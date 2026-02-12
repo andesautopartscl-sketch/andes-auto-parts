@@ -378,7 +378,7 @@ def buscar():
             <td>${p.precio_mayor}</td>
             <td>{p.stock}</td>
             <td>{p.codigo_oem}</td>
-            <td>{p.codigo_alternativo}</td>
+            <td>{resaltar(p.codigo_alternativo, palabras)}</td>
             <td>{p.homologados}</td>
         </tr>
         """
