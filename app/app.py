@@ -26,30 +26,47 @@ SessionDB = sessionmaker(bind=engine)
 # ======================================================
 # MODELOS
 # ======================================================
+
 class Usuario(Base):
     __tablename__ = "usuarios"
+
     username = Column(String, primary_key=True)
     password = Column(String)
     rol = Column(String)
 
+
 class Producto(Base):
     __tablename__ = "productos"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    codigo_interno = Column(String)
-    descripcion = Column(String)
-    modelo = Column(String)
-    motor = Column(String)
-    marca = Column(String)
-    costo = Column(Float, default=0)
-    precio_cliente = Column(Float, default=0)
-    precio_mayor = Column(Float, default=0)
-    stock = Column(Integer, default=0)
-    medidas = Column(String)
-    codigo_oem = Column(String)
-    codigo_alternativo = Column(String)
-    homologados = Column(String)
 
-Base.metadata.create_all(engine)
+    codigo = Column("CODIGO", String, primary_key=True)
+
+    descripcion = Column("DESCRIPCION", String)
+    modelo = Column("MODELO", String)
+    motor = Column("MOTOR", String)
+    marca = Column("MARCA", String)
+
+    p_publico = Column("P_PUBLICO", Float)
+    p_pub_dsc = Column("P_PUB_DSC", Float)
+
+    stock_10jul = Column("STOCK_10JUL", Float)
+    stock_brasil = Column("STOCK_BRASIL", Float)
+    stock_g_avenida = Column("STOCK_G_AVENIDA", Float)
+    stock_orientales = Column("STOCK_ORIENTALES", Float)
+    stock_b20_outlet = Column("STOCK_B20_OUTLET", Float)
+    stock_transito = Column("STOCK_TRANSITO", Float)
+
+    precio_pagar_plaza = Column("PRECIO A PAGAR PLAZA", Float)
+    precio_neto_plaza = Column("PRECIO NETO PLAZA", Float)
+
+    pedido = Column("PEDIDO", Float)
+
+    prec_mayor = Column("PREC_MAYOR", Float)
+    p_mayor_dsc = Column("P_MAYOR_DSC", Float)
+
+    medidas = Column("MEDIDAS", String)
+    codigo_oem = Column("CODIGO OEM", String)
+    codigo_alternativo = Column("CODIGO ALTERNATIVO O ANTIGUO", String)
+    homologados = Column("HOMOLOGADOS", String)
 
 # ======================================================
 # HELPERS
@@ -69,19 +86,45 @@ def resaltar(txt, palabras):
         )
     return txt
 
-def score_producto(p, palabras):
+def score_producto(p):
     score = 0
-    for w in palabras:
-        w = w.lower()
-        if p.modelo and w in p.modelo.lower(): score += 5
-        if p.descripcion and w in p.descripcion.lower(): score += 4
-        if p.marca and w in p.marca.lower(): score += 3
-        if p.motor and w in p.motor.lower(): score += 2
-        if p.codigo_oem and w in p.codigo_oem.lower(): score += 2
-        if p.codigo_alternativo and w in p.codigo_alternativo.lower(): score += 1
-        if p.homologados and w in p.homologados.lower(): score += 1
-    return score
 
+    if not palabras:
+        return stock_total(p)
+
+    texto = (
+        f"{safe(p.codigo)} {safe(p.descripcion)} "
+        f"{safe(p.modelo)} {safe(p.marca)} "
+        f"{safe(p.codigo_oem)} {safe(p.codigo_alternativo)} "
+        f"{safe(p.homologados)}"
+    ).lower()
+
+    for palabra in palabras:
+
+        # PRIORIDAD MAXIMA → CODIGO
+        if palabra in safe(p.codigo).lower():
+            score += 150
+
+        # SEGUNDA PRIORIDAD → MODELO
+        if palabra in safe(p.modelo).lower():
+            score += 120
+
+        # TERCERA → OEM
+        if palabra in safe(p.codigo_oem).lower():
+            score += 100
+
+        # CUARTA → DESCRIPCION
+        if palabra in safe(p.descripcion).lower():
+            score += 70
+
+        # RESTO DEL TEXTO
+        if palabra in texto:
+            score += 25
+
+    # Bonus por stock
+    score += stock_total(p) * 2
+
+    return score
 # ======================================================
 # LOGIN (NO SE TOCA)
 # ======================================================
@@ -271,45 +314,117 @@ def buscar():
     if not login_required():
         return redirect(url_for("login"))
 
-    q = request.args.get("q", "")
-    f_codigo = request.args.get("f_codigo", "")
-    f_desc = request.args.get("f_desc", "")
-    f_modelo = request.args.get("f_modelo", "")
-    f_marca = request.args.get("f_marca", "")
-    f_oem = request.args.get("f_oem", "")
+    q = request.args.get("q", "").strip()
+    f_codigo = request.args.get("f_codigo", "").strip()
+    f_desc = request.args.get("f_desc", "").strip()
+    f_modelo = request.args.get("f_modelo", "").strip()
+    f_marca = request.args.get("f_marca", "").strip()
+    f_oem = request.args.get("f_oem", "").strip()
 
     palabras = q.lower().split()
+    texto_completo = q.lower()
 
     db = SessionDB()
     query = db.query(Producto)
 
-    if q:
-        for p in palabras:
-            query = query.filter(or_(
-                Producto.codigo_interno.ilike(f"%{p}%"),
-                Producto.descripcion.ilike(f"%{p}%"),
-                Producto.modelo.ilike(f"%{p}%"),
-                Producto.motor.ilike(f"%{p}%"),
-                Producto.marca.ilike(f"%{p}%"),
-                Producto.codigo_oem.ilike(f"%{p}%"),
-                Producto.codigo_alternativo.ilike(f"%{p}%"),
-                Producto.homologados.ilike(f"%{p}%")
-            ))
+    # =========================
+    # BUSQUEDA GENERAL
+    # =========================
+    if palabras:
+        for palabra in palabras:
+            query = query.filter(
+                or_(
+                    Producto.codigo.ilike(f"%{palabra}%"),
+                    Producto.descripcion.ilike(f"%{palabra}%"),
+                    Producto.modelo.ilike(f"%{palabra}%"),
+                    Producto.motor.ilike(f"%{palabra}%"),
+                    Producto.marca.ilike(f"%{palabra}%"),
+                    Producto.codigo_oem.ilike(f"%{palabra}%"),
+                    Producto.codigo_alternativo.ilike(f"%{palabra}%"),
+                    Producto.homologados.ilike(f"%{palabra}%")
+                )
+            )
 
-    if f_codigo: query = query.filter(Producto.codigo_interno.ilike(f"%{f_codigo}%"))
-    if f_desc: query = query.filter(Producto.descripcion.ilike(f"%{f_desc}%"))
-    if f_modelo: query = query.filter(Producto.modelo.ilike(f"%{f_modelo}%"))
-    if f_marca: query = query.filter(Producto.marca.ilike(f"%{f_marca}%"))
-    if f_oem: query = query.filter(Producto.codigo_oem.ilike(f"%{f_oem}%"))
+    # =========================
+    # FILTROS INDIVIDUALES
+    # =========================
+    if f_codigo:
+        query = query.filter(Producto.codigo.ilike(f"%{f_codigo}%"))
 
-    productos = query.limit(300).all()
+    if f_desc:
+        query = query.filter(Producto.descripcion.ilike(f"%{f_desc}%"))
+
+    if f_modelo:
+        query = query.filter(Producto.modelo.ilike(f"%{f_modelo}%"))
+
+    if f_marca:
+        query = query.filter(Producto.marca.ilike(f"%{f_marca}%"))
+
+    if f_oem:
+        query = query.filter(Producto.codigo_oem.ilike(f"%{f_oem}%"))
+
+    productos = query.limit(3000).all()
     db.close()
 
+    # =========================
+    # FUNCIONES AUXILIARES
+    # =========================
+    def safe(val):
+        return (val or "").strip()
+
+    def stock_total(p):
+        return (
+            (p.stock_10jul or 0) +
+            (p.stock_brasil or 0) +
+            (p.stock_g_avenida or 0) +
+            (p.stock_orientales or 0) +
+            (p.stock_b20_outlet or 0) +
+            (p.stock_transito or 0)
+        )
+
+    # =========================
+    # ORDENAMIENTO ULTRA PRO
+    # =========================
     if palabras:
-        productos.sort(key=lambda p: score_producto(p, palabras), reverse=True)
 
-    export_btn = "<a href='/exportar'>📥 Exportar Excel</a>" if session["rol"]=="admin" else ""
+        def texto_total_producto(p):
+            return f"{safe(p.descripcion)} {safe(p.modelo)} {safe(p.marca)}".lower()
 
+        def match_grupo_completo(p):
+            texto = texto_total_producto(p)
+            return all(palabra in texto for palabra in palabras)
+
+        def match_descripcion(p):
+            descripcion = safe(p.descripcion).lower()
+            return all(palabra in descripcion for palabra in palabras)
+
+        def match_modelo(p):
+            modelo = safe(p.modelo).lower()
+            return all(palabra in modelo for palabra in palabras)
+
+        productos.sort(
+            key=lambda p: (
+                0 if match_grupo_completo(p) else 1,  # 🔥 PRIORIDAD MÁXIMA (sensor + jac + x200)
+                0 if match_descripcion(p) else 1,
+                0 if match_modelo(p) else 1,
+                safe(p.descripcion) == "",
+                safe(p.descripcion).lower()
+            )
+        )
+
+    else:
+        productos.sort(
+            key=lambda p: (
+                safe(p.descripcion) == "",
+                safe(p.descripcion).lower()
+            )
+        )
+
+    export_btn = "<a href='/exportar'>📥 Exportar Excel</a>" if session["rol"] == "admin" else ""
+
+    # =========================
+    # HTML
+    # =========================
     html = f"""
     <style>
     body{{margin:0;font-family:Arial}}
@@ -319,9 +434,7 @@ def buscar():
     .content{{flex:1;padding:20px;overflow:auto}}
     table{{width:100%;border-collapse:collapse;background:white}}
     th{{background:#0d2fa4;color:white;padding:6px;position:sticky;top:0}}
-    td {{padding:4px 6px;border-bottom:1px solid #ddd;vertical-align:top;font-size:11px;line-height:1.1;}}
-    td td.small {{font-size:12px;line-height:1.15;}}
-    .filters input{{width:100%;font-size:12px}}
+    td{{padding:4px 6px;border-bottom:1px solid #ddd;font-size:11px}}
     </style>
 
     <div class="layout">
@@ -348,38 +461,35 @@ def buscar():
         <p><b>Resultados:</b> {len(productos)}</p>
 
         <table>
-        <tr class="filters">
-            <th><input name="f_codigo" value="{f_codigo}" placeholder="Código"></th>
-            <th><input name="f_desc" value="{f_desc}" placeholder="Descripción"></th>
-            <th><input name="f_modelo" value="{f_modelo}" placeholder="Modelo"></th>
-            <th></th>
-            <th><input name="f_marca" value="{f_marca}" placeholder="Marca"></th>
-            <th></th><th></th><th></th>
-            <th><input name="f_oem" value="{f_oem}" placeholder="OEM"></th>
-            <th></th><th></th>
-        </tr>
-
         <tr>
-            <th>Código</th><th>Descripción</th><th>Modelo</th><th>Motor</th>
-            <th>Marca</th><th>Precio</th><th>Mayor</th><th>Stock</th>
-            <th>OEM</th><th>Alternativo</th><th>Homologados</th>
+            <th>Código</th>
+            <th>Descripción</th>
+            <th>Modelo</th>
+            <th>Motor</th>
+            <th>Marca</th>
+            <th>Precio</th>
+            <th>Mayor</th>
+            <th>Stock</th>
+            <th>OEM</th>
+            <th>Alternativo</th>
+            <th>Homologados</th>
         </tr>
     """
 
     for p in productos:
         html += f"""
         <tr>
-            <td>{resaltar(p.codigo_interno,palabras)}</td>
-            <td>{resaltar(p.descripcion,palabras)}</td>
-            <td>{resaltar(p.modelo,palabras)}</td>
-            <td>{p.motor}</td>
-            <td>{p.marca}</td>
-            <td>${p.precio_cliente}</td>
-            <td>${p.precio_mayor}</td>
-            <td>{p.stock}</td>
-            <td>{p.codigo_oem}</td>
-            <td>{resaltar(p.codigo_alternativo, palabras)}</td>
-            <td>{p.homologados}</td>
+            <td>{safe(p.codigo)}</td>
+            <td>{safe(p.descripcion)}</td>
+            <td>{safe(p.modelo)}</td>
+            <td>{safe(p.motor)}</td>
+            <td>{safe(p.marca)}</td>
+            <td>${p.p_publico or 0}</td>
+            <td>${p.prec_mayor or 0}</td>
+            <td>{stock_total(p)}</td>
+            <td>{safe(p.codigo_oem)}</td>
+            <td>{safe(p.codigo_alternativo)}</td>
+            <td>{safe(p.homologados)}</td>
         </tr>
         """
 
