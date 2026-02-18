@@ -2,3 +2,5 @@ flask
 sqlalchemy
 pandas
 gunicorn
+pandas
+openpyxl

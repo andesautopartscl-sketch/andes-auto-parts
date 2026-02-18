@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Login | Andes Auto Parts</title>
+
+<script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+
+<style>
+html, body {
+    margin:0;
+    padding:0;
+    height:100%;
+    font-family:'Segoe UI', sans-serif;
+    background:#0f172a;
+    overflow:hidden;
+}
+
+#particles-js {
+    position:fixed;
+    width:100%;
+    height:100%;
+    z-index:1;
+}
+
+.login-wrapper {
+    height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:relative;
+    z-index:2;
+}
+
+.login-box {
+    width:420px;
+    background:rgba(15, 23, 42, 0.95);
+    padding:45px 40px;
+    border-radius:22px;
+    box-shadow:0 0 60px rgba(56,189,248,.35);
+    text-align:center;
+    backdrop-filter:blur(18px);
+    animation:fadeIn .6s ease;
+    position:relative;
+}
+
+@keyframes fadeIn{
+    from{opacity:0; transform:translateY(20px);}
+    to{opacity:1; transform:translateY(0);}
+}
+
+/* LOGO */
+.logo {
+    width:170px;
+    margin-bottom:25px;
+    filter: drop-shadow(0 0 25px rgba(56,189,248,.9));
+}
+
+/* TITULO */
+.login-box h2 {
+    color:white;
+    margin-bottom:30px;
+    font-weight:600;
+    letter-spacing:.5px;
+}
+
+/* INPUT GROUP */
+.input-group {
+    position:relative;
+    margin-bottom:18px;
+}
+
+/* ICONO IZQUIERDO */
+.input-group img.icon-left {
+    position:absolute;
+    left:14px;
+    top:50%;
+    transform:translateY(-50%);
+    width:18px;
+    filter: brightness(0) invert(1);
+}
+
+/* ICONO OJO DERECHO */
+.toggle-password {
+    position:absolute;
+    right:14px;
+    top:50%;
+    transform:translateY(-50%);
+    width:18px;
+    cursor:pointer;
+    filter: brightness(0) invert(1);
+}
+
+/* INPUTS */
+.input-group input {
+    width:100%;
+    box-sizing:border-box;
+    padding:14px 45px 14px 45px;
+    border-radius:12px;
+    border:1px solid rgba(148,163,184,.3);
+    background:#0f172a;
+    color:#ffffff;
+    font-size:14px;
+    font-weight:500;
+    transition:.25s;
+}
+
+/* PLACEHOLDER */
+.input-group input::placeholder {
+    color: rgba(255,255,255,0.85);
+}
+
+/* FOCUS EFFECT */
+.input-group input:focus {
+    border-color:#38bdf8;
+    box-shadow:0 0 12px rgba(56,189,248,.5);
+    outline:none;
+}
+
+/* OJITO */
+.toggle-password {
+    position:absolute;
+    right:14px;
+    top:50%;
+    transform:translateY(-50%);
+    width:18px;
+    cursor:pointer;
+    filter: brightness(0) invert(1);
+}
+
+/* BOTON */
+.login-box button {
+    width:100%;
+    padding:14px;
+    margin-top:10px;
+    background:linear-gradient(90deg,#38bdf8,#0ea5e9);
+    border:none;
+    border-radius:12px;
+    color:white;
+    font-weight:600;
+    cursor:pointer;
+    transition:.3s;
+    font-size:15px;
+}
+
+.login-box button:hover {
+    transform:translateY(-2px);
+    box-shadow:0 0 20px rgba(56,189,248,.7);
+}
+
+/* ERROR */
+.error {
+    color:#f87171;
+    margin-top:12px;
+    font-size:13px;
+    min-height:18px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="particles-js"></div>
+
+<div class="login-wrapper">
+    <div class="login-box">
+
+        <!-- LOGO -->
+        <img class="logo" src="{{ url_for('static', filename='logo.png') }}" alt="Andes Auto Parts">
+
+        <h2>Andes Auto Parts</h2>
+
+        <form method="POST">
+
+            <div class="input-group">
+                <img class="icon-left" src="{{ url_for('static', filename='icons/user.png') }}">
+                <input name="username" placeholder="Usuario" required>
+            </div>
+
+            <div class="input-group">
+                <img class="icon-left" src="{{ url_for('static', filename='icons/lock.png') }}">
+                <input type="password" id="password" name="password" placeholder="Clave" required>
+                <img id="togglePassword" class="toggle-password"
+                     src="{{ url_for('static', filename='icons/eye.png') }}">
+            </div>
+
+            <button type="submit">Ingresar</button>
+
+        </form>
+
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+
+    </div>
+</div>
+
+<script>
+particlesJS("particles-js", {
+  particles: {
+    number: { value: 80 },
+    color: { value: "#38bdf8" },
+    shape: { type: "circle" },
+    opacity: { value: 0.6 },
+    size: { value: 3 },
+    line_linked: {
+      enable: true,
+      distance: 160,
+      color: "#38bdf8",
+      opacity: 0.4,
+      width: 1
+    },
+    move: {
+      enable: true,
+      speed: 2
+    }
+  },
+  retina_detect: true
+});
+
+/* Mostrar / Ocultar contraseña */
+const togglePassword = document.getElementById('togglePassword');
+const password = document.getElementById('password');
+
+togglePassword.addEventListener('click', function () {
+
+    const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
+    password.setAttribute('type', type);
+
+    this.src = type === 'password'
+        ? "{{ url_for('static', filename='icons/eye.png') }}"
+        : "{{ url_for('static', filename='icons/eye-off.png') }}";
+
+});
+</script>
+
+</body>
+</html>

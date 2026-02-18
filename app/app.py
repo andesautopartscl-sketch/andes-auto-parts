@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file, redirect, url_for, session
+from flask import Flask, request, send_file, redirect, url_for, session, jsonify
 from sqlalchemy import create_engine, Column, String, Integer, Float, or_
 from sqlalchemy.orm import declarative_base, sessionmaker
 import os
@@ -6,12 +6,16 @@ import pandas as pd
 import io
 import re
 import socket
+from flask import render_template
+
 
 # ======================================================
 # APP
 # ======================================================
+
 app = Flask(__name__)
 app.secret_key = "andes_auto_parts_secret"
+
 
 # ======================================================
 # DATABASE
@@ -126,176 +130,35 @@ def score_producto(p):
 
     return score
 # ======================================================
-# LOGIN (NO SE TOCA)
+# LOGIN
 # ======================================================
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    error = ""
+    error = None
+
     if request.method == "POST":
+
+        username = request.form.get("username")
+        password = request.form.get("password")
+
         db = SessionDB()
-        u = db.query(Usuario).filter_by(
-            username=request.form["username"],
-            password=request.form["password"]
-        ).first()
+
+        user = db.query(Usuario).filter_by(username=username).first()
+
         db.close()
 
-        if u:
-            session["user"] = u.username
-            session["rol"] = u.rol
+        if user and user.password == password:
+
+            session["user"] = user.username
+            session["rol"] = user.rol
+
             return redirect(url_for("buscar"))
-        error = "Usuario o clave incorrectos"
 
-    return f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Login | Andes Auto Parts</title>
+        else:
+            error = "Usuario o clave incorrectos"
 
-<script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
-
-<style>
-html, body {{
-    margin:0;
-    padding:0;
-    height:100%;
-    font-family: Arial;
-    background:#0f1e46;
-    overflow:hidden;
-}}
-
-#particles-js {{
-    position:fixed;
-    width:100%;
-    height:100%;
-    z-index:1;
-}}
-
-.login-wrapper {{
-    height:100%;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    position:relative;
-    z-index:2;
-}}
-
-.login-box {{
-    width:360px;
-    background:#162a63;
-    padding:30px 25px;
-    border-radius:14px;
-    box-shadow:0 20px 40px rgba(0,0,0,.45);
-    text-align:center;
-}}
-
-.login-box img {{
-    width:120px;
-    margin-bottom:15px;
-}}
-
-.login-box h2 {{
-    color:white;
-    margin-bottom:20px;
-}}
-
-.login-box input {{
-    width:85%;
-    padding:11px;
-    margin-bottom:12px;
-    border:none;
-    border-radius:6px;
-    outline:none;
-    text-align:left;
-}}
-
-.login-box button {{
-    width:75%;
-    padding:10px;
-    background:#2f6bff;
-    border:none;
-    border-radius:6px;
-    color:white;
-    font-weight:bold;
-    cursor:pointer;
-    margin-top:5px;
-}}
-
-.login-box button:hover {{
-    background:#1f4fd8;
-}}
-
-.error {{
-    color:#ff8080;
-    margin-top:10px;
-    font-size:13px;
-}}
-</style>
-</head>
-
-<body>
-
-<div id="particles-js"></div>
-
-<div class="login-wrapper">
-    <div class="login-box">
-        <img src="/static/logo.png" alt="Andes Auto Parts">
-        <h2>Andes Auto Parts</h2>
-        <form method="post">
-            <input name="username" placeholder="Usuario" required>
-            <input type="password" name="password" placeholder="Clave" required>
-            <button type="submit">Ingresar</button>
-        </form>
-        <div class="error">{error}</div>
-    </div>
-</div>
-
-<script>
-particlesJS("particles-js", {{
-  particles: {{
-    number: {{ value: 60 }},
-    color: {{ value: "#ffffff" }},
-    shape: {{ type: "circle" }},
-    opacity: {{ value: 0.5 }},
-    size: {{ value: 3 }},
-    line_linked: {{
-      enable: true,
-      distance: 150,
-      color: "#ffffff",
-      opacity: 0.3,
-      width: 1
-    }},
-    move: {{
-      enable: true,
-      speed: 2
-    }}
-  }},
-  interactivity: {{
-    detect_on: "canvas",
-    events: {{
-      onhover: {{
-        enable: false
-      }},
-      onclick: {{
-        enable: true,
-        mode: "push"
-      }}
-    }},
-    modes: {{
-      push: {{
-        particles_nb: 8
-      }}
-    }}
-  }},
-  retina_detect: true
-}});
-</script>
-
-
-
-</body>
-</html>
-"""
+    return render_template("login.html", error=error)
 
 @app.route("/logout")
 def logout():
@@ -322,14 +185,10 @@ def buscar():
     f_oem = request.args.get("f_oem", "").strip()
 
     palabras = q.lower().split()
-    texto_completo = q.lower()
 
     db = SessionDB()
     query = db.query(Producto)
 
-    # =========================
-    # BUSQUEDA GENERAL
-    # =========================
     if palabras:
         for palabra in palabras:
             query = query.filter(
@@ -345,30 +204,20 @@ def buscar():
                 )
             )
 
-    # =========================
-    # FILTROS INDIVIDUALES
-    # =========================
     if f_codigo:
         query = query.filter(Producto.codigo.ilike(f"%{f_codigo}%"))
-
     if f_desc:
         query = query.filter(Producto.descripcion.ilike(f"%{f_desc}%"))
-
     if f_modelo:
         query = query.filter(Producto.modelo.ilike(f"%{f_modelo}%"))
-
     if f_marca:
         query = query.filter(Producto.marca.ilike(f"%{f_marca}%"))
-
     if f_oem:
         query = query.filter(Producto.codigo_oem.ilike(f"%{f_oem}%"))
 
     productos = query.limit(3000).all()
     db.close()
 
-    # =========================
-    # FUNCIONES AUXILIARES
-    # =========================
     def safe(val):
         return (val or "").strip()
 
@@ -382,120 +231,16 @@ def buscar():
             (p.stock_transito or 0)
         )
 
-    # =========================
-    # ORDENAMIENTO ULTRA PRO
-    # =========================
-    if palabras:
+    productos.sort(key=lambda p: safe(p.descripcion).lower())
 
-        def texto_total_producto(p):
-            return f"{safe(p.descripcion)} {safe(p.modelo)} {safe(p.marca)}".lower()
-
-        def match_grupo_completo(p):
-            texto = texto_total_producto(p)
-            return all(palabra in texto for palabra in palabras)
-
-        def match_descripcion(p):
-            descripcion = safe(p.descripcion).lower()
-            return all(palabra in descripcion for palabra in palabras)
-
-        def match_modelo(p):
-            modelo = safe(p.modelo).lower()
-            return all(palabra in modelo for palabra in palabras)
-
-        productos.sort(
-            key=lambda p: (
-                0 if match_grupo_completo(p) else 1,  # 🔥 PRIORIDAD MÁXIMA (sensor + jac + x200)
-                0 if match_descripcion(p) else 1,
-                0 if match_modelo(p) else 1,
-                safe(p.descripcion) == "",
-                safe(p.descripcion).lower()
-            )
-        )
-
-    else:
-        productos.sort(
-            key=lambda p: (
-                safe(p.descripcion) == "",
-                safe(p.descripcion).lower()
-            )
-        )
-
-    export_btn = "<a href='/exportar'>📥 Exportar Excel</a>" if session["rol"] == "admin" else ""
-
-    # =========================
-    # HTML
-    # =========================
-    html = f"""
-    <style>
-    body{{margin:0;font-family:Arial}}
-    .layout{{display:flex;height:100vh}}
-    .sidebar{{width:220px;background:#1f4fd8;color:white;padding:20px}}
-    .sidebar a{{display:block;color:white;margin:10px 0;font-weight:bold;text-decoration:none}}
-    .content{{flex:1;padding:20px;overflow:auto}}
-    table{{width:100%;border-collapse:collapse;background:white}}
-    th{{background:#0d2fa4;color:white;padding:6px;position:sticky;top:0}}
-    td{{padding:4px 6px;border-bottom:1px solid #ddd;font-size:11px}}
-    </style>
-
-    <div class="layout">
-    <div class="sidebar">
-        <h3>Andes Auto Parts</h3>
-        <a href="/buscar">🔍 Buscar</a>
-        <a href="#">➕ Crear</a>
-        <a href="#">✏ Editar</a>
-        <a href="#">🗑 Eliminar</a>
-        {export_btn}
-        <hr>
-        <a href="/logout">🚪 Salir</a>
-    </div>
-
-    <div class="content">
-        <h2>Buscar productos</h2>
-        <p>Usuario: {session['user']} ({session['rol']})</p>
-
-        <form method="get">
-            <input name="q" value="{q}" placeholder="🔎 Búsqueda general">
-            <button>Buscar</button>
-        </form>
-
-        <p><b>Resultados:</b> {len(productos)}</p>
-
-        <table>
-        <tr>
-            <th>Código</th>
-            <th>Descripción</th>
-            <th>Modelo</th>
-            <th>Motor</th>
-            <th>Marca</th>
-            <th>Precio</th>
-            <th>Mayor</th>
-            <th>Stock</th>
-            <th>OEM</th>
-            <th>Alternativo</th>
-            <th>Homologados</th>
-        </tr>
-    """
-
-    for p in productos:
-        html += f"""
-        <tr>
-            <td>{safe(p.codigo)}</td>
-            <td>{safe(p.descripcion)}</td>
-            <td>{safe(p.modelo)}</td>
-            <td>{safe(p.motor)}</td>
-            <td>{safe(p.marca)}</td>
-            <td>${p.p_publico or 0}</td>
-            <td>${p.prec_mayor or 0}</td>
-            <td>{stock_total(p)}</td>
-            <td>{safe(p.codigo_oem)}</td>
-            <td>{safe(p.codigo_alternativo)}</td>
-            <td>{safe(p.homologados)}</td>
-        </tr>
-        """
-
-    html += "</table></div></div>"
-    return html
-
+    return render_template(
+    "buscar.html",
+    productos=productos,
+    q=q,
+    session=session,
+    stock_total=stock_total
+)
+    
 # ======================================================
 # EXPORTAR
 # ======================================================
@@ -515,6 +260,64 @@ def exportar():
     df.to_excel(output, index=False)
     output.seek(0)
     return send_file(output, as_attachment=True, download_name="andes_autoparts.xlsx")
+
+from flask import jsonify
+
+@app.route("/importar_excel", methods=["POST"])
+def importar_excel():
+
+    if not login_required():
+        return jsonify(success=False, message="No autorizado")
+
+    if session["rol"] != "admin":
+        return jsonify(success=False, message="Acceso denegado")
+
+    archivo = request.files.get("archivo")
+
+    if not archivo:
+        return jsonify(success=False, message="No se seleccionó archivo")
+
+    try:
+        df = pd.read_excel(archivo)
+
+        db = SessionDB()
+
+        # 🔥 BORRAR TODO
+        db.query(Producto).delete()
+        db.commit()
+
+        contador = 0
+
+        for _, row in df.iterrows():
+            producto = Producto(
+                codigo=str(row.get("CODIGO", "")).strip(),
+                descripcion=str(row.get("DESCRIPCION", "")).strip(),
+                modelo=str(row.get("MODELO", "")).strip(),
+                motor=str(row.get("MOTOR", "")).strip(),
+                marca=str(row.get("MARCA", "")).strip(),
+                p_publico=row.get("P_PUBLICO", 0) or 0,
+                prec_mayor=row.get("PREC_MAYOR", 0) or 0,
+                codigo_oem=str(row.get("CODIGO OEM", "")).strip(),
+                codigo_alternativo=str(row.get("CODIGO ALTERNATIVO O ANTIGUO", "")).strip(),
+                homologados=str(row.get("HOMOLOGADOS", "")).strip(),
+                stock_10jul=row.get("STOCK_10JUL", 0) or 0,
+                stock_brasil=row.get("STOCK_BRASIL", 0) or 0,
+                stock_g_avenida=row.get("STOCK_G_AVENIDA", 0) or 0,
+                stock_orientales=row.get("STOCK_ORIENTALES", 0) or 0,
+                stock_b20_outlet=row.get("STOCK_B20_OUTLET", 0) or 0,
+                stock_transito=row.get("STOCK_TRANSITO", 0) or 0
+            )
+
+            db.add(producto)
+            contador += 1
+
+        db.commit()
+        db.close()
+
+        return jsonify(success=True, message=f"{contador} productos cargados correctamente")
+
+    except Exception as e:
+        return jsonify(success=False, message=str(e))
 
 # ======================================================
 # MAIN
