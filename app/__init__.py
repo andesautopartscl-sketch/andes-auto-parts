@@ -5,7 +5,9 @@ import os
 import sys
 
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
-from sqlalchemy import text
+from sqlalchemy import event, text
+from sqlalchemy.engine import Engine
+from werkzeug.middleware.proxy_fix import ProxyFix
 from .extensions import db
 from .automotriz import models
 from .ventas import models as ventas_models  # noqa: F401 – registers ORM models
@@ -40,6 +42,27 @@ from app.utils.permissions import DEFAULT_PERMISSIONS, get_user_permissions
 EXPECTED_VENV_PYTHON = str(
     (Path(__file__).resolve().parents[1] / ".venv" / "Scripts" / "python.exe").resolve()
 )
+
+
+@event.listens_for(Engine, "connect")
+def _sqlite_pragmas_on_connect(dbapi_connection, _connection_record):
+    """Reduce 'database is locked' y mejora concurrencia en SQLite (Render / Gunicorn)."""
+    try:
+        cur = dbapi_connection.cursor()
+    except Exception:
+        return
+    try:
+        cur.execute("PRAGMA busy_timeout=30000")
+    except Exception:
+        pass
+    try:
+        cur.execute("PRAGMA journal_mode=WAL")
+    except Exception:
+        pass
+    try:
+        cur.close()
+    except Exception:
+        pass
 
 
 def _runtime_reportlab_diagnostics() -> tuple[bool, str]:
@@ -89,6 +112,8 @@ def create_app():
     app = Flask(__name__)
     if not app.logger.handlers:
         logging.basicConfig(level=logging.INFO)
+    # Render / reverse proxy: esquema y host correctos para cookies y redirects.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
     app.jinja_env.filters["chile_datetime"] = chile_datetime_filter
     app.jinja_env.filters["format_rut"] = format_rut
     app.jinja_env.filters["audit_metadata"] = format_audit_metadata
@@ -100,9 +125,13 @@ def create_app():
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     DB_PATH = os.path.join(BASE_DIR, "..", "data", "andes.db")
+    os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
     CHAT_UPLOADS_PATH = Path(BASE_DIR).resolve().parent / "data" / "chat_uploads"
     app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "connect_args": {"check_same_thread": False, "timeout": 30},
+    }
 
     db.init_app(app)
 
@@ -116,7 +145,9 @@ def create_app():
     app.secret_key = "andes_auto_parts_super_secret_key_2026"
 
     app.config["SESSION_COOKIE_HTTPONLY"] = True
-    app.config["SESSION_COOKIE_SECURE"] = False
+    # En Render el sitio es HTTPS; sin Secure algunos navegadores móviles no guardan la cookie bien.
+    _is_render = (os.environ.get("RENDER") or "").strip().lower() in {"1", "true", "yes"}
+    app.config["SESSION_COOKIE_SECURE"] = bool(_is_render)
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
     # ===============================
@@ -461,6 +492,8 @@ def create_app():
     @app.after_request
     def inject_chat_widget(response):
         # Inject chat globally for authenticated users in HTML responses.
+        if request.endpoint in {"auth.login", "auth.inicio_seguro"}:
+            return response
         if response.status_code != 200:
             return response
         if "user" not in session:
@@ -485,17 +518,31 @@ def create_app():
 
     @app.errorhandler(500)
     def handle_internal_error(_error):
-        db.session.rollback()
-        if request.path.startswith("/seguridad/api/") or request.path.startswith("/chat/api/") or request.path.startswith("/ventas/api/"):
-            return jsonify(success=False, message="Error interno temporal"), 500
-        if request.is_json:
-            return jsonify(success=False, message="Error interno temporal"), 500
-        if "user" in session and request.endpoint != "auth.inicio_seguro":
-            return redirect(url_for("auth.inicio_seguro"))
-        return render_template(
-            "login.html",
-            error="Error temporal del servidor. Intenta nuevamente en unos segundos.",
-        ), 500
+        try:
+            app.logger.exception("Unhandled 500: %s", request.path)
+        except Exception:
+            pass
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        try:
+            if request.path.startswith("/seguridad/api/") or request.path.startswith("/chat/api/") or request.path.startswith("/ventas/api/"):
+                return jsonify(success=False, message="Error interno temporal"), 500
+            if request.is_json:
+                return jsonify(success=False, message="Error interno temporal"), 500
+            if "user" in session and request.endpoint != "auth.inicio_seguro":
+                return redirect(url_for("auth.inicio_seguro"))
+            return render_template(
+                "login.html",
+                error="Error temporal del servidor. Intenta nuevamente en unos segundos.",
+            ), 500
+        except Exception:
+            return (
+                "Error temporal del servidor. Intenta nuevamente en unos segundos.",
+                500,
+                {"Content-Type": "text/plain; charset=utf-8"},
+            )
 
     return app
 

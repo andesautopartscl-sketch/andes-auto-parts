@@ -6,7 +6,11 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "..", "data", "andes.db")
 
-engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
+engine = create_engine(
+    f"sqlite:///{DB_PATH}",
+    echo=False,
+    connect_args={"check_same_thread": False, "timeout": 30},
+)
 
 Base = declarative_base()
 SessionDB = sessionmaker(bind=engine)

@@ -12,4 +12,7 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.3
+      # SQLite + varios workers de Gunicorn provoca "database is locked" y 500 intermitentes.
+      - key: WEB_CONCURRENCY
+        value: "1"
 
