@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 
-from flask import Flask, render_template, request, session
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 from sqlalchemy import text
 from .extensions import db
 from .automotriz import models
@@ -34,7 +34,7 @@ from app.seguridad.crear_superadmin import crear_superadmin
 from app.utils.datetime_utils import chile_datetime_filter
 from app.utils.rut_utils import format_rut
 from app.utils.audit_metadata_filter import format_audit_metadata
-from app.utils.permissions import get_user_permissions
+from app.utils.permissions import DEFAULT_PERMISSIONS, get_user_permissions
 
 
 EXPECTED_VENV_PYTHON = str(
@@ -436,7 +436,12 @@ def create_app():
 
     @app.context_processor
     def usuario_actual():
-        perms = get_user_permissions(session.get("user"), session.get("rol"))
+        try:
+            perms = get_user_permissions(session.get("user"), session.get("rol"))
+            if not isinstance(perms, dict):
+                perms = dict(DEFAULT_PERMISSIONS)
+        except Exception:
+            perms = dict(DEFAULT_PERMISSIONS)
         return dict(
             usuario_nombre=session.get("user"),
             usuario_rol=session.get("rol"),
@@ -477,6 +482,20 @@ def create_app():
             return response
         except Exception:
             return response
+
+    @app.errorhandler(500)
+    def handle_internal_error(_error):
+        db.session.rollback()
+        if request.path.startswith("/seguridad/api/") or request.path.startswith("/chat/api/") or request.path.startswith("/ventas/api/"):
+            return jsonify(success=False, message="Error interno temporal"), 500
+        if request.is_json:
+            return jsonify(success=False, message="Error interno temporal"), 500
+        if "user" in session and request.endpoint != "auth.inicio_seguro":
+            return redirect(url_for("auth.inicio_seguro"))
+        return render_template(
+            "login.html",
+            error="Error temporal del servidor. Intenta nuevamente en unos segundos.",
+        ), 500
 
     return app
 

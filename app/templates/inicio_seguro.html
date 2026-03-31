@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inicio Seguro | Andes Auto Parts</title>
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='logo_andes.png') }}">
+<style>
+body{
+    margin:0;
+    font-family:Segoe UI,Arial,sans-serif;
+    min-height:100vh;
+    display:grid;
+    place-items:center;
+    background:radial-gradient(circle at 15% 15%, #1e3a8a 0%, #0f172a 45%, #020617 100%);
+}
+.card{
+    width:min(94vw,560px);
+    background:#fff;
+    border:1px solid #dbe3ef;
+    border-radius:18px;
+    box-shadow:0 20px 40px rgba(2,8,23,.35);
+    padding:22px;
+}
+h1{margin:0 0 8px;font-size:24px;color:#0f172a}
+p{margin:6px 0;color:#334155}
+.muted{font-size:13px;color:#64748b}
+.grid{
+    margin-top:14px;
+    display:grid;
+    gap:10px;
+    grid-template-columns:1fr 1fr;
+}
+a.btn{
+    text-decoration:none;
+    padding:12px 14px;
+    border-radius:10px;
+    text-align:center;
+    border:1px solid #cbd5e1;
+    color:#0f172a;
+    font-weight:600;
+    background:#f8fafc;
+}
+a.btn.primary{
+    background:#1e3a8a;
+    border-color:#1e3a8a;
+    color:#fff;
+}
+a.btn.full{grid-column:1 / -1}
+</style>
+</head>
+<body>
+    <main class="card">
+        <h1>Ingreso exitoso</h1>
+        <p>Bienvenido, <strong>{{ usuario or "usuario" }}</strong>.</p>
+        <p class="muted">Rol actual: {{ rol or "sin rol" }}</p>
+        <div class="grid">
+            <a class="btn primary" href="{{ url_for('productos.buscar') }}">Ir a Buscar Productos</a>
+            <a class="btn" href="{{ url_for('dashboard.index') }}">Ir a Dashboard</a>
+            <a class="btn full" href="{{ url_for('auth.logout') }}">Cerrar sesión</a>
+        </div>
+    </main>
+</body>
+</html>

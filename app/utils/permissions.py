@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from app.extensions import db
-from sqlalchemy.exc import SQLAlchemyError
 
 
 DEFAULT_PERMISSIONS = {
@@ -37,8 +36,8 @@ def get_user_permissions(username: str | None, role_name: str | None = None) -> 
             "ver_finanzas": bool(perm.ver_finanzas),
             "ver_precio_mayor": bool(perm.ver_precio_mayor),
         }
-    except SQLAlchemyError:
-        # Fallback seguro en entornos con esquema antiguo/desfasado.
+    except Exception:
+        # Cualquier fallo de ORM/esquema/datos no debe tumbar la vista (p. ej. Render).
         db.session.rollback()
         return dict(DEFAULT_PERMISSIONS)
 

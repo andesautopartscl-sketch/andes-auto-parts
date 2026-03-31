@@ -29,7 +29,7 @@ from app.seguridad.models import Usuario
 from app.bodega.models import ProductoVarianteStock
 from app.bodega.models import MovimientoStock
 from ..utils.decorators import login_required, admin_required
-from app.utils.permissions import get_user_permissions
+from app.utils.permissions import DEFAULT_PERMISSIONS, get_user_permissions
 from ..import_excel import import_products_from_excel
 from ..utils.product_audit import build_diffs, register_product_audit
 from ..utils.categoria_autodetect import (
@@ -517,9 +517,9 @@ def buscar():
     per_page = request.args.get("per_page", 100, type=int) or 100
     per_page = max(25, min(int(per_page), 200))
 
-    sess = SessionDB()
-    online_users = _online_users()
-    user_perms = get_user_permissions(session.get("user"), session.get("rol"))
+    sess = None
+    online_users: list = []
+    user_perms = dict(DEFAULT_PERMISSIONS)
 
     variant_map = {}
 
@@ -556,6 +556,10 @@ def buscar():
         return Markup(highlighted)
 
     try:
+        sess = SessionDB()
+        online_users = _online_users()
+        user_perms = get_user_permissions(session.get("user"), session.get("rol"))
+
         query = sess.query(Producto).filter(Producto.activo.is_(True))
         productos = []
 
@@ -707,7 +711,8 @@ def buscar():
             can_view_precio_mayor=bool(user_perms.get("ver_precio_mayor", True)),
         )
     finally:
-        sess.close()
+        if sess is not None:
+            sess.close()
 
 
 # =========================================

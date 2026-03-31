@@ -106,7 +106,7 @@ def login():
                     print(f"[LOGIN][ERROR] Error updating timestamps: {e}")
                     print("="*70 + "\n")
 
-                return redirect(url_for("productos.buscar"))
+                return redirect(url_for("auth.inicio_seguro"))
 
             else:
                 if user:
@@ -143,16 +143,19 @@ def login():
                     if legacy_user is not None and legacy_password_ok:
                         session["user"] = legacy_user.username
                         session["rol"] = legacy_user.rol or ""
-                        return redirect(url_for("productos.buscar"))
+                        return redirect(url_for("auth.inicio_seguro"))
 
                 error = "Usuario o clave incorrectos"
+
+        return render_template("login.html", error=error)
     except Exception as exc:
         db.session.rollback()
         print("[AUTH LOGIN][FATAL]", exc)
         traceback.print_exc()
-        error = "Error temporal al iniciar sesión. Intenta nuevamente en unos segundos."
-
-    return render_template("login.html", error=error)
+        return render_template(
+            "login.html",
+            error="Error temporal al iniciar sesión. Intenta nuevamente en unos segundos.",
+        )
 
 
 @auth_bp.route("/login/password-reset-request", methods=["POST"])
@@ -208,3 +211,14 @@ def logout():
     session.clear()
 
     return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/inicio-seguro")
+def inicio_seguro():
+    if "user" not in session:
+        return redirect(url_for("auth.login"))
+    return render_template(
+        "inicio_seguro.html",
+        usuario=session.get("user"),
+        rol=session.get("rol"),
+    )
