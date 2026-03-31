@@ -1,0 +1,342 @@
+/**
+ * Estilos compartidos para módulos ERP (dashboard, transferencias, informes, etc.).
+ * Cargado desde base.html para que las vistas cargadas por AJAX (solo fragmento en #appMainContent)
+ * tengan las mismas clases .card, .form-grid, .btn.primary, .erp-table… que erp_shell.html.
+ *
+ * Variables solo en #appMainContent / erp_shell para NO pisar :root del layout (sidebar).
+ */
+#appMainContent,
+body.erp-shell-standalone {
+  --erp-bg: #f0f4fb;
+  --erp-panel: #fff;
+  --erp-line: #dbe3ef;
+  --erp-text: #0f172a;
+  --erp-muted: #64748b;
+  --erp-primary: #1d4ed8;
+  --erp-primary-dark: #1e40af;
+  --erp-ok: #16a34a;
+  --erp-warn: #d97706;
+  --erp-danger: #dc2626;
+  /* Alias usados en plantillas (var(--text), etc.) solo dentro del área de módulo */
+  --text: var(--erp-text);
+  --muted: var(--erp-muted);
+  --primary: var(--erp-primary);
+  --primary-dark: var(--erp-primary-dark);
+  --line: var(--erp-line);
+  --panel: var(--erp-panel);
+  --ok: var(--erp-ok);
+  --warn: var(--erp-warn);
+  --danger: var(--erp-danger);
+}
+
+/* Vista full-page sin layout lateral (solo plantilla erp_shell) */
+body.erp-shell-standalone {
+  background: var(--erp-bg);
+  color: var(--erp-text);
+  font-family: "Segoe UI", system-ui, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+.shell {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 16px;
+}
+.v-header {
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #1d4ed8 100%);
+  border-radius: 16px;
+  padding: 16px 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.25);
+}
+.v-header-brand h1 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+}
+.v-header-brand p {
+  font-size: 12px;
+  color: #bfdbfe;
+  margin-top: 2px;
+}
+.v-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.v-nav {
+  margin-top: 12px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 0 2px;
+  align-items: center;
+}
+.v-tab {
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.14s;
+  white-space: nowrap;
+}
+.v-tab:hover {
+  background: #eff6ff;
+  color: var(--primary);
+  border-color: #bfdbfe;
+}
+.v-tab.active {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1e3a8a;
+}
+.v-tab-sep {
+  border-left: 1px solid var(--line);
+  height: 24px;
+  margin: 0 2px;
+}
+.v-content {
+  margin-top: 14px;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.13s;
+  background: var(--panel);
+  color: var(--text);
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+.btn:active {
+  transform: none;
+}
+.btn.primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.btn.primary:hover {
+  background: var(--primary-dark);
+}
+.btn.ok {
+  background: var(--ok);
+  color: #fff;
+  border-color: var(--ok);
+}
+.btn.warn {
+  background: var(--warn);
+  color: #fff;
+  border-color: var(--warn);
+}
+.btn.danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+.btn.outline {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+.btn.outline:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.btn.sm {
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 7px;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+.badge.blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+}
+.badge.green {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+.badge.orange {
+  background: #ffedd5;
+  color: #c2410c;
+  border-color: #fdba74;
+}
+.badge.red {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+.badge.slate {
+  background: #e2e8f0;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+.flash-list {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.flash-msg {
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid;
+}
+.flash-msg.success {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+.flash-msg.error {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+.flash-msg.info {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+}
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+.card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+}
+.card h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+.card .num {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--primary);
+  margin: 8px 0 4px;
+}
+.card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+table.erp-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+table.erp-table th,
+table.erp-table td {
+  padding: 11px 13px;
+  text-align: left;
+  font-size: 13px;
+  border-bottom: 1px solid #eef2f7;
+}
+table.erp-table th {
+  background: #f8fafc;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+}
+table.erp-table tr:hover td {
+  background: #f8fbff;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.form-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text);
+  background: #fff;
+  width: 100%;
+}
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.1);
+}
+@media (max-width: 768px) {
+  .v-header {
+    flex-direction: column;
+  }
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  table.erp-table th,
+  table.erp-table td {
+    padding: 8px 9px;
+    font-size: 12px;
+  }
+  table.erp-table th {
+    font-size: 10px;
+  }
+}

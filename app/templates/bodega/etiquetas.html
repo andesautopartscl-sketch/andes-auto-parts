@@ -1,0 +1,1157 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+
+{% block title %}Etiquetas Profesionales | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<style>
+* {
+    box-sizing: border-box;
+}
+
+.sheet {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 280px));
+    gap: 18px;
+    justify-content: center;
+    align-items: start;
+}
+
+.label {
+    width: 280px;
+    min-height: 220px;
+    padding: 14px;
+    border-radius: 16px;
+    border: 1px solid #e5e7eb;
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: space-between;
+    overflow: hidden;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+.label * {
+    max-width: 100%;
+}
+
+.label-header {
+    text-align: center;
+    font-size: 10px;
+    opacity: 0.78;
+    line-height: 1.2;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed #d1d5db;
+}
+
+.brand-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 3px;
+}
+
+.logo-wrap {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.logo-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.empresa {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #0f172a;
+}
+
+.contacto,
+.correo {
+    font-size: 9px;
+    color: #6b7280;
+}
+
+.label-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+}
+
+.codigo {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1;
+    color: #0f172a;
+    letter-spacing: 0.02em;
+    word-break: break-word;
+    margin-top: 2px;
+}
+
+.descripcion {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+    color: #1f2937;
+    line-height: 1.28;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 2.56em;
+}
+
+.descripcion.name-sm { font-size: 12px; }
+.descripcion.name-xs { font-size: 11px; }
+
+.modelo {
+    text-align: center;
+    font-size: 11px;
+    color: #6b7280;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 1.2em;
+}
+
+.inline-edit {
+    position: relative;
+}
+
+.field-input {
+    display: none;
+}
+
+.editable-input {
+    width: 100%;
+    border: 1px solid #dbe3ef;
+    border-radius: 10px;
+    padding: 7px 9px;
+    font-size: 11px;
+    color: #0f172a;
+    background: #f8fafc;
+    outline: none;
+    transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.editable-input:focus {
+    border-color: #94a3b8;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.14);
+}
+
+.codigo-field .editable-input,
+.descripcion-field .editable-input,
+.modelo-field .editable-input {
+    text-align: center;
+}
+
+.codigo-field .editable-input {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.descripcion-field .editable-input {
+    font-size: 12px;
+}
+
+.modelo-field .editable-input,
+.fp-card .editable-input {
+    font-size: 11px;
+}
+
+.label-footer {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.meta-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 76px;
+    align-items: center;
+    gap: 10px;
+}
+
+.fp-card {
+    min-width: 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 7px 9px;
+    background: #f9fafb;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+}
+
+.fp-label {
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6b7280;
+    font-weight: 700;
+}
+
+.fp-value {
+    font-size: 14px;
+    font-weight: 800;
+    color: #111827;
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.qr {
+    width: 76px;
+    height: 76px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #fff;
+    flex-shrink: 0;
+    overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.qr img {
+    width: 70px;
+    height: 70px;
+    object-fit: contain;
+    display: block;
+}
+
+.barcode {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 64px;
+    overflow: hidden;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 4px;
+}
+
+.barcode img {
+    width: 100%;
+    height: 60px;
+    object-fit: contain;
+    display: block;
+}
+
+.inline-edit .label-display-only,
+.inline-edit .fp-value {
+    cursor: text;
+    border-radius: 8px;
+    transition: background-color 120ms ease, color 120ms ease;
+}
+
+.inline-edit .label-display-only:hover,
+.inline-edit .fp-value:hover {
+    background: #f8fafc;
+}
+
+.inline-edit.is-active .label-display-only,
+.inline-edit.is-active .fp-value {
+    display: none;
+}
+
+.inline-edit.is-active .field-input {
+    display: block;
+}
+
+.inputs-card {
+    max-width: 1080px;
+    margin: 0 auto 18px;
+}
+
+.form-wide {
+    display: grid;
+    grid-template-columns: 2fr 1fr auto;
+    gap: 10px;
+    align-items: end;
+}
+
+.print-mode-wrap {
+    max-width: 1080px;
+    margin: 0 auto 10px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+}
+
+.print-mode-wrap label {
+    font-size: 12px;
+    color: #334155;
+    font-weight: 600;
+}
+
+.search-assist {
+    margin-top: 12px;
+    border: 1px solid #dbe3ef;
+    border-radius: 12px;
+    background: #f8fbff;
+    padding: 10px;
+}
+
+.search-assist-title {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.search-assist-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+}
+
+.search-assist-input {
+    width: 100%;
+    border: 1px solid #dbe3ef;
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 13px;
+}
+
+.search-assist-results {
+    display: grid;
+    gap: 6px;
+    max-height: 260px;
+    overflow: auto;
+}
+
+.search-assist-item {
+    display: grid;
+    grid-template-columns: 130px 170px minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    border: 1px solid #dbe3ef;
+    border-radius: 10px;
+    padding: 7px 9px;
+    background: #fff;
+}
+
+.search-chip {
+    font-size: 12px;
+    color: #0f172a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.search-chip.muted {
+    color: #64748b;
+}
+
+.search-add-btn {
+    border: 1px solid #94a3b8;
+    border-radius: 8px;
+    background: #fff;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 8px;
+    cursor: pointer;
+}
+
+.search-add-btn:hover {
+    background: #eef6ff;
+    border-color: #3b82f6;
+}
+
+.search-help {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.search-assist mark {
+    background: #fde68a;
+    color: #7c2d12;
+    border-radius: 4px;
+    padding: 0 2px;
+}
+
+#printMode {
+    border: 1px solid #dbe3ef;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: #0f172a;
+    background: #fff;
+}
+
+html[data-print-mode="thermal"] .sheet {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 240px));
+    gap: 12px;
+}
+
+html[data-print-mode="thermal"] .label {
+    width: 240px;
+    min-height: 160px;
+    padding: 10px;
+    border-radius: 10px;
+}
+
+html[data-print-mode="thermal"] .logo-wrap {
+    width: 30px;
+    height: 30px;
+}
+
+html[data-print-mode="thermal"] .codigo {
+    font-size: 18px;
+}
+
+html[data-print-mode="thermal"] .descripcion {
+    font-size: 11px;
+    min-height: 2.2em;
+}
+
+html[data-print-mode="thermal"] .modelo {
+    font-size: 10px;
+}
+
+html[data-print-mode="thermal"] .meta-row {
+    grid-template-columns: minmax(0, 1fr) 62px;
+    gap: 8px;
+}
+
+html[data-print-mode="thermal"] .qr {
+    width: 62px;
+    height: 62px;
+    border-radius: 8px;
+}
+
+html[data-print-mode="thermal"] .qr img {
+    width: 56px;
+    height: 56px;
+}
+
+html[data-print-mode="thermal"] .barcode {
+    min-height: 48px;
+}
+
+html[data-print-mode="thermal"] .barcode img {
+    height: 42px;
+}
+
+@media (max-width: 1200px) {
+    .sheet {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 280px));
+    }
+}
+
+@media (max-width: 900px) {
+    .sheet {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 280px));
+    }
+
+    .form-wide {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media print {
+    @page {
+        size: A4;
+        margin: 5mm;
+    }
+
+    .sheet {
+        display: grid;
+        width: 100%;
+        grid-template-columns: repeat(auto-fit, minmax(var(--print-label-width, 280px), var(--print-label-width, 280px)));
+        justify-content: var(--print-justify, center);
+        align-content: start;
+        row-gap: var(--print-row-gap, 4mm);
+        column-gap: var(--print-col-gap, 3mm);
+    }
+
+    .label {
+        width: 280px;
+        min-height: 220px;
+        box-shadow: none;
+        border: 1px solid #333;
+        page-break-inside: avoid;
+        background: #fff;
+    }
+
+    .label-header {
+        padding-bottom: 6px;
+    }
+
+    .logo-wrap {
+        width: 32px;
+        height: 32px;
+    }
+
+    .field-input,
+    .print-mode-wrap,
+    .no-print,
+    .sidebar,
+    .topbar,
+    .message {
+        display: none !important;
+    }
+
+    .label .label-display-only,
+    .label .fp-value {
+        display: block !important;
+    }
+
+    .logo-wrap {
+        width: 24px;
+        height: 24px;
+    }
+
+    .layout,
+    .content {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+        border: none;
+        box-shadow: none;
+    }
+
+    html[data-print-mode="thermal"] .sheet {
+        display: block;
+        width: auto;
+    }
+
+    html[data-print-mode="thermal"] .label {
+        width: 60mm;
+        min-height: 40mm;
+        margin: 0;
+        padding: 2.4mm;
+        border-radius: 1.8mm;
+        box-shadow: none;
+        border: 0.2mm solid #222;
+        page-break-after: always;
+        page-break-inside: avoid;
+    }
+
+    html[data-print-mode="thermal"] .label:last-child {
+        page-break-after: auto;
+    }
+
+    html[data-print-mode="thermal"] .label-header {
+        padding-bottom: 1.2mm;
+    }
+
+    html[data-print-mode="thermal"] .logo-wrap {
+        width: 6mm;
+        height: 6mm;
+    }
+
+    html[data-print-mode="thermal"] .empresa {
+        font-size: 2.6mm;
+    }
+
+    html[data-print-mode="thermal"] .contacto,
+    html[data-print-mode="thermal"] .correo {
+        font-size: 2.2mm;
+    }
+
+    html[data-print-mode="thermal"] .codigo {
+        font-size: 5.2mm;
+        margin-top: 0;
+    }
+
+    html[data-print-mode="thermal"] .descripcion {
+        font-size: 2.8mm;
+        line-height: 1.2;
+        min-height: 2.4em;
+    }
+
+    html[data-print-mode="thermal"] .modelo {
+        font-size: 2.4mm;
+        min-height: 1.2em;
+    }
+
+    html[data-print-mode="thermal"] .label-footer {
+        gap: 1.6mm;
+    }
+
+    html[data-print-mode="thermal"] .meta-row {
+        grid-template-columns: minmax(0, 1fr) 15mm;
+        gap: 1.6mm;
+    }
+
+    html[data-print-mode="thermal"] .fp-card {
+        border-radius: 1.2mm;
+        padding: 1.2mm 1.4mm;
+    }
+
+    html[data-print-mode="thermal"] .fp-label {
+        font-size: 2mm;
+    }
+
+    html[data-print-mode="thermal"] .fp-value {
+        font-size: 3.1mm;
+    }
+
+    html[data-print-mode="thermal"] .qr {
+        width: 15mm;
+        height: 15mm;
+        border-radius: 1.2mm;
+    }
+
+    html[data-print-mode="thermal"] .qr img {
+        width: 13.6mm;
+        height: 13.6mm;
+    }
+
+    html[data-print-mode="thermal"] .barcode {
+        min-height: 8.8mm;
+        border-top: 0.2mm solid #e2e8f0;
+        padding-top: 0.8mm;
+    }
+
+    html[data-print-mode="thermal"] .barcode img {
+        height: 8mm;
+    }
+}
+</style>
+
+<div class="topbar no-print">
+    <div>
+        <h1 class="page-title">Imprimir Etiquetas</h1>
+        <p class="page-subtitle">Sistema profesional retail con QR + Code128 y hoja A4 optimizada.</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="link-btn" href="{{ url_for('bodega.index') }}">🏠 Panel Bodega</a>
+        <a class="link-btn" href="{{ url_for('bodega.etiquetas_historial') }}">🗂 Historial de Etiquetas</a>
+        <a class="link-btn" href="{{ url_for('inventario.labels_history') }}">📚 Historial Inventario</a>
+        <button id="btnPrintLabels" class="btn btn-primary" type="button">🖨 Imprimir</button>
+    </div>
+</div>
+
+{% if message %}
+<div class="message {{ message.type }} no-print">{{ message.text }}</div>
+{% endif %}
+
+<div class="print-mode-wrap no-print">
+    <label for="printMode">Modo impresión</label>
+    <select id="printMode" aria-label="Modo de impresion">
+        <option value="a4">A4</option>
+        <option value="thermal">Térmica</option>
+    </select>
+</div>
+
+<div class="form-card inputs-card no-print">
+    <h2 class="section-title">Generador de Etiquetas</h2>
+    <form id="labelsForm" method="get">
+        <div class="form-wide">
+            <div class="field">
+                <label for="codigos">Códigos (ej: 2417 x2, 5433 x5, F204)</label>
+                <input id="codigos" name="codigos" value="{{ codigos or '' }}" placeholder="Ingresa códigos o usa el buscador por código, OEM o descripción" required>
+            </div>
+            <div class="field">
+                <label for="fp">F° P</label>
+                <input id="fp" name="fp" value="{{ fp or '' }}" placeholder="F° Proveedor">
+            </div>
+            <div class="actions" style="margin:0;">
+                <button class="btn btn-primary" type="submit">Generar</button>
+            </div>
+        </div>
+
+        <div class="search-assist">
+            <p class="search-assist-title">Búsqueda Inteligente de Productos</p>
+            <div class="search-assist-row">
+                <input id="label-search" class="search-assist-input" type="text" placeholder="Buscar por código, OEM o descripción..." autocomplete="off">
+                <div class="search-help">Escribe al menos 2 caracteres. Puedes agregar resultados al campo de códigos con un clic.</div>
+                <div id="label-search-results" class="search-assist-results"></div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<section id="sheet" class="sheet">
+    {% if labels and labels|length > 0 %}
+    {% for label in labels %}
+    <article class="label">
+
+        <div class="label-header">
+            <div class="brand-row">
+                <div class="logo-wrap">
+                    <img class="logo-img" src="{{ url_for('static', filename='logo_andes.png') }}" alt="Logo Andes">
+                </div>
+                <div class="empresa">ANDES AUTO PARTS LTDA</div>
+            </div>
+            <div class="contacto">+56 9 2615 2826</div>
+            <div class="correo">andesautopartscl@gmail.com</div>
+        </div>
+
+        <div class="label-body">
+            <div class="inline-edit codigo-field" data-field="codigo">
+                <div class="codigo label-display-only">{{ label.codigo }}</div>
+                <input class="editable-input field-input edit-codigo" value="{{ label.codigo }}" placeholder="Codigo">
+            </div>
+
+            <div class="inline-edit descripcion-field" data-field="descripcion">
+                <div class="descripcion {{ label.name_class }} label-display-only">{{ label.descripcion or label.nombre }}</div>
+                <input class="editable-input field-input edit-descripcion" value="{{ label.descripcion or label.nombre }}" placeholder="Descripcion">
+            </div>
+
+            <div class="inline-edit modelo-field" data-field="modelo">
+                <div class="modelo label-display-only">{{ label.modelo or ' ' }}</div>
+                <input class="editable-input field-input edit-modelo" value="{{ label.modelo or '' }}" placeholder="Modelo">
+            </div>
+
+            <div class="label-footer">
+                <div class="meta-row">
+                    <div class="fp-card inline-edit" data-field="fp">
+                        <span class="fp-label">F° P</span>
+                        <strong class="fp-value">{{ label.fp or '—' }}</strong>
+                        <input class="editable-input field-input edit-fp" value="{{ label.fp or '' }}" placeholder="F° P">
+                    </div>
+                    <div class="qr">
+                        <img src="data:image/png;base64,{{ label.qr_base64 }}" alt="QR">
+                    </div>
+                </div>
+
+                <div class="barcode">
+                    <img src="data:image/png;base64,{{ label.barcode_base64 }}" alt="CODE128">
+                </div>
+            </div>
+        </div>
+    </article>
+    {% endfor %}
+    {% endif %}
+</section>
+{% if not labels or labels|length == 0 %}
+<div class="empty-state no-print">Ingresa códigos separados por coma para generar la previsualización.</div>
+{% endif %}
+
+<script>
+(function () {
+    const codigosInput = document.getElementById('codigos');
+    const fpInput = document.getElementById('fp');
+    const labelSearchInput = document.getElementById('label-search');
+    const labelSearchResults = document.getElementById('label-search-results');
+    const sheet = document.getElementById('sheet');
+    const logoSrc = '{{ url_for("static", filename="logo_andes.png") }}';
+    const printModeSelect = document.getElementById('printMode');
+    const btnPrintLabels = document.getElementById('btnPrintLabels');
+    const URL_LABEL_PRINT_HISTORY = '{{ url_for("bodega.etiquetas_historial_register") }}';
+    const THERMAL_PAGE_STYLE_ID = 'thermal-page-size-style';
+    let lastPrintRegistrationAt = 0;
+
+    function ensureThermalPageStyle(enabled) {
+        const existing = document.getElementById(THERMAL_PAGE_STYLE_ID);
+        if (!enabled) {
+            if (existing) existing.remove();
+            return;
+        }
+        if (existing) return;
+        const style = document.createElement('style');
+        style.id = THERMAL_PAGE_STYLE_ID;
+        style.textContent = '@media print { @page { size: 60mm 40mm; margin: 0; } }';
+        document.head.appendChild(style);
+    }
+
+    function applyPrintMode(mode) {
+        const normalized = mode === 'thermal' ? 'thermal' : 'a4';
+        document.documentElement.setAttribute('data-print-mode', normalized);
+        if (printModeSelect) printModeSelect.value = normalized;
+        ensureThermalPageStyle(normalized === 'thermal');
+        try {
+            localStorage.setItem('etiquetas_print_mode', normalized);
+        } catch (e) {}
+        optimizePrintGrid();
+    }
+
+    function optimizePrintGrid() {
+        const mode = document.documentElement.getAttribute('data-print-mode') || 'a4';
+        if (mode === 'thermal') {
+            const rootThermal = document.documentElement;
+            rootThermal.style.setProperty('--print-label-width', '60mm');
+            rootThermal.style.setProperty('--print-col-gap', '0');
+            rootThermal.style.setProperty('--print-row-gap', '0');
+            rootThermal.style.setProperty('--print-justify', 'start');
+            return;
+        }
+
+        const root = document.documentElement;
+        const labelWidth = 280;
+        const pageMarginPx = 38; // approx 10mm total printable margin safety
+        const minGapPx = 10;
+        const available = Math.max(320, window.innerWidth - pageMarginPx);
+        const cols = Math.max(1, Math.floor((available + minGapPx) / (labelWidth + minGapPx)));
+        const used = cols * labelWidth;
+        const remaining = Math.max(0, available - used);
+        const gap = cols > 1 ? Math.max(minGapPx, Math.floor(remaining / (cols - 1))) : 0;
+
+        root.style.setProperty('--print-label-width', labelWidth + 'px');
+        root.style.setProperty('--print-col-gap', gap + 'px');
+        root.style.setProperty('--print-row-gap', '12px');
+        root.style.setProperty('--print-justify', cols > 1 ? 'start' : 'center');
+    }
+
+    function escapeHtml(str) {
+        return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function highlightText(value, search) {
+        const raw = String(value || '');
+        const q = String(search || '').trim();
+        if (!q) return escapeHtml(raw);
+        const tokens = q.split(/\s+/).filter(Boolean).map(function (x) {
+            return x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        });
+        if (!tokens.length) return escapeHtml(raw);
+        const regex = new RegExp('(' + tokens.join('|') + ')', 'ig');
+        return escapeHtml(raw).replace(regex, '<mark>$1</mark>');
+    }
+
+    function appendCodeToInput(code) {
+        const clean = String(code || '').trim().toUpperCase();
+        if (!clean || !codigosInput) return;
+        const current = (codigosInput.value || '').trim();
+        if (!current) {
+            codigosInput.value = clean;
+            return;
+        }
+        const normalized = current.toUpperCase();
+        if (normalized.split(/[\n,;]+/).map(function (x) { return x.trim(); }).includes(clean)) {
+            return;
+        }
+        codigosInput.value = current + ', ' + clean;
+    }
+
+    function renderSearchResults(items, searchTerm) {
+        if (!labelSearchResults) return;
+        if (!items || !items.length) {
+            labelSearchResults.innerHTML = '<div class="search-help">Sin resultados para esta búsqueda.</div>';
+            return;
+        }
+
+        labelSearchResults.innerHTML = items.map(function (item) {
+            return '' +
+                '<div class="search-assist-item">' +
+                    '<div class="search-chip"><strong>' + highlightText(item.codigo || '', searchTerm) + '</strong></div>' +
+                    '<div class="search-chip muted">OEM: ' + highlightText(item.codigo_oem || '—', searchTerm) + '</div>' +
+                    '<div class="search-chip" title="' + escapeHtml(item.descripcion || '') + '">' + highlightText(item.descripcion || '', searchTerm) + '</div>' +
+                    '<button type="button" class="search-add-btn" data-code="' + escapeHtml(item.codigo || '') + '">Agregar</button>' +
+                '</div>';
+        }).join('');
+
+        labelSearchResults.querySelectorAll('.search-add-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                appendCodeToInput(btn.getAttribute('data-code'));
+                codigosInput.focus();
+            });
+        });
+    }
+
+    let searchTimer = null;
+    function searchProductsForLabels() {
+        const q = (labelSearchInput && labelSearchInput.value || '').trim();
+        if (!labelSearchResults) return;
+        if (q.length < 2) {
+            labelSearchResults.innerHTML = '';
+            return;
+        }
+
+        fetch('{{ url_for("bodega.etiquetas_buscar_productos") }}?q=' + encodeURIComponent(q), {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (!data || !data.success) {
+                    labelSearchResults.innerHTML = '<div class="search-help">No se pudo obtener resultados.</div>';
+                    return;
+                }
+                renderSearchResults(data.items || [], q);
+            })
+            .catch(function () {
+                labelSearchResults.innerHTML = '<div class="search-help">Error al buscar productos.</div>';
+            });
+    }
+
+    function debounceProductSearch() {
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(searchProductsForLabels, 250);
+    }
+
+    function renderLabels(labels) {
+        if (!sheet) return;
+        if (!labels || !labels.length) { sheet.innerHTML = ''; return; }
+        sheet.innerHTML = labels.map(function (label) {
+            return '<article class="label">' +
+                '<div class="label-header">' +
+                '<div class="brand-row"><div class="logo-wrap"><img class="logo-img" src="' + logoSrc + '" alt="Logo Andes"></div><div class="empresa">ANDES AUTO PARTS LTDA</div></div>' +
+                '<div class="contacto">+56 9 2615 2826</div>' +
+                '<div class="correo">andesautopartscl@gmail.com</div>' +
+                '</div>' +
+                '<div class="label-body">' +
+                '<div class="inline-edit codigo-field" data-field="codigo">' +
+                '<div class="codigo label-display-only">' + escapeHtml(label.codigo) + '</div>' +
+                '<input class="editable-input field-input edit-codigo" value="' + escapeHtml(label.codigo) + '" placeholder="Codigo">' +
+                '</div>' +
+                '<div class="inline-edit descripcion-field" data-field="descripcion">' +
+                '<div class="descripcion ' + escapeHtml(label.name_class || '') + ' label-display-only">' + escapeHtml(label.descripcion || label.nombre || '') + '</div>' +
+                '<input class="editable-input field-input edit-descripcion" value="' + escapeHtml(label.descripcion || label.nombre || '') + '" placeholder="Descripcion">' +
+                '</div>' +
+                '<div class="inline-edit modelo-field" data-field="modelo">' +
+                '<div class="modelo label-display-only">' + escapeHtml(label.modelo || ' ') + '</div>' +
+                '<input class="editable-input field-input edit-modelo" value="' + escapeHtml(label.modelo || '') + '" placeholder="Modelo">' +
+                '</div>' +
+                '<div class="label-footer">' +
+                '<div class="meta-row">' +
+                '<div class="fp-card inline-edit" data-field="fp"><span class="fp-label">F\u00b0 P</span><strong class="fp-value">' + escapeHtml(label.fp || '\u2014') + '</strong><input class="editable-input field-input edit-fp" value="' + escapeHtml(label.fp || '') + '" placeholder="F\u00b0 P"></div>' +
+                '<div class="qr"><img src="data:image/png;base64,' + label.qr_base64 + '" alt="QR"></div>' +
+                '</div>' +
+                '<div class="barcode"><img src="data:image/png;base64,' + label.barcode_base64 + '" alt="CODE128"></div>' +
+                '</div>' +
+                '</div>' +
+                '</article>';
+        }).join('');
+        bindEditableFields();
+    }
+
+    function collectLabelsForHistory() {
+        if (!sheet) return [];
+        const out = [];
+        const collected = {};
+        
+        sheet.querySelectorAll('.label').forEach(function (card) {
+            const code = (card.querySelector('.codigo') && card.querySelector('.codigo').textContent || '').trim();
+            const description = (card.querySelector('.descripcion') && card.querySelector('.descripcion').textContent || '').trim();
+            if (!code) return;
+            
+            if (!collected[code]) {
+                collected[code] = {
+                    codigo: code,
+                    descripcion: description,
+                    cantidad: 0,
+                };
+            }
+            collected[code].cantidad += 1;
+        });
+        
+        Object.values(collected).forEach(function (item) {
+            out.push(item);
+        });
+        
+        console.log('[LABELS] Collected labels for history:', out);
+        return out;
+    }
+
+    function registerPrintHistory() {
+        const now = Date.now();
+        if (now - lastPrintRegistrationAt < 4000) {
+            console.log('[LABELS] Throttling: too soon since last registration');
+            return;
+        }
+        
+        const labels = collectLabelsForHistory();
+        if (!labels.length) {
+            console.log('[LABELS] No labels to register');
+            return;
+        }
+
+        lastPrintRegistrationAt = now;
+        const payload = {
+            labels: labels,
+            document_reference: (codigosInput && codigosInput.value || '').slice(0, 120),
+        };
+        
+        console.log('[LABELS] Sending to', URL_LABEL_PRINT_HISTORY, payload);
+        
+        fetch(URL_LABEL_PRINT_HISTORY, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify(payload)
+        })
+            .then(function (response) {
+                console.log('[LABELS] Response status:', response.status);
+                return response.json().then(function (data) {
+                    console.log('[LABELS] Response data:', data);
+                    if (!response.ok || !data.ok) {
+                        console.error('[LABELS] Error:', data.error || 'Unknown error');
+                    } else {
+                        console.log('[LABELS] Success! Saved', data.saved, 'records');
+                    }
+                    return data;
+                });
+            })
+            .catch(function (error) {
+                console.error('[LABELS] Fetch error:', error);
+            });
+    }
+
+    function applyNameClass(el, text) {
+        el.classList.remove('name-sm', 'name-xs');
+        const len = (text || '').trim().length;
+        if (len > 50) el.classList.add('name-xs');
+        else if (len > 34) el.classList.add('name-sm');
+    }
+
+    function bindEditableFields() {
+        if (!sheet) return;
+        sheet.querySelectorAll('.label').forEach(function (card) {
+            const codeField = card.querySelector('.codigo-field');
+            const descriptionField = card.querySelector('.descripcion-field');
+            const modelField = card.querySelector('.modelo-field');
+            const fpField = card.querySelector('.fp-card.inline-edit');
+            const codeInput = card.querySelector('.edit-codigo');
+            const descriptionInput = card.querySelector('.edit-descripcion');
+            const modelInput = card.querySelector('.edit-modelo');
+            const fpInputField = card.querySelector('.edit-fp');
+            const codeOutput = card.querySelector('.codigo');
+            const descriptionOutput = card.querySelector('.descripcion');
+            const modelOutput = card.querySelector('.modelo');
+            const fpOutput = card.querySelector('.fp-value');
+
+            function openField(fieldWrapper, input) {
+                if (!fieldWrapper || !input) return;
+                card.querySelectorAll('.inline-edit.is-active').forEach(function (field) {
+                    if (field !== fieldWrapper) field.classList.remove('is-active');
+                });
+                fieldWrapper.classList.add('is-active');
+                input.focus();
+                input.select();
+            }
+
+            function closeField(fieldWrapper) {
+                if (fieldWrapper) fieldWrapper.classList.remove('is-active');
+            }
+
+            function sync() {
+                const code = (codeInput && codeInput.value || '').trim() || '—';
+                const description = (descriptionInput && descriptionInput.value || '').trim() || 'SIN DESCRIPCION';
+                const model = (modelInput && modelInput.value || '').trim() || ' ';
+                const fpValue = (fpInputField && fpInputField.value || '').trim() || '\u2014';
+
+                if (codeOutput) {
+                    codeOutput.textContent = code;
+                }
+                if (descriptionOutput) {
+                    descriptionOutput.textContent = description;
+                    applyNameClass(descriptionOutput, description);
+                }
+                if (modelOutput) modelOutput.textContent = model;
+                if (fpOutput) fpOutput.textContent = fpValue;
+            }
+
+            [codeInput, descriptionInput, modelInput, fpInputField].forEach(function (input) {
+                if (input) input.addEventListener('input', sync);
+                if (input) {
+                    input.addEventListener('keydown', function (event) {
+                        if (event.key === 'Enter') {
+                            event.preventDefault();
+                            closeField(input.closest('.inline-edit'));
+                        }
+                        if (event.key === 'Escape') {
+                            event.preventDefault();
+                            sync();
+                            closeField(input.closest('.inline-edit'));
+                        }
+                    });
+                    input.addEventListener('blur', function () {
+                        closeField(input.closest('.inline-edit'));
+                    });
+                }
+            });
+
+            [
+                [codeField, codeInput],
+                [descriptionField, descriptionInput],
+                [modelField, modelInput],
+                [fpField, fpInputField],
+            ].forEach(function (entry) {
+                const fieldWrapper = entry[0];
+                const input = entry[1];
+                if (!fieldWrapper || !input) return;
+                const trigger = fieldWrapper.querySelector('.label-display-only, .fp-value');
+                if (trigger) {
+                    trigger.addEventListener('click', function () {
+                        openField(fieldWrapper, input);
+                    });
+                }
+            });
+
+            sync();
+        });
+    }
+
+    let timer = null;
+    function refreshPreview() {
+        const codigos = (codigosInput.value || '').trim();
+        const fp = (fpInput.value || '').trim();
+        if (!codigos) { if (sheet) sheet.innerHTML = ''; return; }
+        const params = new URLSearchParams({ ajax: '1', codigos: codigos, fp: fp });
+        fetch('{{ url_for("bodega.etiquetas") }}?' + params.toString(), {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (res) { return res.json(); })
+            .then(function (data) { if (data && data.labels) renderLabels(data.labels); })
+            .catch(function () {});
+    }
+
+    function debounce() {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(refreshPreview, 380);
+    }
+
+    if (codigosInput) codigosInput.addEventListener('input', debounce);
+    if (fpInput) fpInput.addEventListener('input', debounce);
+    if (labelSearchInput) labelSearchInput.addEventListener('input', debounceProductSearch);
+    if (printModeSelect) {
+        printModeSelect.addEventListener('change', function () {
+            applyPrintMode(printModeSelect.value);
+        });
+    }
+    if (btnPrintLabels) {
+        btnPrintLabels.addEventListener('click', function () {
+            registerPrintHistory();
+            window.print();
+        });
+    }
+    bindEditableFields();
+
+    let preferredMode = 'a4';
+    try {
+        preferredMode = localStorage.getItem('etiquetas_print_mode') || 'a4';
+    } catch (e) {}
+    applyPrintMode(preferredMode);
+
+    optimizePrintGrid();
+    window.addEventListener('resize', optimizePrintGrid);
+    window.addEventListener('beforeprint', function () {
+        optimizePrintGrid();
+        registerPrintHistory();
+    });
+})();
+</script>
+{% endblock %}

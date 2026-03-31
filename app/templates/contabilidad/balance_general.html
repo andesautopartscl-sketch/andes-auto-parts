@@ -1,0 +1,62 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Balance General | Finanzas | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Finanzas</h1>
+    <p class="page-subtitle">Balance general</p>
+  </div>
+  <div class="topbar-actions">
+    <a class="link-btn" href="{{ url_for('contabilidad.estado_resultados') }}">📈 Estado de resultados</a>
+    <a class="link-btn" href="{{ url_for('contabilidad.reportes_financieros') }}">📊 Reportes</a>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px;">
+  <div style="border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:12px;">
+    <div style="font-size:12px;color:#64748b;">Total Activos</div>
+    <div style="font-size:24px;font-weight:700;">${{ '{:,.0f}'.format(total_activos).replace(',', '.') }}</div>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:12px;">
+    <div style="font-size:12px;color:#64748b;">Total Pasivos</div>
+    <div style="font-size:24px;font-weight:700;">${{ '{:,.0f}'.format(total_pasivos).replace(',', '.') }}</div>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:12px;">
+    <div style="font-size:12px;color:#64748b;">Total Patrimonio</div>
+    <div style="font-size:24px;font-weight:700;">${{ '{:,.0f}'.format(total_patrimonio).replace(',', '.') }}</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;">
+  <section style="border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:12px;">
+    <h3 style="margin-top:0;">Activos</h3>
+    {% for r in activos %}
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;">
+      <span>{{ r.cuenta.codigo }} {{ r.cuenta.nombre }}</span>
+      <strong>${{ '{:,.0f}'.format(r.saldo).replace(',', '.') }}</strong>
+    </div>
+    {% else %}<p style="color:#64748b;">Sin cuentas.</p>{% endfor %}
+  </section>
+
+  <section style="border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:12px;">
+    <h3 style="margin-top:0;">Pasivos</h3>
+    {% for r in pasivos %}
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;">
+      <span>{{ r.cuenta.codigo }} {{ r.cuenta.nombre }}</span>
+      <strong>${{ '{:,.0f}'.format(r.saldo).replace(',', '.') }}</strong>
+    </div>
+    {% else %}<p style="color:#64748b;">Sin cuentas.</p>{% endfor %}
+  </section>
+
+  <section style="border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:12px;">
+    <h3 style="margin-top:0;">Patrimonio</h3>
+    {% for r in patrimonio %}
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;">
+      <span>{{ r.cuenta.codigo }} {{ r.cuenta.nombre }}</span>
+      <strong>${{ '{:,.0f}'.format(r.saldo).replace(',', '.') }}</strong>
+    </div>
+    {% else %}<p style="color:#64748b;">Sin cuentas.</p>{% endfor %}
+  </section>
+</div>
+{% endblock %}

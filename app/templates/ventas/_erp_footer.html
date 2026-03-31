@@ -1,0 +1,68 @@
+<div class="cot-footer">
+    <div class="cot-notes">
+        <label for="notes">Observaciones</label>
+        <textarea id="notes" name="notes" placeholder="Condiciones de pago, validez, observaciones para el documento...">{{ notes }}</textarea>
+    </div>
+    <div class="cot-actions no-print">
+        {% if doc_type == 'cotizacion' %}
+        <button class="btn outline" type="button" id="btnConvertToOV">Convertir a Orden de Venta</button>
+        {% elif doc_type == 'orden_venta' %}
+        <button class="btn outline" type="button" id="btnFacturarOV">Convertir a Factura / Boleta</button>
+        {% elif doc_type == 'orden_compra' %}
+        <button class="btn outline" type="button" id="btnRecibirOC">Recibir / Factura proveedor</button>
+        {% elif doc_type == 'factura' %}
+        <button class="btn warn" type="button" id="btnCreateNC">Crear Nota de Crédito</button>
+        {% endif %}
+        <button class="btn" type="button" onclick="window.print()">Imprimir / PDF</button>
+        <button class="btn primary" type="submit">Guardar {{ title|lower }}</button>
+    </div>
+</div>
+
+{% if doc_type in ['orden_venta', 'factura'] %}
+<!-- PAYMENT MODAL -->
+<div id="pagoModal" class="psmodal" aria-hidden="true">
+    <div class="psbox" style="max-width:420px;">
+        <div class="pshead">
+            <h3>Registrar Pago</h3>
+            <button class="ps-closex" type="button" id="pagoModalClose">&times;</button>
+        </div>
+        <div style="padding:20px 24px;">
+            <label style="display:block;font-weight:600;margin-bottom:8px;" for="selectMetodoPago">Método de pago</label>
+            <select id="selectMetodoPago" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;">
+                <option value="efectivo">Efectivo</option>
+                <option value="transferencia">Transferencia bancaria</option>
+                <option value="tarjeta_debito">Tarjeta débito</option>
+                <option value="tarjeta_credito">Tarjeta crédito</option>
+                <option value="credito_30">Crédito 30 días</option>
+                <option value="credito_60">Crédito 60 días</option>
+                <option value="credito_90">Crédito 90 días</option>
+                <option value="cheque">Cheque</option>
+            </select>
+            <p id="pagoModalError" style="color:var(--danger);margin-top:8px;display:none;"></p>
+        </div>
+        <div class="psfoot">
+            <span></span>
+            <div class="ps-btns">
+                <button class="btn" type="button" id="pagoModalCancel">Cancelar</button>
+                <button class="btn primary" type="button" id="pagoModalConfirm">Confirmar pago</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div id="docTraceModal" class="psmodal" aria-hidden="true">
+    <div class="psbox" style="max-width:720px;">
+        <div class="pshead">
+            <h3>Trazabilidad del Documento</h3>
+            <button class="ps-closex" type="button" id="traceClose">&times;</button>
+        </div>
+        <div id="traceList" class="trace-list"></div>
+        <div class="psfoot">
+            <span class="ps-selcount" id="traceHint">Cadena documental</span>
+            <div class="ps-btns">
+                <button class="btn" type="button" id="traceClose2">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>

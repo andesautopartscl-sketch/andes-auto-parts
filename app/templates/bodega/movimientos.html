@@ -1,0 +1,96 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+
+{% block title %}Movimientos de Stock | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <div>
+        <h1 class="page-title">Movimientos de Stock</h1>
+        <p class="page-subtitle">Historial consolidado de ingresos, salidas y ajustes con filtros operativos.</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="link-btn" href="{{ url_for('bodega.ingreso') }}">📥 Nuevo ingreso</a>
+        <a class="link-btn" href="{{ url_for('bodega.salida') }}">📤 Nueva salida</a>
+        <a class="link-btn" href="{{ url_for('bodega.ajuste') }}">🧮 Nuevo ajuste</a>
+    </div>
+</div>
+
+<div class="table-card">
+    <h2 class="section-title">Filtros</h2>
+    <form method="get" class="filters">
+        <div class="field">
+            <label for="codigo">Código</label>
+            <input id="codigo" name="codigo" value="{{ filtros.codigo }}" placeholder="Buscar por código">
+        </div>
+        <div class="field">
+            <label for="marca">Marca</label>
+            <input id="marca" name="marca" value="{{ filtros.marca }}" placeholder="Ej: BOSCH">
+        </div>
+        <div class="field">
+            <label for="bodega">Bodega</label>
+            <input id="bodega" name="bodega" value="{{ filtros.bodega }}" placeholder="Ej: Bodega 1">
+        </div>
+        <div class="field">
+            <label for="fecha_desde">Desde</label>
+            <input id="fecha_desde" name="fecha_desde" type="date" value="{{ filtros.fecha_desde }}">
+        </div>
+        <div class="field">
+            <label for="fecha_hasta">Hasta</label>
+            <input id="fecha_hasta" name="fecha_hasta" type="date" value="{{ filtros.fecha_hasta }}">
+        </div>
+        <div class="field">
+            <label for="tipo">Tipo</label>
+            <select id="tipo" name="tipo">
+                <option value="" {% if not filtros.tipo %}selected{% endif %}>Todos</option>
+                <option value="ingreso" {% if filtros.tipo == 'ingreso' %}selected{% endif %}>Ingreso</option>
+                <option value="salida" {% if filtros.tipo == 'salida' %}selected{% endif %}>Salida</option>
+                <option value="ajuste" {% if filtros.tipo == 'ajuste' %}selected{% endif %}>Ajuste</option>
+            </select>
+        </div>
+        <div class="actions" style="margin-top:0;">
+            <button class="btn btn-primary" type="submit">Filtrar</button>
+            <a class="link-btn" href="{{ url_for('bodega.movimientos') }}">Limpiar</a>
+        </div>
+    </form>
+</div>
+
+<div class="table-card" style="margin-top:18px;">
+    <h2 class="section-title">Historial</h2>
+    {% if movimientos %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Código</th>
+                    <th>Marca</th>
+                    <th>Bodega</th>
+                    <th>Tipo</th>
+                    <th>Cantidad</th>
+                    <th>Proveedor</th>
+                    <th>Usuario</th>
+                    <th>Observación</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for movimiento in movimientos %}
+                <tr>
+                    <td>{{ movimiento.fecha.strftime('%d/%m/%Y %H:%M') if movimiento.fecha else '' }}</td>
+                    <td><strong>{{ movimiento.codigo_producto }}</strong></td>
+                    <td>{{ movimiento.marca or '—' }}</td>
+                    <td>{{ movimiento.bodega or '—' }}</td>
+                    <td><span class="badge {{ movimiento.tipo }}">{{ movimiento.tipo|upper }}</span></td>
+                    <td>{{ movimiento.cantidad }}</td>
+                    <td>{{ movimiento.proveedor or '—' }}</td>
+                    <td>{{ movimiento.usuario or 'sistema' }}</td>
+                    <td>{{ movimiento.observacion or 'Sin observación' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">No hay movimientos que coincidan con los filtros actuales.</div>
+    {% endif %}
+</div>
+{% endblock %}

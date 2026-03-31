@@ -1,0 +1,65 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Stock crítico | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Stock crítico</h1>
+    <p class="page-subtitle">Variantes con stock igual o inferior al umbral</p>
+  </div>
+  <div class="topbar-actions">
+    <a class="link-btn" href="{{ url_for('informes.index') }}">← Informes</a>
+  </div>
+</div>
+
+<form method="get" style="display:flex;gap:12px;align-items:flex-end;margin-bottom:16px;background:#fff;padding:14px;border:1px solid #e2e8f0;border-radius:12px;">
+  <div>
+    <label style="font-size:12px;font-weight:600;color:#64748b;display:block;margin-bottom:4px;">Umbral de stock</label>
+    <select name="umbral" style="border:1px solid #dbe3ef;border-radius:8px;padding:8px 10px;font-size:13px;">
+      {% for v in [0, 1, 2, 3, 5, 10] %}
+      <option value="{{ v }}" {% if threshold == v %}selected{% endif %}>≤ {{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn btn-primary">Filtrar</button>
+</form>
+
+{% if filas %}
+<div style="border:1px solid #fca5a5;border-radius:12px;padding:10px 16px;background:#fef2f2;margin-bottom:16px;color:#dc2626;font-weight:600;">
+  ⚠️ {{ filas|length }} variante{% if filas|length != 1 %}s{% endif %} con stock ≤ {{ threshold }}
+</div>
+{% endif %}
+
+<div style="overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;">
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Código</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Marca</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Bodega</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Proveedor</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Stock</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in filas %}
+      <tr>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;font-weight:600;">{{ f.codigo_producto }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;">{{ f.marca or '—' }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;">{{ f.bodega }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;">{{ f.proveedor or '—' }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;text-align:right;">
+          {% if f.stock == 0 %}
+          <span style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700;">0</span>
+          {% else %}
+          <span style="background:#ffedd5;color:#c2410c;border:1px solid #fdba74;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700;">{{ f.stock }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" style="padding:20px;text-align:center;color:#16a34a;font-weight:600;">✅ Sin problemas de stock crítico con el umbral seleccionado.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

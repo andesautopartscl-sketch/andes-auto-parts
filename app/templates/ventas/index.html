@@ -1,0 +1,134 @@
+{% extends 'ventas/base_partial.html' if _partial else 'ventas/base.html' %}
+
+{% block title %}Panel Ventas | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.ventas-wrap {
+    display: grid;
+    gap: 18px;
+}
+.ventas-hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 62%, #2563eb 100%);
+    color: #f8fafc;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.28);
+    padding: 24px 26px;
+}
+.ventas-hero h2 {
+    margin: 0;
+    font-size: 31px;
+    letter-spacing: -0.02em;
+}
+.ventas-hero p {
+    margin: 8px 0 0;
+    font-size: 14px;
+    line-height: 1.45;
+    color: rgba(241, 245, 249, 0.9);
+}
+.company {
+    margin-top: 16px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.35);
+    padding-top: 12px;
+    font-size: 12px;
+    color: rgba(248, 250, 252, 0.9);
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+}
+.sales-card {
+    background: #fff;
+    border: 1px solid #dbe5f2;
+    border-radius: 16px;
+    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+    padding: 18px;
+    display: grid;
+    gap: 10px;
+}
+.sales-card h3 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    color: #0f172a;
+}
+.sales-card p {
+    margin: 0;
+    color: #475569;
+    font-size: 14px;
+    line-height: 1.5;
+}
+.sales-card .cta {
+    margin-top: 8px;
+}
+.card-icon {
+    font-size: 28px;
+    line-height: 1;
+}
+.sales-card .btn {
+    width: 100%;
+    min-height: 42px;
+    font-size: 14px;
+}
+.hint-bar {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e3a8a;
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 600;
+}
+@media (max-width: 980px) {
+    .grid { grid-template-columns: 1fr; }
+    .ventas-hero h2 { font-size: 24px; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ventas-wrap">
+<section class="ventas-hero">
+    <h2>Documentos de Ventas y Compras</h2>
+    <p>Flujo completo para Cotizacion, Orden de Venta y Orden de Compra con calculo automatico de totales y salida profesional para impresion/PDF.</p>
+    <div class="company">
+        <div><strong>{{ company.name }}</strong></div>
+        <div>RUT: {{ company.rut }}</div>
+        <div>{{ company.business }}</div>
+        <div>{{ company.address }}</div>
+    </div>
+</section>
+
+<div class="hint-bar">Tip: crea primero una cotizacion y luego convierte a orden de venta/factura cuando corresponda.</div>
+
+<section class="grid">
+    <article class="sales-card">
+        <div class="card-icon">📄</div>
+        <h3>Cotizacion</h3>
+        <p>Genera propuestas comerciales con lineas dinamicas de productos, cantidades, precios y total final con IVA.</p>
+        <div class="cta">
+            <a class="btn btn-primary" href="{{ url_for('ventas.cotizacion') }}" onclick="event.preventDefault(); window._loadModule && window._loadModule(this.href);">Crear cotizacion</a>
+        </div>
+    </article>
+
+    <article class="sales-card">
+        <div class="card-icon">📋</div>
+        <h3>Orden de Venta</h3>
+        <p>Documento operacional para ventas con estado de seguimiento: pendiente, aprobada y entregada.</p>
+        <div class="cta">
+            <a class="btn btn-primary" href="{{ url_for('ventas.orden_venta') }}" onclick="event.preventDefault(); window._loadModule && window._loadModule(this.href);">Crear orden de venta</a>
+        </div>
+    </article>
+
+    <article class="sales-card">
+        <div class="card-icon">🛍️</div>
+        <h3>Orden de Compra</h3>
+        <p>Gestiona compras a proveedor con costos unitarios, cantidades y total de adquisicion para abastecimiento.</p>
+        <div class="cta">
+            <a class="btn btn-primary" href="{{ url_for('ventas.orden_compra') }}" onclick="event.preventDefault(); window._loadModule && window._loadModule(this.href);">Crear orden de compra</a>
+        </div>
+    </article>
+</section>
+</div>
+{% endblock %}

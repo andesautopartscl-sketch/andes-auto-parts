@@ -1,0 +1,190 @@
+{% extends 'base_content.html' if _partial else 'erp_shell.html' %}
+{% block title %}Oportunidades CRM | Andes Auto Parts{% endblock %}
+{% block header_subtitle %}CRM &mdash; Oportunidades de venta{% endblock %}
+
+{% block extra_head %}
+<style>
+.kanban-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.kanban-col { background: #f8fafc; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.kanban-col-head { padding: 13px 16px; font-size: 13px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
+.kanban-col-head.nueva { background: #dbeafe; color: #1d4ed8; }
+.kanban-col-head.en-proceso { background: #fef3c7; color: #92400e; }
+.kanban-col-head.ganada { background: #dcfce7; color: #166534; }
+.kanban-col-head.perdida { background: #fee2e2; color: #991b1b; }
+.kanban-cards { padding: 10px; display: grid; gap: 8px; min-height: 60px; }
+.kanban-card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; box-shadow: 0 2px 8px rgba(15,23,42,.05); }
+.kanban-card h4 { font-size: 13px; margin: 0 0 4px; }
+.kanban-card .monto { font-size: 15px; font-weight: 800; color: var(--primary); margin: 5px 0 3px; }
+.kanban-card .meta { font-size: 11px; color: var(--muted); }
+.kanban-card .card-actions { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+.modal-bg { display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 1000; align-items: center; justify-content: center; }
+.modal-bg.open { display: flex; }
+.modal-box { background: #fff; border-radius: 18px; padding: 28px; max-width: 560px; width: 95%; box-shadow: 0 24px 60px rgba(15,23,42,.22); }
+.modal-box h3 { margin: 0 0 18px; font-size: 18px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:grid;gap:18px;">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div>
+      <h2 style="font-size:20px;">Oportunidades de venta</h2>
+      <p style="color:var(--muted);font-size:13px;margin-top:3px;">CRM ligero — seguimiento de clientes potenciales</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      {% for e in estados %}
+      <a href="?estado={{ e }}" class="btn sm {% if estado_filter == e %}primary{% else %}outline{% endif %}">{{ e }}</a>
+      {% endfor %}
+      <a href="{{ url_for('oportunidades.index') }}" class="btn sm outline">Todas</a>
+      <button class="btn primary sm" id="btnNuevaOp">+ Nueva oportunidad</button>
+    </div>
+  </div>
+
+  <!-- Kanban board -->
+  <div class="kanban-board">
+    {% for estado in estados %}
+    <div class="kanban-col">
+      <div class="kanban-col-head {{ estado|lower|replace(' ', '-') }}">
+        <span>{{ estado }}</span>
+        <span class="badge slate">{{ kanban[estado]|length }}</span>
+      </div>
+      <div class="kanban-cards">
+        {% for op in kanban[estado] %}
+        <div class="kanban-card">
+          <h4>{{ op.cliente_nombre or (op.cliente.nombre if op.cliente else 'Sin cliente') }}</h4>
+          <div class="monto">${{ '{:,.0f}'.format(op.monto_estimado or 0).replace(',', '.') }}</div>
+          <div class="meta">
+            <div>{{ op.descripcion[:60] }}{% if op.descripcion|length > 60 %}…{% endif %}</div>
+            {% if op.fecha_seguimiento %}
+            <div>Seguimiento: <strong>{{ op.fecha_seguimiento.strftime('%d/%m/%Y') }}</strong></div>
+            {% endif %}
+            <div>{{ op.usuario or '—' }} &bull; {{ op.created_at.strftime('%d/%m/%Y') }}</div>
+          </div>
+          <div class="card-actions">
+            <button class="btn sm outline btn-cambiar-estado"
+              data-id="{{ op.id }}"
+              data-estado="{{ op.estado }}">Cambiar estado</button>
+            <form method="post" action="{{ url_for('oportunidades.eliminar', oid=op.id) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar esta oportunidad?')">
+              <button class="btn sm danger" type="submit">Eliminar</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+        {% if not kanban[estado] %}
+        <div style="padding:12px;text-align:center;color:var(--muted);font-size:12px;">Sin oportunidades</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+
+<!-- Modal: Nueva oportunidad -->
+<div class="modal-bg" id="modalNuevaOp">
+  <div class="modal-box">
+    <h3>Nueva oportunidad</h3>
+    <form method="post" action="{{ url_for('oportunidades.nueva') }}">
+      <div style="display:grid;gap:12px;">
+        <div class="form-group">
+          <label>Cliente</label>
+          <select name="cliente_id">
+            <option value="">-- Sin cliente registrado --</option>
+            {% for c in clientes %}
+            <option value="{{ c.id }}">{{ c.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Nombre cliente (manual)</label>
+          <input type="text" name="cliente_nombre_manual" placeholder="Si no está en la lista">
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <textarea name="descripcion" rows="2" style="resize:vertical;" placeholder="¿Qué necesita el cliente?"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group">
+            <label>Monto estimado ($)</label>
+            <input type="number" name="monto_estimado" min="0" step="100" value="0">
+          </div>
+          <div class="form-group">
+            <label>Estado</label>
+            <select name="estado">
+              {% for e in estados %}
+              <option value="{{ e }}">{{ e }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Fecha de seguimiento</label>
+          <input type="date" name="fecha_seguimiento">
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">
+          <button type="button" class="btn outline" id="btnCancelarOp">Cancelar</button>
+          <button type="submit" class="btn primary">Crear oportunidad</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Cambiar estado -->
+<div class="modal-bg" id="modalEstado">
+  <div class="modal-box" style="max-width:360px;">
+    <h3>Cambiar estado</h3>
+    <div style="display:grid;gap:10px;margin-top:4px;" id="estadoBtns">
+      {% for e in estados %}
+      <button class="btn outline btn-set-estado" data-estado="{{ e }}">{{ e }}</button>
+      {% endfor %}
+    </div>
+    <div style="margin-top:14px;text-align:right;">
+      <button class="btn outline" id="btnCancelarEstado">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const URL_ESTADO = '/oportunidades/{id}/estado';
+  let targetId = null;
+
+  document.getElementById('btnNuevaOp').addEventListener('click', () => {
+    document.getElementById('modalNuevaOp').classList.add('open');
+  });
+  document.getElementById('btnCancelarOp').addEventListener('click', () => {
+    document.getElementById('modalNuevaOp').classList.remove('open');
+  });
+  document.getElementById('btnCancelarEstado').addEventListener('click', () => {
+    document.getElementById('modalEstado').classList.remove('open');
+  });
+
+  document.querySelectorAll('.btn-cambiar-estado').forEach(btn => {
+    btn.addEventListener('click', () => {
+      targetId = btn.dataset.id;
+      document.getElementById('modalEstado').classList.add('open');
+    });
+  });
+
+  document.querySelectorAll('.btn-set-estado').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const estado = btn.dataset.estado;
+      if (!targetId) return;
+      fetch(URL_ESTADO.replace('{id}', targetId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) window.location.reload();
+          else alert(data.error || 'Error');
+        });
+    });
+  });
+})();
+</script>
+{% endblock %}

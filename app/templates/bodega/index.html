@@ -1,0 +1,112 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+
+{% block title %}Panel de Bodega | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <div>
+        <h1 class="page-title">Panel de Bodega</h1>
+        <p class="page-subtitle">Control centralizado del inventario operativo, con ingresos, salidas, ajustes y trazabilidad completa.</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="link-btn" href="{{ url_for('bodega.ingreso') }}">📥 Nuevo ingreso</a>
+        <a class="link-btn" href="{{ url_for('bodega.salida') }}">📤 Registrar salida</a>
+        <a class="link-btn" href="{{ url_for('bodega.movimientos') }}">📊 Ver historial</a>
+    </div>
+</div>
+
+<div class="grid-3">
+    <div class="stat-card">
+        <p class="stat-label">Movimientos Totales</p>
+        <p class="stat-value">{{ total_movimientos }}</p>
+    </div>
+    <div class="stat-card">
+        <p class="stat-label">Movimientos Hoy</p>
+        <p class="stat-value">{{ movimientos_hoy }}</p>
+    </div>
+    <div class="stat-card">
+        <p class="stat-label">Productos con Bajo Stock</p>
+        <p class="stat-value">{{ resumen.bajo_stock or 0 }}</p>
+    </div>
+</div>
+
+<div class="panel" style="margin-bottom:18px;">
+    <h2 class="section-title">Resumen Operativo</h2>
+    <div class="product-summary">
+        <div class="summary-box">
+            <h4>Productos Activos</h4>
+            <p>{{ resumen.total_productos or 0 }}</p>
+        </div>
+        <div class="summary-box">
+            <h4>Sin Stock</h4>
+            <p>{{ resumen.sin_stock or 0 }}</p>
+        </div>
+        <div class="summary-box">
+            <h4>Bajo Stock</h4>
+            <p>{{ resumen.bajo_stock or 0 }}</p>
+        </div>
+        <div class="summary-box">
+            <h4>Enlace Rápido</h4>
+            <p><a href="{{ url_for('productos.buscar') }}" style="color:#1d4ed8;text-decoration:none;">Ir a productos</a></p>
+        </div>
+    </div>
+</div>
+
+<div class="panel" style="margin-bottom:18px;">
+    <h2 class="section-title">Accesos Directos</h2>
+    <div class="quick-links">
+        <a class="quick-link" href="{{ url_for('bodega.ingreso') }}">
+            <strong>📥 Ingreso</strong>
+            <span>Suma stock al producto y registra el responsable.</span>
+        </a>
+        <a class="quick-link" href="{{ url_for('bodega.salida') }}">
+            <strong>📤 Salida</strong>
+            <span>Descuenta stock con validación de saldo disponible.</span>
+        </a>
+        <a class="quick-link" href="{{ url_for('bodega.ajuste') }}">
+            <strong>🧮 Ajuste</strong>
+            <span>Corrige inventario manualmente sin dejar trazabilidad fuera del sistema.</span>
+        </a>
+        <a class="quick-link" href="{{ url_for('bodega.movimientos') }}">
+            <strong>📊 Historial</strong>
+            <span>Consulta ingresos, salidas y ajustes con filtros por fecha y código.</span>
+        </a>
+    </div>
+</div>
+
+<div class="table-card">
+    <h2 class="section-title">Últimos Movimientos</h2>
+    {% if recientes %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Código</th>
+                    <th>Tipo</th>
+                    <th>Cantidad</th>
+                    <th>Proveedor</th>
+                    <th>Usuario</th>
+                    <th>Observación</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for movimiento in recientes %}
+                <tr>
+                    <td>{{ movimiento.fecha.strftime('%d/%m/%Y %H:%M') if movimiento.fecha else '' }}</td>
+                    <td><strong>{{ movimiento.codigo_producto }}</strong></td>
+                    <td><span class="badge {{ movimiento.tipo }}">{{ movimiento.tipo|upper }}</span></td>
+                    <td>{{ movimiento.cantidad }}</td>
+                    <td>{{ movimiento.proveedor or '—' }}</td>
+                    <td>{{ movimiento.usuario or 'sistema' }}</td>
+                    <td>{{ movimiento.observacion or 'Sin observación' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">Aún no hay movimientos registrados en bodega.</div>
+    {% endif %}
+</div>
+{% endblock %}

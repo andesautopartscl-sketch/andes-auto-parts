@@ -1,0 +1,2274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<title>Ficha Técnica | {{ producto.codigo }}</title>
+
+<style>
+:root {
+  --ft-bg: #e8edf5;
+  --ft-surface: #ffffff;
+  --ft-border: #d8e0ec;
+  --ft-text: #0f172a;
+  --ft-muted: #64748b;
+  --ft-accent: #1e3a5f;
+  --ft-accent-2: #2563eb;
+  --ft-accent-soft: #eff6ff;
+  --ft-success: #059669;
+  --ft-radius: 14px;
+  --ft-shadow: 0 3px 18px rgba(15, 23, 42, 0.06);
+  --ft-font: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+/* Sin scroll interno en el documento del iframe: una sola barra en el modal padre */
+html {
+  overflow-x: hidden;
+  overflow-y: visible;
+  height: auto;
+}
+
+body.ficha-tecnica-page {
+  margin: 0;
+  font-family: var(--ft-font);
+  font-size: 12px;
+  line-height: 1.38;
+  color: var(--ft-text);
+  background: linear-gradient(165deg, #dbeafe 0%, #f1f5f9 42%, #e2e8f0 100%);
+  overflow-x: hidden;
+  overflow-y: visible;
+  min-height: 0;
+}
+
+/* Shell — ancho completo del iframe para que la imagen use toda la columna */
+.ft-wrap {
+  max-width: 100%;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2px 4px 4px;
+  box-sizing: border-box;
+}
+
+.ft-card {
+  background: var(--ft-surface);
+  border-radius: var(--ft-radius);
+  border: 1px solid var(--ft-border);
+  box-shadow: var(--ft-shadow);
+  overflow: hidden;
+  padding-bottom: 38px;
+}
+
+/* Top bar */
+.ft-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 6px 10px 5px;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  border-bottom: 1px solid var(--ft-border);
+}
+
+.ft-kicker {
+  margin: 0 0 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ft-muted);
+}
+
+.ft-title {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ft-accent);
+}
+
+.ft-top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.ft-code-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ft-accent);
+  background: #f1f5f9;
+  border: 1px solid var(--ft-border);
+  border-radius: 999px;
+}
+
+.ft-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ft-btn--primary {
+  color: #fff;
+  background: linear-gradient(135deg, var(--ft-success), #34d399);
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.35);
+}
+
+.ft-btn--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(5, 150, 105, 0.45);
+}
+
+/* ~60% media / ~40% panel info — stretch: la columna izquierda llena la fila; el visor crece y no queda “piso” blanco */
+.ft-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
+}
+
+.ft-col--media {
+  border-right: 1px solid var(--ft-border);
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 4px 6px 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-width: 0;
+  min-height: 0;
+  align-self: stretch;
+}
+
+.ft-col--specs {
+  background: #eef1f6;
+  padding: 6px 10px 8px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ft-brand-head {
+  margin: 0 0 5px;
+}
+
+.ft-brand-logo {
+  height: 28px;
+  width: auto;
+  max-width: 150px;
+  object-fit: contain;
+  display: block;
+}
+
+.ft-panel-title {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+/* Llena la altura de la columna: visor crece, miniaturas abajo (sin hueco gigante bajo las thumbs) */
+.ft-media-grow {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.ft-viewer {
+  position: relative;
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-height: min(36vh, 260px);
+  width: 100%;
+  min-width: 0;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid var(--ft-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  overflow: hidden;
+}
+
+/* Rectángulo fijo respecto al visor: el <img> no participa del flujo → no afecta scrollHeight ni altura intrínseca */
+.ft-viewer-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Dentro del stage (tamaño fijo) el 100% es seguro: contain escala cualquier proporción sin recorte */
+.ft-img-main {
+  display: block;
+  box-sizing: border-box;
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  object-fit: contain;
+  object-position: center;
+  cursor: zoom-in;
+  transition: transform 0.22s ease;
+  image-rendering: auto;
+  transform-origin: center center;
+}
+
+/* Zoom suave al pasar el mouse */
+.ft-img-main:hover:not(.ft-img-main--zoomed) {
+  transform: scale(1.04);
+}
+
+/* Zoom + pan: el transform lo aplica JS (translate + scale) */
+.ft-img-main.ft-img-main--zoomed {
+  cursor: grab;
+}
+
+.ft-img-main.ft-img-main--zoomed.ft-img-main--panning {
+  cursor: grabbing;
+  transition: none;
+}
+
+.ft-thumb-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  flex-shrink: 0;
+  justify-content: flex-start;
+}
+
+.miniatura {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--ft-border);
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  flex-shrink: 0;
+}
+
+.miniatura:hover {
+  transform: scale(1.06);
+  border-color: var(--ft-accent-2);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+}
+
+.visor360-btn {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #f8fafc;
+  border: 1px solid var(--ft-border);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.mini360 {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.15s ease;
+}
+
+.badge360 {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.spin-icon {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 20px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ft-accent);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  animation: spin360 2.5s linear infinite;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes spin360 {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.visor360-btn:hover {
+  transform: scale(1.06);
+  border-color: var(--ft-accent-2);
+}
+
+.visor360-btn:hover .mini360 {
+  transform: scale(1.08);
+}
+
+.ft-placeholder {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-height: min(36vh, 260px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #f1f5f9;
+  border: 1px dashed var(--ft-border);
+  color: var(--ft-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Stock justo después del bloque anterior (sin empujar al fondo de una columna alta) */
+.ft-stock-card {
+  margin-top: 8px;
+  flex-shrink: 0;
+  background: #fff;
+  border-radius: 11px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.075);
+  padding: 7px 9px 8px;
+}
+
+.ft-stock-card-title {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ft-accent);
+}
+
+.ft-stock-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid #eef2f6;
+  font-size: 11px;
+}
+
+.ft-stock-line:last-of-type {
+  border-bottom: none;
+}
+
+.ft-stock-line-label {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.ft-stock-line-val {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--ft-text);
+}
+
+.ft-stock-line--total {
+  margin-top: 2px;
+  padding-top: 5px;
+  border-top: 2px solid #e2e8f0;
+  border-bottom: none;
+  font-size: 12px;
+  color: var(--ft-accent);
+}
+
+.ft-stock-line--total .ft-stock-line-label {
+  color: var(--ft-accent);
+  font-weight: 800;
+}
+
+.ft-stock-line--total .ft-stock-line-val {
+  font-size: 0.98rem;
+  color: var(--ft-accent);
+}
+
+/* Specs column */
+.ft-desc {
+  margin: 0 0 6px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.32;
+  color: var(--ft-text);
+}
+
+.ft-spec-table {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 7px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.035);
+}
+
+.ft-spec-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 38%) 1fr;
+  gap: 0;
+  align-items: start;
+  padding: 4px 9px;
+  border-bottom: 1px solid #eef2f6;
+  font-size: 11px;
+}
+
+.ft-spec-row:last-child {
+  border-bottom: none;
+}
+
+.ft-spec-dt {
+  font-weight: 600;
+  color: var(--ft-muted);
+}
+
+.ft-spec-dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--ft-text);
+  word-break: break-word;
+}
+
+.ft-section-title {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ft-accent);
+}
+
+.homologados-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 0;
+}
+
+.chip-hom {
+  display: inline-block;
+  padding: 3px 8px;
+  border: 1px solid #c7d2f0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ft-accent);
+}
+
+.chip-hom--text {
+  font-size: 10px;
+  font-weight: 500;
+  max-width: 100%;
+  word-break: break-word;
+}
+
+.ft-compat-block {
+  margin-top: 0;
+  margin-bottom: 7px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .ft-body {
+    grid-template-columns: 1fr;
+  }
+  .ft-col--media {
+    border-right: none;
+    border-bottom: 1px solid var(--ft-border);
+  }
+}
+
+@media (max-height: 720px) {
+  .ft-viewer {
+    min-height: min(28vh, 200px);
+  }
+  .ft-placeholder {
+    min-height: min(28vh, 200px);
+  }
+  .miniatura,
+  .visor360-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 9px;
+  }
+  .ft-col--media,
+  .ft-col--specs {
+    padding: 4px 6px;
+  }
+}
+
+/* —— Modal despiece estilo catálogo EPC —— */
+.epc-despiece-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  box-sizing: border-box;
+}
+.epc-despiece-wrap {
+  background: #fff;
+  width: min(920px, 96vw);
+  max-width: 920px;
+  max-height: min(94vh, 800px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 25px 50px -12px rgba(15, 23, 42, 0.35),
+    0 12px 24px -8px rgba(15, 23, 42, 0.18);
+  /* Sin altura definida, flex:1 en hijos colapsa el contenido a ~0px */
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.epc-despiece-main {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: min-content;
+}
+.epc-despiece-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(165deg, #f8fafc 0%, #ffffff 55%);
+  flex-shrink: 0;
+}
+.epc-despiece-head__kicker {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+.epc-despiece-head__title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+  max-width: min(620px, 82vw);
+}
+.epc-despiece-head__close {
+  flex-shrink: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  color: #475569;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.epc-despiece-head__close:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+.epc-despiece-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(200px, 280px);
+  grid-template-rows: 300px;
+  gap: 0;
+  flex: 0 0 auto;
+  min-height: 300px;
+  height: 300px;
+  max-height: 300px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.epc-despiece-diagram {
+  background: linear-gradient(160deg, #eef2f7 0%, #f8fafc 100%);
+  border-right: 1px solid #e2e8f0;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  min-height: 300px;
+  height: 300px;
+  max-height: 300px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.epc-despiece-diagram-inner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+.epc-despiece-diagram-inner--zoom {
+  flex-direction: column;
+  align-items: stretch;
+}
+.epc-despiece-zoom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 6px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid #e2e8f0;
+}
+.epc-zoom-hint {
+  font-size: 9px;
+  color: #94a3b8;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.epc-zbtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1;
+  color: #334155;
+  padding: 0;
+}
+.epc-zbtn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+.epc-zoom-pct {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  min-width: 40px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.epc-despiece-zoom-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  cursor: default;
+}
+.epc-despiece-zoom-viewport.epc-despiece-zoom-viewport--can-pan {
+  cursor: grab;
+}
+.epc-despiece-zoom-viewport.epc-despiece-zoom-viewport--panning {
+  cursor: grabbing;
+}
+.epc-despiece-zoom-inner {
+  transform-origin: center center;
+  transition: transform 0.1s ease-out;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.epc-despiece-zoom-inner.epc-panning {
+  transition: none;
+}
+.epc-despiece-empty {
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  text-align: center;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  overflow: auto;
+  box-sizing: border-box;
+}
+.epc-despiece-empty__icon {
+  font-size: 22px;
+  line-height: 1;
+  margin-bottom: 6px;
+  opacity: 0.85;
+}
+.epc-despiece-side-hint {
+  padding: 12px 12px;
+  margin: 0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+  background: linear-gradient(180deg, #fafbfc 0%, #fff 100%);
+  border-radius: 0;
+}
+.epc-despiece-imgbox {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-height: 268px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.epc-despiece-imgbox > div {
+  max-width: 100%;
+  max-height: 268px;
+}
+.epc-despiece-imgbox img {
+  max-width: 100%;
+  max-height: 268px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  vertical-align: middle;
+}
+.epc-despiece-hotspots {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.epc-despiece-hotspot {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid #dc2626;
+  background: rgba(220, 38, 38, 0.18);
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #b91c1c;
+  box-sizing: border-box;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.epc-despiece-hotspot:hover {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.35);
+}
+.epc-despiece-hotspot.is-active {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.22);
+  color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+  z-index: 2;
+}
+.epc-despiece-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 300px;
+  background: #fff;
+}
+.epc-despiece-side-scroll {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.epc-despiece-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.epc-despiece-table thead th {
+  position: sticky;
+  top: 0;
+  background: linear-gradient(180deg, #1e3a8a 0%, #172554 100%);
+  color: #fff;
+  text-align: left;
+  padding: 9px 10px;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+.epc-despiece-table tbody td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #eef2f7;
+  vertical-align: top;
+}
+.epc-despiece-table tbody tr {
+  cursor: pointer;
+}
+.epc-despiece-table tbody tr:hover {
+  background: #f8fafc;
+}
+.epc-despiece-table tbody tr.is-selected {
+  background: #dbeafe;
+  outline: 1px solid #93c5fd;
+}
+.epc-despiece-foot {
+  flex-shrink: 0;
+  padding: 6px 10px 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-top: 1px solid #e2e8f0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 8px;
+  font-size: 10px;
+}
+.epc-despiece-foot label {
+  display: block;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+.epc-despiece-foot .v {
+  font-weight: 700;
+  color: #0f172a;
+  word-break: break-word;
+  min-height: 1.15em;
+}
+.epc-despiece-foot .epc-despiece-det-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-size: 11px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #fff;
+}
+.epc-despiece-foot .epc-despiece-det-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+.epc-despiece-notas {
+  margin: 0;
+  padding: 6px 10px 8px;
+  font-size: 0.72rem;
+  color: #475569;
+  line-height: 1.4;
+  background: #fffbeb;
+  border-top: 1px solid #fde68a;
+  flex-shrink: 0;
+}
+/* Panel admin: no usar flex:1 con padre de altura auto (colapsa el modal) */
+.epc-despiece-admin {
+  flex: 0 0 auto;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-top: 1px solid #cbd5e1;
+  background: linear-gradient(180deg, #f1f5f9 0%, #e8eef5 100%);
+  padding: 10px 12px 12px;
+}
+.epc-despiece-admin__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.epc-despiece-admin__head::before {
+  content: "";
+  width: 4px;
+  height: 24px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #3b82f6, #1d4ed8);
+  flex-shrink: 0;
+}
+.epc-despiece-admin__head span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #475569;
+}
+.epc-despiece-admin__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 100%;
+}
+.epc-despiece-field label.epc-despiece-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+.epc-despiece-input,
+.epc-despiece-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  font-size: 13px;
+  color: #0f172a;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.epc-despiece-textarea--mono {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  min-height: 72px;
+  max-height: min(28vh, 200px);
+  overflow-y: auto;
+  resize: vertical;
+}
+.epc-despiece-json-details {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.epc-despiece-json-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px 0 6px;
+  list-style: none;
+  user-select: none;
+}
+.epc-despiece-json-summary::-webkit-details-marker {
+  display: none;
+}
+.epc-despiece-json-summary::before {
+  content: "▸";
+  font-size: 10px;
+  color: #94a3b8;
+  transition: transform 0.15s ease;
+}
+.epc-despiece-json-details[open] .epc-despiece-json-summary::before {
+  transform: rotate(90deg);
+}
+.epc-despiece-json-help {
+  margin: 0 0 8px;
+  font-size: 10px;
+  color: #64748b;
+  line-height: 1.4;
+}
+.epc-despiece-preview {
+  width: 100%;
+  max-width: 280px;
+  height: 104px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.epc-despiece-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.epc-despiece-preview__placeholder {
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 8px;
+  text-align: center;
+  line-height: 1.35;
+}
+.epc-despiece-input:focus,
+.epc-despiece-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+}
+.epc-despiece-file {
+  font-size: 12px;
+  padding: 6px 0;
+}
+.epc-despiece-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  color: #475569;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.epc-despiece-check input {
+  margin-top: 3px;
+  accent-color: #2563eb;
+}
+.epc-despiece-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 6px;
+  padding-top: 4px;
+}
+.epc-despiece-btn-save {
+  background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%);
+  color: #fff;
+  border: none;
+  padding: 11px 22px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.epc-despiece-btn-save:hover {
+  box-shadow: 0 4px 14px rgba(29, 78, 216, 0.45);
+  transform: translateY(-1px);
+}
+.epc-despiece-save-msg {
+  font-size: 12px;
+  color: #64748b;
+}
+@media (max-width: 900px) {
+  .epc-despiece-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 260px minmax(88px, 140px);
+    height: auto;
+    min-height: 348px;
+    max-height: none;
+  }
+  .epc-despiece-diagram {
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+    min-height: 260px;
+    height: 260px;
+    max-height: 260px;
+  }
+  .epc-despiece-side {
+    max-height: 140px;
+  }
+  .epc-despiece-imgbox,
+  .epc-despiece-imgbox > div,
+  .epc-despiece-imgbox img {
+    max-height: 220px;
+  }
+  .epc-zoom-hint {
+    display: none;
+  }
+}
+
+</style>
+</head>
+
+<body class="ficha-tecnica-page">
+
+<div class="ft-wrap">
+<div class="ft-card">
+
+<header class="ft-topbar">
+  <div>
+    <p class="ft-kicker">Catálogo</p>
+    <h1 class="ft-title">Ficha técnica</h1>
+  </div>
+  <div class="ft-top-actions">
+    <span class="ft-code-pill" title="Código interno">{{ producto.codigo }}</span>
+    <button type="button" class="ft-btn ft-btn--primary" onclick="abrirModalEtiqueta()">
+      <span aria-hidden="true">🖨</span> Generar etiquetas
+    </button>
+    <button type="button" class="ft-btn" style="background:#1e3a8a;color:#fff;border:none;" onclick="abrirModalDespiece()" title="Diagrama y tabla de partes (catálogo propio)">
+      <span aria-hidden="true">📐</span> Despiece
+    </button>
+  </div>
+</header>
+
+{% set s1 = producto.stock_10jul or 0 %}
+{% set s2 = producto.stock_brasil or 0 %}
+{% set s3 = producto.stock_g_avenida or 0 %}
+{% set s4 = producto.stock_orientales or 0 %}
+{% set s5 = producto.stock_b20_outlet or 0 %}
+{% set s6 = producto.stock_transito or 0 %}
+
+<div class="ft-body">
+
+<aside class="ft-col ft-col--media">
+
+{% if imagenes %}
+<div class="ft-media-grow">
+<div class="ft-viewer">
+  <div class="ft-viewer-stage">
+  <img id="imgPrincipal"
+       class="ft-img-main img-producto"
+       data-360='[
+{% for img in imagenes_360 %}
+"{{ url_for('static', filename='productos360/' + producto.codigo + '/' + img) }}"{% if not loop.last %},{% endif %}
+{% endfor %}
+]'
+       src="{{ url_for('static', filename='productos_img/' + imagenes[0]) }}"
+       alt="{{ producto.descripcion or producto.codigo }}">
+  </div>
+</div>
+
+<div class="ft-thumb-row">
+  {% for img in imagenes %}
+  <img class="miniatura"
+       src="{{ url_for('static', filename='productos_img/' + img) }}"
+       alt=""
+       onclick="volverImagenNormal(this.src)">
+  {% endfor %}
+  {% if imagenes_360 %}
+  <div class="miniatura visor360-btn" onclick="activar360()" role="button" tabindex="0" aria-label="Vista 360°">
+    <img src="{{ url_for('static', filename='productos360/' + producto.codigo + '/' + imagenes_360[0]) }}"
+         class="mini360" alt="">
+    <div class="badge360">360°</div>
+    <div class="spin-icon">↻</div>
+  </div>
+  {% endif %}
+</div>
+</div>
+{% else %}
+<div class="ft-media-grow">
+<div class="ft-placeholder">Sin imagen disponible</div>
+</div>
+{% endif %}
+
+</aside>
+
+<section class="ft-col ft-col--specs">
+
+<div class="ft-brand-head">
+  <img src="{{ url_for('static', filename='logo_andes.png') }}" alt="Andes Auto Parts" class="ft-brand-logo" width="150" height="32">
+</div>
+
+<h2 class="ft-panel-title">Especificaciones</h2>
+<p class="ft-desc">{{ producto.descripcion }}</p>
+
+<div class="ft-spec-table">
+  <div class="ft-spec-row">
+    <div class="ft-spec-dt">Código</div>
+    <div class="ft-spec-dd">{{ producto.codigo }}</div>
+  </div>
+  <div class="ft-spec-row">
+    <div class="ft-spec-dt">Marca vehículo</div>
+    <div class="ft-spec-dd">{{ producto.marca or "—" }}</div>
+  </div>
+  <div class="ft-spec-row">
+    <div class="ft-spec-dt">Modelo</div>
+    <div class="ft-spec-dd">{{ producto.modelo or "—" }}</div>
+  </div>
+  <div class="ft-spec-row">
+    <div class="ft-spec-dt">Motor</div>
+    <div class="ft-spec-dd">{{ producto.motor or "—" }}</div>
+  </div>
+  <div class="ft-spec-row">
+    <div class="ft-spec-dt">Medidas</div>
+    <div class="ft-spec-dd">{{ producto.medidas if producto.medidas else "—" }}</div>
+  </div>
+  <div class="ft-spec-row">
+    <div class="ft-spec-dt">Categoría</div>
+    <div class="ft-spec-dd">{{ categoria_txt or "No asignada" }}</div>
+  </div>
+  <div class="ft-spec-row">
+    <div class="ft-spec-dt">Subcategoría</div>
+    <div class="ft-spec-dd">{{ subcategoria_txt or "No asignada" }}</div>
+  </div>
+  <div class="ft-spec-row">
+    <div class="ft-spec-dt">OEM</div>
+    <div class="ft-spec-dd">{{ producto.codigo_oem if producto.codigo_oem else "—" }}</div>
+  </div>
+</div>
+
+<div class="ft-compat-block">
+  <h2 class="ft-section-title">Homologados / compatibilidad</h2>
+  {% if homologados_raw %}
+  <p class="ft-homologados-text">{{ homologados_raw }}</p>
+  {% elif homologados_items %}
+  <div class="homologados-chips">
+    {% for h in homologados_items %}
+    <span class="chip-hom" title="{{ (h.descripcion or '')|e }}">{{ h.codigo }}</span>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="ft-spec-dd" style="margin:0;">—</p>
+  {% endif %}
+</div>
+
+<div class="ft-stock-card">
+  <h3 class="ft-stock-card-title">Repuestos disponibles</h3>
+  <div class="ft-stock-line"><span class="ft-stock-line-label">Bodega 1</span><span class="ft-stock-line-val">{{ s1 }}</span></div>
+  <div class="ft-stock-line"><span class="ft-stock-line-label">Bodega 2</span><span class="ft-stock-line-val">{{ s2 }}</span></div>
+  <div class="ft-stock-line"><span class="ft-stock-line-label">Bodega 3</span><span class="ft-stock-line-val">{{ s3 }}</span></div>
+  <div class="ft-stock-line"><span class="ft-stock-line-label">Bodega 4</span><span class="ft-stock-line-val">{{ s4 }}</span></div>
+  <div class="ft-stock-line"><span class="ft-stock-line-label">Bodega 5</span><span class="ft-stock-line-val">{{ s5 }}</span></div>
+  <div class="ft-stock-line"><span class="ft-stock-line-label">En tránsito</span><span class="ft-stock-line-val">{{ s6 }}</span></div>
+  <div class="ft-stock-line ft-stock-line--total">
+    <span class="ft-stock-line-label">Total inventario</span>
+    <span class="ft-stock-line-val">{{ s1 + s2 + s3 + s4 + s5 + s6 }}</span>
+  </div>
+</div>
+
+</section>
+
+</div>
+
+</div>
+</div>
+
+<!-- MODAL DESPIECE (layout tipo catálogo EPC: diagrama | lista | barra detalle) -->
+<div id="modalDespiece" class="epc-despiece-overlay" style="display:none;" onclick="if(event.target===this)cerrarModalDespiece();">
+
+<div class="epc-despiece-wrap" data-epc-admin="{{ 1 if es_admin else 0 }}" onclick="event.stopPropagation();">
+
+<header class="epc-despiece-head">
+  <div>
+    <p class="epc-despiece-head__kicker">Despiece catálogo</p>
+    <h3 class="epc-despiece-head__title">{{ despiece_titulo or (producto.descripcion[:80] if producto.descripcion else producto.codigo) }}</h3>
+  </div>
+  <button type="button" class="epc-despiece-head__close" onclick="cerrarModalDespiece()">Cerrar</button>
+</header>
+
+<div class="epc-despiece-main">
+<div class="epc-despiece-body">
+  <div class="epc-despiece-diagram">
+    {% if despiece_imagen_url %}
+    <div class="epc-despiece-diagram-inner epc-despiece-diagram-inner--zoom">
+      <div class="epc-despiece-zoom-bar">
+        <button type="button" class="epc-zbtn" id="epcZoomOut" title="Alejar" aria-label="Alejar">−</button>
+        <span class="epc-zoom-pct" id="epcZoomPct">100%</span>
+        <button type="button" class="epc-zbtn" id="epcZoomIn" title="Acercar" aria-label="Acercar">+</button>
+        <button type="button" class="epc-zbtn" id="epcZoomReset" title="Restablecer zoom (100%)" aria-label="Restablecer zoom">⌂</button>
+        <span class="epc-zoom-hint" title="Rueda para zoom; con zoom, arrastrá para mover el diagrama">Rueda · arrastrar · máx. 550%</span>
+      </div>
+      <div class="epc-despiece-zoom-viewport" id="epcDespieceZoomViewport">
+        <div class="epc-despiece-zoom-inner" id="epcDespieceZoomInner">
+          <div class="epc-despiece-imgbox" id="epcDespieceImgBox">
+            <div style="position:relative;display:inline-block;max-width:100%;max-height:268px;line-height:0;">
+              <img id="epcDespieceImg" src="{{ despiece_imagen_url }}" alt="Despiece" style="max-width:100%;max-height:268px;height:auto;display:block;" />
+              <div class="epc-despiece-hotspots" id="epcDespieceHotspots"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="epc-despiece-diagram-inner">
+    <div class="epc-despiece-empty">
+      <div class="epc-despiece-empty__icon" aria-hidden="true">📐</div>
+      {% if es_admin %}
+      <strong style="color:#334155;">Sin diagrama</strong><br />
+      Subí una imagen abajo (vista previa incluida).
+      {% else %}
+      No hay diagrama cargado para este producto.
+      {% endif %}
+    </div>
+    </div>
+    {% endif %}
+  </div>
+  <div class="epc-despiece-side">
+    <div class="epc-despiece-side-scroll">
+      {% if despiece_partes %}
+      <table class="epc-despiece-table" id="epcDespieceTable">
+        <thead>
+          <tr>
+            <th>Callout</th>
+            <th>Part No</th>
+            <th>Part usage</th>
+            <th>Unit</th>
+          </tr>
+        </thead>
+        <tbody id="epcDespieceTbody">
+          {% for row in despiece_partes %}
+          <tr data-idx="{{ loop.index0 }}">
+            <td>{{ row.callout|default(row.pos|default('—')) }}</td>
+            <td style="font-weight:700;">{{ row.part_no|default('—') }}</td>
+            <td>{{ row.usage|default(row.description|default(row.desc|default('—'))) }}</td>
+            <td>{{ row.qty|default(row.quantity|default('—')) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="epc-despiece-side-hint">
+        {% if es_admin %}
+        <strong style="color:#334155;">Sin tabla de partes</strong><br />
+        Completá el JSON en el panel de edición (callout, part_no, usage, qty, etc.).
+        {% else %}
+        Sin datos de tabla de partes.
+        {% endif %}
+      </p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="epc-despiece-foot" id="epcDespieceDetail">
+  <div>
+    <label for="epcDetPart">Part NO</label>
+    <input type="text" class="epc-despiece-det-input" id="epcDetPart" name="epc_det_part_no" autocomplete="off" placeholder="Nº pieza" />
+  </div>
+  <div>
+    <label>Part usage (desc.)</label>
+    <div class="v" id="epcDetUsage">—</div>
+  </div>
+  <div>
+    <label>Precio ERP (público)</label>
+    <div class="v" id="epcDetErpPrecio">—</div>
+  </div>
+  <div>
+    <label>Precio catálogo</label>
+    <div class="v" id="epcDetPrice">—</div>
+  </div>
+  <div>
+    <label>Precio ref.</label>
+    <div class="v" id="epcDetRefPrice">—</div>
+  </div>
+  <div>
+    <label>Cant. unidad</label>
+    <div class="v" id="epcDetQty">—</div>
+  </div>
+</div>
+
+{% if despiece_notas %}
+<p class="epc-despiece-notas">{{ despiece_notas }}</p>
+{% endif %}
+</div>
+
+{% if es_admin %}
+<div class="epc-despiece-admin">
+  <div class="epc-despiece-admin__head">
+    <span>Editar despiece (administrador)</span>
+  </div>
+  <form id="formDespieceAdmin" class="epc-despiece-admin__grid" enctype="multipart/form-data">
+    <div class="epc-despiece-field">
+      <label class="epc-despiece-label" for="despieceTitulo">Título</label>
+      <input id="despieceTitulo" class="epc-despiece-input" type="text" name="titulo" value="{{ despiece_titulo|e }}" maxlength="220" placeholder="Ej. Pistón — diagrama referencia" />
+    </div>
+    <div class="epc-despiece-field">
+      <details class="epc-despiece-json-details">
+        <summary class="epc-despiece-json-summary">Opcional: ver o editar listado técnico (JSON)</summary>
+        <p class="epc-despiece-json-help">En lo cotidiano usá la tabla del diagrama. Abrí esto solo si necesitás pegar o revisar datos en formato JSON.</p>
+        <textarea id="despiecePartesJson" class="epc-despiece-textarea epc-despiece-textarea--mono" name="partes_json" rows="6" placeholder="" aria-label="Partes en formato JSON">{{ despiece_partes_texto|e }}</textarea>
+      </details>
+    </div>
+    <div class="epc-despiece-field">
+      <label class="epc-despiece-label" for="despieceNotas">Notas</label>
+      <textarea id="despieceNotas" class="epc-despiece-textarea" name="notas" rows="2" placeholder="Notas opcionales para la ficha">{{ despiece_notas|e }}</textarea>
+    </div>
+    <div class="epc-despiece-field">
+      <span class="epc-despiece-label">Imagen del diagrama</span>
+      <div id="epcDespiecePreviewBox" class="epc-despiece-preview">
+        {% if despiece_imagen_url %}
+        <img id="epcDespiecePreviewImg" src="{{ despiece_imagen_url }}" alt="Vista previa del diagrama" />
+        {% else %}
+        <span id="epcDespiecePreviewPlaceholder" class="epc-despiece-preview__placeholder">Vista previa: sin imagen<br /><span style="font-size:10px;">Elegí un archivo para previsualizar</span></span>
+        {% endif %}
+      </div>
+      <input id="despieceImagenInput" class="epc-despiece-file" type="file" name="imagen" accept="image/png,image/jpeg,image/webp,image/gif" />
+    </div>
+    <label class="epc-despiece-check">
+      <input id="despieceBorrarImagen" type="checkbox" name="borrar_imagen" value="1" />
+      <span>Quitar imagen actual (dejar sin diagrama)</span>
+    </label>
+    <div class="epc-despiece-actions">
+      <button type="submit" class="epc-despiece-btn-save">Guardar despiece</button>
+      <span id="epcDespieceSaveMsg" class="epc-despiece-save-msg"></span>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+</div>
+</div>
+
+<script type="application/json" id="epc-despiece-config">
+{{ {"partes": despiece_partes|default([]), "oem_match": despiece_oem_match|default(""), "erp_precio": despiece_erp_precio, "erp_mayor": despiece_erp_precio_mayor}|tojson }}
+</script>
+
+<!-- MODAL ETIQUETAS -->
+<div id="modalEtiqueta" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:9999;backdrop-filter:blur(4px);">
+
+<div style="background:#fff;padding:24px;width:min(340px,92vw);border-radius:14px;border:1px solid #e2e8f0;box-shadow:0 20px 50px rgba(15,23,42,0.2);display:flex;flex-direction:column;gap:12px;">
+
+<h3 style="margin:0;font-size:1.1rem;font-weight:700;color:#0f172a;">Imprimir etiquetas</h3>
+
+<label style="font-size:13px;font-weight:600;color:#475569;">Cantidad</label>
+<input type="number" id="cantidadEtiqueta" value="24" min="1" style="padding:10px 12px;border-radius:8px;border:1px solid #cbd5e1;font-size:14px;">
+
+<label style="font-size:13px;font-weight:600;color:#475569;">Formato</label>
+<select id="formatoEtiqueta" style="padding:10px 12px;border-radius:8px;border:1px solid #cbd5e1;font-size:14px;">
+<option value="individual">Individual</option>
+<option value="hoja24" selected>Hoja carta (24)</option>
+</select>
+
+<div style="display:flex; justify-content:space-between; margin-top:15px; gap:10px;">
+
+<button onclick="cerrarModalEtiqueta()" style="background:#f1f5f9;color:#334155;border:1px solid #e2e8f0;padding:10px 16px;cursor:pointer;border-radius:10px;font-weight:600;">
+Cancelar
+</button>
+
+<button onclick="imprimirEtiqueta('{{ producto.codigo }}')" style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:white;border:none;padding:10px 16px;cursor:pointer;border-radius:10px;font-weight:600;">
+Imprimir
+</button>
+
+</div>
+</div>
+</div>
+
+<script>
+
+(function () {
+  function readDespieceCfg() {
+    var el = document.getElementById("epc-despiece-config");
+    if (!el) return { partes: [], oem_match: "", erp_precio: null, erp_mayor: null };
+    try {
+      return JSON.parse(el.textContent);
+    } catch (e) {
+      return { partes: [], oem_match: "", erp_precio: null, erp_mayor: null };
+    }
+  }
+
+  function normOem(s) {
+    return String(s || "").trim().toUpperCase();
+  }
+
+  function fmtMoney(v) {
+    if (v === null || v === undefined || v === "") return "—";
+    var n = Number(v);
+    if (isNaN(n)) return String(v);
+    return n.toLocaleString("es-CL", { maximumFractionDigits: 0 });
+  }
+
+  window.__epcPartsCache = [];
+  window.__epcSel = 0;
+  window.__epcZoomScale = 1;
+  window.__epcPanX = 0;
+  window.__epcPanY = 0;
+
+  function epcClampPan() {
+    var vp = document.getElementById("epcDespieceZoomViewport");
+    if (!vp) return;
+    var z = window.__epcZoomScale;
+    if (z <= 1) {
+      window.__epcPanX = 0;
+      window.__epcPanY = 0;
+      return;
+    }
+    var w = vp.clientWidth;
+    var h = vp.clientHeight;
+    var maxX = (w * (z - 1)) / 2;
+    var maxY = (h * (z - 1)) / 2;
+    if (maxX < 0) maxX = 0;
+    if (maxY < 0) maxY = 0;
+    var px = window.__epcPanX || 0;
+    var py = window.__epcPanY || 0;
+    window.__epcPanX = Math.max(-maxX, Math.min(maxX, px));
+    window.__epcPanY = Math.max(-maxY, Math.min(maxY, py));
+  }
+
+  function epcApplyZoom() {
+    epcClampPan();
+    var inner = document.getElementById("epcDespieceZoomInner");
+    var vp = document.getElementById("epcDespieceZoomViewport");
+    var pct = document.getElementById("epcZoomPct");
+    var z = window.__epcZoomScale;
+    var px = window.__epcPanX || 0;
+    var py = window.__epcPanY || 0;
+    if (inner) {
+      inner.style.transform = "translate(" + px + "px, " + py + "px) scale(" + z + ")";
+    }
+    if (vp) {
+      if (z > 1) vp.classList.add("epc-despiece-zoom-viewport--can-pan");
+      else vp.classList.remove("epc-despiece-zoom-viewport--can-pan");
+    }
+    if (pct) {
+      pct.textContent = Math.round(z * 100) + "%";
+    }
+  }
+
+  window.epcDespieceResetZoom = function () {
+    window.__epcZoomScale = 1;
+    window.__epcPanX = 0;
+    window.__epcPanY = 0;
+    var vp = document.getElementById("epcDespieceZoomViewport");
+    if (vp) {
+      vp.classList.remove("epc-despiece-zoom-viewport--panning");
+      vp.classList.remove("epc-despiece-zoom-viewport--can-pan");
+    }
+    var inner = document.getElementById("epcDespieceZoomInner");
+    if (inner) inner.classList.remove("epc-panning");
+    epcApplyZoom();
+  };
+
+  function epcBindZoomControls() {
+    var vp = document.getElementById("epcDespieceZoomViewport");
+    if (!vp || vp.dataset.epcZoomBound) return;
+    vp.dataset.epcZoomBound = "1";
+    var step = 0.12;
+    var zMin = 0.5;
+    var zMax = 5.5;
+    function bump(delta) {
+      window.__epcZoomScale = Math.max(zMin, Math.min(zMax, window.__epcZoomScale + delta));
+      epcApplyZoom();
+    }
+    var btnIn = document.getElementById("epcZoomIn");
+    var btnOut = document.getElementById("epcZoomOut");
+    var btnReset = document.getElementById("epcZoomReset");
+    if (btnIn) btnIn.addEventListener("click", function () { bump(step); });
+    if (btnOut) btnOut.addEventListener("click", function () { bump(-step); });
+    if (btnReset) btnReset.addEventListener("click", window.epcDespieceResetZoom);
+    vp.addEventListener(
+      "wheel",
+      function (e) {
+        e.preventDefault();
+        bump(e.deltaY < 0 ? step * 0.8 : -step * 0.8);
+      },
+      { passive: false }
+    );
+  }
+
+  function epcBindPanControls() {
+    var vp = document.getElementById("epcDespieceZoomViewport");
+    if (!vp || vp.dataset.epcPanBound) return;
+    vp.dataset.epcPanBound = "1";
+    var inner = document.getElementById("epcDespieceZoomInner");
+    var drag = false;
+    var sx = 0;
+    var sy = 0;
+    var spx = 0;
+    var spy = 0;
+    function onDown(e) {
+      if (e.button !== 0 && e.type === "mousedown") return;
+      var el = e.target;
+      if (el && el.closest && el.closest(".epc-despiece-hotspot")) return;
+      if ((window.__epcZoomScale || 1) <= 1) return;
+      var cx = e.clientX != null ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+      var cy = e.clientY != null ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+      drag = true;
+      sx = cx;
+      sy = cy;
+      spx = window.__epcPanX || 0;
+      spy = window.__epcPanY || 0;
+      vp.classList.add("epc-despiece-zoom-viewport--panning");
+      if (inner) inner.classList.add("epc-panning");
+      if (e.type === "touchstart") e.preventDefault();
+    }
+    function onMove(e) {
+      if (!drag) return;
+      if ((window.__epcZoomScale || 1) <= 1) return;
+      if (e.type === "touchmove") e.preventDefault();
+      var cx = e.clientX != null ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+      var cy = e.clientY != null ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+      window.__epcPanX = spx + (cx - sx);
+      window.__epcPanY = spy + (cy - sy);
+      epcApplyZoom();
+    }
+    function onUp() {
+      if (!drag) return;
+      drag = false;
+      vp.classList.remove("epc-despiece-zoom-viewport--panning");
+      if (inner) inner.classList.remove("epc-panning");
+    }
+    vp.addEventListener("mousedown", onDown);
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    vp.addEventListener("touchstart", onDown, { passive: false });
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", onUp);
+  }
+
+  var epcUpdateErpFromPartNo = function (val) {
+    var cfg = readDespieceCfg();
+    var erpP = cfg.erp_precio;
+    var showErp = normOem(val) === normOem(cfg.oem_match);
+    var elErp = document.getElementById("epcDetErpPrecio");
+    if (elErp) {
+      elErp.textContent = showErp && erpP != null ? "$ " + fmtMoney(erpP) : "—";
+    }
+  };
+
+  window.epcMergePartNoIntoJsonForm = function () {
+    var ta = document.getElementById("despiecePartesJson");
+    var inp = document.getElementById("epcDetPart");
+    if (!ta || !inp) return;
+    var val = inp.value.trim();
+    var parts = [];
+    try {
+      parts = JSON.parse(ta.value || "[]");
+    } catch (e) {
+      return;
+    }
+    if (!Array.isArray(parts)) parts = [];
+    if (!parts.length && val) {
+      parts = [{ callout: "1", part_no: val, usage: "", qty: "1" }];
+    } else if (parts.length) {
+      var idx = window.__epcSel;
+      if (idx < 0 || idx >= parts.length) idx = 0;
+      if (!parts[idx]) parts[idx] = {};
+      parts[idx].part_no = val;
+    }
+    ta.value = JSON.stringify(parts, null, 2);
+    window.__epcPartsCache = parts;
+    epcUpdateErpFromPartNo(val);
+  };
+
+  function epcSyncPartNoToCache() {
+    var parts = window.__epcPartsCache || [];
+    var inp = document.getElementById("epcDetPart");
+    if (!inp || inp.tagName !== "INPUT") return;
+    var val = inp.value.trim();
+    var idx = window.__epcSel;
+    if (!parts.length) {
+      if (!val) return;
+      parts = [{ callout: "1", part_no: val, usage: "", qty: "1" }];
+      window.__epcPartsCache = parts;
+      window.__epcSel = 0;
+      idx = 0;
+    } else {
+      if (idx < 0 || idx >= parts.length) idx = 0;
+      window.__epcSel = idx;
+      parts[idx].part_no = val;
+    }
+    var trs = document.querySelectorAll("#epcDespieceTbody tr");
+    if (trs[idx]) {
+      var cells = trs[idx].querySelectorAll("td");
+      if (cells[1]) cells[1].textContent = val || "—";
+    }
+    var ta = document.getElementById("despiecePartesJson");
+    if (ta) {
+      try {
+        ta.value = JSON.stringify(parts, null, 2);
+      } catch (e) {}
+    }
+    epcUpdateErpFromPartNo(val);
+  }
+
+  var __epcPartNoTimer = null;
+  function epcBindPartNoInput() {
+    var inp = document.getElementById("epcDetPart");
+    if (!inp || inp.tagName !== "INPUT" || inp.dataset.epcBound) return;
+    inp.dataset.epcBound = "1";
+    inp.addEventListener("input", function () {
+      clearTimeout(__epcPartNoTimer);
+      __epcPartNoTimer = setTimeout(epcSyncPartNoToCache, 280);
+    });
+    inp.addEventListener("blur", epcSyncPartNoToCache);
+  }
+
+  window.epcDespieceOnImgLoad = function () {
+    window.__epcPanX = 0;
+    window.__epcPanY = 0;
+    window.__epcZoomScale = 1.25;
+    epcApplyZoom();
+    window.epcDespieceBuildHotspots();
+  };
+
+  window.epcDespieceBuildHotspots = function () {
+    var parts = window.__epcPartsCache || [];
+    var box = document.getElementById("epcDespieceHotspots");
+    if (!box) return;
+    box.innerHTML = "";
+    parts.forEach(function (p, i) {
+      var x = p.x_pct;
+      var y = p.y_pct;
+      if (x == null || y == null) return;
+      var r = p.r_pct != null && p.r_pct > 0 ? Number(p.r_pct) : 3.5;
+      var d = document.createElement("button");
+      d.type = "button";
+      d.className = "epc-despiece-hotspot";
+      d.setAttribute("data-idx", String(i));
+      d.style.left = x + "%";
+      d.style.top = y + "%";
+      d.style.width = r * 2 + "%";
+      d.style.height = r * 2 + "%";
+      d.setAttribute("aria-label", "Callout " + (p.callout || i));
+      d.textContent = String(p.callout != null ? p.callout : "");
+      (function (idx) {
+        d.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          window.epcDespieceSelectRow(idx);
+        });
+      })(i);
+      box.appendChild(d);
+    });
+    window.epcDespieceSelectRow(window.__epcSel);
+  };
+
+  window.epcDespieceSelectRow = function (idx) {
+    var parts = window.__epcPartsCache || [];
+    var cfg = readDespieceCfg();
+    var elPart = document.getElementById("epcDetPart");
+    var clearFoot = function () {
+      var wrap = document.querySelector(".epc-despiece-wrap");
+      var isAdm = wrap && wrap.getAttribute("data-epc-admin") === "1";
+      if (elPart && elPart.tagName === "INPUT") {
+        elPart.value = "";
+        elPart.placeholder = isAdm ? "Agregá filas en el JSON abajo" : "Sin partes en tabla";
+      }
+      ["epcDetUsage", "epcDetQty", "epcDetErpPrecio", "epcDetPrice", "epcDetRefPrice"].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = "—";
+      });
+    };
+    if (!parts.length) {
+      clearFoot();
+      return;
+    }
+    if (idx < 0 || idx >= parts.length) idx = 0;
+    window.__epcSel = idx;
+    if (!elPart) return;
+    var trs = document.querySelectorAll("#epcDespieceTbody tr");
+    trs.forEach(function (tr, i) {
+      tr.classList.toggle("is-selected", i === idx);
+    });
+    document.querySelectorAll("#epcDespieceHotspots .epc-despiece-hotspot").forEach(function (h) {
+      var hi = parseInt(h.getAttribute("data-idx"), 10);
+      h.classList.toggle("is-active", hi === idx);
+    });
+    if (trs[idx]) {
+      try {
+        trs[idx].scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } catch (e) {}
+    }
+    var p = parts[idx];
+    var pnRaw = p.part_no != null && p.part_no !== "" ? String(p.part_no) : "";
+    var usage = p.usage || p.description || p.desc || "—";
+    var qty = p.qty != null ? p.qty : p.quantity != null ? p.quantity : "—";
+    var catPrice = p.price != null ? p.price : p.cat_price;
+    var refP = p.ref_price != null ? p.ref_price : p.ref;
+
+    if (elPart.tagName === "INPUT") {
+      elPart.value = pnRaw;
+      elPart.placeholder = "Nº pieza";
+    } else {
+      elPart.textContent = pnRaw || "—";
+    }
+    document.getElementById("epcDetUsage").textContent = usage;
+    document.getElementById("epcDetQty").textContent = String(qty);
+
+    var erpP = cfg.erp_precio;
+    var showErp = normOem(pnRaw) === normOem(cfg.oem_match);
+    document.getElementById("epcDetErpPrecio").textContent = showErp && erpP != null ? "$ " + fmtMoney(erpP) : "—";
+    document.getElementById("epcDetPrice").textContent = catPrice != null ? String(catPrice) : "—";
+    document.getElementById("epcDetRefPrice").textContent = refP != null ? String(refP) : "—";
+  };
+
+  function findIdxForOem(parts, oemMatch) {
+    var t = normOem(oemMatch);
+    if (!t) return 0;
+    for (var i = 0; i < parts.length; i++) {
+      if (normOem(parts[i].part_no) === t) return i;
+    }
+    return 0;
+  }
+
+  window.epcDespieceInit = function () {
+    window.epcDespieceResetZoom();
+    epcBindZoomControls();
+    epcBindPanControls();
+    epcBindPartNoInput();
+    var cfg = readDespieceCfg();
+    window.__epcPartsCache = cfg.partes || [];
+    var tbody = document.getElementById("epcDespieceTbody");
+    if (tbody && !tbody.dataset.epcBound) {
+      tbody.dataset.epcBound = "1";
+      tbody.addEventListener("click", function (e) {
+        var tr = e.target.closest("tr");
+        if (!tr || !tbody.contains(tr)) return;
+        var idx = parseInt(tr.getAttribute("data-idx"), 10);
+        if (!isNaN(idx)) window.epcDespieceSelectRow(idx);
+      });
+    }
+    var start = findIdxForOem(window.__epcPartsCache, cfg.oem_match);
+    window.__epcSel = start;
+    var img = document.getElementById("epcDespieceImg");
+    if (img) {
+      if (img.complete && img.naturalWidth) {
+        window.__epcPanX = 0;
+        window.__epcPanY = 0;
+        window.__epcZoomScale = 1.25;
+        epcApplyZoom();
+        window.epcDespieceBuildHotspots();
+      } else {
+        img.addEventListener(
+          "load",
+          function () {
+            window.epcDespieceOnImgLoad();
+          },
+          { once: true }
+        );
+        window.epcDespieceSelectRow(start);
+      }
+    } else {
+      window.epcDespieceSelectRow(start);
+    }
+  };
+
+  window.abrirModalDespiece = function () {
+    var el = document.getElementById("modalDespiece");
+    if (!el) return;
+    el.style.display = "flex";
+    el.style.alignItems = "center";
+    el.style.justifyContent = "center";
+    setTimeout(function () {
+      window.epcDespieceInit();
+      if (window.__ftResizeIframeToContent) {
+        window.__ftResizeIframeToContent();
+        setTimeout(window.__ftResizeIframeToContent, 120);
+        setTimeout(window.__ftResizeIframeToContent, 400);
+      }
+    }, 30);
+  };
+
+  window.cerrarModalDespiece = function () {
+    var el = document.getElementById("modalDespiece");
+    if (el) el.style.display = "none";
+    window.epcDespieceResetZoom();
+    if (window.__ftResizeIframeToContent) setTimeout(window.__ftResizeIframeToContent, 100);
+  };
+
+  {% if es_admin %}
+  (function () {
+    var formD = document.getElementById("formDespieceAdmin");
+    if (!formD) return;
+    formD.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      if (typeof window.epcMergePartNoIntoJsonForm === "function") {
+        window.epcMergePartNoIntoJsonForm();
+      }
+      var msg = document.getElementById("epcDespieceSaveMsg");
+      if (msg) msg.textContent = "Guardando…";
+      var fd = new FormData(formD);
+      fetch("{{ url_for('productos.guardar_despiece_producto', codigo=producto.codigo) }}", {
+        method: "POST",
+        body: fd,
+        credentials: "same-origin",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      })
+        .then(function (r) {
+          return r.json().then(function (d) {
+            return { ok: r.ok, status: r.status, d: d };
+          });
+        })
+        .then(function (x) {
+          if (x.ok && x.d && x.d.success) {
+            if (msg) msg.textContent = "Guardado.";
+            window.location.reload();
+            return;
+          }
+          var m =
+            x.d && x.d.message
+              ? x.d.message
+              : x.status === 403
+                ? "No autorizado (solo administradores)"
+                : "Error al guardar";
+          if (msg) msg.textContent = m;
+          alert(m);
+        })
+        .catch(function () {
+          if (msg) msg.textContent = "Error de red.";
+        });
+    });
+  })();
+  (function () {
+    var input = document.getElementById("despieceImagenInput");
+    var box = document.getElementById("epcDespiecePreviewBox");
+    var chk = document.getElementById("despieceBorrarImagen");
+    if (input && box) {
+      input.addEventListener("change", function () {
+        var f = input.files && input.files[0];
+        if (!f) return;
+        if (chk) chk.checked = false;
+        try {
+          var u = URL.createObjectURL(f);
+          box.innerHTML =
+            '<img id="epcDespiecePreviewImg" src="' +
+            u +
+            '" alt="Vista previa del diagrama" />';
+        } catch (e) {}
+      });
+    }
+    if (chk && box && input) {
+      chk.addEventListener("change", function () {
+        if (chk.checked) {
+          input.value = "";
+          box.innerHTML =
+            '<span class="epc-despiece-preview__placeholder">La imagen se eliminará al guardar.</span>';
+        }
+      });
+    }
+  })();
+  {% endif %}
+})();
+
+window.abrirModalEtiqueta = function(){
+const modal = document.getElementById("modalEtiqueta")
+modal.style.display="flex"
+modal.style.alignItems="center"
+modal.style.justifyContent="center"
+}
+
+window.cerrarModalEtiqueta = function(){
+document.getElementById("modalEtiqueta").style.display="none"
+}
+
+window.imprimirEtiqueta = function(codigo){
+
+const cantidad=document.getElementById("cantidadEtiqueta").value
+const formato=document.getElementById("formatoEtiqueta").value
+
+let url=""
+
+if(formato==="individual"){
+url="/producto/"+codigo+"/etiqueta"
+}else{
+url="/producto/"+codigo+"/etiquetas?cantidad="+cantidad
+}
+
+window.open(url,"_blank")
+cerrarModalEtiqueta()
+}
+
+</script>
+
+<script>
+
+window.imagenes360 = [];
+window.interval360 = null;
+window.frame360 = 0;
+
+{% for img in imagenes_360 %}
+window.imagenes360.push("{{ url_for('static', filename='productos360/' + producto.codigo + '/' + img) }}");
+{% endfor %}
+
+window.detener360Auto = function () {
+    if (window.interval360) {
+        clearInterval(window.interval360);
+        window.interval360 = null;
+    }
+};
+
+window.iniciar360Auto = function () {
+    var img = document.getElementById("imgPrincipal");
+    if (!img || !window.imagenes360 || window.imagenes360.length < 2) return;
+    window.detener360Auto();
+    window.frame360 = 0;
+    img.src = window.imagenes360[0];
+    window.interval360 = setInterval(function () {
+        window.frame360 = (window.frame360 + 1) % window.imagenes360.length;
+        img.src = window.imagenes360[window.frame360];
+    }, 90);
+};
+
+window.__ftResizeIframeToContent = function () {
+    var fe = window.frameElement;
+    if (!fe) return;
+    try {
+        var card = document.querySelector && document.querySelector('.ft-card');
+        var h = 0;
+        if (card) {
+            // Usar altura de `.ft-card` evita que el iframe cambie altura
+            // cuando se actualiza la imagen (load) o cuando hay zoom con transform.
+            h = Math.ceil(card.getBoundingClientRect().height || 0);
+        }
+        if (!h) {
+            h = Math.max(
+                document.body ? document.body.scrollHeight : 0,
+                document.documentElement ? document.documentElement.scrollHeight : 0
+            );
+        }
+        if (h > 0) {
+            // Evita que un cambio de imagen/transform haga que el modal crezca incrementalmente.
+            var last = window.__ftResizeLastH || 0;
+            if (!last) last = h;
+            if (h > last + 2) h = last;
+            else last = Math.max(last, h);
+            window.__ftResizeLastH = last;
+            fe.style.height = (h + 8) + "px";
+        }
+    } catch (e) {}
+};
+
+window.volverImagenNormal = function (src) {
+    window.detener360Auto();
+    var img = document.getElementById("imgPrincipal");
+    if (!img || !src) return;
+    if (window.ftResetImgZoomPan) window.ftResetImgZoomPan(img);
+    else img.classList.remove("ft-img-main--zoomed");
+    var done = false;
+    var onImgDone = function () {
+        if (done) return;
+        done = true;
+        img.removeEventListener("load", onImgDone);
+        img.removeEventListener("error", onImgDone);
+        requestAnimationFrame(function () {
+            window.__ftResizeIframeToContent();
+            setTimeout(window.__ftResizeIframeToContent, 80);
+        });
+    };
+    img.addEventListener("load", onImgDone);
+    img.addEventListener("error", onImgDone);
+    img.src = src;
+    if (img.complete) setTimeout(onImgDone, 0);
+};
+
+window.activar360 = function () {
+    var img = document.getElementById("imgPrincipal");
+    if (!img || window.imagenes360.length === 0) return;
+    if (window.ftResetImgZoomPan) window.ftResetImgZoomPan(img);
+    else img.classList.remove("ft-img-main--zoomed");
+
+    var rotando = false;
+    var startX = 0;
+
+    img.style.cursor = "grab";
+
+    img.onmousedown = function (e) {
+        window.detener360Auto();
+        rotando = true;
+        startX = e.clientX;
+        img.style.cursor = "grabbing";
+    };
+
+    document.onmouseup = function () {
+        rotando = false;
+        img.style.cursor = "grab";
+    };
+
+    document.onmousemove = function (e) {
+        if (!rotando) return;
+        var diff = e.clientX - startX;
+        if (Math.abs(diff) > 10) {
+            if (diff > 0) {
+                window.frame360--;
+            } else {
+                window.frame360++;
+            }
+            if (window.frame360 >= window.imagenes360.length) window.frame360 = 0;
+            if (window.frame360 < 0) window.frame360 = window.imagenes360.length - 1;
+            img.src = window.imagenes360[window.frame360];
+            startX = e.clientX;
+        }
+    };
+
+    window.iniciar360Auto();
+};
+
+/* No iniciar 360 al abrir: la imagen principal ya es la primera estática; el 360 solo al pulsar la miniatura. */
+
+(function () {
+    function ftReflowIframe() {
+        if (window.__ftResizeIframeToContent) {
+            window.__ftResizeIframeToContent();
+        }
+    }
+    var img = document.getElementById("imgPrincipal");
+    if (img) {
+        function onFirstPaint() {
+            requestAnimationFrame(ftReflowIframe);
+            setTimeout(ftReflowIframe, 0);
+            setTimeout(ftReflowIframe, 80);
+            setTimeout(ftReflowIframe, 250);
+        }
+        if (img.complete && img.naturalWidth) {
+            onFirstPaint();
+        } else {
+            img.addEventListener("load", onFirstPaint, { once: true });
+            img.addEventListener("error", onFirstPaint, { once: true });
+        }
+        window.addEventListener("load", function () {
+            requestAnimationFrame(ftReflowIframe);
+            setTimeout(ftReflowIframe, 0);
+            setTimeout(ftReflowIframe, 120);
+        });
+    }
+    if (!img) {
+        window.ftResetImgZoomPan = function () {};
+        return;
+    }
+
+    var FT_ZOOM = 1.35;
+    var panX = 0;
+    var panY = 0;
+    var drag = false;
+    var dragSX = 0;
+    var dragSY = 0;
+    var panSX = 0;
+    var panSY = 0;
+    var didPan = false;
+    var clickX = 0;
+    var clickY = 0;
+    var clickT = 0;
+
+    window.ftResetImgZoomPan = function (el) {
+        el = el || img;
+        if (!el) return;
+        panX = 0;
+        panY = 0;
+        drag = false;
+        didPan = false;
+        el.classList.remove("ft-img-main--zoomed");
+        el.classList.remove("ft-img-main--panning");
+        el.style.transform = "";
+    };
+
+    function clampPan() {
+        var stage = img.closest(".ft-viewer-stage");
+        if (!stage) return;
+        var w = stage.clientWidth;
+        var h = stage.clientHeight;
+        var maxX = (w * (FT_ZOOM - 1)) / 2;
+        var maxY = (h * (FT_ZOOM - 1)) / 2;
+        if (maxX < 0) maxX = 0;
+        if (maxY < 0) maxY = 0;
+        panX = Math.max(-maxX, Math.min(maxX, panX));
+        panY = Math.max(-maxY, Math.min(maxY, panY));
+    }
+
+    function applyZoomTransform() {
+        if (!img.classList.contains("ft-img-main--zoomed")) {
+            img.style.transform = "";
+            return;
+        }
+        img.style.transform =
+            "translate(" + panX + "px, " + panY + "px) scale(" + FT_ZOOM + ")";
+    }
+
+    function onPointerDown(e) {
+        if (e.button !== 0 && e.type === "mousedown") return;
+        if (window.interval360) return;
+        var cx = e.clientX != null ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        var cy = e.clientY != null ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+        clickX = cx;
+        clickY = cy;
+        clickT = Date.now();
+        if (img.classList.contains("ft-img-main--zoomed")) {
+            drag = true;
+            didPan = false;
+            dragSX = cx;
+            dragSY = cy;
+            panSX = panX;
+            panSY = panY;
+            img.classList.add("ft-img-main--panning");
+            if (e.type === "touchstart") e.preventDefault();
+        }
+    }
+
+    function onPointerMove(e) {
+        if (!drag || !img.classList.contains("ft-img-main--zoomed")) return;
+        if (window.interval360) return;
+        if (e.type === "touchmove") e.preventDefault();
+        var cx = e.clientX != null ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        var cy = e.clientY != null ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+        var dx = cx - dragSX;
+        var dy = cy - dragSY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didPan = true;
+        panX = panSX + dx;
+        panY = panSY + dy;
+        clampPan();
+        applyZoomTransform();
+    }
+
+    function onPointerUp() {
+        if (!drag) return;
+        drag = false;
+        img.classList.remove("ft-img-main--panning");
+    }
+
+    img.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("mousemove", onPointerMove);
+    document.addEventListener("mouseup", onPointerUp);
+    img.addEventListener("touchstart", onPointerDown, { passive: false });
+    document.addEventListener("touchmove", onPointerMove, { passive: false });
+    document.addEventListener("touchend", onPointerUp);
+
+    img.addEventListener("click", function (e) {
+        if (e.button !== 0) return;
+        if (window.interval360) return;
+        if (Math.abs(e.clientX - clickX) > 10 || Math.abs(e.clientY - clickY) > 10) return;
+        if (Date.now() - clickT > 600) return;
+        if (img.classList.contains("ft-img-main--zoomed")) {
+            if (didPan) {
+                didPan = false;
+                return;
+            }
+            window.ftResetImgZoomPan(img);
+            return;
+        }
+        img.classList.add("ft-img-main--zoomed");
+        panX = 0;
+        panY = 0;
+        clampPan();
+        applyZoomTransform();
+    });
+
+    window.addEventListener("resize", function () {
+        if (img.classList.contains("ft-img-main--zoomed")) {
+            clampPan();
+            applyZoomTransform();
+        }
+    });
+})();
+</script>
+
+</body>
+</html>

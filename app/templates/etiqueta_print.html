@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Etiqueta {{ producto.codigo }}</title>
+
+<style>
+@page { margin: 0; }
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+}
+
+.etiqueta {
+    width: 5.5cm;
+    height: 3.5cm;
+    padding: 5px;
+    box-sizing: border-box;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ===== HEADER ===== */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo img {
+    height: 35px;   /* AJUSTADO REAL */
+}
+
+.datos {
+    text-align: right;
+    font-size: 6px;
+    line-height: 1.1;
+}
+
+/* ===== CENTRO ===== */
+.centro {
+    text-align: center;
+    margin-top: 3px;
+}
+
+.descripcion {
+    font-size: 9px;
+    font-weight: 600;
+}
+
+.codigo {
+    font-size: 22px;
+    font-weight: 900;
+    margin-top: 2px;
+}
+
+/* ===== BARCODE CENTRADO ===== */
+.barcode {
+    text-align: center;
+    margin-top: 2px;
+}
+
+.barcode img {
+    height: 35px;
+}
+
+/* ===== QR ===== */
+.qr {
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+}
+
+.qr img {
+    width: 28px;
+}
+
+/* ===== FACTURA ===== */
+.factura {
+    position: absolute;
+    bottom: 5px;
+    left: 5px;
+    font-size: 7px;
+    font-weight: 600;
+}
+</style>
+</head>
+
+<body onload="window.print()">
+
+<div class="etiqueta">
+
+    <!-- HEADER -->
+    <div class="header">
+        <div class="logo">
+            <img src="{{ url_for('static', filename='logo_andes.png') }}">
+        </div>
+
+        <div class="datos">
+            ANDES AUTO PARTS LTDA<br>
+            +56 9 2815 2026<br>
+            andesautopartscl@gmail.com
+        </div>
+    </div>
+
+    <!-- CENTRO -->
+    <div class="centro">
+        <div class="descripcion">
+            {{ producto.descripcion[:30] }}
+        </div>
+
+        <div class="codigo">
+            {{ producto.codigo }}
+        </div>
+    </div>
+
+    <!-- BARCODE -->
+    <div class="barcode">
+        <img src="data:image/png;base64,{{ barcode_img }}">
+    </div>
+
+    <!-- QR -->
+    <div class="qr">
+        <img src="data:image/png;base64,{{ qr_img }}">
+    </div>
+
+    <!-- FACTURA -->
+    {% if producto.factura_proveedor %}
+    <div class="factura">
+        FACTURA Nº: {{ producto.factura_proveedor }}
+    </div>
+    {% endif %}
+
+</div>
+
+</body>
+</html>

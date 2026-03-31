@@ -1,0 +1,93 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+
+{% block title %}Auditoría Productos | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px;box-shadow:0 10px 25px rgba(0,0,0,.05);margin-bottom:14px}
+.filters{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:end}
+.filters label{display:block;font-size:12px;color:#475569;font-weight:700;margin-bottom:5px}
+.filters input,.filters select{width:100%;padding:10px 11px;border:1px solid #cbd5e1;border-radius:9px}
+.table-wrap{overflow:auto;max-height:min(76vh,860px);border:1px solid #e2e8f0;border-radius:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{padding:8px 7px;border-bottom:1px solid #eef2f7;vertical-align:top}
+th{position:sticky;top:0;background:#1e3a8a;color:#fff;font-size:11px}
+.muted{color:#64748b;font-size:12px}
+.audit-meta{font-size:11px;line-height:1.45;color:#334155}
+.audit-meta-item{display:inline-block;margin:2px 10px 2px 0;vertical-align:top}
+.audit-meta-k{font-weight:700;color:#475569}
+.audit-meta-v{color:#0f172a}
+.chip{display:inline-block;padding:2px 8px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:11px}
+.pagination{display:flex;justify-content:center;gap:10px;margin-top:12px}
+@media(max-width:1080px){.filters{grid-template-columns:1fr 1fr}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Auditoría de productos</h1>
+    <p class="page-subtitle">Trazabilidad de cambios, búsquedas y vistas.</p>
+  </div>
+  <div class="topbar-actions">
+    <a class="btn" href="{{ url_for('productos.buscar') }}" data-module-url="{{ url_for('productos.buscar') }}">🔍 Buscar</a>
+    <a class="btn btn-primary" href="{{ url_for('productos.exportar_auditoria_productos', **filtros) }}">📥 Exportar XLSX</a>
+  </div>
+</div>
+
+<section class="card">
+  <form class="filters" method="get" action="{{ url_for('productos.productos_auditoria') }}">
+    <div><label>Usuario</label><input name="actor" value="{{ filtros.actor }}"></div>
+    <div><label>Acción</label><input name="action" value="{{ filtros.action }}" placeholder="update, search, view"></div>
+    <div><label>Código</label><input name="codigo" value="{{ filtros.codigo }}"></div>
+    <div><label>Desde</label><input type="date" name="fecha_desde" value="{{ filtros.fecha_desde }}"></div>
+    <div><label>Hasta</label><input type="date" name="fecha_hasta" value="{{ filtros.fecha_hasta }}"></div>
+    <div><button class="btn btn-primary" type="submit">Filtrar</button></div>
+  </form>
+  <p class="muted" style="margin-top:10px;">Total: {{ total_count }} eventos</p>
+</section>
+
+<section class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th><th>Usuario</th><th>Acción</th><th>Código</th><th>Metadata</th><th>Cambios</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for e in eventos %}
+        <tr>
+          <td>{{ e.created_at.strftime('%Y-%m-%d %H:%M:%S') if e.created_at else '' }}</td>
+          <td>{{ e.actor }}</td>
+          <td><span class="chip">{{ e.action }}</span></td>
+          <td>{{ e.producto_codigo or '—' }}</td>
+          <td>{{ e.metadata_json | audit_metadata }}</td>
+          <td>
+            {% set rows = diffs_map.get(e.id, []) %}
+            {% if rows %}
+              {% for d in rows %}
+                <div><strong>{{ d.campo }}</strong>: {{ d.valor_anterior or '∅' }} → {{ d.valor_nuevo or '∅' }}</div>
+              {% endfor %}
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="muted">Sin eventos para estos filtros.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="pagination">
+    {% if page > 1 %}
+      <a class="btn" href="{{ url_for('productos.productos_auditoria', page=page-1, per_page=per_page, **filtros) }}">← Anterior</a>
+    {% endif %}
+    <span class="muted">Página {{ page }} / {{ total_pages }}</span>
+    {% if page < total_pages %}
+      <a class="btn" href="{{ url_for('productos.productos_auditoria', page=page+1, per_page=per_page, **filtros) }}">Siguiente →</a>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

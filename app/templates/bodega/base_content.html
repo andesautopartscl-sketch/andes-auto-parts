@@ -1,0 +1,12 @@
+{% block extra_head %}
+<style>
+@import url("{{ url_for('static', filename='bodega.css') }}");
+</style>
+{% endblock %}
+
+{% block content %}{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='rut_utils.js') }}"></script>
+<script src="{{ url_for('static', filename='bodega_ui.js') }}"></script>
+{% endblock %}

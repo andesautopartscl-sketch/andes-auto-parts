@@ -1,8 +1,14 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Login | Andes Auto Parts</title>
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='logo_andes.png') }}">
+<link rel="shortcut icon" href="{{ url_for('static', filename='logo_andes.png') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
 
 <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
 
@@ -10,10 +16,16 @@
 html, body {
     margin:0;
     padding:0;
-    height:100%;
-    font-family:'Segoe UI', sans-serif;
-    background:#0f172a;
-    overflow:hidden;
+    min-height:100%;
+    min-height:100dvh;
+    font-family:'Inter', 'Segoe UI', system-ui, sans-serif;
+    background: radial-gradient(ellipse 120% 80% at 50% 20%, #1e3a5f 0%, #0f172a 45%, #020617 100%);
+    overflow-x:hidden;
+    overflow-y:auto;
+}
+
+html.login-reduced-motion body {
+    background: radial-gradient(ellipse 100% 70% at 50% 30%, #1e3a5f 0%, #0f172a 55%, #020617 100%);
 }
 
 #particles-js {
@@ -21,27 +33,42 @@ html, body {
     width:100%;
     height:100%;
     z-index:1;
+    pointer-events:auto;
+}
+
+html.login-reduced-motion #particles-js {
+    display:none;
 }
 
 .login-wrapper {
-    height:100%;
+    min-height:100%;
+    min-height:100dvh;
     display:flex;
     align-items:center;
     justify-content:center;
     position:relative;
     z-index:2;
+    padding:max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    box-sizing:border-box;
 }
 
 .login-box {
-    width:420px;
+    width:100%;
+    max-width:420px;
     background:rgba(15, 23, 42, 0.95);
     padding:45px 40px;
     border-radius:22px;
+    border:1px solid rgba(148, 163, 184, 0.18);
     box-shadow:0 0 60px rgba(56,189,248,.35);
     text-align:center;
     backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
     animation:fadeIn .6s ease;
     position:relative;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .login-box { animation:none; }
 }
 
 @keyframes fadeIn{
@@ -52,6 +79,7 @@ html, body {
 /* LOGO */
 .logo {
     width:170px;
+    max-width:min(170px, 55vw);
     margin-bottom:25px;
     filter: drop-shadow(0 0 25px rgba(56,189,248,.9));
 }
@@ -62,6 +90,7 @@ html, body {
     margin-bottom:30px;
     font-weight:600;
     letter-spacing:.5px;
+    font-size:clamp(1.15rem, 4vw, 1.35rem);
 }
 
 /* INPUT GROUP */
@@ -78,6 +107,7 @@ html, body {
     transform:translateY(-50%);
     width:18px;
     filter: brightness(0) invert(1);
+    pointer-events:none;
 }
 
 /* ICONO OJO DERECHO */
@@ -100,14 +130,19 @@ html, body {
     border:1px solid rgba(148,163,184,.3);
     background:#0f172a;
     color:#ffffff;
-    font-size:14px;
+    font-size:16px;
     font-weight:500;
-    transition:.25s;
+    transition:border-color .25s, box-shadow .25s;
+}
+
+/* Evita zoom automático en iOS al enfocar */
+@supports (-webkit-touch-callout: none) {
+    .input-group input { font-size:16px; }
 }
 
 /* PLACEHOLDER */
 .input-group input::placeholder {
-    color: rgba(255,255,255,0.85);
+    color: rgba(255,255,255,0.72);
 }
 
 /* FOCUS EFFECT */
@@ -115,17 +150,6 @@ html, body {
     border-color:#38bdf8;
     box-shadow:0 0 12px rgba(56,189,248,.5);
     outline:none;
-}
-
-/* OJITO */
-.toggle-password {
-    position:absolute;
-    right:14px;
-    top:50%;
-    transform:translateY(-50%);
-    width:18px;
-    cursor:pointer;
-    filter: brightness(0) invert(1);
 }
 
 /* BOTON */
@@ -139,13 +163,48 @@ html, body {
     color:white;
     font-weight:600;
     cursor:pointer;
-    transition:.3s;
+    transition:transform .2s, box-shadow .2s;
     font-size:15px;
 }
 
 .login-box button:hover {
     transform:translateY(-2px);
     box-shadow:0 0 20px rgba(56,189,248,.7);
+}
+
+.login-box button:active {
+    transform:translateY(0);
+    box-shadow:0 0 12px rgba(56,189,248,.5);
+}
+
+.login-box button:focus-visible {
+    outline:2px solid #7dd3fc;
+    outline-offset:3px;
+}
+.login-forgot-wrap {
+    margin-top: 8px;
+    text-align: right;
+}
+.login-link-btn {
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    background: rgba(15, 23, 42, 0.35);
+    color: #cbd5e1;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 999px;
+    transition: color .2s, border-color .2s, background-color .2s, transform .15s;
+}
+.login-link-btn:hover,
+.login-link-btn:focus-visible {
+    color: #e2e8f0;
+    border-color: rgba(125, 211, 252, 0.5);
+    background: rgba(30, 41, 59, 0.55);
+    transform: translateY(-1px);
+    outline: none;
 }
 
 /* ERROR */
@@ -155,12 +214,161 @@ html, body {
     font-size:13px;
     min-height:18px;
 }
+
+/* Aviso legal esquina */
+.login-footer-legal {
+    position:fixed;
+    z-index:5;
+    right:max(10px, env(safe-area-inset-right));
+    bottom:max(10px, env(safe-area-inset-bottom));
+    left:auto;
+    text-align:right;
+    max-width:min(100% - 24px, 320px);
+}
+.login-footer-legal button {
+    background:none;
+    border:none;
+    color:rgba(148, 163, 184, 0.92);
+    font-family:inherit;
+    font-size:11px;
+    font-weight:500;
+    cursor:pointer;
+    text-decoration:underline;
+    text-underline-offset:3px;
+    padding:6px 4px;
+    transition:color .2s;
+}
+.login-footer-legal button:hover,
+.login-footer-legal button:focus-visible {
+    color:#7dd3fc;
+    outline:none;
+}
+#loginLegalDialog {
+    max-width:min(440px, 94vw);
+    padding:0;
+    border:none;
+    border-radius:16px;
+    background:#0f172a;
+    color:#e2e8f0;
+    box-shadow:0 25px 50px rgba(0,0,0,.45), 0 0 0 1px rgba(148,163,184,.2);
+}
+#loginLegalDialog::backdrop {
+    background:rgba(2,6,23,.72);
+    backdrop-filter:blur(4px);
+}
+.login-legal-dialog-inner {
+    padding:22px 22px 18px;
+}
+.login-legal-dialog-inner h3 {
+    margin:0 0 12px;
+    font-size:15px;
+    font-weight:700;
+    color:#f8fafc;
+}
+.login-legal-dialog-inner p {
+    margin:0 0 10px;
+    font-size:12px;
+    line-height:1.55;
+    color:#cbd5e1;
+}
+.login-legal-dialog-inner .login-legal-note {
+    font-size:11px;
+    color:#94a3b8;
+    margin-top:12px;
+}
+#loginLegalDialog .login-legal-close {
+    width:100%;
+    margin-top:16px;
+    padding:10px;
+    border-radius:10px;
+    border:1px solid rgba(148,163,184,.35);
+    background:rgba(30,41,59,.8);
+    color:#e2e8f0;
+    font-weight:600;
+    font-size:13px;
+    cursor:pointer;
+}
+#loginLegalDialog .login-legal-close:hover {
+    background:rgba(51,65,85,.9);
+}
+#forgotPasswordDialog {
+    max-width:min(460px, 94vw);
+    padding:0;
+    border:none;
+    border-radius:16px;
+    background:#0f172a;
+    color:#e2e8f0;
+    box-shadow:0 25px 50px rgba(0,0,0,.45), 0 0 0 1px rgba(148,163,184,.2);
+}
+#forgotPasswordDialog::backdrop {
+    background:rgba(2,6,23,.72);
+    backdrop-filter:blur(4px);
+}
+.forgot-pass-inner { padding:22px; }
+.forgot-pass-inner h3 {
+    margin:0 0 10px;
+    font-size:15px;
+    color:#f8fafc;
+}
+.forgot-pass-inner p {
+    margin:0 0 12px;
+    font-size:12px;
+    line-height:1.5;
+    color:#cbd5e1;
+}
+.forgot-pass-inner .field {
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    margin-bottom:10px;
+}
+.forgot-pass-inner label {
+    font-size:11px;
+    font-weight:700;
+    text-transform:uppercase;
+    color:#94a3b8;
+}
+.forgot-pass-inner input,
+.forgot-pass-inner textarea {
+    width:100%;
+    box-sizing:border-box;
+    border-radius:10px;
+    border:1px solid rgba(148,163,184,.35);
+    background:#111827;
+    color:#e2e8f0;
+    padding:10px 12px;
+    font-size:13px;
+}
+.forgot-pass-inner textarea {
+    min-height:84px;
+    resize:vertical;
+}
+.forgot-pass-actions {
+    display:flex;
+    gap:8px;
+    justify-content:flex-end;
+    margin-top:12px;
+}
+.forgot-pass-actions button {
+    width:auto;
+    margin:0;
+    padding:10px 14px;
+    font-size:13px;
+}
+.forgot-pass-msg {
+    margin-top:8px;
+    min-height:18px;
+    font-size:12px;
+    color:#93c5fd;
+}
+.forgot-pass-msg.error { color:#fca5a5; }
+.forgot-pass-msg.success { color:#86efac; }
 </style>
 </head>
 
 <body>
 
-<div id="particles-js"></div>
+<div id="particles-js" aria-hidden="true"></div>
 
 <div class="login-wrapper">
     <div class="login-box">
@@ -173,20 +381,23 @@ html, body {
         <form method="POST">
 
             <div class="input-group">
-                <img class="icon-left" src="{{ url_for('static', filename='icons/user.png') }}">
-                <input name="username" placeholder="Usuario" required>
+                <img class="icon-left" src="{{ url_for('static', filename='icons/user.png') }}" alt="" width="18" height="18">
+                <input name="username" placeholder="Usuario" required autocomplete="username" autocapitalize="none">
             </div>
 
             <div class="input-group">
-                <img class="icon-left" src="{{ url_for('static', filename='icons/lock.png') }}">
-                <input type="password" id="password" name="password" placeholder="Clave" required>
+                <img class="icon-left" src="{{ url_for('static', filename='icons/lock.png') }}" alt="" width="18" height="18">
+                <input type="password" id="password" name="password" placeholder="Clave" required autocomplete="current-password">
                 <img id="togglePassword" class="toggle-password"
-                     src="{{ url_for('static', filename='icons/eye.png') }}">
+                     src="{{ url_for('static', filename='icons/eye.png') }}" alt="Mostrar u ocultar contraseña" width="18" height="18" role="button" tabindex="0">
             </div>
 
             <button type="submit">Ingresar</button>
 
         </form>
+        <div class="login-forgot-wrap">
+            <button type="button" class="login-link-btn" id="openForgotPassword">Olvidé mi contraseña</button>
+        </div>
 
         {% if error %}
         <div class="error">{{ error }}</div>
@@ -195,43 +406,230 @@ html, body {
     </div>
 </div>
 
+<footer class="login-footer-legal">
+    <button type="button" id="openLoginLegal">Aviso legal y uso de datos</button>
+</footer>
+
+<dialog id="loginLegalDialog" aria-labelledby="loginLegalTitle">
+    <div class="login-legal-dialog-inner">
+        <h3 id="loginLegalTitle">Uso del sistema y confidencialidad</h3>
+        <p>El acceso a <strong>Andes Auto Parts</strong> está reservado a personas autorizadas. Las credenciales son personales y no deben compartirse.</p>
+        <p>La información comercial, de clientes, inventario y operaciones es <strong>confidencial</strong>. Está prohibido copiar, extraer o usar datos fuera de las funciones permitidas por la empresa.</p>
+        <p>El acceso no autorizado, el uso indebido o cualquier acción que comprometa la seguridad de los datos puede ser sancionado según las políticas internas y la normativa aplicable en materia de delitos informáticos y protección de datos.</p>
+        <p class="login-legal-note">Si detectás un acceso indebido o pérdida de credenciales, informá de inmediato a tu responsable o al área de sistemas.</p>
+        <button type="button" class="login-legal-close" id="closeLoginLegal">Entendido</button>
+    </div>
+</dialog>
+
+<dialog id="forgotPasswordDialog" aria-labelledby="forgotPasswordTitle">
+    <div class="forgot-pass-inner">
+        <h3 id="forgotPasswordTitle">Solicitud de cambio de contraseña</h3>
+        <p>Envía la solicitud y el administrador (dueño) asignará manualmente una nueva clave.</p>
+        <form id="forgotPasswordForm" autocomplete="off">
+            <div class="field">
+                <label for="forgotUser">Usuario</label>
+                <input id="forgotUser" name="username" required maxlength="80" placeholder="Tu usuario de acceso">
+            </div>
+            <div class="field">
+                <label for="forgotReason">Motivo (opcional)</label>
+                <textarea id="forgotReason" name="motivo" maxlength="255" placeholder="Ej: olvidé mi clave / cuenta bloqueada"></textarea>
+            </div>
+            <div class="forgot-pass-actions">
+                <button type="button" class="login-legal-close" id="closeForgotPassword">Cancelar</button>
+                <button type="submit">Enviar solicitud</button>
+            </div>
+            <div id="forgotPasswordMsg" class="forgot-pass-msg" aria-live="polite"></div>
+        </form>
+    </div>
+</dialog>
+
 <script>
-particlesJS("particles-js", {
-  particles: {
-    number: { value: 80 },
-    color: { value: "#38bdf8" },
-    shape: { type: "circle" },
-    opacity: { value: 0.6 },
-    size: { value: 3 },
-    line_linked: {
-      enable: true,
-      distance: 160,
-      color: "#38bdf8",
-      opacity: 0.4,
-      width: 1
-    },
-    move: {
-      enable: true,
-      speed: 2
+(function () {
+    var reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) {
+        document.documentElement.classList.add("login-reduced-motion");
+        return;
     }
-  },
-  retina_detect: true
-});
+
+    var dense = typeof window.matchMedia === "function" && window.matchMedia("(max-width: 600px)").matches;
+    var particleCount = dense ? 48 : 80;
+    var lineDist = dense ? 130 : 160;
+
+    particlesJS("particles-js", {
+        particles: {
+            number: { value: particleCount, density: { enable: true, value_area: 800 } },
+            color: { value: "#38bdf8" },
+            shape: { type: "circle" },
+            opacity: { value: 0.55, random: true },
+            size: { value: 3, random: { enable: true, minimumValue: 1 } },
+            line_linked: {
+                enable: true,
+                distance: lineDist,
+                color: "#38bdf8",
+                opacity: 0.35,
+                width: 1
+            },
+            move: {
+                enable: true,
+                speed: 1.6,
+                direction: "none",
+                random: true,
+                straight: false,
+                out_mode: "out",
+                bounce: false
+            }
+        },
+        interactivity: {
+            /* canvas: los clics los "come" el login encima; window = posición y clic en toda la página */
+            detect_on: "window",
+            events: {
+                onhover: {
+                    enable: true,
+                    mode: "grab"
+                },
+                onclick: {
+                    enable: true,
+                    /* repulse: al clic las partículas se alejan un instante y las líneas se sueltan */
+                    mode: "repulse"
+                },
+                resize: true
+            },
+            modes: {
+                grab: {
+                    distance: 165,
+                    line_linked: { opacity: 0.62 }
+                },
+                bubble: {
+                    distance: 130,
+                    size: 5,
+                    duration: 24,
+                    opacity: 1.2,
+                    speed: 0.5
+                },
+                repulse: {
+                    distance: 150,
+                    duration: 0.85
+                },
+                push: {
+                    particles_nb: 2
+                },
+                remove: {
+                    particles_nb: 2
+                }
+            }
+        },
+        retina_detect: true
+    });
+})();
+
+(function () {
+    var dlg = document.getElementById("forgotPasswordDialog");
+    var openBtn = document.getElementById("openForgotPassword");
+    var closeBtn = document.getElementById("closeForgotPassword");
+    var form = document.getElementById("forgotPasswordForm");
+    var msg = document.getElementById("forgotPasswordMsg");
+    var userInput = document.getElementById("forgotUser");
+    if (!dlg || !openBtn || !closeBtn || !form || !msg || !userInput) return;
+
+    function setMsg(text, kind) {
+        msg.textContent = text || "";
+        msg.className = "forgot-pass-msg" + (kind ? " " + kind : "");
+    }
+    function openDlg() {
+        if (typeof dlg.showModal === "function") dlg.showModal();
+        else dlg.setAttribute("open", "");
+        var currentLoginUser = (document.querySelector('input[name="username"]') || {}).value || "";
+        userInput.value = currentLoginUser.trim();
+        setMsg("", "");
+        setTimeout(function () { userInput.focus(); }, 40);
+    }
+    function closeDlg() {
+        if (typeof dlg.close === "function") dlg.close();
+        else dlg.removeAttribute("open");
+    }
+    openBtn.addEventListener("click", openDlg);
+    closeBtn.addEventListener("click", closeDlg);
+    dlg.addEventListener("click", function (e) {
+        if (e.target === dlg) closeDlg();
+    });
+    form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        var username = (userInput.value || "").trim();
+        var motivo = (document.getElementById("forgotReason").value || "").trim();
+        if (!username) {
+            setMsg("Debes indicar tu usuario.", "error");
+            return;
+        }
+        setMsg("Enviando solicitud...", "");
+        try {
+            var res = await fetch("/login/password-reset-request", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Requested-With": "XMLHttpRequest"
+                },
+                credentials: "same-origin",
+                body: JSON.stringify({ username: username, motivo: motivo })
+            });
+            var json = await res.json().catch(function () { return null; });
+            if (!res.ok || !json || json.success !== true) {
+                throw new Error((json && json.message) ? json.message : "No se pudo enviar la solicitud.");
+            }
+            setMsg(json.message || "Solicitud enviada.", "success");
+            form.reset();
+        } catch (err) {
+            setMsg(err.message || "Error al enviar solicitud.", "error");
+        }
+    });
+})();
+
+(function () {
+    var dlg = document.getElementById("loginLegalDialog");
+    var openBtn = document.getElementById("openLoginLegal");
+    var closeBtn = document.getElementById("closeLoginLegal");
+    if (!dlg || !openBtn || !closeBtn) return;
+    function openDlg() {
+        if (typeof dlg.showModal === "function") dlg.showModal();
+        else dlg.setAttribute("open", "");
+    }
+    function closeDlg() {
+        if (typeof dlg.close === "function") dlg.close();
+        else dlg.removeAttribute("open");
+    }
+    openBtn.addEventListener("click", function () { openDlg(); });
+    closeBtn.addEventListener("click", function () { closeDlg(); });
+    dlg.addEventListener("click", function (e) {
+        if (e.target === dlg) closeDlg();
+    });
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && dlg.open) closeDlg();
+    });
+})();
 
 /* Mostrar / Ocultar contraseña */
-const togglePassword = document.getElementById('togglePassword');
-const password = document.getElementById('password');
-
-togglePassword.addEventListener('click', function () {
-
-    const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
-    password.setAttribute('type', type);
-
-    this.src = type === 'password'
-        ? "{{ url_for('static', filename='icons/eye.png') }}"
-        : "{{ url_for('static', filename='icons/eye-off.png') }}";
-
-});
+var togglePassword = document.getElementById("togglePassword");
+var password = document.getElementById("password");
+if (togglePassword && password) {
+    function flipEye() {
+        var type = password.getAttribute("type") === "password" ? "text" : "password";
+        password.setAttribute("type", type);
+        togglePassword.src =
+            type === "password"
+                ? "{{ url_for('static', filename='icons/eye.png') }}"
+                : "{{ url_for('static', filename='icons/eye-off.png') }}";
+        togglePassword.setAttribute("alt", type === "password" ? "Mostrar contraseña" : "Ocultar contraseña");
+    }
+    togglePassword.addEventListener("click", function (e) {
+        e.preventDefault();
+        flipEye();
+    });
+    togglePassword.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            flipEye();
+        }
+    });
+}
 </script>
 
 </body>

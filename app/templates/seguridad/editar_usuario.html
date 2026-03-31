@@ -1,0 +1,45 @@
+<section class="form-card">
+    <h1 class="page-title">Editar Usuario</h1>
+
+    <form method="POST" action="{{ url_for('seguridad.editar_usuario', id=user.id) }}">
+        <div class="form-grid">
+            <div class="field">
+                <label>Nombre</label>
+                <input name="nombre" value="{{ user.nombre }}" required>
+            </div>
+
+            <div class="field">
+                <label>Usuario</label>
+                <input name="usuario" value="{{ user.usuario }}" required>
+            </div>
+
+            <div class="field">
+                <label>Nueva contraseña</label>
+                <input type="password" name="password">
+                <small>Dejar vacío para no cambiar</small>
+            </div>
+
+            <div class="field">
+                <label>Rol</label>
+                <select name="rol">
+                    {% for r in roles %}
+                    <option value="{{ r.id }}" {% if r.id == user.rol_id %}selected{% endif %}>
+                        {{ r.nombre }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="field field-full">
+                <label>
+                    <input type="checkbox" name="activo" {% if user.activo %}checked{% endif %}>
+                    Activo
+                </label>
+            </div>
+        </div>
+
+        <div class="actions" style="margin-top:18px; justify-content:flex-end;">
+            <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+        </div>
+    </form>
+</section>

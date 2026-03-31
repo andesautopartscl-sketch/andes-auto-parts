@@ -1,0 +1,569 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+
+{% block title %}Editar Productos | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.card {
+    border:1px solid #e2e8f0;
+    border-radius:16px;
+    padding:18px;
+    margin-bottom:16px;
+    background:#fff;
+    box-shadow:0 10px 25px rgba(0,0,0,0.05);
+}
+
+.row {
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+}
+
+.field {
+    flex:1 1 250px;
+}
+
+.field label {
+    display:block;
+    margin-bottom:6px;
+    font-size:13px;
+    font-weight:600;
+    color:#334155;
+}
+
+input {
+    width:100%;
+    padding:10px 12px;
+    border:1px solid #cbd5e1;
+    border-radius:8px;
+    font-size:14px;
+}
+
+.actions {
+    display:flex;
+    gap:10px;
+    margin-top:12px;
+    flex-wrap:wrap;
+}
+
+.hidden {
+    display:none;
+}
+
+.badge {
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:5px 9px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:600;
+}
+
+.badge-active {
+    background:rgba(34,197,94,.15);
+    color:#166534;
+}
+
+.badge-inactive {
+    background:rgba(220,38,38,.12);
+    color:#991b1b;
+}
+
+.msg {
+    margin-top:10px;
+    padding:10px 12px;
+    border-radius:8px;
+    font-size:13px;
+}
+
+.msg-ok {
+    background:#ecfdf3;
+    border:1px solid #86efac;
+    color:#166534;
+}
+
+.msg-err {
+    background:#fef2f2;
+    border:1px solid #fca5a5;
+    color:#991b1b;
+}
+
+body.dark .card {
+    background:#1f2937;
+    border-color:#374151;
+}
+
+body.dark .card h3,
+body.dark .page-title,
+body.dark .page-subtitle,
+body.dark .field label {
+    color:#e5e7eb;
+}
+
+@media (max-width: 960px) {
+    .row {
+        flex-direction:column;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <div>
+        <h1 class="page-title">Edición de Productos</h1>
+        <p class="page-subtitle">Busca un producto, edita sus datos y guarda cambios sin salir del flujo principal.</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="btn" href="{{ url_for('productos.buscar') }}" data-module-url="{{ url_for('productos.buscar') }}">🔍 Buscar</a>
+        <a class="btn" href="{{ url_for('productos.ver_desactivados') }}" data-module-url="{{ url_for('productos.ver_desactivados') }}">📦 Desactivados</a>
+        <a class="btn btn-primary" href="{{ url_for('productos.modal_crear_producto') }}" data-modal-url="{{ url_for('productos.modal_crear_producto') }}">➕ Crear producto</a>
+    </div>
+</div>
+
+<section class="card">
+    <div class="row">
+        <div class="field">
+            <label for="codigoBuscar">Código del producto</label>
+            <input id="codigoBuscar" placeholder="Ej: ABC123">
+        </div>
+    </div>
+    <div class="actions">
+        <button class="btn btn-primary" type="button" onclick="buscarProductoParaEditar()">Buscar producto</button>
+        <span id="estadoBadge" class="badge hidden"></span>
+    </div>
+    <div id="msgBusqueda"></div>
+</section>
+
+<section id="formCard" class="card hidden">
+    <h3 style="margin:0 0 14px;font-size:16px;color:#0f172a;">📌 Identificación</h3>
+    <div class="row">
+        <div class="field">
+            <label for="codigo">Código (solo lectura)</label>
+            <input id="codigo" readonly style="background:#f1f5f9;color:#64748b;">
+        </div>
+        <div class="field">
+            <label for="nombre">Descripción / Nombre</label>
+            <input id="nombre" placeholder="Descripción del producto">
+        </div>
+    </div>
+
+    <h3 style="margin:18px 0 10px;font-size:16px;color:#0f172a;">🚗 Aplicación Vehicular</h3>
+    <div class="row">
+        <div class="field">
+            <label for="marca">Marca</label>
+            <input id="marca" placeholder="Ej: Toyota">
+        </div>
+        <div class="field">
+            <label for="modelo">Modelo</label>
+            <input id="modelo" placeholder="Ej: Corolla">
+        </div>
+        <div class="field">
+            <label for="motor">Motor</label>
+            <input id="motor" placeholder="Ej: 1.8 VVTi">
+        </div>
+        <div class="field">
+            <label for="anio">Año</label>
+            <input id="anio" placeholder="Ej: 2018-2023">
+        </div>
+        <div class="field">
+            <label for="version">Versión</label>
+            <input id="version" placeholder="Ej: XLi, GLi">
+        </div>
+    </div>
+
+    <h3 style="margin:18px 0 10px;font-size:16px;color:#0f172a;">📋 Características</h3>
+    <div class="row">
+        <div class="field">
+            <label for="medidas">Medidas</label>
+            <input id="medidas" placeholder="Ej: 200x50x30 mm">
+        </div>
+        <div class="field">
+            <label for="categoria_id">Categoría</label>
+            <input id="categoria_buscar" placeholder="Buscar categoría..." style="margin-bottom:6px;">
+            <select id="categoria_id" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;">
+                <option value="">— Seleccionar —</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="subcategoria_id">Subcategoría</label>
+            <input id="subcategoria_buscar" placeholder="Buscar subcategoría..." style="margin-bottom:6px;">
+            <select id="subcategoria_id" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;">
+                <option value="">— Primero categoría —</option>
+            </select>
+        </div>
+    </div>
+
+    <h3 style="margin:18px 0 10px;font-size:16px;color:#0f172a;">💲 Precios</h3>
+    <div class="row">
+        <div class="field">
+            <label for="precio">Precio Público</label>
+            <input id="precio" type="number" step="0.01" min="0" placeholder="0.00">
+        </div>
+        <div class="field">
+            <label for="precio_mayor">Precio Mayor</label>
+            <input id="precio_mayor" type="number" step="0.01" min="0" placeholder="0.00">
+        </div>
+        <div class="field">
+            <label>Stock Total (info)</label>
+            <input id="stock_display" readonly style="background:#f1f5f9;color:#64748b;" placeholder="—">
+        </div>
+    </div>
+
+    <h3 style="margin:18px 0 10px;font-size:16px;color:#0f172a;">🔢 Codificación OEM</h3>
+    <div class="row">
+        <div class="field">
+            <label for="oem">Código OEM</label>
+            <input id="oem" placeholder="Código original fabricante">
+        </div>
+        <div class="field">
+            <label for="alternativo">Código Alternativo</label>
+            <input id="alternativo" placeholder="Códigos alternativos (separados por /)">
+        </div>
+    </div>
+
+    <h3 style="margin:18px 0 10px;font-size:16px;color:#0f172a;">🔄 Homologados</h3>
+    <div class="row">
+        <div class="field" style="flex:1 1 100%;">
+            <label for="homologados">Homologados</label>
+            <input id="homologados" placeholder="Códigos homologados separados por coma">
+        </div>
+    </div>
+
+    <h3 style="margin:18px 0 10px;font-size:16px;color:#0f172a;">⚙️ Estado del Producto</h3>
+    <div class="row" style="align-items:center;">
+        <div class="field" style="flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
+            <input type="checkbox" id="activo_toggle" style="width:18px;height:18px;cursor:pointer;accent-color:#16a34a;" checked>
+            <label for="activo_toggle" style="margin:0;font-weight:600;cursor:pointer;font-size:14px;">Producto activo</label>
+        </div>
+        <div style="font-size:12px;color:#64748b;padding-left:4px;">
+            Desmarcar para desactivar este producto al guardar.
+        </div>
+    </div>
+
+    <div class="actions" style="margin-top:20px;">
+        <button class="btn btn-primary" type="button" onclick="guardarEdicion()">💾 Guardar cambios</button>
+    </div>
+    <div id="msgEdicion"></div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+var taxonomiaCategorias = [];
+var taxonomiaCategoriasBackup = [];
+
+function poblarSubcategorias(categoriaId, subIdSeleccionada) {
+    var sub = document.getElementById('subcategoria_id');
+    if (!sub) return;
+    sub.innerHTML = '<option value="">— Seleccionar —</option>';
+    if (!categoriaId) return;
+    var cat = taxonomiaCategorias.find(function (c) { return String(c.id) === String(categoriaId); });
+    if (!cat || !cat.subcategorias) return;
+    cat.subcategorias.forEach(function (s) {
+        var opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.nombre || '';
+        if (subIdSeleccionada != null && String(s.id) === String(subIdSeleccionada)) opt.selected = true;
+        sub.appendChild(opt);
+    });
+}
+
+function cargarTaxonomia() {
+    return fetch('/productos/api/taxonomia')
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data.success || !data.categorias) return;
+            taxonomiaCategorias = data.categorias;
+            taxonomiaCategoriasBackup = data.categorias.slice();
+            var sel = document.getElementById('categoria_id');
+            if (!sel) return;
+            var prev = sel.value;
+            sel.innerHTML = '<option value="">— Seleccionar —</option>';
+            data.categorias.forEach(function (c) {
+                var opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = c.nombre || '';
+                sel.appendChild(opt);
+            });
+            if (prev) sel.value = prev;
+        })
+        .catch(function () {});
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    cargarTaxonomia();
+    var csel = document.getElementById('categoria_id');
+    if (csel) {
+        csel.addEventListener('change', function () {
+            poblarSubcategorias(csel.value, null);
+        });
+    }
+    var catBuscar = document.getElementById('categoria_buscar');
+    if (catBuscar) {
+        catBuscar.addEventListener('input', function () {
+            var q = (catBuscar.value || '').toLowerCase().trim();
+            var sel = document.getElementById('categoria_id');
+            if (!sel) return;
+            var current = sel.value;
+            sel.innerHTML = '<option value="">— Seleccionar —</option>';
+            taxonomiaCategoriasBackup.forEach(function (c) {
+                if (q && (c.nombre || '').toLowerCase().indexOf(q) === -1) return;
+                var opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = c.nombre || '';
+                sel.appendChild(opt);
+            });
+            if (current) sel.value = current;
+        });
+    }
+    var subBuscar = document.getElementById('subcategoria_buscar');
+    if (subBuscar) {
+        subBuscar.addEventListener('input', function () {
+            var csel2 = document.getElementById('categoria_id');
+            var categoriaId = csel2 ? csel2.value : '';
+            var sub = document.getElementById('subcategoria_id');
+            if (!sub) return;
+            var q = (subBuscar.value || '').toLowerCase().trim();
+            sub.innerHTML = '<option value="">— Seleccionar —</option>';
+            var cat = taxonomiaCategoriasBackup.find(function (c) { return String(c.id) === String(categoriaId); });
+            if (!cat || !cat.subcategorias) return;
+            cat.subcategorias.forEach(function (s) {
+                if (q && (s.nombre || '').toLowerCase().indexOf(q) === -1) return;
+                var opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = s.nombre || '';
+                sub.appendChild(opt);
+            });
+        });
+    }
+    try {
+        var params = new URLSearchParams(window.location.search);
+        var cFromUrl = (params.get('codigo') || '').trim().toUpperCase();
+        if (cFromUrl) {
+            var cb = document.getElementById('codigoBuscar');
+            if (cb) {
+                cb.value = cFromUrl;
+                setTimeout(function () { buscarProductoParaEditar(); }, 0);
+            }
+        }
+    } catch (e) {}
+});
+
+function payloadEdicion() {
+    return {
+        codigo: document.getElementById('codigo').value || '',
+        nombre: document.getElementById('nombre').value || '',
+        marca: document.getElementById('marca').value || '',
+        modelo: document.getElementById('modelo').value || '',
+        motor: document.getElementById('motor').value || '',
+        anio: document.getElementById('anio').value || '',
+        version: document.getElementById('version').value || '',
+        medidas: document.getElementById('medidas').value || '',
+        categoria_id: document.getElementById('categoria_id').value || '',
+        subcategoria_id: document.getElementById('subcategoria_id').value || '',
+        precio: document.getElementById('precio').value || '',
+        precio_mayor: document.getElementById('precio_mayor').value || '',
+        codigo_oem: document.getElementById('oem').value || '',
+        alternativo: document.getElementById('alternativo').value || '',
+        homologados: document.getElementById('homologados').value || '',
+        editing_codigo: document.getElementById('codigo').value || ''
+    };
+}
+
+function validarEdicionRealtime() {
+    return fetch('/productos/validar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadEdicion())
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+        var codigoEl = document.getElementById('codigo');
+        if (codigoEl) codigoEl.setCustomValidity((data.errors && data.errors.codigo) || '');
+        var subEl = document.getElementById('subcategoria_id');
+        if (subEl) subEl.setCustomValidity((data.errors && data.errors.subcategoria_id) || '');
+        return !!data.valid;
+    })
+    .catch(function () { return true; });
+}
+
+function debounce(fn, wait) {
+    var t; return function () { clearTimeout(t); t = setTimeout(fn, wait); };
+}
+
+function saveDraftLocal() {
+    var key = 'productos:edit:' + ((document.getElementById('codigo').value || '').trim().toUpperCase() || 'pending');
+    localStorage.setItem(key, JSON.stringify({ payload: payloadEdicion(), ts: Date.now() }));
+}
+
+function syncDraftServer() {
+    var codigo = (document.getElementById('codigo').value || '').trim().toUpperCase();
+    if (!codigo) return;
+    var key = 'productos:edit:' + codigo;
+    fetch('/productos/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ form_key: key, producto_codigo: codigo, payload: payloadEdicion() })
+    }).catch(function () {});
+}
+
+var debouncedDraft = debounce(function () { saveDraftLocal(); syncDraftServer(); }, 700);
+
+function setMsg(targetId, text, ok) {
+    const el = document.getElementById(targetId);
+    if (!el) return;
+    el.className = 'msg ' + (ok ? 'msg-ok' : 'msg-err');
+    el.textContent = text;
+}
+
+function buscarProductoParaEditar() {
+    const codigo = (document.getElementById('codigoBuscar').value || '').trim().toUpperCase();
+    if (!codigo) {
+        setMsg('msgBusqueda', 'Ingresa un codigo para buscar.', false);
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('codigo', codigo);
+
+    fetch('/productos/buscar_para_editar', { method: 'POST', body: formData })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) {
+                document.getElementById('formCard').classList.add('hidden');
+                setMsg('msgBusqueda', data.error || 'No encontrado', false);
+                return;
+            }
+
+            document.getElementById('codigo').value = data.codigo || '';
+            document.getElementById('nombre').value = data.nombre || '';
+            document.getElementById('marca').value = data.marca || '';
+            document.getElementById('modelo').value = data.modelo || '';
+            document.getElementById('motor').value = data.motor || '';
+            document.getElementById('anio').value = data.anio || '';
+            document.getElementById('version').value = data.version || '';
+            document.getElementById('medidas').value = data.medidas || '';
+            cargarTaxonomia().then(function () {
+                var csel = document.getElementById('categoria_id');
+                if (csel && data.categoria_id != null) {
+                    csel.value = String(data.categoria_id);
+                } else if (csel) {
+                    csel.value = '';
+                }
+                poblarSubcategorias(csel ? csel.value : '', data.subcategoria_id);
+                var ssel = document.getElementById('subcategoria_id');
+                if (ssel && data.subcategoria_id != null) {
+                    ssel.value = String(data.subcategoria_id);
+                }
+            });
+            document.getElementById('precio').value = data.precio || 0;
+            document.getElementById('precio_mayor').value = data.precio_mayor || 0;
+            document.getElementById('stock_display').value = data.stock || 0;
+            document.getElementById('oem').value = data.oem || '';
+            document.getElementById('alternativo').value = data.alternativo || '';
+            document.getElementById('homologados').value = data.homologados || '';
+            document.getElementById('activo_toggle').checked = data.activo !== false;
+
+            const badge = document.getElementById('estadoBadge');
+            badge.classList.remove('hidden', 'badge-active', 'badge-inactive');
+            if ((data.estado || '').toUpperCase() === 'ACTIVO') {
+                badge.classList.add('badge-active');
+                badge.textContent = 'ACTIVO';
+            } else {
+                badge.classList.add('badge-inactive');
+                badge.textContent = 'INACTIVO';
+            }
+
+            document.getElementById('formCard').classList.remove('hidden');
+            setMsg('msgBusqueda', 'Producto encontrado.', true);
+            document.getElementById('msgEdicion').textContent = '';
+            document.getElementById('msgEdicion').className = '';
+            var key = 'productos:edit:' + (data.codigo || '').toUpperCase();
+            fetch('/productos/draft?form_key=' + encodeURIComponent(key), { credentials: 'same-origin' })
+              .then(function (r) { return r.json(); })
+              .then(function (d) {
+                if (!d || !d.success || !d.draft || !d.draft.payload) return;
+                var p = d.draft.payload;
+                Object.keys(p).forEach(function (k) {
+                    var el = document.getElementById(k) || document.querySelector('[name=\"' + k + '\"]');
+                    if (el && typeof p[k] !== 'undefined') el.value = p[k];
+                });
+              })
+              .catch(function () {});
+        })
+        .catch(() => {
+            setMsg('msgBusqueda', 'Error de conexion al buscar producto.', false);
+        });
+}
+
+function guardarEdicion() {
+    const codigo = (document.getElementById('codigo').value || '').trim().toUpperCase();
+    if (!codigo) {
+        setMsg('msgEdicion', 'Codigo invalido.', false);
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('codigo', codigo);
+    formData.append('nombre', document.getElementById('nombre').value || '');
+    formData.append('marca', document.getElementById('marca').value || '');
+    formData.append('modelo', document.getElementById('modelo').value || '');
+    formData.append('motor', document.getElementById('motor').value || '');
+    formData.append('anio', document.getElementById('anio').value || '');
+    formData.append('version', document.getElementById('version').value || '');
+    formData.append('medidas', document.getElementById('medidas').value || '');
+    formData.append('categoria_id', document.getElementById('categoria_id').value || '');
+    formData.append('subcategoria_id', document.getElementById('subcategoria_id').value || '');
+    formData.append('precio', document.getElementById('precio').value || '');
+    formData.append('precio_mayor', document.getElementById('precio_mayor').value || '');
+    formData.append('oem', document.getElementById('oem').value || '');
+    formData.append('alternativo', document.getElementById('alternativo').value || '');
+    formData.append('homologados', document.getElementById('homologados').value || '');
+    formData.append('activo', document.getElementById('activo_toggle').checked ? 'true' : 'false');
+
+    validarEdicionRealtime().then(function (ok) {
+    if (!ok) {
+        setMsg('msgEdicion', 'Corrige los campos marcados antes de guardar.', false);
+        return;
+    }
+    fetch('/productos/guardar_edicion', { method: 'POST', body: formData })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) {
+                setMsg('msgEdicion', data.error || 'No se pudo guardar', false);
+                return;
+            }
+            setMsg('msgEdicion', data.message || 'Producto actualizado correctamente', true);
+            const badge = document.getElementById('estadoBadge');
+            if (data.activo === false) {
+                badge.classList.remove('badge-active');
+                badge.classList.add('badge-inactive');
+                badge.textContent = 'INACTIVO';
+                const el = document.getElementById('msgEdicion');
+                el.innerHTML += ' &nbsp;<a href="/productos/desactivados" data-module-url="/productos/desactivados" style="color:#166534;font-weight:700;">Ver papelera &rarr;</a>';
+            } else {
+                badge.classList.remove('badge-inactive');
+                badge.classList.add('badge-active');
+                badge.textContent = 'ACTIVO';
+            }
+            var key = 'productos:edit:' + codigo;
+            localStorage.removeItem(key);
+            fetch('/productos/draft?form_key=' + encodeURIComponent(key), { method: 'DELETE', credentials: 'same-origin' }).catch(function () {});
+        })
+        .catch(() => {
+            setMsg('msgEdicion', 'Error de conexion al guardar cambios.', false);
+        });
+    });
+}
+
+document.addEventListener('input', function (e) {
+    var t = e.target;
+    if (!t) return;
+    if (['codigoBuscar','estadoBadge'].indexOf(t.id) !== -1) return;
+    debouncedDraft();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,142 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+
+{% block title %}Sin categoría | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.topbar { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:18px; }
+.card {
+  background:#fff; border:1px solid #e2e8f0; border-radius:16px; padding:16px 18px;
+  margin-bottom:14px; box-shadow:0 10px 25px rgba(0,0,0,.05);
+}
+.filters { display:flex; flex-wrap:wrap; gap:12px; align-items:end; margin-bottom:12px; }
+.filters label { display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px; }
+.filters input { padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; min-width:220px; }
+.table-wrap { overflow:auto; max-height:min(62vh,720px); border:1px solid #e2e8f0; border-radius:10px; }
+table { width:100%; border-collapse:collapse; font-size:12px; }
+th, td { padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:top; }
+th { background:#1e3a8a; color:#fff; font-size:11px; position:sticky; top:0; }
+.note { font-size:12px; color:#64748b; line-height:1.45; }
+.pagination { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:10px; margin-top:14px; }
+.msg-inline { padding:10px 14px; border-radius:10px; font-size:13px; display:none; }
+.msg-inline.ok { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+.msg-inline.err { background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
+body.dark .card { background:#1f2937; border-color:#374151; color:#e5e7eb; }
+body.dark .note { color:#9ca3af; }
+body.dark th { background:#1e3a8a; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Productos sin categoría</h1>
+    <p class="page-subtitle">Listado de activos sin categoría ni subcategoría. Podés ejecutar la misma heurística que al importar Excel (descripción, OEM, homologados).</p>
+  </div>
+  <div class="topbar-actions">
+    <a class="btn" href="{{ url_for('productos.panel_calidad_stock') }}" data-module-url="{{ url_for('productos.panel_calidad_stock') }}">📊 Calidad y stock</a>
+    <a class="btn" href="{{ url_for('productos.buscar') }}" data-module-url="{{ url_for('productos.buscar') }}">🔍 Buscar</a>
+  </div>
+</div>
+
+<section class="card">
+  <p class="note" style="margin-top:0;">Total sin clasificar: <strong>{{ total }}</strong></p>
+  <div id="auto-msg" class="msg-inline" role="status"></div>
+  <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:12px;">
+    <button type="button" class="btn btn-primary" id="btn-autoasignar" {% if total == 0 %}disabled{% endif %}>
+      Autoasignar categorías (lote)
+    </button>
+    <span class="note" id="btn-autoasignar-hint">{% if total == 0 %}No hay filas pendientes.{% else %}Puede tardar si el catálogo es grande.{% endif %}</span>
+  </div>
+  <form class="filters" method="get" action="{{ url_for('productos.productos_sin_categoria') }}">
+    <div>
+      <label for="q">Buscar código o descripción</label>
+      <input id="q" name="q" type="search" value="{{ q }}" placeholder="Ej. 2417 o FILTRO">
+    </div>
+    <div>
+      <label for="per_page">Por página</label>
+      <input id="per_page" name="per_page" type="number" min="25" max="200" value="{{ per_page }}" style="width:80px;">
+    </div>
+    <div><button type="submit" class="btn btn-primary">Filtrar</button></div>
+  </form>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Descripción</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in items %}
+        <tr>
+          <td>{{ r.codigo }}</td>
+          <td>{{ r.descripcion }}</td>
+          <td><a href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="note">No hay productos en esta página.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="pagination">
+    {% if total_pages > 1 %}
+    {% if page > 1 %}
+    <a class="btn" href="{{ url_for('productos.productos_sin_categoria', page=page-1, per_page=per_page, q=q) }}">← Anterior</a>
+    {% endif %}
+    <span class="note">Página {{ page }} / {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a class="btn" href="{{ url_for('productos.productos_sin_categoria', page=page+1, per_page=per_page, q=q) }}">Siguiente →</a>
+    {% endif %}
+    {% endif %}
+  </div>
+</section>
+
+<script>
+(function () {
+  var btn = document.getElementById('btn-autoasignar');
+  var msg = document.getElementById('auto-msg');
+  var hint = document.getElementById('btn-autoasignar-hint');
+  if (!btn || !msg) return;
+  var url = {{ url_for('productos.productos_sin_categoria_autoasignar') | tojson }};
+  btn.addEventListener('click', function () {
+    btn.disabled = true;
+    msg.style.display = 'none';
+    if (hint) hint.textContent = 'Procesando…';
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: '{}',
+      credentials: 'same-origin'
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (x) {
+        if (x.ok && x.j && x.j.success) {
+          msg.className = 'msg-inline ok';
+          msg.textContent = 'Listo: se asignaron ' + x.j.asignados + ' producto(s). Quedan sin clasificar: ' + x.j.pendientes + '.';
+          msg.style.display = 'block';
+          window.setTimeout(function () { window.location.reload(); }, 1200);
+        } else {
+          msg.className = 'msg-inline err';
+          msg.textContent = (x.j && x.j.error) ? x.j.error : 'Error al procesar.';
+          msg.style.display = 'block';
+          btn.disabled = false;
+          if (hint) hint.textContent = '';
+        }
+      })
+      .catch(function () {
+        msg.className = 'msg-inline err';
+        msg.textContent = 'Error de red o respuesta inválida.';
+        msg.style.display = 'block';
+        btn.disabled = false;
+        if (hint) hint.textContent = '';
+      });
+  });
+})();
+</script>
+{% endblock %}

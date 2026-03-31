@@ -1,0 +1,57 @@
+<section class="table-card table-card-spaced">
+    <h1 class="page-title">Administración de Usuarios</h1>
+
+    <div class="topbar-actions" style="margin-top:10px; margin-bottom:16px;">
+        <a href="/usuarios/nuevo" data-usuarios-nuevo="1" class="btn btn-primary" style="text-decoration:none;">
+            ➕ Nuevo Usuario
+        </a>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Usuario</th>
+                <th>Rol</th>
+                <th>Activo</th>
+                <th>Último acceso</th>
+                <th>Acciones</th>
+            </tr>
+
+            {% for u in usuarios %}
+            <tr>
+                <td>{{ u.id }}</td>
+                <td>{{ u.nombre }}</td>
+                <td>{{ u.usuario }}</td>
+                <td>{{ u.rol.nombre }}</td>
+
+                <td>
+                    {% if u.activo %}
+                    ✅ Activo
+                    {% else %}
+                    ❌ Inactivo
+                    {% endif %}
+                </td>
+
+                <td>{{ u.ultimo_acceso | chile_datetime }}</td>
+
+                <td>
+                    <a href="/usuarios/editar/{{u.id}}">✏</a>
+
+                    <a href="/usuarios/toggle/{{u.id}}">
+                        {% if u.activo %}
+                        🔒
+                        {% else %}
+                        🔓
+                        {% endif %}
+                    </a>
+
+                    <a href="/usuarios/eliminar/{{u.id}}"
+                       onclick="return confirm('¿Eliminar este usuario?')">🗑</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</section>

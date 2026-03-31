@@ -1,0 +1,451 @@
+{% set nombre_usuario = usuario_nombre if usuario_nombre else session.get('user', 'Invitado') %}
+{% set inicial_usuario = (nombre_usuario[:1] | upper) if nombre_usuario else 'I' %}
+{% set rol_actual = (session.get('rol', '') | lower) %}
+{% set puede_gestionar_excel = ('admin' in rol_actual) %}
+{% set opciones_activo = active_page in ['seguridad_usuarios', 'seguridad_roles', 'seguridad_nuevo_usuario'] %}
+{% set productos_activo = active_page in ['productos_buscar', 'productos_editar', 'productos_desactivados', 'productos_auditoria', 'productos_panel_calidad', 'productos_sin_categoria'] %}
+{% set ventas_activo = active_page in ['ventas', 'ventas_index', 'cotizacion', 'orden_venta', 'orden_compra', 'factura', 'clientes', 'proveedores'] %}
+{% set bodega_activo = active_page in ['bodega', 'index', 'ingreso', 'salida', 'ajuste', 'movimientos', 'recepcion', 'etiquetas', 'etiquetas_historial'] %}
+{% set contabilidad_activo = active_page in ['contabilidad', 'contabilidad_movimientos', 'contabilidad_asientos', 'contabilidad_libro_mayor', 'contabilidad_cxp', 'contabilidad_cxc', 'contabilidad_libro_ventas', 'contabilidad_libro_compras', 'contabilidad_iva', 'contabilidad_reportes', 'contabilidad_balance_general', 'contabilidad_estado_resultados'] %}
+{% set puede_ver_finanzas = (user_permissions.ver_finanzas if user_permissions is defined else True) %}
+{% set informes_activo = active_page in ['dashboard', 'informes', 'informes_ventas_periodo', 'informes_ventas_cliente', 'informes_utilidad', 'informes_stock', 'informes_productos_top', 'informes_movimientos', 'informes_compras', 'transferencias'] %}
+<style>
+.sidebar {
+	width:300px;
+	border-radius:22px;
+	color:var(--text);
+	background:linear-gradient(180deg, var(--bg) 0%, var(--panel) 46%, var(--panel-soft) 100%);
+	border:1px solid rgba(255,255,255,0.08);
+	box-shadow:0 24px 40px rgba(2,8,23,0.45);
+	padding:20px;
+	display:flex;
+	flex-direction:column;
+}
+.user-card {
+	display:flex;
+	gap:12px;
+	align-items:center;
+	margin-bottom:14px;
+	background:rgba(255,255,255,0.09);
+	border:1px solid rgba(255,255,255,0.15);
+	border-radius:14px;
+	padding:12px;
+}
+.avatar {
+	width:42px;
+	height:42px;
+	border-radius:50%;
+	display:flex;
+	align-items:center;
+	justify-content:center;
+	font-weight:700;
+	color:#0f172a;
+	background:linear-gradient(135deg,#60a5fa,#93c5fd);
+	position:relative;
+}
+.avatar::after {
+	content:'';
+	position:absolute;
+	width:11px;
+	height:11px;
+	border-radius:50%;
+	right:-1px;
+	bottom:-1px;
+	border:2px solid #0f172a;
+	background:#22c55e;
+}
+.user-name { font-weight:700; font-size:14px; }
+.user-role { font-size:12px; opacity:.8; margin-top:2px; }
+.nav-modules {
+	display:flex;
+	flex-direction:column;
+	gap:4px;
+	margin-bottom:8px;
+}
+.nav-module { display:flex; flex-direction:column; }
+.module-header {
+	display:flex;
+	align-items:center;
+	gap:9px;
+	padding:10px 12px;
+	border-radius:10px;
+	cursor:pointer;
+	color:white;
+	font-size:12px;
+	font-weight:700;
+	letter-spacing:.06em;
+	text-transform:uppercase;
+	background:rgba(255,255,255,0.07);
+	border:1px solid rgba(255,255,255,0.10);
+	transition:background .2s, transform .15s;
+	user-select:none;
+}
+.module-header:hover {
+	background:rgba(255,255,255,0.14);
+	transform:scale(1.02);
+}
+.module-header.active {
+	background:rgba(255,255,255,0.16);
+	border-color:rgba(255,255,255,0.24);
+	box-shadow:0 4px 12px rgba(0,0,0,0.22);
+}
+.module-label { flex:1; }
+.module-arrow {
+	font-size:11px;
+	display:inline-block;
+	transition:transform .25s ease;
+	opacity:.7;
+}
+.module-header.active .module-arrow {
+	transform:rotate(-180deg);
+	opacity:1;
+}
+.submenu {
+	max-height:0;
+	overflow:hidden;
+	transition:max-height .32s cubic-bezier(0.4,0,0.2,1);
+	padding-left:6px;
+}
+.submenu.open { max-height:520px; }
+.submenu a,
+.submenu .submenu-disabled {
+	display:flex;
+	align-items:center;
+	gap:9px;
+	padding:8px 10px 8px 18px;
+	border-radius:8px;
+	font-size:13px;
+	margin:2px 0;
+}
+.submenu a {
+	color:rgba(255,255,255,0.85);
+	text-decoration:none;
+	transition:background .18s, color .15s, transform .15s;
+}
+.submenu a:hover {
+	background:rgba(255,255,255,0.14);
+	color:white;
+	transform:translateX(3px);
+}
+.submenu a.nav-active {
+	background:rgba(255,255,255,0.2);
+	color:white;
+	font-weight:600;
+}
+.submenu-disabled {
+	color:rgba(255,255,255,0.35);
+	font-style:italic;
+}
+.sidebar-logout {
+	padding-top:8px;
+	border-top:1px solid rgba(255,255,255,0.12);
+	margin-top:4px;
+}
+.sidebar-logout a {
+	display:flex;
+	align-items:center;
+	gap:9px;
+	color:rgba(255,255,255,0.72);
+	text-decoration:none;
+	padding:9px 12px;
+	border-radius:10px;
+	font-size:13px;
+}
+.sidebar-logout a:hover {
+	background:rgba(220,38,38,0.24);
+	color:white;
+}
+.sidebar-dark-btn {
+	display:flex;
+	align-items:center;
+	gap:9px;
+	width:100%;
+	background:rgba(255,255,255,0.07);
+	border:1px solid rgba(255,255,255,0.13);
+	border-radius:10px;
+	color:rgba(255,255,255,0.72);
+	padding:9px 12px;
+	font-size:13px;
+	cursor:pointer;
+	margin-bottom:6px;
+	transition:background .15s,color .15s;
+}
+.sidebar-dark-btn:hover {
+	background:rgba(255,255,255,0.16);
+	color:#fff;
+}
+.online-list {
+	margin-top:auto;
+	background:rgba(15,23,42,.34);
+	border:1px solid rgba(255,255,255,.11);
+	border-radius:12px;
+	padding:12px;
+}
+.online-list h4 {
+	margin:0 0 8px;
+	font-size:12px;
+	letter-spacing:.07em;
+	text-transform:uppercase;
+	opacity:.86;
+}
+.online-item {
+	display:flex;
+	gap:8px;
+	align-items:flex-start;
+	padding:6px 0;
+}
+.online-dot {
+	width:8px;
+	height:8px;
+	border-radius:50%;
+	margin-top:6px;
+	background:#22c55e;
+	box-shadow:0 0 0 4px rgba(34,197,94,.18);
+}
+.online-name { font-size:13px; font-weight:600; }
+.online-meta { font-size:11px; opacity:.72; }
+@media (max-width: 960px) {
+	.sidebar {
+		width: 100%;
+		max-height: min(72vh, 560px);
+		overflow-y: auto;
+		overflow-x: hidden;
+		-webkit-overflow-scrolling: touch;
+	}
+}
+</style>
+<aside class="sidebar">
+	<div class="user-card">
+		<div class="avatar">{{ inicial_usuario }}</div>
+		<div>
+			<div class="user-name">{{ nombre_usuario }}</div>
+			<div class="user-role">{{ usuario_rol if usuario_rol else session.get('rol', 'Sin rol') }}</div>
+		</div>
+	</div>
+
+	<div class="nav-modules">
+		{% if puede_gestionar_excel %}
+		<div class="nav-module">
+			<div class="module-header" id="hdr-mod-opciones" onclick="openOptionsModal(); return false;">
+				<span>⚙️</span>
+				<span class="module-label">Opciones</span>
+			</div>
+		</div>
+		{% endif %}
+
+		<div class="nav-module">
+			<div class="module-header {% if productos_activo %}active{% endif %}" id="hdr-mod-productos" onclick="toggleMenu('mod-productos')">
+				<span>📦</span>
+				<span class="module-label">PRODUCTOS</span>
+				<span class="module-arrow">▾</span>
+			</div>
+			<div class="submenu {% if productos_activo %}open{% endif %}" id="mod-productos">
+				<a class="{% if active_page == 'productos_buscar' %}nav-active{% endif %}"
+				   href="{{ url_for('productos.buscar') }}"
+				   data-module-url="{{ url_for('productos.buscar') }}">🔍 Buscar</a>
+				<a href="{{ url_for('productos.modal_crear_producto') }}"
+				   data-modal-url="{{ url_for('productos.modal_crear_producto') }}">➕ Crear</a>
+				<a class="{% if active_page == 'productos_editar' %}nav-active{% endif %}"
+				   href="{{ url_for('productos.editar_productos_view') }}"
+				   data-module-url="{{ url_for('productos.editar_productos_view') }}">✏ Editar</a>
+				<a class="{% if active_page == 'productos_desactivados' %}nav-active{% endif %}"
+				   href="{{ url_for('productos.ver_desactivados') }}"
+				   data-module-url="{{ url_for('productos.ver_desactivados') }}">📦 Desactivados</a>
+				<a class="{% if active_page == 'productos_auditoria' %}nav-active{% endif %}"
+				   href="{{ url_for('productos.productos_auditoria') }}"
+				   data-module-url="{{ url_for('productos.productos_auditoria') }}">🧾 Auditoría</a>
+				<a class="{% if active_page == 'productos_panel_calidad' %}nav-active{% endif %}"
+				   href="{{ url_for('productos.panel_calidad_stock') }}"
+				   data-module-url="{{ url_for('productos.panel_calidad_stock') }}">📊 Calidad y stock</a>
+				<a class="{% if active_page == 'productos_sin_categoria' %}nav-active{% endif %}"
+				   href="{{ url_for('productos.productos_sin_categoria') }}"
+				   data-module-url="{{ url_for('productos.productos_sin_categoria') }}">🏷 Sin categoría</a>
+				{% if puede_gestionar_excel %}
+				<a href="{{ url_for('productos.buscar') }}#exportar-excel">📥 Exportar Excel</a>
+				<a href="{{ url_for('productos.buscar') }}#importar-excel">📤 Importar Excel</a>
+				{% endif %}
+			</div>
+		</div>
+
+		<div class="nav-module">
+			<div class="module-header {% if ventas_activo %}active{% endif %}" id="hdr-mod-ventas" onclick="toggleMenu('mod-ventas')">
+				<span>🛒</span>
+				<span class="module-label">VENTAS</span>
+				<span class="module-arrow">▾</span>
+			</div>
+			<div class="submenu {% if ventas_activo %}open{% endif %}" id="mod-ventas">
+				<a class="{% if active_page == 'ventas_index' %}nav-active{% endif %}" href="{{ url_for('ventas.index') }}" data-module-url="{{ url_for('ventas.index') }}">🏠 Módulo Ventas</a>
+				<a class="{% if active_page == 'cotizacion' %}nav-active{% endif %}" href="{{ url_for('ventas.cotizacion') }}" data-module-url="{{ url_for('ventas.cotizacion') }}">📄 Cotización</a>
+				<a class="{% if active_page == 'orden_venta' %}nav-active{% endif %}" href="{{ url_for('ventas.orden_venta') }}" data-module-url="{{ url_for('ventas.orden_venta') }}">📋 Orden de venta</a>
+				<a class="{% if active_page == 'orden_compra' %}nav-active{% endif %}" href="{{ url_for('ventas.orden_compra') }}" data-module-url="{{ url_for('ventas.orden_compra') }}">🛍 Orden de compra</a>
+				<a class="{% if active_page == 'factura' %}nav-active{% endif %}" href="{{ url_for('ventas.facturacion') }}" data-module-url="{{ url_for('ventas.facturacion') }}">🧾 Facturación</a>
+				<a class="{% if active_page == 'clientes' %}nav-active{% endif %}" href="{{ url_for('ventas.clientes') }}" data-module-url="{{ url_for('ventas.clientes') }}">👥 Clientes</a>
+				<a class="{% if active_page == 'proveedores' %}nav-active{% endif %}" href="{{ url_for('ventas.proveedores') }}" data-module-url="{{ url_for('ventas.proveedores') }}">🏭 Proveedores</a>
+			</div>
+		</div>
+
+		<div class="nav-module">
+			<div class="module-header {% if bodega_activo %}active{% endif %}" id="hdr-mod-bodega" onclick="toggleMenu('mod-bodega')">
+				<span>🏭</span>
+				<span class="module-label">BODEGA</span>
+				<span class="module-arrow">▾</span>
+			</div>
+			<div class="submenu {% if bodega_activo %}open{% endif %}" id="mod-bodega">
+				<a class="{% if active_page == 'index' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.index') }}"
+				   data-module-url="{{ url_for('bodega.index') }}">🏠 Panel Bodega</a>
+				<a class="{% if active_page == 'ingreso' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.ingreso') }}"
+				   data-module-url="{{ url_for('bodega.ingreso') }}">📥 Ingreso de productos</a>
+				<a class="{% if active_page == 'salida' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.salida') }}"
+				   data-module-url="{{ url_for('bodega.salida') }}">📤 Salida de productos</a>
+				<a class="{% if active_page == 'ajuste' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.ajuste') }}"
+				   data-module-url="{{ url_for('bodega.ajuste') }}">🧮 Ajuste de stock</a>
+				<a class="{% if active_page == 'movimientos' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.movimientos') }}"
+				   data-module-url="{{ url_for('bodega.movimientos') }}">📊 Movimientos de stock</a>
+				<a class="{% if active_page == 'recepcion' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.recepcion') }}"
+				   data-module-url="{{ url_for('bodega.recepcion') }}">📋 Guía recepción proveedor</a>
+				<a class="{% if active_page == 'etiquetas' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.etiquetas') }}"
+				   data-module-url="{{ url_for('bodega.etiquetas') }}">🏷 Imprimir etiquetas</a>
+				<a class="{% if active_page == 'etiquetas_historial' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.etiquetas_historial') }}"
+				   data-module-url="{{ url_for('bodega.etiquetas_historial') }}">🗂 Historial de Etiquetas</a>
+			</div>
+		</div>
+
+		{% if puede_ver_finanzas %}
+		<div class="nav-module">
+			<div class="module-header {% if contabilidad_activo %}active{% endif %}" id="hdr-mod-contabilidad" onclick="toggleMenu('mod-contabilidad')">
+				<span>📚</span>
+				<span class="module-label">CONTABILIDAD</span>
+				<span class="module-arrow">▾</span>
+			</div>
+			<div class="submenu {% if contabilidad_activo %}open{% endif %}" id="mod-contabilidad">
+				<a class="{% if active_page == 'contabilidad' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.index') }}"
+				   data-module-url="{{ url_for('contabilidad.index') }}">📒 Plan de cuentas</a>
+				<a class="{% if active_page == 'contabilidad_movimientos' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.movimientos') }}"
+				   data-module-url="{{ url_for('contabilidad.movimientos') }}">🧾 Libro diario</a>
+				<a class="{% if active_page == 'contabilidad_libro_mayor' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.libro_mayor') }}"
+				   data-module-url="{{ url_for('contabilidad.libro_mayor') }}">📘 Libro mayor</a>
+				<a class="{% if active_page == 'contabilidad_asientos' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.asientos') }}"
+				   data-module-url="{{ url_for('contabilidad.asientos') }}">🧾 Asientos contables</a>
+				<a class="{% if active_page == 'contabilidad_libro_ventas' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.libro_ventas') }}"
+				   data-module-url="{{ url_for('contabilidad.libro_ventas') }}">📄 Libro de ventas</a>
+				<a class="{% if active_page == 'contabilidad_libro_compras' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.libro_compras') }}"
+				   data-module-url="{{ url_for('contabilidad.libro_compras') }}">🛍 Libro de compras</a>
+				<a class="{% if active_page == 'contabilidad_iva' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.iva') }}"
+				   data-module-url="{{ url_for('contabilidad.iva') }}">🧮 IVA</a>
+				<a class="{% if active_page == 'contabilidad_cxp' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.cuentas_por_pagar') }}"
+				   data-module-url="{{ url_for('contabilidad.cuentas_por_pagar') }}">💰 Cuentas por pagar</a>
+				<a class="{% if active_page == 'contabilidad_cxc' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.cuentas_por_cobrar') }}"
+				   data-module-url="{{ url_for('contabilidad.cuentas_por_cobrar') }}">💳 Cuentas por cobrar</a>
+				<a class="{% if active_page == 'contabilidad_reportes' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.reportes_financieros') }}"
+				   data-module-url="{{ url_for('contabilidad.reportes_financieros') }}">📊 Reportes financieros</a>
+				<a class="{% if active_page == 'contabilidad_balance_general' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.balance_general') }}"
+				   data-module-url="{{ url_for('contabilidad.balance_general') }}">📚 Balance general</a>
+				<a class="{% if active_page == 'contabilidad_estado_resultados' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.estado_resultados') }}"
+				   data-module-url="{{ url_for('contabilidad.estado_resultados') }}">📈 Estado de resultados</a>
+			</div>
+		</div>
+		{% endif %}
+
+		<div class="nav-module">
+			<div class="module-header {% if informes_activo %}active{% endif %}" id="hdr-mod-informes" onclick="toggleMenu('mod-informes')">
+				<span>📈</span>
+				<span class="module-label">INFORMES</span>
+				<span class="module-arrow">▾</span>
+			</div>
+			<div class="submenu {% if informes_activo %}open{% endif %}" id="mod-informes">
+				<a class="{% if active_page == 'dashboard' %}nav-active{% endif %}"
+				   href="{{ url_for('dashboard.index') }}"
+				   data-module-url="{{ url_for('dashboard.index') }}">📊 Dashboard</a>
+				<a class="{% if active_page == 'informes' %}nav-active{% endif %}"
+				   href="{{ url_for('informes.index') }}"
+				   data-module-url="{{ url_for('informes.index') }}">🗂 Centro de informes</a>
+				<a href="{{ url_for('informes.ventas_periodo') }}"
+				   data-module-url="{{ url_for('informes.ventas_periodo') }}">📅 Ventas por período</a>
+				<a href="{{ url_for('informes.ventas_cliente') }}"
+				   data-module-url="{{ url_for('informes.ventas_cliente') }}">👤 Ventas por cliente</a>
+				<a href="{{ url_for('informes.utilidad_margen') }}"
+				   data-module-url="{{ url_for('informes.utilidad_margen') }}">💹 Utilidad y margen</a>
+				<a href="{{ url_for('informes.productos_top') }}"
+				   data-module-url="{{ url_for('informes.productos_top') }}">🏆 Productos más vendidos</a>
+				<a href="{{ url_for('informes.stock_critico') }}"
+				   data-module-url="{{ url_for('informes.stock_critico') }}">⚠️ Stock crítico</a>
+				<a href="{{ url_for('informes.movimientos_inventario') }}"
+				   data-module-url="{{ url_for('informes.movimientos_inventario') }}">📦 Movimientos inventario</a>
+				<a href="{{ url_for('informes.compras_proveedor') }}"
+				   data-module-url="{{ url_for('informes.compras_proveedor') }}">🛒 Compras por proveedor</a>
+				<a class="{% if active_page == 'transferencias' %}nav-active{% endif %}"
+				   href="{{ url_for('inventario.transferencias') }}"
+				   data-module-url="{{ url_for('inventario.transferencias') }}">🔄 Transferencias</a>
+			</div>
+		</div>
+	</div>
+
+	<div class="sidebar-logout">
+		<button class="sidebar-dark-btn" type="button" id="sidebarDarkBtn" onclick="sidebarToggleDark()">🌙 <span id="sidebarDarkLabel">Modo oscuro</span></button>
+		<a href="{{ url_for('auth.logout') }}">🚪 Cerrar sesión</a>
+	</div>
+
+<script>
+(function () {
+	'use strict';
+	var DARK_KEY = 'andes_dark_mode';
+	function applyDark(on) {
+		document.documentElement.classList.toggle('dark', on);
+		document.body.classList.toggle('dark', on);
+		var btn = document.getElementById('sidebarDarkBtn');
+		var lbl = document.getElementById('sidebarDarkLabel');
+		if (btn) btn.title = on ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
+		if (lbl) lbl.textContent = on ? 'Modo claro' : 'Modo oscuro';
+		if (btn) btn.children[0] && (btn.childNodes[0].textContent = on ? '☀️ ' : '🌙 ');
+	}
+	window.sidebarToggleDark = function () {
+		var isDark = document.body.classList.contains('dark');
+		applyDark(!isDark);
+		try { localStorage.setItem(DARK_KEY, (!isDark) ? '1' : '0'); } catch(e){}
+	};
+	// Restore preference on load
+	document.addEventListener('DOMContentLoaded', function () {
+		var saved = '';
+		try { saved = localStorage.getItem(DARK_KEY) || ''; } catch(e){}
+		applyDark(saved === '1');
+	});
+})();
+</script>
+
+	<div class="online-list">
+		<h4>Usuarios en linea</h4>
+		{% if online_users and online_users|length > 0 %}
+			{% for u in online_users %}
+			<div class="online-item">
+				<span class="online-dot"></span>
+				<div>
+					<div class="online-name">{{ u.nombre or u.usuario or 'Usuario' }}</div>
+					<div class="online-meta">Activo ahora</div>
+				</div>
+			</div>
+			{% endfor %}
+		{% else %}
+			<div class="online-meta">Sin usuarios activos.</div>
+		{% endif %}
+	</div>
+</aside>

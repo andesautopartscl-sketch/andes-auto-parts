@@ -1,0 +1,39 @@
+<div class="psmodal no-print" id="productSearchModal">
+    <div class="psbox">
+        <div class="pshead">
+            <h3>Buscador de productos</h3>
+            <button class="ps-closex" type="button" id="psClose">&#xD7;</button>
+        </div>
+        <div class="ps-toolbar">
+            <input id="psInput" type="search" placeholder="Buscar por código, OEM o descripción..." autocomplete="off">
+            <button class="btn sm outline" type="button" id="psRun">Buscar</button>
+            <button class="btn sm" type="button" id="psClear">Limpiar</button>
+        </div>
+        <div id="psSummary" class="ps-hint">Escribe al menos 2 caracteres para buscar.</div>
+        <div class="ps-scroll">
+            <table class="ps-table">
+                <thead>
+                    <tr>
+                        <th style="width:40px;"></th>
+                        <th>Código / OEM</th>
+                        <th>Descripción</th>
+                        <th>Marca</th>
+                        <th>Bodega</th>
+                        <th>Stock</th>
+                        <th style="text-align:right;">Precio</th>
+                    </tr>
+                </thead>
+                <tbody id="psResults">
+                    <tr><td colspan="7" style="text-align:center;padding:24px;color:#94a3b8;">Sin búsqueda ejecutada.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="psfoot">
+            <span class="ps-selcount" id="psSelCount">0 seleccionados</span>
+            <div class="ps-btns">
+                <button class="btn primary" type="button" id="psApply">Agregar seleccionados</button>
+                <button class="btn" type="button" id="psClose2">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>

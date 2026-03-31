@@ -1,0 +1,1273 @@
+<div id="apchat-root" data-current-user="{{ usuario_nombre or '' }}">
+    <button id="apchat-fab" class="apchat-fab" type="button" aria-label="Abrir chat interno">
+        <span class="apchat-logo-wrap">
+            <img src="{{ url_for('static', filename='logo_andes.png') }}" alt="Andes Auto Parts" class="apchat-logo" data-fallback-src="{{ url_for('static', filename='logo.png') }}">
+        </span>
+        <span class="apchat-badge hidden" id="apchat-badge">0</span>
+    </button>
+
+    <section id="apchat-panel" class="apchat-panel" aria-hidden="true">
+        <header class="apchat-header">
+            <div class="apchat-header-brand">
+                <img src="{{ url_for('static', filename='logo_andes.png') }}" alt="Andes Auto Parts" class="apchat-header-logo" data-fallback-src="{{ url_for('static', filename='logo.png') }}">
+                <div>
+                    <h3>Chat Interno</h3>
+                    <p>Andes Auto Parts ERP</p>
+                </div>
+            </div>
+            <button id="apchat-close" class="apchat-close" type="button" aria-label="Cerrar chat">×</button>
+        </header>
+
+        <div class="apchat-body">
+            <aside class="apchat-users" id="apchat-users"></aside>
+
+            <div class="apchat-conversation">
+                <div class="apchat-conversation-head" id="apchat-conversation-head">Selecciona un usuario</div>
+                <div class="apchat-messages" id="apchat-messages"></div>
+
+                <div id="apchat-typing-indicator" class="apchat-typing-indicator hidden">
+                    <span class="apchat-typing-dot"></span>
+                    <span class="apchat-typing-dot"></span>
+                    <span class="apchat-typing-dot"></span>
+                    <span id="apchat-typing-text">Usuario está escribiendo...</span>
+                </div>
+
+                <div id="apchat-recorder-bar" class="apchat-recorder-bar hidden">
+                    <span class="apchat-rec-dot"></span>
+                    <span>Grabando audio</span>
+                    <span id="apchat-rec-timer">00:00</span>
+                    <div class="apchat-rec-actions">
+                        <button type="button" id="apchat-rec-cancel">Cancelar</button>
+                        <button type="button" id="apchat-rec-stop">Detener y enviar</button>
+                    </div>
+                </div>
+
+                <form id="apchat-form" class="apchat-form">
+                    <button class="apchat-icon-btn" type="button" id="apchat-attach-btn" title="Adjuntar archivo">📎</button>
+                    <button class="apchat-icon-btn" type="button" id="apchat-emoji-btn" title="Emojis">😀</button>
+                    <button class="apchat-icon-btn" type="button" id="apchat-mic-btn" title="Mensaje de voz">🎤</button>
+                    <input id="apchat-input" type="text" maxlength="3000" autocomplete="off" placeholder="Escribe un mensaje..." required>
+                    <button type="submit" id="apchat-send-btn">Enviar</button>
+                    <input type="file" id="apchat-file-input" class="hidden" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.odt,.ods,.ppt,.pptx,.mp3,.wav,.ogg,.m4a,.aac,.webm,.mp4">
+                </form>
+
+                <div id="apchat-emoji-picker" class="apchat-emoji-picker hidden"></div>
+            </div>
+        </div>
+    </section>
+
+    <div id="apchat-image-modal" class="apchat-image-modal hidden">
+        <button type="button" id="apchat-image-close" class="apchat-image-close">×</button>
+        <img id="apchat-image-full" src="" alt="Vista previa">
+    </div>
+
+    <div id="apchat-edit-modal" class="apchat-edit-modal hidden">
+        <div class="apchat-edit-content">
+            <h4>Editar Mensaje</h4>
+            <textarea id="apchat-edit-textarea" maxlength="3000" placeholder="Edita el contenido del mensaje..."></textarea>
+            <div class="apchat-edit-actions">
+                <button type="button" id="apchat-edit-cancel">Cancelar</button>
+                <button type="button" id="apchat-edit-save">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="apchat-context-menu" class="apchat-context-menu hidden">
+        <button type="button" class="apchat-context-item" data-action="edit">Editar mensaje</button>
+        <button type="button" class="apchat-context-item" data-action="copy">Copiar</button>
+        <button type="button" class="apchat-context-item" data-action="delete-me">Eliminar para mí</button>
+        <button type="button" class="apchat-context-item" data-action="delete-all" id="apchat-delete-all-btn">Eliminar para todos</button>
+    </div>
+</div>
+
+<style>
+#apchat-root {
+    position: fixed;
+    right: 22px;
+    bottom: 20px;
+    z-index: 1400;
+    font-family: "Segoe UI", system-ui, Arial, sans-serif;
+}
+.hidden { display: none !important; }
+.apchat-fab {
+    width: 66px;
+    height: 66px;
+    border-radius: 20px;
+    border: 1px solid #dbe3ef;
+    cursor: pointer;
+    position: relative;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.24);
+    background: linear-gradient(145deg, #ffffff 0%, #eff6ff 100%);
+    display: grid;
+    place-items: center;
+    transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+.apchat-fab:hover { transform: translateY(-3px) scale(1.02); border-color: #93c5fd; box-shadow: 0 18px 34px rgba(30, 64, 175, 0.28); }
+.apchat-logo-wrap {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+}
+.apchat-logo { width: 30px; height: 30px; object-fit: contain; }
+.apchat-badge {
+    position: absolute;
+    top: -4px;
+    right: -3px;
+    min-width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: #dc2626;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+    padding: 0 6px;
+    border: 2px solid #fff;
+}
+.apchat-panel {
+    position: absolute;
+    right: 0;
+    bottom: 82px;
+    width: min(940px, calc(100vw - 24px));
+    height: min(680px, calc(100vh - 120px));
+    border-radius: 20px;
+    overflow: hidden;
+    background: #f8fafc;
+    border: 1px solid #dbe3ef;
+    box-shadow: 0 28px 50px rgba(15, 23, 42, 0.3);
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+    pointer-events: none;
+    transition: opacity 220ms ease, transform 220ms ease;
+    display: flex;
+    flex-direction: column;
+}
+.apchat-panel.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+.apchat-header {
+    background: linear-gradient(120deg, #0f172a 0%, #1e3a8a 100%);
+    color: #fff;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.apchat-header-brand { display: flex; align-items: center; gap: 10px; }
+.apchat-header-logo {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    object-fit: contain;
+    padding: 2px;
+}
+.apchat-header h3 { margin: 0; font-size: 15px; font-weight: 800; }
+.apchat-header p { margin: 2px 0 0; font-size: 11px; opacity: 0.82; }
+.apchat-close {
+    border: none;
+    background: rgba(255, 255, 255, 0.16);
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+}
+.apchat-body { display: grid; grid-template-columns: 280px 1fr; min-height: 0; flex: 1; }
+.apchat-users { background: #fff; border-right: 1px solid #e2e8f0; overflow-y: auto; }
+.apchat-user {
+    width: 100%; text-align: left; border: none; border-bottom: 1px solid #f1f5f9; background: transparent;
+    padding: 12px 14px; cursor: pointer; display: grid; gap: 6px; transition: background 160ms ease;
+}
+.apchat-user:hover { background: #eff6ff; }
+.apchat-user.active { background: #dbeafe; }
+.apchat-user-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.apchat-user-name { font-size: 13px; font-weight: 700; color: #0f172a; }
+.apchat-user-status-row { display: flex; align-items: center; gap: 8px; }
+.apchat-presence-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.apchat-presence-dot.online { background: #16a34a; box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.2); }
+.apchat-presence-dot.offline { background: #94a3b8; }
+.apchat-user-status { font-size: 11px; color: #64748b; }
+.apchat-user-unread {
+    background: #1d4ed8; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;
+    min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center;
+}
+.apchat-conversation { display: grid; grid-template-rows: auto 1fr auto auto; min-height: 0; position: relative; }
+.apchat-conversation-head {
+    background: #fff; border-bottom: 1px solid #e2e8f0; padding: 12px 15px; font-size: 13px; font-weight: 700; color: #0f172a;
+}
+.apchat-messages {
+    padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;
+    background: linear-gradient(180deg, #f8fafc 0%, #ecf4ff 100%);
+}
+.apchat-empty { margin: auto; color: #64748b; font-size: 13px; }
+.apchat-row { max-width: 82%; display: grid; gap: 5px; animation: apchatFadeIn 180ms ease; }
+@keyframes apchatFadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.apchat-row.mine { align-self: flex-end; }
+.apchat-row.theirs { align-self: flex-start; }
+.apchat-bubble {
+    padding: 10px 12px; border-radius: 14px; font-size: 13px; line-height: 1.38; white-space: pre-wrap; word-break: break-word;
+    box-shadow: 0 5px 14px rgba(15, 23, 42, 0.08);
+}
+.apchat-row.mine .apchat-bubble { background: linear-gradient(145deg, #1d4ed8 0%, #2563eb 100%); color: #fff; border-bottom-right-radius: 5px; }
+.apchat-row.theirs .apchat-bubble { background: #fff; color: #0f172a; border: 1px solid #dbe3ef; border-bottom-left-radius: 5px; }
+.apchat-media-image {
+    display: block; max-width: 260px; width: 100%; border-radius: 10px; border: 1px solid rgba(0,0,0,0.08); cursor: zoom-in; background: #fff;
+}
+.apchat-media-audio { width: min(260px, 100%); }
+.apchat-media-file {
+    display: grid; gap: 6px; background: rgba(255,255,255,0.8); border: 1px solid rgba(148,163,184,0.4); border-radius: 10px; padding: 8px;
+}
+.apchat-row.mine .apchat-media-file { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.3); }
+.apchat-file-name { font-size: 12px; font-weight: 700; }
+.apchat-file-meta { font-size: 11px; opacity: 0.85; }
+.apchat-file-link {
+    display: inline-flex; align-items: center; justify-content: center; text-decoration: none; font-size: 11px; font-weight: 700;
+    border-radius: 8px; padding: 6px 8px; width: fit-content; background: #0f172a; color: #fff;
+}
+.apchat-row.mine .apchat-file-link { background: #dbeafe; color: #1e3a8a; }
+.apchat-meta { font-size: 10px; color: #64748b; display: flex; gap: 6px; }
+.apchat-row.mine .apchat-meta { justify-content: flex-end; }
+.apchat-recorder-bar {
+    display: flex; align-items: center; gap: 9px; background: #fff7ed; border-top: 1px solid #fed7aa; border-bottom: 1px solid #fed7aa;
+    padding: 8px 12px; font-size: 12px; color: #9a3412;
+}
+.apchat-rec-dot {
+    width: 10px; height: 10px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 5px rgba(239,68,68,0.18); animation: apchatPulse 1.1s infinite;
+}
+@keyframes apchatPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.25); }
+    100% { transform: scale(1); }
+}
+.apchat-rec-actions { margin-left: auto; display: flex; gap: 8px; }
+.apchat-rec-actions button {
+    border: none; border-radius: 8px; padding: 6px 8px; font-size: 11px; cursor: pointer; font-weight: 700;
+}
+#apchat-rec-cancel { background: #fee2e2; color: #991b1b; }
+#apchat-rec-stop { background: #dcfce7; color: #166534; }
+.apchat-form {
+    display: grid; grid-template-columns: auto auto auto 1fr auto; gap: 8px; padding: 10px;
+    border-top: 1px solid #e2e8f0; background: #fff; align-items: center;
+}
+.apchat-icon-btn {
+    width: 34px; height: 34px; border-radius: 10px; border: 1px solid #dbe3ef; background: #f8fafc;
+    cursor: pointer; font-size: 16px; line-height: 1; transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+.apchat-icon-btn:hover { background: #eff6ff; border-color: #93c5fd; transform: translateY(-1px); }
+.apchat-form input[type="text"] {
+    border: 1px solid #cbd5e1; border-radius: 12px; padding: 11px 13px; font-size: 13px; outline: none;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.apchat-form input[type="text"]:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18); }
+#apchat-send-btn {
+    border: none; border-radius: 12px; background: linear-gradient(145deg, #1d4ed8 0%, #2563eb 100%); color: #fff;
+    padding: 10px 15px; font-weight: 700; cursor: pointer; transition: transform 160ms ease, opacity 160ms ease;
+}
+#apchat-send-btn:hover { transform: translateY(-1px); }
+#apchat-send-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+.apchat-emoji-picker {
+    position: absolute; bottom: 58px; left: 54px; width: 280px; max-height: 190px; overflow-y: auto;
+    background: #fff; border: 1px solid #dbe3ef; border-radius: 12px; padding: 8px; box-shadow: 0 12px 26px rgba(15, 23, 42, 0.18);
+    display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px;
+}
+.apchat-emoji-item {
+    border: none; background: #f8fafc; border-radius: 8px; padding: 6px 0; cursor: pointer; font-size: 16px;
+}
+.apchat-emoji-item:hover { background: #eff6ff; }
+.apchat-typing-indicator {
+    padding: 10px 14px; display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 12px;
+    background: #f1f5f9; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;
+}
+.apchat-typing-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; animation: apchatTypingBounce 1.4s infinite;
+}
+.apchat-typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.apchat-typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes apchatTypingBounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
+    30% { transform: translateY(-8px); opacity: 1; }
+}
+.apchat-message-status { font-size: 10px; color: #94a3b8; margin-left: 4px; }
+.apchat-message-status.read { color: #3b82f6; }
+.apchat-message-edited { font-size: 10px; color: #94a3b8; font-style: italic; }
+.apchat-deleted-bubble { opacity: 0.6; font-style: italic; }
+.apchat-row { position: relative; }
+.apchat-row:hover .apchat-message-menu-btn { opacity: 1; }
+.apchat-message-menu-btn {
+    opacity: 0; transition: opacity 160ms ease; background: #f1f5f9; border: 1px solid #cbd5e1; 
+    width: 28px; height: 28px; border-radius: 6px; padding: 0; cursor: pointer; font-size: 16px;
+    display: flex; align-items: center; justify-content: center; color: #64748b; font-weight: 700;
+}
+.apchat-message-menu-btn:hover { background: #e2e8f0; border-color: #94a3b8; }
+.apchat-message-menu-btn:active { background: #cbd5e1; }
+.apchat-image-modal {
+    position: fixed; inset: 0; background: rgba(2, 6, 23, 0.86); display: grid; place-items: center; z-index: 2000;
+}
+.apchat-image-modal img {
+    max-width: min(94vw, 1100px);
+    max-height: 86vh;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+}
+.apchat-image-close {
+    position: absolute; top: 20px; right: 20px; border: none; width: 36px; height: 36px; border-radius: 11px;
+    background: rgba(255,255,255,0.18); color: #fff; font-size: 22px; cursor: pointer;
+}
+.apchat-edit-modal {
+    position: fixed; inset: 0; background: rgba(2, 6, 23, 0.6); display: grid; place-items: center; z-index: 2100;
+}
+.apchat-edit-content {
+    background: #fff; border-radius: 12px; padding: 20px; width: min(500px, calc(100vw - 40px)); box-shadow: 0 20px 45px rgba(15, 23, 42, 0.3);
+}
+.apchat-edit-content h4 { margin: 0 0 12px; font-size: 14px; color: #0f172a; }
+.apchat-edit-content textarea {
+    width: 100%; height: 100px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-family: inherit;
+    font-size: 13px; resize: none; outline: none; line-height: 1.38;
+}
+.apchat-edit-content textarea:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18); }
+.apchat-edit-actions { display: flex; gap: 10px; margin-top: 14px; }
+.apchat-edit-actions button {
+    flex: 1; padding: 10px; border: none; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;
+}
+#apchat-edit-cancel { background: #f1f5f9; color: #0f172a; }
+#apchat-edit-save { background: #1d4ed8; color: #fff; }
+#apchat-edit-save:hover { background: #2563eb; }
+.apchat-context-menu {
+    position: fixed; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; 
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.24); z-index: 2050; min-width: 180px; padding: 4px 0;
+    animation: apchatMenuFadeIn 150ms ease;
+}
+@keyframes apchatMenuFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.apchat-context-item {
+    display: block; width: 100%; text-align: left; border: none; background: transparent; padding: 10px 14px;
+    font-size: 13px; color: #0f172a; cursor: pointer; transition: background 160ms ease;
+}
+.apchat-context-item:hover:not(:disabled) { background: #f1f5f9; }
+.apchat-context-item:disabled { color: #cbd5e1; cursor: not-allowed; }
+.apchat-context-item.delete-all-expired { color: #cbd5e1; cursor: not-allowed; }
+@media (max-width: 900px) {
+    #apchat-root { right: 12px; bottom: 12px; }
+    .apchat-panel { width: calc(100vw - 16px); height: min(680px, calc(100vh - 90px)); right: -4px; bottom: 80px; }
+    .apchat-body { grid-template-columns: 1fr; grid-template-rows: 190px 1fr; }
+    .apchat-users { border-right: 0; border-bottom: 1px solid #e2e8f0; }
+    .apchat-form { grid-template-columns: auto auto auto 1fr auto; }
+    .apchat-emoji-picker { left: 12px; right: 12px; width: auto; grid-template-columns: repeat(9, 1fr); }
+}
+</style>
+
+<script>
+(function () {
+    const root = document.getElementById('apchat-root');
+    if (!root) return;
+
+    const panel = document.getElementById('apchat-panel');
+    const fab = document.getElementById('apchat-fab');
+    const closeBtn = document.getElementById('apchat-close');
+    const badge = document.getElementById('apchat-badge');
+    const usersEl = document.getElementById('apchat-users');
+    const messagesEl = document.getElementById('apchat-messages');
+    const formEl = document.getElementById('apchat-form');
+    const inputEl = document.getElementById('apchat-input');
+    const sendBtn = document.getElementById('apchat-send-btn');
+    const conversationHead = document.getElementById('apchat-conversation-head');
+    const typingIndicatorEl = document.getElementById('apchat-typing-indicator');
+    const typingTextEl = document.getElementById('apchat-typing-text');
+    const emojiBtn = document.getElementById('apchat-emoji-btn');
+    const emojiPicker = document.getElementById('apchat-emoji-picker');
+    const attachBtn = document.getElementById('apchat-attach-btn');
+    const fileInput = document.getElementById('apchat-file-input');
+    const micBtn = document.getElementById('apchat-mic-btn');
+    const recorderBar = document.getElementById('apchat-recorder-bar');
+    const recTimer = document.getElementById('apchat-rec-timer');
+    const recCancelBtn = document.getElementById('apchat-rec-cancel');
+    const recStopBtn = document.getElementById('apchat-rec-stop');
+    const imageModal = document.getElementById('apchat-image-modal');
+    const imageClose = document.getElementById('apchat-image-close');
+    const imageFull = document.getElementById('apchat-image-full');
+    const editModal = document.getElementById('apchat-edit-modal');
+    const editTextarea = document.getElementById('apchat-edit-textarea');
+    const editCancelBtn = document.getElementById('apchat-edit-cancel');
+    const editSaveBtn = document.getElementById('apchat-edit-save');
+    const contextMenu = document.getElementById('apchat-context-menu');
+
+    const EMOJIS = ['😀','😁','😂','🤣','😊','😍','😎','😢','😡','👍','👎','👏','🙌','🙏','💪','🔥','✨','🎉','✅','💯','🛒','📦','🚗','🧰','⚙','📈','📉','💼','📄','🕒','☎','📍'];
+
+    let selectedUserId = null;
+    let selectedUserName = '';
+    let users = [];
+    let lastMessageId = 0;
+    let usersPoll = null;
+    let messagesPoll = null;
+    let heartbeatPoll = null;
+    let typingPoll = null;
+    let idleUsersPoll = null;
+    let mediaRecorder = null;
+    let recorderStream = null;
+    let recorderChunks = [];
+    let recordingTimer = null;
+    let recordingStartedAt = null;
+    let editingMessageId = null;
+    let isTyping = false;
+    let typingTimeout = null;
+    const messageStore = new Map();
+
+    root.querySelectorAll('img[data-fallback-src]').forEach((img) => {
+        img.addEventListener('error', () => {
+            const fallback = img.getAttribute('data-fallback-src');
+            if (fallback && img.src !== fallback) img.src = fallback;
+        });
+    });
+
+    function csrfHeaders() {
+        return { 'Content-Type': 'application/json' };
+    }
+
+    function escapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function fmtTime(iso) {
+        if (!iso) return '';
+        const dt = new Date(iso);
+        if (Number.isNaN(dt.getTime())) return '';
+        return dt.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function fmtSize(bytes) {
+        const n = Number(bytes) || 0;
+        if (n < 1024) return `${n} B`;
+        if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+        return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function setBadge(value) {
+        const count = Number(value) || 0;
+        if (count > 0) {
+            badge.textContent = count > 99 ? '99+' : String(count);
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+
+    async function apiGet(url) {
+        const resp = await fetch(url, { credentials: 'same-origin' });
+        if (!resp.ok) throw new Error('request_failed');
+        return resp.json();
+    }
+
+    async function apiPost(url, payload) {
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: csrfHeaders(),
+            credentials: 'same-origin',
+            body: JSON.stringify(payload || {}),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error((data && data.message) || 'request_failed');
+        return data;
+    }
+
+    async function apiPut(url, payload) {
+        const resp = await fetch(url, {
+            method: 'PUT',
+            headers: csrfHeaders(),
+            credentials: 'same-origin',
+            body: JSON.stringify(payload || {}),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error((data && data.message) || 'request_failed');
+        return data;
+    }
+
+    async function apiUpload(url, formData) {
+        const resp = await fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: formData,
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error((data && data.message) || 'upload_failed');
+        return data;
+    }
+
+    function renderUsers() {
+        usersEl.innerHTML = '';
+        if (!users.length) {
+            usersEl.innerHTML = '<div class="apchat-empty" style="padding:10px;">No hay usuarios disponibles.</div>';
+            return;
+        }
+
+        users.forEach((user) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'apchat-user' + (selectedUserId === user.id ? ' active' : '');
+            btn.dataset.userId = String(user.id);
+
+            const statusTxt = escapeHtml(user.status_label || (user.online ? 'Activo ahora' : 'Sin actividad'));
+            const unreadHtml = user.unread > 0 ? `<span class="apchat-user-unread">${user.unread > 99 ? '99+' : user.unread}</span>` : '';
+            const dotClass = user.online ? 'online' : 'offline';
+
+            btn.innerHTML = `
+                <div class="apchat-user-top">
+                    <span class="apchat-user-name">${escapeHtml(user.name)}</span>
+                    ${unreadHtml}
+                </div>
+                <div class="apchat-user-status-row">
+                    <span class="apchat-presence-dot ${dotClass}"></span>
+                    <span class="apchat-user-status">${statusTxt}</span>
+                </div>
+            `;
+
+            btn.addEventListener('click', () => selectUser(user.id, user.name));
+            usersEl.appendChild(btn);
+        });
+    }
+
+    function messageMediaHtml(message, messageId) {
+        if (message.is_audio && message.media_url) {
+            return `<audio class="apchat-media-audio" data-message-id="${messageId}" controls preload="none" src="${escapeHtml(message.media_url)}"></audio>`;
+        }
+        if (message.is_image && message.media_url) {
+            return `<img class="apchat-media-image" data-message-id="${messageId}" loading="lazy" src="${escapeHtml(message.media_url)}" alt="Imagen enviada" data-full-src="${escapeHtml(message.media_url)}">`;
+        }
+        if ((message.is_file || (!message.is_text && message.media_url)) && message.media_download_url) {
+            const fileName = escapeHtml(message.media_name || 'Archivo');
+            const fileMime = escapeHtml(message.media_mime || 'Archivo');
+            const fileSize = escapeHtml(fmtSize(message.media_size));
+            return `
+                <div class="apchat-media-file" data-message-id="${messageId}">
+                    <div class="apchat-file-name">${fileName}</div>
+                    <div class="apchat-file-meta">${fileMime} · ${fileSize}</div>
+                    <a class="apchat-file-link" href="${escapeHtml(message.media_download_url)}">Descargar</a>
+                </div>
+            `;
+        }
+        return '';
+    }
+
+    function parsePositiveId(value) {
+        const n = Number(value);
+        return Number.isInteger(n) && n > 0 ? n : null;
+    }
+
+    function canDeleteForAllNow(message) {
+        if (!message || !message.mine || message.is_deleted) return false;
+        const sentTime = new Date(message.sent_at);
+        if (Number.isNaN(sentTime.getTime())) return false;
+        const minutesAgo = (Date.now() - sentTime.getTime()) / (1000 * 60);
+        return minutesAgo < 10;
+    }
+
+    function findMessageContextByButton(buttonEl) {
+        if (!buttonEl) return null;
+        const row = buttonEl.closest('.apchat-row');
+        const idFromRow = parsePositiveId(row && row.getAttribute('data-message-id'));
+        const idFromButton = parsePositiveId(buttonEl.getAttribute('data-message-id'));
+        const messageId = idFromRow || idFromButton;
+        if (!messageId) {
+            console.error('Chat delete aborted: missing message ID in DOM context', { row, buttonEl });
+            return null;
+        }
+        const message = messageStore.get(messageId) || null;
+        return { messageId, message, row };
+    }
+
+    function applyDeletedStateInDom(messageId) {
+        const row = messagesEl.querySelector(`.apchat-row[data-message-id="${messageId}"]`);
+        if (!row) {
+            console.warn('Delete UI update skipped: message row not found', { messageId });
+            return;
+        }
+
+        row.querySelectorAll('.apchat-bubble, .apchat-media-audio, .apchat-media-image, .apchat-media-file').forEach((node) => {
+            node.remove();
+        });
+
+        const bubble = document.createElement('div');
+        bubble.className = 'apchat-bubble apchat-deleted-bubble';
+        bubble.setAttribute('data-message-id', String(messageId));
+        bubble.innerHTML = '<em>Mensaje eliminado</em>';
+        row.insertBefore(bubble, row.firstChild);
+
+        const menuButton = row.querySelector('[data-action="menu-trigger"]');
+        if (menuButton) menuButton.remove();
+
+        const stored = messageStore.get(messageId);
+        if (stored) {
+            stored.is_deleted = true;
+            stored.content = '';
+            messageStore.set(messageId, stored);
+        }
+    }
+
+    function appendMessage(message) {
+        const messageId = parsePositiveId(message && message.id);
+        if (!messageId) {
+            console.error('Skipping message render: invalid message ID', { message });
+            return;
+        }
+
+        lastMessageId = Math.max(lastMessageId, messageId);
+        messageStore.set(messageId, { ...message, id: messageId });
+
+        const row = document.createElement('div');
+        row.className = 'apchat-row ' + (message.mine ? 'mine' : 'theirs');
+        row.setAttribute('data-message-id', String(messageId));
+        row.dataset.messageId = String(messageId);
+        const sender = message.mine ? 'Tu' : escapeHtml(selectedUserName || 'Usuario');
+        
+        let contentHtml = '';
+        let mediaHtml = '';
+        
+        if (message.is_deleted) {
+            contentHtml = `<div class="apchat-bubble apchat-deleted-bubble" data-message-id="${messageId}"><em>Mensaje eliminado</em></div>`;
+        } else {
+            contentHtml = message.content ? `<div class="apchat-bubble" data-message-id="${messageId}">${escapeHtml(message.content)}</div>` : '';
+            mediaHtml = messageMediaHtml(message, messageId);
+        }
+        
+        const statusIcon = message.mine ? escapeHtml(message.status_icon || '✔') : '';
+        const statusClass = message.status === 'read' ? 'read' : '';
+        const editedLabel = (message.is_edited && !message.is_deleted) ? '<span class="apchat-message-edited"> (editado)</span>' : '';
+        
+        const menuButtonHtml = message.mine && !message.is_deleted ? `
+            <button type="button" class="apchat-message-menu-btn" data-action="menu-trigger" data-message-id="${messageId}" title="Opciones" aria-label="Opciones del mensaje">⋯</button>
+        ` : '';
+
+        row.innerHTML = `
+            ${contentHtml}
+            ${mediaHtml}
+            <div class="apchat-meta">
+                <span>${sender}</span>
+                <span>${fmtTime(message.sent_at)}</span>
+                <span class="apchat-message-status ${statusClass}">${statusIcon}</span>
+                ${editedLabel}
+            </div>
+            ${menuButtonHtml}
+        `;
+
+        row.querySelectorAll('.apchat-media-image').forEach((img) => {
+            img.addEventListener('click', () => {
+                imageFull.src = img.getAttribute('data-full-src') || '';
+                imageModal.classList.remove('hidden');
+            });
+        });
+
+        messagesEl.appendChild(row);
+
+        if (message.mine && !message.is_read) {
+            markMessageAsRead(message.id);
+        }
+    }
+
+    function renderMessages(items) {
+        if (!items || !items.length) {
+            if (!messagesEl.children.length) {
+                messagesEl.innerHTML = '<div class="apchat-empty">Sin mensajes aun.</div>';
+            }
+            return;
+        }
+
+        const wasNearBottom = (messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight) < 80;
+        if (messagesEl.querySelector('.apchat-empty')) messagesEl.innerHTML = '';
+
+        items.forEach((m) => appendMessage(m));
+
+        if (wasNearBottom || items.some((m) => !m.mine)) {
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+    }
+
+    async function loadUsers() {
+        try {
+            const data = await apiGet('/chat/api/users');
+            users = Array.isArray(data.users) ? data.users : [];
+            const unreadTotal = users.reduce((acc, u) => acc + (Number(u.unread) || 0), 0);
+            setBadge(unreadTotal);
+            renderUsers();
+            if (!selectedUserId && users.length) selectUser(users[0].id, users[0].name);
+        } catch (_) {
+        }
+    }
+
+    async function loadMessages(opts) {
+        const options = opts || {};
+        if (!selectedUserId) {
+            messagesEl.innerHTML = '<div class="apchat-empty">Selecciona un usuario para iniciar la conversacion.</div>';
+            return;
+        }
+
+        if (options.reset) {
+            lastMessageId = 0;
+            messageStore.clear();
+            messagesEl.innerHTML = '<div class="apchat-empty">Cargando mensajes...</div>';
+        }
+
+        const after = options.reset ? 0 : lastMessageId;
+
+        try {
+            const data = await apiGet(`/chat/api/messages/${selectedUserId}?after_id=${after}&limit=120`);
+            const items = Array.isArray(data.messages) ? data.messages : [];
+            renderMessages(items);
+            await loadUsers();
+        } catch (_) {
+            if (options.reset) messagesEl.innerHTML = '<div class="apchat-empty">No fue posible cargar mensajes.</div>';
+        }
+    }
+
+    async function checkTypingStatus() {
+        if (!selectedUserId) return;
+        try {
+            const data = await apiGet(`/chat/api/typing/${selectedUserId}`);
+            if (data.is_typing) {
+                typingIndicatorEl.classList.remove('hidden');
+            } else {
+                typingIndicatorEl.classList.add('hidden');
+            }
+        } catch (_) {
+        }
+    }
+
+    function notifyTypingStart() {
+        if (!selectedUserId || isTyping) return;
+        isTyping = true;
+        try {
+            apiPost(`/chat/api/typing/start/${selectedUserId}`, {});
+        } catch (_) {
+        }
+    }
+
+    function notifyTypingStop() {
+        if (!selectedUserId || !isTyping) return;
+        isTyping = false;
+        clearTimeout(typingTimeout);
+        try {
+            apiPost(`/chat/api/typing/stop/${selectedUserId}`, {});
+        } catch (_) {
+        }
+    }
+
+    function selectUser(userId, userName) {
+        selectedUserId = Number(userId);
+        selectedUserName = userName || 'Usuario';
+        conversationHead.textContent = selectedUserName;
+        notifyTypingStop();
+        renderUsers();
+        loadMessages({ reset: true });
+        inputEl.focus();
+    }
+
+    async function sendTextMessage(evt) {
+        evt.preventDefault();
+        if (!selectedUserId) return;
+        const content = (inputEl.value || '').trim();
+        if (!content) return;
+
+        notifyTypingStop();
+        inputEl.disabled = true;
+        sendBtn.disabled = true;
+        try {
+            await apiPost('/chat/api/messages/send', { receiver_id: selectedUserId, content });
+            inputEl.value = '';
+            await loadMessages({ reset: false });
+        } catch (_) {
+        } finally {
+            inputEl.disabled = false;
+            sendBtn.disabled = false;
+            inputEl.focus();
+        }
+    }
+
+    async function uploadFile(file, voiceNote) {
+        if (!selectedUserId || !file) return;
+        const formData = new FormData();
+        formData.append('receiver_id', String(selectedUserId));
+        formData.append('file', file);
+        formData.append('content', (inputEl.value || '').trim());
+        if (voiceNote) formData.append('voice_note', '1');
+
+        notifyTypingStop();
+        inputEl.disabled = true;
+        sendBtn.disabled = true;
+
+        try {
+            await apiUpload('/chat/api/messages/upload', formData);
+            inputEl.value = '';
+            await loadMessages({ reset: false });
+        } catch (_) {
+        } finally {
+            inputEl.disabled = false;
+            sendBtn.disabled = false;
+        }
+    }
+
+    async function markMessageAsRead(messageId) {
+        if (!messageId) return;
+        try {
+            await apiPost(`/chat/api/messages/${messageId}/read`, {});
+        } catch (_) {
+        }
+    }
+
+    function openEditModal(message) {
+        editingMessageId = message.id;
+        editTextarea.value = message.content;
+        editModal.classList.remove('hidden');
+        editTextarea.focus();
+    }
+
+    function closeEditModal() {
+        editingMessageId = null;
+        editTextarea.value = '';
+        editModal.classList.add('hidden');
+    }
+
+    async function saveEditedMessage() {
+        if (!editingMessageId) return;
+        const content = (editTextarea.value || '').trim();
+        if (!content) {
+            closeEditModal();
+            return;
+        }
+
+        try {
+            await apiPut(`/chat/api/messages/${editingMessageId}`, { content });
+            closeEditModal();
+            await loadMessages({ reset: false });
+        } catch (_) {
+        }
+    }
+
+    let currentContextMessageId = null;
+    let currentContextMessage = null;
+    let currentContextCanDeleteAll = false;
+
+    function openContextMenu(buttonEl) {
+        const context = findMessageContextByButton(buttonEl);
+        if (!context) {
+            closeContextMenu();
+            return;
+        }
+
+        currentContextMessageId = context.messageId;
+        currentContextMessage = context.message || null;
+        currentContextCanDeleteAll = canDeleteForAllNow(context.message);
+        
+        // Position menu relative to button with proper centering
+        const rect = buttonEl.getBoundingClientRect();
+        const menuWidth = 180;
+        const menuHeight = 160;
+        
+        // Position to the left of button, with overflow handling
+        let left = rect.left - menuWidth - 8;
+        let top = rect.top + (rect.height / 2) - (menuHeight / 2);
+        
+        // Prevent going off-screen
+        if (left < 10) left = rect.right + 8;
+        if (top < 10) top = 10;
+        if (top + menuHeight > window.innerHeight) top = window.innerHeight - menuHeight - 10;
+        
+        contextMenu.style.left = left + 'px';
+        contextMenu.style.top = top + 'px';
+        
+        // Show/hide buttons based on permissions
+        const editBtn = contextMenu.querySelector('[data-action="edit"]');
+        const deleteAllBtn = contextMenu.querySelector('[data-action="delete-all"]');
+        
+        if (editBtn) {
+            if (context.message && context.message.mine && !context.message.is_deleted) {
+                editBtn.style.display = 'block';
+            } else {
+                editBtn.style.display = 'none';
+            }
+        }
+        
+        if (deleteAllBtn) {
+            if (currentContextCanDeleteAll) {
+                deleteAllBtn.classList.remove('delete-all-expired');
+                deleteAllBtn.disabled = false;
+                deleteAllBtn.style.display = 'block';
+            } else if (context.message && context.message.mine && !context.message.is_deleted) {
+                deleteAllBtn.classList.add('delete-all-expired');
+                deleteAllBtn.disabled = true;
+                deleteAllBtn.style.display = 'block';
+            } else {
+                deleteAllBtn.style.display = 'none';
+            }
+        }
+        
+        contextMenu.classList.remove('hidden');
+    }
+
+    function closeContextMenu() {
+        contextMenu.classList.add('hidden');
+        currentContextMessageId = null;
+        currentContextMessage = null;
+        currentContextCanDeleteAll = false;
+    }
+
+    async function deleteMessageForMe() {
+        const messageId = parsePositiveId(currentContextMessageId);
+        if (!messageId) {
+            console.error('Delete for me aborted: context message ID is missing');
+            closeContextMenu();
+            return;
+        }
+        if (!window.confirm('Se eliminara este mensaje para tu usuario. Deseas continuar?')) {
+            closeContextMenu();
+            return;
+        }
+
+        closeContextMenu();
+
+        try {
+            await apiPost(`/chat/api/messages/${messageId}/delete-me`, { message_id: messageId, scope: 'me' });
+            applyDeletedStateInDom(messageId);
+            await loadMessages({ reset: true });
+        } catch (e) {
+            const error = e.message || 'Error al eliminar';
+            alert(error);
+        }
+    }
+
+    async function deleteMessageForAll() {
+        const messageId = parsePositiveId(currentContextMessageId);
+        if (!messageId) {
+            console.error('Delete for all aborted: context message ID is missing');
+            closeContextMenu();
+            return;
+        }
+        if (!currentContextCanDeleteAll) {
+            alert('El tiempo para eliminar para todos ha expirado');
+            closeContextMenu();
+            return;
+        }
+        if (!window.confirm('Se eliminara este mensaje para todos. Deseas continuar?')) {
+            closeContextMenu();
+            return;
+        }
+        closeContextMenu();
+
+        try {
+            await apiPost(`/chat/api/messages/${messageId}/delete-all`, { message_id: messageId, scope: 'all' });
+            applyDeletedStateInDom(messageId);
+            await loadMessages({ reset: true });
+        } catch (e) {
+            const error = e.message || 'Error al eliminar';
+            alert(error);
+        }
+    }
+
+    function copyMessageToClipboard() {
+        if (!currentContextMessage || !currentContextMessage.content) {
+            alert('No hay contenido para copiar');
+            closeContextMenu();
+            return;
+        }
+        
+        navigator.clipboard.writeText(currentContextMessage.content).then(() => {
+            closeContextMenu();
+        }).catch(() => {
+            // Fallback for older browsers
+            const textarea = document.createElement('textarea');
+            textarea.value = currentContextMessage.content;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            closeContextMenu();
+        });
+    }
+
+    function openEmojiPicker() {
+        emojiPicker.classList.toggle('hidden');
+    }
+
+    function closeEmojiPicker() {
+        emojiPicker.classList.add('hidden');
+    }
+
+    function insertEmoji(emoji) {
+        const start = inputEl.selectionStart || inputEl.value.length;
+        const end = inputEl.selectionEnd || inputEl.value.length;
+        const value = inputEl.value;
+        inputEl.value = value.slice(0, start) + emoji + value.slice(end);
+        const pos = start + emoji.length;
+        inputEl.setSelectionRange(pos, pos);
+        inputEl.focus();
+        notifyTypingStart();
+    }
+
+    function buildEmojiPicker() {
+        emojiPicker.innerHTML = '';
+        EMOJIS.forEach((emoji) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'apchat-emoji-item';
+            btn.textContent = emoji;
+            btn.addEventListener('click', () => insertEmoji(emoji));
+            emojiPicker.appendChild(btn);
+        });
+    }
+
+    function startRecordingTimer() {
+        stopRecordingTimer();
+        recordingStartedAt = Date.now();
+        recTimer.textContent = '00:00';
+        recordingTimer = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - recordingStartedAt) / 1000);
+            const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+            const ss = String(elapsed % 60).padStart(2, '0');
+            recTimer.textContent = `${mm}:${ss}`;
+        }, 500);
+    }
+
+    function stopRecordingTimer() {
+        if (recordingTimer) clearInterval(recordingTimer);
+        recordingTimer = null;
+    }
+
+    function cleanupRecorder() {
+        if (recorderStream) recorderStream.getTracks().forEach((track) => track.stop());
+        recorderStream = null;
+        mediaRecorder = null;
+        recorderChunks = [];
+        stopRecordingTimer();
+        recorderBar.classList.add('hidden');
+    }
+
+    async function startRecording() {
+        if (!selectedUserId) return;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+
+        try {
+            recorderStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(recorderStream);
+            recorderChunks = [];
+
+            mediaRecorder.addEventListener('dataavailable', (event) => {
+                if (event.data && event.data.size > 0) recorderChunks.push(event.data);
+            });
+
+            mediaRecorder.addEventListener('stop', async () => {
+                const blob = new Blob(recorderChunks, { type: 'audio/webm' });
+                if (blob.size > 0) {
+                    const audioFile = new File([blob], `audio_${Date.now()}.webm`, { type: 'audio/webm' });
+                    await uploadFile(audioFile, true);
+                }
+                cleanupRecorder();
+            });
+
+            mediaRecorder.start();
+            recorderBar.classList.remove('hidden');
+            startRecordingTimer();
+        } catch (_) {
+            cleanupRecorder();
+        }
+    }
+
+    function stopRecording(send) {
+        if (!mediaRecorder) return;
+        if (!send) {
+            mediaRecorder.stop();
+            cleanupRecorder();
+            return;
+        }
+        mediaRecorder.stop();
+    }
+
+    async function sendHeartbeat() {
+        try {
+            await apiPost('/chat/api/presence/heartbeat', {});
+        } catch (_) {
+        }
+    }
+
+    function startOpenPanelPolling() {
+        stopOpenPanelPolling();
+        usersPoll = setInterval(loadUsers, 9000);
+        messagesPoll = setInterval(() => { if (selectedUserId) loadMessages({ reset: false }); }, 3000);
+        typingPoll = setInterval(checkTypingStatus, 1000);
+    }
+
+    function stopOpenPanelPolling() {
+        if (usersPoll) clearInterval(usersPoll);
+        if (messagesPoll) clearInterval(messagesPoll);
+        if (typingPoll) clearInterval(typingPoll);
+        usersPoll = null;
+        messagesPoll = null;
+        typingPoll = null;
+    }
+
+    function startIdleUsersPolling() {
+        if (idleUsersPoll) return;
+        idleUsersPoll = setInterval(loadUsers, 25000);
+    }
+
+    function stopIdleUsersPolling() {
+        if (idleUsersPoll) clearInterval(idleUsersPoll);
+        idleUsersPoll = null;
+    }
+
+    function startHeartbeat() {
+        if (heartbeatPoll) return;
+        sendHeartbeat();
+        heartbeatPoll = setInterval(sendHeartbeat, 55000);
+    }
+
+    function stopHeartbeat() {
+        if (heartbeatPoll) clearInterval(heartbeatPoll);
+        heartbeatPoll = null;
+    }
+
+    function stopAllTimers() {
+        stopOpenPanelPolling();
+        stopIdleUsersPolling();
+        stopHeartbeat();
+        notifyTypingStop();
+        stopRecording(false);
+    }
+
+    function openPanel() {
+        panel.classList.add('open');
+        panel.setAttribute('aria-hidden', 'false');
+        loadUsers();
+        startOpenPanelPolling();
+        startHeartbeat();
+    }
+
+    function closePanel() {
+        notifyTypingStop();
+        panel.classList.remove('open');
+        panel.setAttribute('aria-hidden', 'true');
+        closeEmojiPicker();
+        stopOpenPanelPolling();
+        startIdleUsersPolling();
+    }
+
+    fab.addEventListener('click', () => {
+        if (panel.classList.contains('open')) closePanel();
+        else {
+            stopIdleUsersPolling();
+            openPanel();
+        }
+    });
+
+    closeBtn.addEventListener('click', closePanel);
+    formEl.addEventListener('submit', sendTextMessage);
+    inputEl.addEventListener('input', () => {
+        notifyTypingStart();
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(notifyTypingStop, 3000);
+    });
+    emojiBtn.addEventListener('click', openEmojiPicker);
+    attachBtn.addEventListener('click', () => fileInput.click());
+    micBtn.addEventListener('click', startRecording);
+    recCancelBtn.addEventListener('click', () => stopRecording(false));
+    recStopBtn.addEventListener('click', () => stopRecording(true));
+
+    fileInput.addEventListener('change', async () => {
+        const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+        fileInput.value = '';
+        if (!file) return;
+        await uploadFile(file, false);
+    });
+
+    editCancelBtn.addEventListener('click', closeEditModal);
+    editSaveBtn.addEventListener('click', saveEditedMessage);
+
+    contextMenu.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-action]');
+        if (!item) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const action = item.getAttribute('data-action');
+        
+        if (action === 'edit') {
+            if (currentContextMessage) openEditModal(currentContextMessage);
+        } else if (action === 'copy') {
+            copyMessageToClipboard();
+        } else if (action === 'delete-me') {
+            deleteMessageForMe();
+        } else if (action === 'delete-all') {
+            deleteMessageForAll();
+        }
+    });
+
+    messagesEl.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-action="menu-trigger"]');
+        if (!button) return;
+        event.preventDefault();
+        event.stopPropagation();
+        openContextMenu(button);
+    });
+
+    document.addEventListener('click', (event) => {
+        const target = event.target;
+        if (contextMenu && !contextMenu.contains(target) && !target.closest('[data-action="menu-trigger"]')) {
+            closeContextMenu();
+        }
+        if (emojiPicker && !emojiPicker.contains(target) && target !== emojiBtn) {
+            closeEmojiPicker();
+        }
+    });
+
+    imageClose.addEventListener('click', () => {
+        imageModal.classList.add('hidden');
+        imageFull.src = '';
+    });
+    imageModal.addEventListener('click', (event) => {
+        if (event.target === imageModal) {
+            imageModal.classList.add('hidden');
+            imageFull.src = '';
+        }
+    });
+
+    editModal.addEventListener('click', (event) => {
+        if (event.target === editModal) closeEditModal();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stopAllTimers();
+        } else {
+            loadUsers();
+            startHeartbeat();
+            if (panel.classList.contains('open')) {
+                startOpenPanelPolling();
+                loadMessages({ reset: false });
+            } else {
+                startIdleUsersPolling();
+            }
+        }
+    });
+
+    window.addEventListener('beforeunload', stopAllTimers);
+
+    buildEmojiPicker();
+    loadUsers();
+    startIdleUsersPolling();
+    startHeartbeat();
+})();
+</script>

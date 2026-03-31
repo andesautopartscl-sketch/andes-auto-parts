@@ -1,0 +1,101 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+
+{% block title %}Historial Producto | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.panel {
+    background:#fff;
+    border:1px solid #e2e8f0;
+    border-radius:14px;
+    box-shadow:0 8px 20px rgba(15,23,42,0.05);
+    padding:16px;
+}
+.table-wrap { overflow:auto; }
+table.erp-compact {
+    width:100%;
+    border-collapse:collapse;
+    table-layout:fixed;
+}
+table.erp-compact th,
+table.erp-compact td {
+    padding:8px 10px;
+    font-size:12px;
+    border-bottom:1px solid #eef2f7;
+    text-align:left;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+table.erp-compact th {
+    background:#f8fafc;
+    color:#64748b;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    font-size:11px;
+}
+.badge {
+    display:inline-flex;
+    align-items:center;
+    padding:2px 8px;
+    border-radius:999px;
+    font-size:11px;
+    font-weight:700;
+}
+.badge.in { background:#dcfce7; color:#166534; }
+.badge.out { background:#fee2e2; color:#991b1b; }
+.badge.adj { background:#ffedd5; color:#9a3412; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <div>
+        <h1 class="page-title">Historial de producto</h1>
+        <p class="page-subtitle">Codigo: {{ codigo }}</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="link-btn" href="{{ url_for('productos.buscar', q=codigo) }}">↩ Volver a buscar</a>
+        <a class="link-btn" href="{{ url_for('productos.ver_producto', codigo=codigo) }}" data-modal-url="{{ url_for('productos.ver_producto', codigo=codigo) }}">Ver detalle</a>
+    </div>
+</div>
+
+<section class="panel">
+    {% if movimientos %}
+    <div class="table-wrap">
+        <table class="erp-compact">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Cantidad</th>
+                    <th>Marca</th>
+                    <th>Bodega</th>
+                    <th>Usuario</th>
+                    <th>Observacion</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in movimientos %}
+                <tr>
+                    <td>{{ m.fecha.strftime('%d/%m/%Y %H:%M') if m.fecha else '-' }}</td>
+                    <td>
+                        {% if m.tipo == 'ingreso' %}<span class="badge in">Ingreso</span>
+                        {% elif m.tipo == 'salida' %}<span class="badge out">Salida</span>
+                        {% else %}<span class="badge adj">Ajuste</span>{% endif %}
+                    </td>
+                    <td>{{ m.cantidad or 0 }}</td>
+                    <td>{{ m.marca or '-' }}</td>
+                    <td>{{ m.bodega or '-' }}</td>
+                    <td>{{ m.usuario or '-' }}</td>
+                    <td>{{ m.observacion or '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p style="margin:0;color:#64748b;">No hay movimientos registrados para este producto.</p>
+    {% endif %}
+</section>
+{% endblock %}

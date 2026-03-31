@@ -1,0 +1,72 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Informes | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Informes</h1>
+    <p class="page-subtitle">Reportes y análisis operacional en tiempo real</p>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;">
+
+  <a href="{{ url_for('informes.ventas_periodo') }}" style="text-decoration:none;">
+    <div style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.06);transition:box-shadow .15s;">
+      <div style="font-size:28px;margin-bottom:8px;">📅</div>
+      <h3 style="margin:0 0 4px;font-size:15px;">Ventas por período</h3>
+      <p style="margin:0;color:#64748b;font-size:13px;">Filtra facturas y boletas por rango de fechas.</p>
+    </div>
+  </a>
+
+  <a href="{{ url_for('informes.ventas_cliente') }}" style="text-decoration:none;">
+    <div style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.06);">
+      <div style="font-size:28px;margin-bottom:8px;">👤</div>
+      <h3 style="margin:0 0 4px;font-size:15px;">Ventas por cliente</h3>
+      <p style="margin:0;color:#64748b;font-size:13px;">Ranking de clientes por monto total comprado.</p>
+    </div>
+  </a>
+
+  <a href="{{ url_for('informes.utilidad_margen') }}" style="text-decoration:none;">
+    <div style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.06);">
+      <div style="font-size:28px;margin-bottom:8px;">💹</div>
+      <h3 style="margin:0 0 4px;font-size:15px;">Utilidad y margen</h3>
+      <p style="margin:0;color:#64748b;font-size:13px;">Productos más rentables por volumen de venta.</p>
+    </div>
+  </a>
+
+  <a href="{{ url_for('informes.stock_critico') }}" style="text-decoration:none;">
+    <div style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.06);">
+      <div style="font-size:28px;margin-bottom:8px;">⚠️</div>
+      <h3 style="margin:0 0 4px;font-size:15px;">Stock crítico</h3>
+      <p style="margin:0;color:#64748b;font-size:13px;">Variantes con stock igual o inferior al umbral.</p>
+    </div>
+  </a>
+
+  <a href="{{ url_for('informes.productos_top') }}" style="text-decoration:none;">
+    <div style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.06);">
+      <div style="font-size:28px;margin-bottom:8px;">🏆</div>
+      <h3 style="margin:0 0 4px;font-size:15px;">Productos más vendidos</h3>
+      <p style="margin:0;color:#64748b;font-size:13px;">Top 50 productos por cantidad de unidades vendidas.</p>
+    </div>
+  </a>
+
+  <a href="{{ url_for('informes.movimientos_inventario') }}" style="text-decoration:none;">
+    <div style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.06);">
+      <div style="font-size:28px;margin-bottom:8px;">📦</div>
+      <h3 style="margin:0 0 4px;font-size:15px;">Movimientos de inventario</h3>
+      <p style="margin:0;color:#64748b;font-size:13px;">Ingresos, salidas y ajustes de stock por período.</p>
+    </div>
+  </a>
+
+  <a href="{{ url_for('informes.compras_proveedor') }}" style="text-decoration:none;">
+    <div style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.06);">
+      <div style="font-size:28px;margin-bottom:8px;">🛒</div>
+      <h3 style="margin:0 0 4px;font-size:15px;">Compras por proveedor</h3>
+      <p style="margin:0;color:#64748b;font-size:13px;">Resumen de órdenes de compra agrupadas por proveedor.</p>
+    </div>
+  </a>
+
+</div>
+{% endblock %}
+ 

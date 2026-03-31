@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='bodega.css') }}">
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='rut_utils.js') }}"></script>
+<script src="{{ url_for('static', filename='bodega_ui.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,249 @@
+<h2>Panel Automotriz</h2>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div style="
+          padding:10px;
+          margin-bottom:10px;
+          border-radius:5px;
+          background-color:{% if category == 'error' %}#ffdddd{% else %}#ddffdd{% endif %};
+          color:#000;
+          font-weight:bold;">
+          {{ message }}
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<h3>Crear Vehículo</h3>
+<form method="POST" action="{{ url_for('automotriz.crear_vehiculo') }}">
+    Marca: <input name="marca"><br>
+    Modelo: <input name="modelo"><br>
+    Año Desde: <input name="anio_desde"><br>
+    Año Hasta: <input name="anio_hasta"><br>
+    <button type="submit">Guardar</button>
+</form>
+
+<hr>
+
+<h3>Crear OEM</h3>
+<form method="POST" action="{{ url_for('automotriz.crear_oem') }}">
+    Código OEM: <input name="codigo_oem"><br>
+    Descripción: <input name="descripcion"><br>
+    <button type="submit">Guardar</button>
+</form>
+
+<hr>
+
+<hr>
+<h3>Asignar OEM a Vehículo</h3>
+
+<form method="POST" action="{{ url_for('automotriz.asignar_oem_vehiculo') }}">
+
+    <label>OEM:</label>
+    <select name="oem_id" required>
+        <option value="">Seleccionar OEM</option>
+        {% for oem in oems %}
+            <option value="{{ oem.id }}">
+                {{ oem.codigo_oem }} - {{ oem.descripcion_tecnica }}
+            </option>
+        {% endfor %}
+    </select>
+
+    <br><br>
+
+    <label>Vehículos:</label><br>
+    {% for vehiculo in vehiculos %}
+        <input type="checkbox" name="vehiculo_ids" value="{{ vehiculo.id }}">
+        {{ vehiculo.marca }} {{ vehiculo.modelo }} ({{ vehiculo.anio_desde }} - {{ vehiculo.anio_hasta }})
+        <br>
+    {% endfor %}
+
+    <br>
+    <button type="submit">Asignar</button>
+
+</form>
+
+
+<h3>Crear Bodega</h3>
+<form method="POST" action="{{ url_for('automotriz.crear_bodega') }}">
+    <input type="text" name="nombre" placeholder="Nombre Bodega" required>
+    <button type="submit">Crear</button>
+</form>
+
+<hr>
+
+<h3>Vehículos creados</h3>
+<ul>
+{% for v in vehiculos %}
+    <li>{{ v.marca }} {{ v.modelo }} ({{ v.anio_desde }} - {{ v.anio_hasta }})</li>
+{% endfor %}
+</ul>
+
+<hr>
+
+<h3>OEM creados</h3>
+
+{% for oem in oems %}
+    <div style="margin-bottom:20px;">
+        <strong>{{ oem.codigo_oem }} - {{ oem.descripcion_tecnica }}</strong>
+
+<br>
+<small><strong>Aplica a:</strong>
+    {% if oem.vehiculos %}
+        {% for v in oem.vehiculos %}
+            {{ v.marca }} {{ v.modelo }} ({{ v.anio_desde }}-{{ v.anio_hasta }}){% if not loop.last %}, {% endif %}
+        {% endfor %}
+    {% else %}
+        Sin vehículos asignados
+    {% endif %}
+</small>
+<br><br>
+
+        <ul>
+        {% for producto in oem.productos %}
+            <li>
+   Cod: {{ producto.codigo_interno }} |
+   Marca: {{ producto.marca }} |
+   Publico: {{ producto.precio_publico }} |
+   Mayor: {{ producto.precio_mayor }}
+
+   <a href="{{ url_for('automotriz.editar_producto', producto_id=producto.id) }}">
+       ✏️ Editar
+   </a>
+</li>
+
+    {% set ns = namespace(total=0) %}
+    {% for stock in producto.stocks %}
+        {% set ns.total = ns.total + stock.cantidad %}
+    {% endfor %}
+
+    <br>
+    {% if ns.total == 0 %}
+    <strong style="color:red;">Stock Total: {{ ns.total }}</strong>
+{% else %}
+    <strong style="color:green;">Stock Total: {{ ns.total }}</strong>
+{% endif %}
+
+    <ul>
+    {% for stock in producto.stocks %}
+        <li>
+            Bodega: {{ stock.bodega.nombre }} |
+            Cantidad: {{ stock.cantidad }}
+        </li>
+    {% endfor %}
+    </ul>
+
+</li>
+        {% endfor %}
+        </ul>
+    </div>
+{% endfor %}
+
+<hr>
+
+<h2>Agregar Producto Comercial a OEM</h2>
+
+<form method="POST" action="{{ url_for('automotriz.crear_producto_comercial') }}">
+    
+    <label>OEM:</label>
+    <select name="oem_id">
+        {% for oem in oems %}
+            <option value="{{ oem.id }}">
+                {{ oem.codigo_oem }} - {{ oem.descripcion_tecnica }}
+            </option>
+        {% endfor %}
+    </select>
+
+    <input type="text" name="codigo_interno" placeholder="Código Interno" required>
+    <input type="text" name="marca" placeholder="Marca" required>
+    <input type="text" name="precio_publico" placeholder="Precio Público">
+    <input type="text" name="precio_mayor" placeholder="Precio Mayor">
+
+    <button type="submit">Agregar</button>
+</form>
+
+<hr>
+
+<h2>Ingresar Stock</h2>
+
+<form method="POST" action="{{ url_for('automotriz.ingresar_stock') }}">
+
+    <select name="producto_id" required>
+        <option value="">Seleccionar Producto</option>
+        {% for oem in oems %}
+            {% for producto in oem.productos %}
+                <option value="{{ producto.id }}">
+                    {{ oem.codigo_oem }} - {{ producto.marca }} ({{ producto.codigo_interno }})
+                </option>
+            {% endfor %}
+        {% endfor %}
+    </select>
+
+    <select name="bodega_id" required>
+        <option value="">Seleccionar Bodega</option>
+        {% for bodega in bodegas %}
+            <option value="{{ bodega.id }}">{{ bodega.nombre }}</option>
+        {% endfor %}
+    </select>
+
+    <input type="number" name="cantidad" placeholder="Cantidad" required>
+
+    <button type="submit">Guardar Stock</button>
+
+</form>
+
+<hr>
+
+<h2>Vender Producto</h2>
+
+<form method="POST" action="{{ url_for('automotriz.vender_producto') }}">
+
+    <select name="producto_id" required>
+        <option value="">Seleccionar Producto</option>
+        {% for oem in oems %}
+            {% for producto in oem.productos %}
+                <option value="{{ producto.id }}">
+                    {{ oem.codigo_oem }} - {{ producto.marca }} ({{ producto.codigo_interno }})
+                </option>
+            {% endfor %}
+        {% endfor %}
+    </select>
+
+    <select name="bodega_id" required>
+        <option value="">Seleccionar Bodega</option>
+        {% for bodega in bodegas %}
+            <option value="{{ bodega.id }}">{{ bodega.nombre }}</option>
+        {% endfor %}
+    </select>
+
+    <input type="number" name="cantidad" placeholder="Cantidad" required>
+
+    <button type="submit">Vender</button>
+
+</form>
+
+<hr>
+
+<h2>Historial de Ventas</h2>
+
+<ul>
+{% for venta in ventas %}
+    <li>
+        {{ venta.fecha | chile_datetime }} |
+        {{ venta.producto.codigo_interno if venta.producto else '(eliminado)' }} |
+        {{ venta.producto.marca if venta.producto else '' }} |
+        Bodega: {{ venta.bodega.nombre if venta.bodega else '(sin bodega)' }} |
+        Cantidad: {{ venta.cantidad }}
+    </li>
+{% endfor %}
+</ul>
+
+<hr>
+
+<h2>Resumen de Ventas</h2>
+
+<p><strong>Total Ventas:</strong> {{ total_ventas }}</p>
+<p><strong>Total Unidades Vendidas:</strong> {{ total_unidades_vendidas }}</p>
+<p><strong>Total Ingresos Estimados:</strong> ${{ total_ingresos }}</p>

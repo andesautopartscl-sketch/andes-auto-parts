@@ -1,0 +1,40 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Compras por proveedor | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Compras por proveedor</h1>
+    <p class="page-subtitle">Órdenes de compra agrupadas por proveedor</p>
+  </div>
+  <div class="topbar-actions">
+    <a class="link-btn" href="{{ url_for('informes.index') }}">← Informes</a>
+    <a class="link-btn" href="{{ url_for('ventas.orden_compra') }}">+ Nueva orden</a>
+  </div>
+</div>
+
+<div style="overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;">
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">#</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Proveedor</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Órdenes</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Total comprado</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in proveedores %}
+      <tr>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;color:#64748b;">{{ loop.index }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;font-weight:600;">{{ p.nombre }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;text-align:right;">{{ p.num_docs }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700;color:#1d4ed8;">${{ '{:,.0f}'.format(p.total).replace(',', '.') }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" style="padding:20px;text-align:center;color:#64748b;">Sin órdenes de compra registradas.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

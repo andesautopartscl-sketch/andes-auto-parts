@@ -1,0 +1,320 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+
+{% block title %}Papelera de Productos | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.toolbar {
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+    margin-bottom:18px;
+}
+
+.sub-title {
+    font-size:13px;
+    color:#64748b;
+    margin:0 0 18px;
+}
+
+.counter-badge {
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    border-radius:999px;
+    padding:6px 12px;
+    background:#fee2e2;
+    color:#991b1b;
+    font-size:12px;
+    font-weight:700;
+}
+
+.search-card,
+.table-card,
+.empty-state,
+.msg-banner {
+    background:#fff;
+    border:1px solid #e2e8f0;
+    border-radius:16px;
+    box-shadow:0 10px 25px rgba(0,0,0,0.05);
+}
+
+.search-card,
+.table-card {
+    padding:18px;
+}
+
+.search-form {
+    display:grid;
+    grid-template-columns:minmax(0, 1fr) auto auto;
+    gap:10px;
+    align-items:end;
+}
+
+.search-form label {
+    display:block;
+    margin-bottom:6px;
+    font-size:13px;
+    font-weight:600;
+    color:#334155;
+}
+
+.search-form input {
+    width:100%;
+    padding:11px 12px;
+    border:1px solid #cbd5e1;
+    border-radius:10px;
+    font-size:14px;
+}
+
+.table-wrap {
+    overflow:auto;
+}
+
+.table-card table {
+    width:100%;
+    border-collapse:collapse;
+    table-layout:fixed;
+}
+
+.table-card th {
+    background:#1e3c72;
+    color:white;
+    padding:10px 8px;
+    font-size:12px;
+    text-align:left;
+}
+
+.table-card td {
+    padding:9px 8px;
+    font-size:12px;
+    border-bottom:1px solid #e5e7eb;
+    color:#0f172a;
+    vertical-align:middle;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.empty-state {
+    padding:30px;
+    text-align:center;
+    color:#64748b;
+}
+
+.empty-state .icon {
+    font-size:28px;
+    margin-bottom:8px;
+}
+
+.msg-banner {
+    display:none;
+    padding:12px 14px;
+    margin-bottom:16px;
+    font-size:14px;
+    font-weight:600;
+}
+
+.msg-ok {
+    background:#ecfdf3;
+    border-color:#86efac;
+    color:#166534;
+}
+
+.msg-err {
+    background:#fef2f2;
+    border-color:#fca5a5;
+    color:#991b1b;
+}
+
+body.dark .search-card,
+body.dark .table-card,
+body.dark .empty-state,
+body.dark .msg-banner {
+    background:#1f2937;
+    border-color:#374151;
+}
+
+body.dark .table-card td,
+body.dark .sub-title,
+body.dark .page-title,
+body.dark .page-subtitle {
+    color:#e5e7eb;
+}
+
+body.dark .table-card th {
+    background:#111827;
+}
+
+@media (max-width: 960px) {
+    .search-form {
+        grid-template-columns:1fr;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <div>
+        <h1 class="page-title">📦 Productos desactivados</h1>
+        <p class="page-subtitle">Gestiona la papelera de productos y reactiva registros sin salir del layout principal.</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="btn" href="{{ url_for('productos.buscar') }}" data-module-url="{{ url_for('productos.buscar') }}">🔍 Volver a búsqueda</a>
+        <a class="btn" href="{{ url_for('productos.editar_productos_view') }}" data-module-url="{{ url_for('productos.editar_productos_view') }}">✏ Editar</a>
+        <a class="btn btn-primary" href="{{ url_for('productos.modal_crear_producto') }}" data-modal-url="{{ url_for('productos.modal_crear_producto') }}">➕ Crear producto</a>
+    </div>
+</div>
+
+<p class="sub-title">Usa este panel para revisar productos inactivos y restaurarlos rápidamente.</p>
+<div id="msgBanner" class="msg-banner"></div>
+
+<div class="toolbar">
+    <span class="counter-badge">Desactivados: {{ total_inactivos or productos|length }}</span>
+    {% if total_inactivos > 0 %}
+    <button class="btn btn-success" type="button" onclick="reactivarTodos()">♻️ Reactivar todos</button>
+    {% endif %}
+</div>
+
+<section class="search-card">
+    <form method="get" class="search-form">
+        <div>
+            <label for="q">Buscar en desactivados</label>
+            <input id="q" name="q" value="{{ q or '' }}" placeholder="Código, OEM, descripción o marca">
+        </div>
+        <button class="btn btn-primary" type="submit">Buscar</button>
+        {% if q %}
+        <a class="btn btn-secondary" href="{{ url_for('productos.ver_desactivados') }}" data-module-url="{{ url_for('productos.ver_desactivados') }}">Limpiar</a>
+        {% endif %}
+    </form>
+</section>
+
+<section class="table-card">
+    {% if productos %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Descripción</th>
+                    <th>Marca</th>
+                    <th>Modelo</th>
+                    <th>OEM</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody id="tablaBody">
+            {% for p in productos %}
+                <tr id="fila-{{ p.codigo }}">
+                    <td>{{ p.codigo }}</td>
+                    <td>{{ p.descripcion or '' }}</td>
+                    <td>{{ p.marca or '' }}</td>
+                    <td>{{ p.modelo or '' }}</td>
+                    <td>{{ p.codigo_oem or '' }}</td>
+                    <td>
+                        <button class="btn btn-success" type="button" onclick="reactivarProducto('{{ p.codigo }}')">
+                            ♻️ Reactivar
+                        </button>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="icon">✅</div>
+        <p>
+            {% if q %}
+                No se encontraron productos desactivados con ese filtro.
+            {% else %}
+                No hay productos desactivados. ¡Todo limpio!
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function showMsg(text, ok) {
+    const el = document.getElementById('msgBanner');
+    if (!el) return;
+    el.className = 'msg-banner ' + (ok ? 'msg-ok' : 'msg-err');
+    el.textContent = text;
+    el.style.display = 'block';
+    setTimeout(function () { el.style.display = 'none'; }, 5000);
+}
+
+function actualizarContador() {
+    const restantes = document.querySelectorAll('#tablaBody tr').length;
+    document.querySelectorAll('.counter-badge').forEach(function (el) {
+        el.textContent = restantes > 0 ? 'Desactivados: ' + restantes : '0';
+    });
+    if (restantes === 0) {
+        const section = document.querySelector('.table-card');
+        if (section) {
+            section.innerHTML = "<div class='empty-state'><div class='icon'>✅</div><p>No hay productos desactivados. ¡Todo limpio!</p></div>";
+        }
+    }
+}
+
+function reactivarProducto(codigo) {
+    const formData = new FormData();
+    formData.append('codigo', codigo);
+
+    fetch('/productos/reactivar', { method: 'POST', body: formData })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (!data.success) {
+                showMsg(data.error || 'No se pudo reactivar el producto.', false);
+                return;
+            }
+            showMsg(data.message || 'Producto reactivado correctamente', true);
+            const fila = document.getElementById('fila-' + codigo);
+            if (fila) {
+                fila.style.transition = 'opacity .4s ease';
+                fila.style.opacity = '0';
+                setTimeout(function () {
+                    fila.remove();
+                    actualizarContador();
+                }, 420);
+            }
+        })
+        .catch(function () {
+            showMsg('Error de conexion al reactivar producto.', false);
+        });
+}
+
+function reactivarTodos() {
+    if (!confirm('¿Reactivar TODOS los productos desactivados? Esta accion no se puede deshacer.')) return;
+
+    fetch('/productos/reactivar_todos', { method: 'POST' })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (!data.success) {
+                showMsg(data.error || 'No se pudo completar la operacion.', false);
+                return;
+            }
+            showMsg(data.message || 'Todos los productos fueron reactivados.', true);
+            document.querySelectorAll('#tablaBody tr').forEach(function (tr) {
+                tr.style.transition = 'opacity .4s ease';
+                tr.style.opacity = '0';
+            });
+            setTimeout(function () {
+                if (window._loadModule) {
+                    window._loadModule(window.location.pathname);
+                } else {
+                    window.location.reload();
+                }
+            }, 800);
+        })
+        .catch(function () {
+            showMsg('Error de conexion al reactivar todos.', false);
+        });
+}
+</script>
+{% endblock %}

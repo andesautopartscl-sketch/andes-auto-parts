@@ -1,0 +1,76 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Ventas por período | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Ventas por período</h1>
+    <p class="page-subtitle">Facturas y boletas en el rango seleccionado</p>
+  </div>
+  <div class="topbar-actions">
+    <a class="link-btn" href="{{ url_for('informes.index') }}">← Informes</a>
+  </div>
+</div>
+
+<form method="get" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;background:#fff;padding:14px;border:1px solid #e2e8f0;border-radius:12px;">
+  <div>
+    <label style="font-size:12px;font-weight:600;color:#64748b;display:block;margin-bottom:4px;">Desde</label>
+    <input type="date" name="desde" value="{{ desde }}" style="border:1px solid #dbe3ef;border-radius:8px;padding:8px 10px;font-size:13px;">
+  </div>
+  <div>
+    <label style="font-size:12px;font-weight:600;color:#64748b;display:block;margin-bottom:4px;">Hasta</label>
+    <input type="date" name="hasta" value="{{ hasta }}" style="border:1px solid #dbe3ef;border-radius:8px;padding:8px 10px;font-size:13px;">
+  </div>
+  <button type="submit" class="btn btn-primary">Filtrar</button>
+</form>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;">
+  <div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
+    <div style="color:#64748b;font-size:12px;">Neto total</div>
+    <div style="font-size:22px;font-weight:700;">${{ '{:,.0f}'.format(total_neto).replace(',', '.') }}</div>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
+    <div style="color:#64748b;font-size:12px;">IVA total</div>
+    <div style="font-size:22px;font-weight:700;">${{ '{:,.0f}'.format(total_iva).replace(',', '.') }}</div>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
+    <div style="color:#64748b;font-size:12px;">Total general</div>
+    <div style="font-size:22px;font-weight:700;color:#1d4ed8;">${{ '{:,.0f}'.format(total_general).replace(',', '.') }}</div>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
+    <div style="color:#64748b;font-size:12px;">Documentos</div>
+    <div style="font-size:22px;font-weight:700;">{{ documentos|length }}</div>
+  </div>
+</div>
+
+<div style="overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;">
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Fecha</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Tipo</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Nº Doc.</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Cliente</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Neto</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">IVA</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in documentos %}
+      <tr>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;">{{ d.fecha_documento.strftime('%d/%m/%Y') if d.fecha_documento else '-' }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;">{{ d.tipo }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;">{{ d.numero or '-' }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;">{{ d.cliente_nombre or '-' }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;text-align:right;">${{ '{:,.0f}'.format(d.subtotal or 0).replace(',', '.') }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;text-align:right;">${{ '{:,.0f}'.format(d.impuesto or 0).replace(',', '.') }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700;color:#1d4ed8;">${{ '{:,.0f}'.format(d.total or 0).replace(',', '.') }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" style="padding:20px;text-align:center;color:#64748b;">Sin documentos en el período seleccionado.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

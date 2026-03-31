@@ -1,0 +1,29 @@
+<div class="doc-actions no-print"
+     data-doc-id="{{ doc_id or '' }}"
+     data-doc-type="{{ doc_type or tipo or '' }}"
+     data-doc-number="{{ doc_number or numero or '' }}"
+     data-client-email="{{ client_email or party_email or '' }}"
+     data-client-phone="{{ client_phone or party_phone or '' }}">
+
+    <div class="doc-actions-title">
+        <span class="label">Entrega de documento</span>
+        <span class="hint">Comparte por WhatsApp o correo en un clic</span>
+    </div>
+
+    <div class="doc-actions-group" role="group" aria-label="Acciones de envío">
+        <button class="doc-action-btn is-primary" data-action="whatsapp" type="button">
+            <span class="icon" aria-hidden="true">&#128241;</span>
+            <span class="txt">Enviar por WhatsApp</span>
+        </button>
+
+        <button class="doc-action-btn is-secondary" data-action="email" type="button">
+            <span class="icon" aria-hidden="true">&#9993;</span>
+            <span class="txt">Enviar por Email</span>
+        </button>
+
+        <button class="doc-action-btn is-ghost" data-action="resend" type="button">
+            <span class="icon" aria-hidden="true">&#8635;</span>
+            <span class="txt">Reenviar documento</span>
+        </button>
+    </div>
+</div>

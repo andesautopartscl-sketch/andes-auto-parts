@@ -1,0 +1,233 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+
+{% block title %}Historial de Etiquetas | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<style>
+.page-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 14px;
+}
+.page-title {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.page-subtitle {
+    margin: 6px 0 0;
+    color: #64748b;
+    font-size: 14px;
+}
+.search-card,
+.table-card {
+    background: #fff;
+    border: 1px solid #dbe4f0;
+    border-radius: 14px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+.search-card {
+    padding: 14px;
+    margin-bottom: 14px;
+}
+.search-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 10px;
+}
+.search-form input {
+    width: 100%;
+    height: 42px;
+    border: 1px solid #c7d3e2;
+    border-radius: 10px;
+    padding: 0 12px;
+    font-size: 14px;
+    color: #0f172a;
+}
+.table-card {
+    overflow: hidden;
+}
+.table-scroll {
+    overflow: auto;
+}
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 860px;
+}
+.history-table thead th {
+    text-align: left;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    border-bottom: 1px solid #dbe4f0;
+    padding: 12px 14px;
+}
+.history-table td {
+    border-bottom: 1px solid #edf2f7;
+    padding: 12px 14px;
+    color: #0f172a;
+    vertical-align: top;
+}
+.history-table tbody tr:hover {
+    background: #f8fbff;
+}
+.muted {
+    color: #64748b;
+    font-size: 12px;
+}
+.actions-cell {
+    white-space: nowrap;
+}
+.btn-inline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #c7d3e2;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+    text-decoration: none;
+    color: #0f172a;
+    background: #fff;
+}
+.btn-inline:hover {
+    background: #eef6ff;
+    border-color: #8bb5ee;
+}
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border-top: 1px solid #dbe4f0;
+    background: #fbfdff;
+}
+.pagination-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.page-chip {
+    border: 1px solid #c7d3e2;
+    border-radius: 8px;
+    padding: 5px 9px;
+    text-decoration: none;
+    color: #0f172a;
+    font-size: 13px;
+    background: #fff;
+}
+.page-chip:hover { background: #eef6ff; }
+.page-chip.current {
+    background: #1d4ed8;
+    color: #fff;
+    border-color: #1d4ed8;
+}
+.empty-state {
+    padding: 24px;
+    text-align: center;
+    color: #64748b;
+}
+@media (max-width: 960px) {
+    .page-head {
+        flex-direction: column;
+    }
+    .search-form {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Historial de Etiquetas</h1>
+        <p class="page-subtitle">Registro de impresiones por producto, cantidad, fecha y usuario.</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="link-btn" href="{{ url_for('bodega.etiquetas') }}">🏷 Ir a Impresión</a>
+        <a class="link-btn" href="{{ url_for('bodega.index') }}">🏠 Panel Bodega</a>
+    </div>
+</div>
+
+<div class="search-card">
+    <form class="search-form" method="get" action="{{ url_for('bodega.etiquetas_historial') }}">
+        <input type="text" name="q" value="{{ q }}" placeholder="Buscar por código o descripción..." aria-label="Buscar historial">
+        <button class="btn btn-primary" type="submit">Buscar</button>
+        {% if q %}
+        <a class="btn" href="{{ url_for('bodega.etiquetas_historial') }}">Limpiar</a>
+        {% endif %}
+    </form>
+</div>
+
+<div class="table-card">
+    {% if rows and rows|length > 0 %}
+    <div class="table-scroll">
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Descripción</th>
+                    <th>Modelo</th>
+                    <th>Cantidad</th>
+                    <th>Fecha</th>
+                    <th>Usuario</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td><strong>{{ row.codigo_producto }}</strong></td>
+                    <td>{{ row.descripcion }}</td>
+                    <td>{{ row.modelo or '—' }}</td>
+                    <td>{{ row.cantidad }}</td>
+                    <td>
+                        {{ row.fecha|chile_datetime }}
+                        <div class="muted">{{ row.fecha.strftime('%Y-%m-%d %H:%M') if row.fecha else '' }} UTC</div>
+                    </td>
+                    <td>{{ row.usuario or 'sistema' }}</td>
+                    <td class="actions-cell">
+                        <a class="btn-inline" href="{{ url_for('bodega.etiquetas_historial_reimprimir', historial_id=row.id) }}">🔁 Reimprimir</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        <div class="muted">Mostrando {{ rows|length }} de {{ total }} registros</div>
+        <div class="pagination-nav">
+            {% if page > 1 %}
+            <a class="page-chip" href="{{ url_for('bodega.etiquetas_historial', q=q, page=page-1) }}">← Anterior</a>
+            {% endif %}
+
+            {% for p in range(1, total_pages + 1) %}
+                {% if p == page or p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+                    {% if p == page %}
+                    <span class="page-chip current">{{ p }}</span>
+                    {% else %}
+                    <a class="page-chip" href="{{ url_for('bodega.etiquetas_historial', q=q, page=p) }}">{{ p }}</a>
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+
+            {% if page < total_pages %}
+            <a class="page-chip" href="{{ url_for('bodega.etiquetas_historial', q=q, page=page+1) }}">Siguiente →</a>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        No hay registros en el historial{% if q %} para la búsqueda actual{% endif %}.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

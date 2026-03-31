@@ -1,6 +1,10 @@
-flask
-sqlalchemy
-pandas
-gunicorn
+Flask
+Flask-SQLAlchemy
+SQLAlchemy
 pandas
 openpyxl
+reportlab
+python-dotenv
+
+# Optional (prod): only needed if deploying behind a WSGI server
+gunicorn

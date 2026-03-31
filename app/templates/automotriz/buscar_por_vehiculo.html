@@ -1,0 +1,43 @@
+<h2>Buscar Repuestos por Vehículo</h2>
+
+<form method="POST">
+
+    <label>Marca:</label>
+    <select name="marca">
+        {% for m in marcas %}
+            <option value="{{ m }}">{{ m }}</option>
+        {% endfor %}
+    </select>
+
+    <label>Modelo:</label>
+    <input type="text" name="modelo">
+
+    <label>Año:</label>
+    <input type="number" name="anio">
+
+    <button type="submit">Buscar</button>
+
+</form>
+
+<hr>
+
+{% if resultados %}
+    <h3>OEM Compatibles</h3>
+
+    {% for oem in resultados %}
+        <div style="margin-bottom:20px;">
+            <strong>{{ oem.codigo_oem }}</strong> - {{ oem.descripcion_tecnica }}
+
+            <ul>
+                {% for prod in oem.productos %}
+                    <li>
+                        {{ prod.codigo_interno }} |
+                        {{ prod.marca }} |
+                        Público: {{ prod.precio_publico }} |
+                        Mayor: {{ prod.precio_mayor }}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endfor %}
+{% endif %}

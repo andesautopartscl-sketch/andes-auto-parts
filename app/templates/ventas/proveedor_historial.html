@@ -1,0 +1,393 @@
+{% extends 'base_content.html' if _partial else 'ventas/base.html' %}
+
+{% block title %}Historial Proveedor | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.history-shell {
+    display: grid;
+    gap: 16px;
+}
+.history-hero {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-start;
+    padding: 22px;
+    border: 1px solid #dbe3ef;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #0f172a 0%, #14532d 58%, #16a34a 100%);
+    color: #fff;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+}
+.history-hero h2 {
+    margin: 0 0 6px;
+    font-size: 26px;
+}
+.history-hero p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.82);
+}
+.history-stats {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.history-stat {
+    min-width: 130px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+}
+.history-stat strong {
+    display: block;
+    font-size: 22px;
+}
+.history-stat span {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.74);
+}
+.history-card {
+    background: #fff;
+    border: 1px solid #dbe3ef;
+    border-radius: 18px;
+    box-shadow: 0 12px 34px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+}
+.history-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 22px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.history-card-head h3 {
+    margin: 0;
+    font-size: 18px;
+}
+.history-card-head p {
+    margin: 4px 0 0;
+    color: #64748b;
+    font-size: 13px;
+}
+.history-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.history-tabs .tab-btn {
+    padding: 10px 14px;
+    border-radius: 999px;
+    border: 1px solid #dbe3ef;
+    background: #f8fafc;
+    color: #475569;
+}
+.history-tabs .tab-btn.active {
+    background: #dcfce7;
+    border-color: #86efac;
+    color: #166534;
+}
+.history-pane {
+    display: none;
+    padding: 18px 22px 22px;
+}
+.history-pane.active {
+    display: block;
+}
+.history-table-wrap {
+    overflow-x: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+}
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 820px;
+}
+.history-table th,
+.history-table td {
+    padding: 13px 14px;
+    border-bottom: 1px solid #eef2f7;
+    text-align: left;
+    font-size: 13px;
+}
+.history-table th {
+    background: #f8fafc;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 11px;
+}
+.history-row-link {
+    cursor: pointer;
+}
+.history-row-link:hover td,
+.history-row-link:hover .history-timeline-card {
+    background: #f8fbff;
+}
+.doc-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.doc-badge.orange {
+    background: #ffedd5;
+    color: #c2410c;
+    border-color: #fdba74;
+}
+.doc-badge.green {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #86efac;
+}
+.doc-badge.slate {
+    background: #e2e8f0;
+    color: #334155;
+    border-color: #cbd5e1;
+}
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid #dbe3ef;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.history-empty {
+    padding: 26px;
+    text-align: center;
+    color: #64748b;
+    border: 1px dashed #cbd5e1;
+    border-radius: 16px;
+    background: #f8fafc;
+}
+.history-note-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+}
+.history-note-card {
+    padding: 18px;
+    border: 1px dashed #86efac;
+    border-radius: 16px;
+    background: #f0fdf4;
+}
+.history-note-card h4 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: #166534;
+}
+.history-note-card p {
+    margin: 0;
+    font-size: 13px;
+    color: #475569;
+}
+.history-timeline {
+    display: grid;
+    gap: 0;
+}
+.history-timeline-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 14px;
+    padding-bottom: 18px;
+}
+.history-timeline-item:last-child {
+    padding-bottom: 0;
+}
+.history-timeline-item:last-child .history-timeline-line {
+    display: none;
+}
+.history-timeline-rail {
+    position: relative;
+    display: flex;
+    justify-content: center;
+}
+.history-timeline-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    background: #16a34a;
+    border: 3px solid #dcfce7;
+    margin-top: 8px;
+    z-index: 1;
+}
+.history-timeline-line {
+    position: absolute;
+    top: 24px;
+    bottom: -6px;
+    width: 2px;
+    background: linear-gradient(180deg, #86efac 0%, #cbd5e1 100%);
+}
+.history-timeline-card {
+    padding: 14px 16px;
+    border: 1px solid #dbe3ef;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+.history-timeline-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 6px;
+}
+.history-timeline-meta {
+    color: #64748b;
+    font-size: 12px;
+}
+@media (max-width: 900px) {
+    .history-hero {
+        flex-direction: column;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="history-shell">
+    <section class="history-hero">
+        <div>
+            <h2>{{ proveedor.empresa or proveedor.nombre }}</h2>
+            <p>RUT: {{ proveedor.rut|format_rut if proveedor.rut else 'Sin RUT' }} | Email: {{ proveedor.email or 'Sin email' }} | Telefono: {{ proveedor.telefono or 'Sin telefono' }}</p>
+        </div>
+        <div class="history-stats">
+            <div class="history-stat">
+                <strong>{{ data.documentos|length }}</strong>
+                <span>Documentos</span>
+            </div>
+            <div class="history-stat">
+                <strong>{{ data.ordenes_compra|length }}</strong>
+                <span>Ordenes de compra</span>
+            </div>
+            <div class="history-stat">
+                <strong>{{ data.facturas_proveedor|length }}</strong>
+                <span>Facturas proveedor</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="history-card">
+        <div class="history-card-head">
+            <div>
+                <h3>Panel de historial de compras</h3>
+                <p>Seguimiento operativo del proveedor con documentos y trazabilidad de recepcion.</p>
+            </div>
+            <div class="history-tabs" id="tabsProveedorHistorial">
+                <button class="tab-btn active" type="button" data-tab="proveedor-documentos">Documentos</button>
+                <button class="tab-btn" type="button" data-tab="proveedor-pagos">Pagos</button>
+                <button class="tab-btn" type="button" data-tab="proveedor-trazabilidad">Trazabilidad</button>
+            </div>
+        </div>
+
+        <section class="history-pane active" id="proveedor-documentos">
+            {% if data.documentos %}
+            <div class="history-table-wrap">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th>
+                            <th>Numero</th>
+                            <th>Fecha</th>
+                            <th>Total</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in data.documentos %}
+                        <tr class="{% if doc.view_url %}history-row-link{% endif %}" {% if doc.view_url %}data-href="{{ doc.view_url }}"{% endif %}>
+                            <td><span class="doc-badge {{ doc.badge_tone }}">{{ doc.label }}</span></td>
+                            <td><strong>{{ doc.number or ('#' ~ doc.id) }}</strong></td>
+                            <td>{{ doc.fecha }}</td>
+                            <td>${{ '{:,.0f}'.format(doc.total or 0).replace(',', '.') }}</td>
+                            <td><span class="status-pill">{{ doc.status or 'pendiente' }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="history-empty">No hay documentos registrados para este proveedor.</div>
+            {% endif %}
+        </section>
+
+        <section class="history-pane" id="proveedor-pagos">
+            <div class="history-note-grid">
+                <div class="history-note-card">
+                    <h4>Modulo futuro</h4>
+                    <p>Este espacio queda preparado para pagos a proveedores, vencimientos y control de obligaciones.</p>
+                </div>
+                <div class="history-note-card">
+                    <h4>Integracion sugerida</h4>
+                    <p>Se puede enlazar con cuentas por pagar para mostrar facturas pendientes, abonos y fechas compromiso.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="history-pane" id="proveedor-trazabilidad">
+            {% if data.timeline %}
+            <div class="history-timeline">
+                {% for doc in data.timeline %}
+                <div class="history-timeline-item">
+                    <div class="history-timeline-rail">
+                        <span class="history-timeline-dot"></span>
+                        <span class="history-timeline-line"></span>
+                    </div>
+                    <div class="history-timeline-card {% if doc.view_url %}history-row-link{% endif %}" {% if doc.view_url %}data-href="{{ doc.view_url }}"{% endif %}>
+                        <div class="history-timeline-top">
+                            <span class="doc-badge {{ doc.badge_tone }}">{{ doc.label }}</span>
+                            <strong>{{ doc.number or ('#' ~ doc.id) }}</strong>
+                        </div>
+                        <div class="history-timeline-meta">Fecha: {{ doc.fecha }} | Estado: {{ doc.status or 'pendiente' }} | Total: ${{ '{:,.0f}'.format(doc.total or 0).replace(',', '.') }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="history-empty">No hay trazabilidad disponible para este proveedor.</div>
+            {% endif %}
+        </section>
+    </section>
+</div>
+
+<script>
+(function () {
+    'use strict';
+    const root = document.getElementById('tabsProveedorHistorial');
+    if (root) {
+        const buttons = root.querySelectorAll('.tab-btn');
+        const panes = document.querySelectorAll('.history-pane');
+        buttons.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const tabId = btn.getAttribute('data-tab');
+                buttons.forEach(function (item) { item.classList.remove('active'); });
+                panes.forEach(function (pane) { pane.classList.remove('active'); });
+                btn.classList.add('active');
+                const pane = document.getElementById(tabId);
+                if (pane) pane.classList.add('active');
+            });
+        });
+    }
+    document.querySelectorAll('[data-href]').forEach(function (row) {
+        row.addEventListener('click', function () {
+            const href = row.getAttribute('data-href');
+            if (href) window.location.href = href;
+        });
+    });
+})();
+</script>
+{% endblock %}

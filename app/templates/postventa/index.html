@@ -1,0 +1,193 @@
+{% extends 'base_content.html' if _partial else 'erp_shell.html' %}
+{% block title %}Postventa | Andes Auto Parts{% endblock %}
+{% block header_subtitle %}Postventa &mdash; Registro de garantías{% endblock %}
+
+{% block extra_head %}
+<style>
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1000;align-items:center;justify-content:center;}
+.modal-bg.open{display:flex;}
+.modal-box{background:#fff;border-radius:18px;padding:28px;max-width:560px;width:95%;box-shadow:0 24px 60px rgba(15,23,42,.22);}
+.modal-box h3{margin:0 0 18px;font-size:18px;}
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:grid;gap:18px;">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div>
+      <h2 style="font-size:20px;">Gestión de garantías</h2>
+      <p style="color:var(--muted);font-size:13px;margin-top:3px;">Registro y seguimiento de casos de postventa</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      {% for e in estados %}
+      <a href="?estado={{ e }}" class="btn sm {% if estado_filter == e %}primary{% else %}outline{% endif %}">{{ e }}</a>
+      {% endfor %}
+      <a href="{{ url_for('postventa.index') }}" class="btn sm outline">Todas</a>
+      <button class="btn primary sm" id="btnNuevaGar">+ Nueva garantía</button>
+    </div>
+  </div>
+
+  <section class="panel" style="overflow:hidden;">
+    {% if garantias %}
+    <div style="overflow-x:auto;">
+      <table class="erp-table">
+        <thead>
+          <tr>
+            <th>N°</th>
+            <th>Cliente</th>
+            <th>Producto</th>
+            <th>Factura/Doc</th>
+            <th>Motivo</th>
+            <th>Estado</th>
+            <th>Fecha</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in garantias %}
+          <tr>
+            <td><strong>{{ g.numero }}</strong></td>
+            <td>{{ g.cliente_nombre or '—' }}</td>
+            <td>{{ g.producto_codigo }}{% if g.producto_descripcion %} — {{ g.producto_descripcion[:30] }}{% endif %}</td>
+            <td>{{ g.documento_numero or '—' }}</td>
+            <td>{{ g.motivo[:50] if g.motivo else '—' }}</td>
+            <td>
+              {% if g.estado == 'Pendiente' %}<span class="badge orange">{{ g.estado }}</span>
+              {% elif g.estado == 'Aprobado' or g.estado == 'Resuelto' %}<span class="badge green">{{ g.estado }}</span>
+              {% elif g.estado == 'Rechazado' %}<span class="badge red">{{ g.estado }}</span>
+              {% else %}<span class="badge slate">{{ g.estado }}</span>{% endif %}
+            </td>
+            <td>{{ g.fecha.strftime('%d/%m/%Y') }}</td>
+            <td>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <button class="btn sm outline btn-estado-gar" data-id="{{ g.id }}" data-estado="{{ g.estado }}">Estado</button>
+                <form method="post" action="{{ url_for('postventa.eliminar', gid=g.id) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar garantía?')">
+                  <button class="btn sm danger" type="submit">Eliminar</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="padding:40px;text-align:center;color:var(--muted);">No hay garantías registradas{% if estado_filter %} para el estado "{{ estado_filter }}"{% endif %}.</div>
+    {% endif %}
+  </section>
+
+</div>
+
+<!-- Modal: Nueva garantía -->
+<div class="modal-bg" id="modalNuevaGar">
+  <div class="modal-box">
+    <h3>Registrar garantía</h3>
+    <form method="post" action="{{ url_for('postventa.nueva') }}">
+      <div style="display:grid;gap:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group">
+            <label>Cliente</label>
+            <select name="cliente_id">
+              <option value="">-- Sin cliente --</option>
+              {% for c in clientes %}
+              <option value="{{ c.id }}">{{ c.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Nombre cliente (manual)</label>
+            <input type="text" name="cliente_nombre_manual">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group">
+            <label>Código producto</label>
+            <input type="text" name="producto_codigo" placeholder="Ej: LUB-001">
+          </div>
+          <div class="form-group">
+            <label>Descripción producto</label>
+            <input type="text" name="producto_descripcion">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Número de factura / boleta asociada</label>
+          <input type="text" name="documento_numero" placeholder="Ej: FA-0001">
+        </div>
+        <div class="form-group">
+          <label>Motivo de la garantía</label>
+          <textarea name="motivo" rows="3" style="resize:vertical;" placeholder="Describe el problema o solicitud..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Estado inicial</label>
+          <select name="estado">
+            {% for e in estados %}
+            <option value="{{ e }}" {% if e == 'Pendiente' %}selected{% endif %}>{{ e }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">
+          <button type="button" class="btn outline" id="btnCancelarGar">Cancelar</button>
+          <button type="submit" class="btn primary">Registrar garantía</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Cambiar estado -->
+<div class="modal-bg" id="modalEstadoGar">
+  <div class="modal-box" style="max-width:340px;">
+    <h3>Cambiar estado</h3>
+    <div style="display:grid;gap:8px;margin-top:4px;">
+      {% for e in estados %}
+      <button class="btn outline btn-set-estado-gar" data-estado="{{ e }}">{{ e }}</button>
+      {% endfor %}
+    </div>
+    <div style="margin-top:14px;text-align:right;">
+      <button class="btn outline" id="btnCancelarEstadoGar">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  let targetId = null;
+  const URL_ESTADO = '/postventa/{id}/estado';
+
+  document.getElementById('btnNuevaGar').addEventListener('click', () => {
+    document.getElementById('modalNuevaGar').classList.add('open');
+  });
+  document.getElementById('btnCancelarGar').addEventListener('click', () => {
+    document.getElementById('modalNuevaGar').classList.remove('open');
+  });
+  document.getElementById('btnCancelarEstadoGar').addEventListener('click', () => {
+    document.getElementById('modalEstadoGar').classList.remove('open');
+  });
+
+  document.querySelectorAll('.btn-estado-gar').forEach(btn => {
+    btn.addEventListener('click', () => {
+      targetId = btn.dataset.id;
+      document.getElementById('modalEstadoGar').classList.add('open');
+    });
+  });
+
+  document.querySelectorAll('.btn-set-estado-gar').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!targetId) return;
+      fetch(URL_ESTADO.replace('{id}', targetId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado: btn.dataset.estado }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) window.location.reload();
+          else alert(data.error || 'Error');
+        });
+    });
+  });
+})();
+</script>
+{% endblock %}

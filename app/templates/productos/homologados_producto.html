@@ -1,0 +1,56 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+
+{% block title %}Homologados | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.homologados-block {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #f8fafc;
+    padding: 18px 20px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.homologados-body {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #0f172a;
+    letter-spacing: 0.01em;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.homologados-vacio {
+    margin: 0;
+    color: #64748b;
+    font-size: 14px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <div>
+        <h1 class="page-title">Homologados</h1>
+        <p class="page-subtitle">Código: {{ codigo }}</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="link-btn" href="{{ url_for('productos.buscar', q=codigo) }}">↩ Volver a buscar</a>
+        {% if producto %}
+        <a class="link-btn" href="{{ url_for('productos.ver_producto', codigo=codigo) }}" data-modal-url="{{ url_for('productos.ver_producto', codigo=codigo) }}">Ver detalle</a>
+        {% endif %}
+    </div>
+</div>
+
+<section class="panel" style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 8px 20px rgba(15,23,42,0.05);padding:20px;">
+    {% if not producto %}
+    <p class="homologados-vacio">Producto no encontrado en catálogo.</p>
+    {% elif (producto.homologados or '') | trim %}
+    <div class="homologados-block">
+        <p class="homologados-body">{{ producto.homologados }}</p>
+    </div>
+    {% else %}
+    <p class="homologados-vacio">No hay texto en el campo homologados para este producto.</p>
+    {% endif %}
+</section>
+{% endblock %}

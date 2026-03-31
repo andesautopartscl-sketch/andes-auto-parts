@@ -1,0 +1,218 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+
+{% block title %}Ingreso de Productos | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+.supplier-card {
+    padding:14px;
+    margin-bottom:14px;
+    border:1px solid #dbe4f0;
+    border-radius:12px;
+    background:#fff;
+}
+
+.supplier-inline {
+    display:flex;
+    gap:8px;
+    align-items:center;
+}
+
+.supplier-form-wrap {
+    max-height:560px;
+    overflow:hidden;
+    transition:max-height .25s ease, opacity .2s ease, transform .2s ease;
+    opacity:1;
+    transform:translateY(0);
+}
+
+.supplier-form-wrap.is-collapsed {
+    max-height:0;
+    opacity:0;
+    transform:translateY(-4px);
+    pointer-events:none;
+}
+
+.supplier-summary {
+    display:none;
+    border:1px solid #dbe4f0;
+    border-radius:12px;
+    background:#f8fbff;
+    padding:10px 12px;
+    margin-bottom:14px;
+}
+
+.supplier-summary.is-visible {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+}
+
+.supplier-summary-main {
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+}
+
+.supplier-summary-title {
+    font-weight:700;
+    color:#0f172a;
+}
+
+.supplier-summary-meta {
+    color:#475569;
+    font-size:13px;
+}
+
+.products-card {
+    margin-top:4px;
+}
+.products-card table th:first-child,
+.products-card table td:first-child {
+    min-width: 170px;
+}
+.products-card table td {
+    vertical-align: middle;
+}
+.products-card input {
+    min-height: 38px;
+}
+.products-card .btnRemove {
+    min-height: 36px;
+    width: 100%;
+}
+
+@media (max-width: 900px) {
+    .supplier-inline {
+        flex-wrap:wrap;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <div>
+        <h1 class="page-title">Ingreso de Productos</h1>
+        <p class="page-subtitle">Incrementa stock en bodega y registra la trazabilidad del movimiento.</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="link-btn" href="{{ url_for('bodega.movimientos') }}">📊 Ver movimientos</a>
+        <a class="link-btn" href="{{ url_for('bodega.index') }}">🏠 Panel Bodega</a>
+    </div>
+</div>
+
+{% if message %}
+<div class="message {{ message.type }}">{{ message.text }}</div>
+{% endif %}
+
+<div class="form-card">
+    <h2 class="section-title">Ingreso ERP de Stock</h2>
+    <form method="post" id="ingresoForm">
+        <div class="field" style="margin-bottom:12px;">
+            <label for="supplier_rut">RUT del proveedor (requerido)</label>
+            <div class="supplier-inline">
+                <input id="supplier_rut" name="supplier_rut" data-rut-input data-rut-required="1" value="{{ form_data.supplier_rut|format_rut if form_data.supplier_rut else '' }}" placeholder="Ej: 76.123.456-7" required>
+                <button type="button" class="btn btn-primary" id="btnBuscarProveedor" data-search-url="{{ url_for('bodega.ingreso_proveedor_por_rut') }}">Buscar</button>
+            </div>
+            <small id="rutStatus" style="color:#64748b;">Ingresa el RUT para autocompletar proveedor.</small>
+        </div>
+
+        <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:14px;">
+            <div class="field">
+                <label for="fecha_documento">Fecha</label>
+                <input id="fecha_documento" name="fecha_documento" type="date" value="{{ form_data.fecha_documento }}" required>
+            </div>
+            <div class="field">
+                <label for="numero_documento">N° Documento (opcional)</label>
+                <input id="numero_documento" name="numero_documento" value="{{ form_data.numero_documento }}" placeholder="Factura/Guia interna">
+            </div>
+            <div class="field">
+                <label for="observacion">Observación general</label>
+                <input id="observacion" name="observacion" value="{{ form_data.observacion }}" placeholder="Observación del ingreso">
+            </div>
+        </div>
+
+        <div id="supplierSummary" class="supplier-summary" aria-live="polite">
+            <div class="supplier-summary-main">
+                <span class="supplier-summary-title" id="supplierSummaryName">Proveedor seleccionado</span>
+                <span class="supplier-summary-meta" id="supplierSummaryMeta">RUT y datos del proveedor</span>
+            </div>
+            <button type="button" class="btn" id="btnEditarProveedor">Cambiar proveedor</button>
+        </div>
+
+        <div class="supplier-card">
+            <h3 style="margin:0 0 12px;font-size:15px;color:#0f172a;">Proveedor</h3>
+            <div id="supplierFormWrap" class="supplier-form-wrap">
+            <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));">
+                <div class="field">
+                    <label for="supplier_name">Nombre / Razón social</label>
+                    <input id="supplier_name" name="supplier_name" value="{{ form_data.supplier_name }}" placeholder="Proveedor">
+                </div>
+                <div class="field">
+                    <label for="supplier_giro">Giro</label>
+                    <input id="supplier_giro" name="supplier_giro" value="{{ form_data.supplier_giro }}" placeholder="Actividad económica">
+                </div>
+                <div class="field">
+                    <label for="supplier_email">Email</label>
+                    <input id="supplier_email" name="supplier_email" value="{{ form_data.supplier_email }}" type="email" placeholder="contacto@proveedor.cl">
+                </div>
+                <div class="field field-full" style="grid-column:1 / span 2;">
+                    <label for="supplier_address">Dirección</label>
+                    <input id="supplier_address" name="supplier_address" value="{{ form_data.supplier_address }}" placeholder="Dirección comercial">
+                </div>
+                <div class="field">
+                    <label for="supplier_comuna">Comuna</label>
+                    <input id="supplier_comuna" name="supplier_comuna" value="{{ form_data.supplier_comuna }}" placeholder="Comuna">
+                </div>
+                <div class="field">
+                    <label for="supplier_region">Región</label>
+                    <input id="supplier_region" name="supplier_region" value="{{ form_data.supplier_region }}" placeholder="Región">
+                </div>
+                <div class="field">
+                    <label for="supplier_country">País</label>
+                    <input id="supplier_country" name="supplier_country" value="{{ form_data.supplier_country or 'Chile' }}" placeholder="País">
+                </div>
+            </div>
+            <small style="color:#64748b;">Si el RUT no existe, al guardar se creará automáticamente este proveedor en línea.</small>
+            </div>
+        </div>
+
+        <div class="table-wrap products-card" style="border:1px solid #e2e8f0;border-radius:12px;overflow:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Marca / Variante</th>
+                        <th>Bodega</th>
+                        <th>Cantidad</th>
+                        <th>Nota</th>
+                        <th style="width:90px;">Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="itemsBody">
+                    {% for row in rows %}
+                    <tr class="item-row">
+                        <td><input name="codigo_producto[]" value="{{ row.codigo }}" placeholder="Código" required></td>
+                        <td><input name="marca_producto[]" value="{{ row.marca }}" placeholder="Marca"></td>
+                        <td><input name="bodega_producto[]" value="{{ row.bodega or 'Bodega 1' }}" placeholder="Bodega"></td>
+                        <td><input name="cantidad_producto[]" type="number" min="1" step="1" value="{{ row.cantidad }}" required></td>
+                        <td><input name="nota_producto[]" value="{{ row.nota }}" placeholder="Nota opcional"></td>
+                        <td><button type="button" class="btn btn-warn btnRemove" style="padding:8px 10px;">Quitar</button></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="actions">
+            <button type="button" class="btn btn-primary" id="btnAddRow">+ Agregar producto</button>
+            <button class="btn btn-success" type="submit">Guardar ingreso</button>
+            <a class="link-btn" href="{{ url_for('bodega.ingreso') }}">Limpiar formulario</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

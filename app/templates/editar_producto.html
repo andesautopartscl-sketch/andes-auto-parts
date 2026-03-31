@@ -1,0 +1,20 @@
+<h2>Editar Producto</h2>
+
+<form method="POST">
+    Código Interno:
+    <input type="text" name="codigo_interno" value="{{ producto.codigo_interno }}"><br><br>
+
+    Marca:
+    <input type="text" name="marca" value="{{ producto.marca }}"><br><br>
+
+    Precio Público:
+    <input type="text" name="precio_publico" value="{{ producto.precio_publico }}"><br><br>
+
+    Precio Mayor:
+    <input type="text" name="precio_mayor" value="{{ producto.precio_mayor }}"><br><br>
+
+    <button type="submit">Guardar Cambios</button>
+</form>
+
+<br>
+<a href="{{ url_for('automotriz.panel') }}">⬅ Volver</a>

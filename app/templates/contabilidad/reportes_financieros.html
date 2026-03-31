@@ -1,0 +1,38 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Reportes Financieros | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Contabilidad</h1>
+    <p class="page-subtitle">Reportes financieros</p>
+  </div>
+  <div class="topbar-actions">
+    <a class="link-btn" href="{{ url_for('contabilidad.libro_mayor') }}">📘 Libro mayor</a>
+    <a class="link-btn" href="{{ url_for('contabilidad.iva') }}">🧮 IVA</a>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px;">
+  <div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
+    <div style="color:#64748b;font-size:12px;">Total Debe</div>
+    <div style="font-size:24px;font-weight:700;">${{ '{:,.0f}'.format(total_debe).replace(',', '.') }}</div>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
+    <div style="color:#64748b;font-size:12px;">Total Haber</div>
+    <div style="font-size:24px;font-weight:700;">${{ '{:,.0f}'.format(total_haber).replace(',', '.') }}</div>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
+    <div style="color:#64748b;font-size:12px;">Diferencia</div>
+    <div style="font-size:24px;font-weight:700;">${{ '{:,.0f}'.format(diferencia).replace(',', '.') }}</div>
+  </div>
+</div>
+
+<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
+  <h3 style="margin-top:0;">Resumen de estructura contable</h3>
+  <p style="margin:6px 0;">Activos: <strong>{{ activos }}</strong></p>
+  <p style="margin:6px 0;">Pasivos: <strong>{{ pasivos }}</strong></p>
+  <p style="margin:6px 0;">Ingresos: <strong>{{ ingresos }}</strong></p>
+  <p style="margin:6px 0;">Egresos/Costos: <strong>{{ egresos }}</strong></p>
+</div>
+{% endblock %}

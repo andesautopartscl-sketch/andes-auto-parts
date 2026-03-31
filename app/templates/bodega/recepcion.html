@@ -1,0 +1,108 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+
+{% block title %}Guía de Recepción Proveedor | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <div>
+        <h1 class="page-title">Guía de Recepción Proveedor</h1>
+        <p class="page-subtitle">Registra recepciones desde proveedor, incrementa stock y deja trazabilidad operativa completa.</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="link-btn" href="{{ url_for('bodega.movimientos') }}">📊 Ver movimientos</a>
+        <a class="link-btn" href="{{ url_for('bodega.index') }}">🏠 Panel Bodega</a>
+    </div>
+</div>
+
+{% if message %}
+<div class="message {{ message.type }}">{{ message.text }}</div>
+{% endif %}
+
+<div class="form-card" style="max-width:920px;margin:0 auto;">
+    <h2 class="section-title">Registrar Recepción</h2>
+    <form method="post">
+        <div class="form-grid">
+            <div class="field">
+                <label for="proveedor">Proveedor</label>
+                <input id="proveedor" name="proveedor" value="{{ form_data.proveedor }}" placeholder="Ej: Repuestos Chile SpA" required>
+            </div>
+            <div class="field">
+                <label for="codigo_producto">Código del producto</label>
+                <input id="codigo_producto" name="codigo_producto" value="{{ form_data.codigo }}" placeholder="Ej: ABC123" required>
+            </div>
+            <div class="field">
+                <label for="cantidad">Cantidad recibida</label>
+                <input id="cantidad" name="cantidad" type="number" min="1" step="1" value="{{ form_data.cantidad }}" placeholder="Ej: 24" required>
+            </div>
+            <div class="field">
+                <label for="marca">Marca / Variante</label>
+                <input id="marca" name="marca" value="{{ form_data.marca }}" placeholder="Ej: BOSCH">
+            </div>
+            <div class="field">
+                <label for="bodega">Bodega</label>
+                <input id="bodega" name="bodega" value="{{ form_data.bodega }}" placeholder="Ej: Bodega 1">
+            </div>
+            <div class="field field-full">
+                <label for="observacion">Observación</label>
+                <textarea id="observacion" name="observacion" placeholder="Documento de compra, guía, lote, estado de la recepción">{{ form_data.observacion }}</textarea>
+            </div>
+        </div>
+        <div class="actions">
+            <button class="btn btn-success" type="submit">Guardar recepción</button>
+            <a class="link-btn" href="{{ url_for('bodega.recepcion') }}">Limpiar formulario</a>
+        </div>
+    </form>
+</div>
+
+{% if producto %}
+<div class="panel" style="max-width:920px;margin:18px auto 0;">
+    <h2 class="section-title">Producto Procesado</h2>
+    <div class="product-summary">
+        <div class="summary-box">
+            <h4>Código</h4>
+            <p>{{ producto.codigo }}</p>
+        </div>
+        <div class="summary-box">
+            <h4>Descripción</h4>
+            <p>{{ producto.descripcion or 'Sin descripción' }}</p>
+        </div>
+        <div class="summary-box">
+            <h4>Proveedor</h4>
+            <p>{{ form_data.proveedor }}</p>
+        </div>
+        <div class="summary-box">
+            <h4>Stock Bodega</h4>
+            <p>{{ producto.stock_actual }}</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if variantes %}
+<div class="panel" style="max-width:920px;margin:18px auto 0;">
+    <h2 class="section-title">Variantes Disponibles</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Marca</th>
+                    <th>Bodega</th>
+                    <th>Proveedor</th>
+                    <th>Stock</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for variante in variantes %}
+                <tr>
+                    <td><strong>{{ variante.marca }}</strong></td>
+                    <td>{{ variante.bodega }}</td>
+                    <td>{{ variante.proveedor or '—' }}</td>
+                    <td>{{ variante.stock }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

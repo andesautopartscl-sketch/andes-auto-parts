@@ -1,0 +1,65 @@
+{% extends 'base_content.html' if _partial else 'erp_shell.html' %}
+{% block title %}Historial de Impresion de Etiquetas | Andes Auto Parts{% endblock %}
+{% block header_subtitle %}Inventario - Trazabilidad de etiquetas impresas{% endblock %}
+
+{% block content %}
+<div style="display:grid;gap:16px;">
+  <section class="card" style="padding:18px;">
+    <form method="get" action="{{ url_for('inventario.labels_history') }}" style="display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;">
+      <input type="text" name="q" value="{{ q or '' }}" placeholder="Buscar por producto, usuario o referencia" style="height:42px;padding:0 12px;border:1px solid #cbd5e1;border-radius:10px;">
+      <button class="btn primary" type="submit">Buscar</button>
+      {% if q %}
+      <a class="btn" href="{{ url_for('inventario.labels_history') }}">Limpiar</a>
+      {% endif %}
+    </form>
+  </section>
+
+  <section class="panel" style="overflow:hidden;">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;">
+      <h3 style="font-size:16px;">Historial de Impresion</h3>
+      <span style="font-size:12px;color:var(--muted);">{{ total }} registros</span>
+    </div>
+
+    {% if rows %}
+    <div style="overflow-x:auto;">
+      <table class="erp-table">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Cantidad impresa</th>
+            <th>Fecha y hora</th>
+            <th>Usuario</th>
+            <th>Referencia</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.product_name }}</td>
+            <td><span class="badge orange">{{ row.quantity }}</span></td>
+            <td>{{ row.date_time|chile_datetime }}</td>
+            <td>{{ row.user_id or 'sistema' }}</td>
+            <td>{{ row.document_reference or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="padding:12px 16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--muted);">Pagina {{ page }} de {{ total_pages }}</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        {% if page > 1 %}
+        <a class="btn" href="{{ url_for('inventario.labels_history', q=q, page=page-1) }}">Anterior</a>
+        {% endif %}
+        {% if page < total_pages %}
+        <a class="btn" href="{{ url_for('inventario.labels_history', q=q, page=page+1) }}">Siguiente</a>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div style="padding:30px;text-align:center;color:var(--muted);">No hay impresiones registradas{% if q %} para la busqueda actual{% endif %}.</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Andes Auto Parts{% endblock %}</title>
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='logo_andes.png') }}">
+<link rel="shortcut icon" href="{{ url_for('static', filename='logo_andes.png') }}">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+	--bg:#0f172a;
+	--panel:#1e3a8a;
+	--panel-soft:#1d4ed8;
+	--text:#f8fafc;
+	--surface:#ffffff;
+	--surface-soft:#f8fafc;
+	--line:#e2e8f0;
+	--muted:#64748b;
+	--ok:#16a34a;
+	--warn:#d97706;
+	--danger:#dc2626;
+	--shadow:0 20px 40px rgba(2,8,23,0.25);
+}
+
+* { box-sizing:border-box; }
+
+/* Evita que iOS/Safari escalen el texto de forma rara en móvil */
+html {
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+}
+
+body {
+	margin:0;
+	font-family:'Inter', system-ui, sans-serif;
+	background:radial-gradient(circle at 10% 10%, #1e293b 0%, var(--bg) 42%, #090f1c 100%);
+}
+
+body.dark {
+	background:#121826;
+	color:#e4e7ec;
+}
+
+.layout {
+	display:flex;
+	min-height:100vh;
+	gap:18px;
+	padding:16px;
+}
+
+.content {
+	flex:1;
+	border-radius:22px;
+	background:var(--surface);
+	border:1px solid var(--line);
+	box-shadow:var(--shadow);
+	padding:24px;
+	overflow-x:auto;
+}
+
+.topbar {
+	display:flex;
+	align-items:flex-start;
+	justify-content:space-between;
+	gap:16px;
+	margin-bottom:20px;
+	flex-wrap:wrap;
+}
+
+.page-title {
+	margin:0;
+	font-size:28px;
+	color:#0f172a;
+}
+
+.page-subtitle {
+	margin:6px 0 0;
+	color:var(--muted);
+	font-size:14px;
+}
+
+.topbar-actions {
+	display:flex;
+	gap:10px;
+	flex-wrap:wrap;
+}
+
+.link-btn,
+.btn {
+	display:inline-flex;
+	align-items:center;
+	justify-content:center;
+	gap:8px;
+	padding:10px 14px;
+	border-radius:10px;
+	text-decoration:none;
+	border:1px solid #cbd5e1;
+	color:#0f172a;
+	background:#fff;
+	font-size:14px;
+	font-weight:600;
+	cursor:pointer;
+}
+
+.link-btn:hover,
+.btn:hover { background:#eff6ff; border-color:#93c5fd; }
+
+.btn-primary { background:#1e3a8a; color:#fff; border-color:#1e3a8a; }
+.btn-primary:hover { background:#1d4ed8; border-color:#1d4ed8; }
+.btn-success { background:var(--ok); color:#fff; border-color:var(--ok); }
+.btn-success:hover { background:#15803d; border-color:#15803d; }
+.btn-warn { background:var(--warn); color:#fff; border-color:var(--warn); }
+.btn-warn:hover { background:#b45309; border-color:#b45309; }
+.btn-secondary { background:#e5e7eb; color:#0f172a; }
+
+.message {
+	margin-bottom:16px;
+	border-radius:12px;
+	padding:12px 14px;
+	font-size:14px;
+	font-weight:500;
+}
+
+.message.success { background:#ecfdf3; color:#166534; border:1px solid #86efac; }
+.message.error { background:#fef2f2; color:#991b1b; border:1px solid #fca5a5; }
+
+.app-modal {
+	display:none;
+	position:fixed;
+	inset:0;
+	background:rgba(15,23,42,0.65);
+	backdrop-filter:blur(6px);
+	align-items:center;
+	justify-content:center;
+	padding:24px;
+	z-index:1200;
+}
+
+.app-modal.is-open {
+	display:flex;
+}
+
+.app-modal-dialog {
+	width:min(960px, 96vw);
+	max-height:90vh;
+	overflow:auto;
+	background:#fff;
+	border:1px solid #e2e8f0;
+	border-radius:18px;
+	box-shadow:0 25px 60px rgba(0,0,0,0.25);
+	padding:24px;
+	position:relative;
+}
+
+.app-modal-dialog--producto-ficha {
+	width: min(1180px, 99.5vw);
+	max-height: none;
+	overflow: visible;
+	padding: 4px 5px 54px;
+}
+
+/* Ficha en iframe: el scroll va en el overlay (#appModal), no en el diálogo ni dentro del iframe (evita doble barra). */
+.app-modal.app-modal--tall-iframe.is-open {
+	overflow-y: auto;
+	overflow-x: hidden;
+	-webkit-overflow-scrolling: touch;
+	align-items: flex-start;
+	justify-content: center;
+	padding: 3px 5px 8px;
+	box-sizing: border-box;
+}
+
+.app-modal-close {
+	position:absolute;
+	top:12px;
+	right:12px;
+	border:none;
+	background:#e5e7eb;
+	color:#0f172a;
+	width:36px;
+	height:36px;
+	border-radius:999px;
+	cursor:pointer;
+	font-size:18px;
+	font-weight:700;
+}
+
+.app-modal-loading,
+.app-modal-error {
+	padding:32px;
+	text-align:center;
+	color:#475569;
+}
+
+.app-modal-error {
+	color:#dc2626;
+}
+
+.app-modal-iframe {
+	display:block;
+	width:100%;
+	min-height:min(78vh, 820px);
+	border:0;
+	border-radius:14px;
+	background:#f8fafc;
+}
+
+.app-modal-dialog--producto-ficha .app-modal-iframe--producto {
+	min-height: 0;
+	height: auto;
+}
+
+/* Ocultar FAB del chat cuando cualquier modal del ERP está abierto (clase en body + respaldo por hermanos). */
+body.app-modal-is-open #apchat-root {
+	display: none !important;
+	visibility: hidden !important;
+	pointer-events: none !important;
+	opacity: 0 !important;
+}
+#appModal.is-open ~ #apchat-root {
+	display: none !important;
+}
+
+@media (max-width: 960px) {
+	.layout {
+		flex-direction: column;
+		padding: 10px 10px 12px;
+		gap: 12px;
+	}
+	.content {
+		padding: 18px 16px;
+		border-radius: 18px;
+		min-width: 0;
+	}
+}
+@media (max-width: 600px) {
+	.layout {
+		padding: 8px 8px 10px;
+		gap: 10px;
+	}
+	.content {
+		padding: 14px 12px;
+		border-radius: 14px;
+	}
+	.page-title {
+		font-size: clamp(1.2rem, 5.5vw, 1.65rem);
+		line-height: 1.2;
+	}
+	.topbar {
+		flex-direction: column;
+		align-items: stretch;
+	}
+	.topbar-actions {
+		justify-content: flex-start;
+	}
+}
+</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/erp_module.css') }}">
+{% block extra_head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+<div class="layout">
+	{% include 'partials/global_sidebar.html' %}
+	<main class="content" id="appMainContent">
+		{% block content %}{% endblock %}
+	</main>
+</div>
+
+<div id="appModal" class="app-modal" aria-hidden="true">
+	<div class="app-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
+		<button type="button" class="app-modal-close" id="appModalClose" aria-label="Cerrar modal">&times;</button>
+		<div id="appModalBody"></div>
+	</div>
+</div>
+
+{% include 'partials/admin_center_workspace.html' %}
+
+<script>
+function toggleMenu(id) {
+	var el = document.getElementById(id);
+	var hdr = document.getElementById('hdr-' + id);
+	if (!el || !hdr) {
+		return;
+	}
+	var isOpen = el.classList.contains('open');
+	document.querySelectorAll('.submenu').forEach(function(menu) { menu.classList.remove('open'); });
+	document.querySelectorAll('.module-header').forEach(function(header) { header.classList.remove('active'); });
+	if (!isOpen) {
+		el.classList.add('open');
+		hdr.classList.add('active');
+	}
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+	var activeLink = document.querySelector('.submenu a.nav-active');
+	if (activeLink) {
+		var submenu = activeLink.closest('.submenu');
+		if (submenu) {
+			submenu.classList.add('open');
+			var header = document.getElementById('hdr-' + submenu.id);
+			if (header) {
+				header.classList.add('active');
+			}
+		}
+	}
+});
+
+/* ── Dynamic module loader ─────────────────────────────── */
+(function () {
+	'use strict';
+
+	function executeScripts(container) {
+		/* Re-execute scripts injected via innerHTML (they don't auto-run) */
+		var scripts = Array.from(container.querySelectorAll('script'));
+		return scripts.reduce(function (chain, oldScript) {
+			return chain.then(function () {
+				return new Promise(function (resolve) {
+					var newScript = document.createElement('script');
+					Array.from(oldScript.attributes).forEach(function (attr) {
+						newScript.setAttribute(attr.name, attr.value);
+					});
+					if (oldScript.src) {
+						newScript.onload = resolve;
+						newScript.onerror = resolve;
+					} else {
+						newScript.textContent = oldScript.textContent;
+					}
+					oldScript.parentNode.replaceChild(newScript, oldScript);
+					if (!oldScript.src) resolve();
+				});
+			});
+		}, Promise.resolve());
+	}
+
+	function updateSidebarActive(url) {
+		/* Normalise: strip trailing slash, query string, and hash for comparison */
+		function norm(u) { return (u || '').replace(/\/$/, '').split('?')[0].split('#')[0]; }
+		var target = norm(url);
+		var activeLink = null;
+
+		document.querySelectorAll('.submenu a').forEach(function (a) {
+			/* Prefer data-module-url; fall back to href */
+			var candidate = norm(a.dataset.moduleUrl || a.getAttribute('href') || '');
+			var isActive = candidate !== '' && candidate === target;
+			a.classList.toggle('nav-active', isActive);
+			if (isActive) activeLink = a;
+		});
+
+		/* Sync accordion: collapse all, then open the parent of the active link */
+		document.querySelectorAll('.submenu').forEach(function (m) { m.classList.remove('open'); });
+		document.querySelectorAll('.module-header').forEach(function (h) { h.classList.remove('active'); });
+		if (activeLink) {
+			var submenu = activeLink.closest('.submenu');
+			if (submenu) {
+				submenu.classList.add('open');
+				var hdr = document.getElementById('hdr-' + submenu.id);
+				if (hdr) hdr.classList.add('active');
+			}
+		}
+	}
+
+	function showLoading(container) {
+		container.innerHTML = '<div style="padding:60px 24px;text-align:center;color:#64748b;font-size:15px;">⏳ Cargando módulo...</div>';
+	}
+
+	function currentPath() {
+		return window.location.pathname + window.location.search + window.location.hash;
+	}
+
+	function closeAppModal() {
+		var modal = document.getElementById('appModal');
+		var modalBody = document.getElementById('appModalBody');
+		var dlg = document.querySelector('#appModal .app-modal-dialog');
+		if (dlg) dlg.classList.remove('app-modal-dialog--producto-ficha');
+		if (modal) modal.classList.remove('app-modal--tall-iframe');
+		document.body.classList.remove('app-modal-is-open');
+		if (!modal || !modalBody) return;
+		modal.classList.remove('is-open');
+		modal.setAttribute('aria-hidden', 'true');
+		modalBody.innerHTML = '';
+	}
+
+	function openAppModal() {
+		var modal = document.getElementById('appModal');
+		if (!modal) return;
+		document.body.classList.add('app-modal-is-open');
+		modal.classList.add('is-open');
+		modal.setAttribute('aria-hidden', 'false');
+	}
+
+	window.closeAppModal = closeAppModal;
+
+	window.openRemoteModal = function (url) {
+		var modalBody = document.getElementById('appModalBody');
+		if (!modalBody) return;
+		/* Ficha técnica: página standalone con muchos estilos; aislar en iframe para no romper el layout. */
+		var pathOnly = (url || '').split('?')[0].split('#')[0];
+		var isProductoFicha = /\/producto\/[^/]+$/.test(pathOnly);
+		if (isProductoFicha) {
+			/* Evita caché del iframe: si no, el navegador puede mostrar HTML/CSS viejo aunque el servidor ya cambió. */
+			var srcNoHash = (url || '').split('#')[0];
+			var sep = srcNoHash.indexOf('?') === -1 ? '?' : '&';
+			var src = srcNoHash + sep + '_v=' + Date.now();
+			modalBody.innerHTML = '<iframe class="app-modal-iframe app-modal-iframe--producto" title="Ficha del producto" src="' +
+				src.replace(/"/g, '&quot;') + '"></iframe>';
+			var dlg = document.querySelector('#appModal .app-modal-dialog');
+			if (dlg) dlg.classList.add('app-modal-dialog--producto-ficha');
+			var modalEl = document.getElementById('appModal');
+			if (modalEl) modalEl.classList.add('app-modal--tall-iframe');
+			openAppModal();
+			var iframe = modalBody.querySelector('iframe');
+			var lastFtH = 0;
+			function resizeProductoIframe() {
+				if (!iframe) return;
+				try {
+					var doc = iframe.contentDocument || iframe.contentWindow.document;
+					var card = doc.querySelector && doc.querySelector('.ft-card');
+					var h = 0;
+					if (card) {
+						// Usar altura de `.ft-card` evita que el `scrollHeight` cambie por imágenes/zoom
+						// (y evita que el modal “crezca” al presionar miniaturas).
+						h = Math.ceil(card.getBoundingClientRect().height || 0);
+					}
+					if (!h) {
+						h = Math.max(
+							doc.body ? doc.body.scrollHeight : 0,
+							doc.documentElement ? doc.documentElement.scrollHeight : 0
+						);
+					}
+					if (h > 0) {
+						// Si por algún motivo el `load` de imágenes dispara un crecimiento incremental,
+						// evitamos que el modal vaya agrandándose indefinidamente.
+						if (!lastFtH) lastFtH = h;
+						if (h > lastFtH + 2) h = lastFtH;
+						else lastFtH = Math.max(lastFtH, h);
+						iframe.style.height = (h + 8) + 'px';
+					}
+				} catch (e) {}
+			}
+			if (iframe) {
+				iframe.onload = function () {
+					resizeProductoIframe();
+					try {
+						var doc = iframe.contentDocument || iframe.contentWindow.document;
+						if (doc) {
+							doc.querySelectorAll('img').forEach(function (img) {
+								if (!img.complete) img.addEventListener('load', resizeProductoIframe);
+							});
+						}
+					} catch (e2) {}
+					setTimeout(resizeProductoIframe, 50);
+					setTimeout(resizeProductoIframe, 200);
+					setTimeout(resizeProductoIframe, 600);
+					setTimeout(resizeProductoIframe, 1200);
+				};
+			}
+			return;
+		}
+
+		modalBody.innerHTML = '<div class="app-modal-loading">Cargando...</div>';
+		openAppModal();
+
+		fetch(url, {
+			headers: {
+				'X-Requested-With': 'XMLHttpRequest',
+				'Accept': 'text/html'
+			},
+			credentials: 'same-origin'
+		})
+		.then(function (res) {
+			if (res.redirected && res.url.indexOf('/login') !== -1) {
+				window.location.href = res.url;
+				return Promise.reject(new Error('redirect'));
+			}
+			if (!res.ok) throw new Error('HTTP ' + res.status);
+			return res.text();
+		})
+		.then(function (html) {
+			modalBody.innerHTML = html;
+			return executeScripts(modalBody);
+		})
+		.catch(function (err) {
+			if (err.message === 'redirect') return;
+			modalBody.innerHTML = '<div class="app-modal-error">Error al cargar el modal: ' + err.message + '</div>';
+		});
+	};
+
+	window._loadModule = function (url, options) {
+		options = options || {};
+		var container = document.getElementById('appMainContent');
+		if (!container) return;
+		closeAppModal();
+		showLoading(container);
+
+		fetch(url, {
+			headers: {
+				'X-Requested-With': 'XMLHttpRequest',
+				'Accept': 'text/html'
+			},
+			credentials: 'same-origin'
+		})
+		.then(function (res) {
+			if (res.redirected && res.url.indexOf('/login') !== -1) {
+				window.location.href = res.url;
+				return Promise.reject(new Error('redirect'));
+			}
+			if (!res.ok) throw new Error('HTTP ' + res.status);
+			return res.text();
+		})
+		.then(function (html) {
+			container.innerHTML = html;
+			return executeScripts(container);
+		})
+		.then(function () {
+			if (!options.skipHistory && window.history && window.history.pushState) {
+				var nextUrl = (url || '').toString();
+				if (nextUrl !== currentPath()) {
+					history.pushState({ moduleUrl: url }, '', url);
+				}
+			}
+			updateSidebarActive(url);
+			document.dispatchEvent(new CustomEvent('app:module-loaded', { detail: { url: url } }));
+		})
+		.catch(function (err) {
+			if (err.message === 'redirect') return;
+			container.innerHTML = '<div style="padding:40px;text-align:center;color:#dc2626;">❌ Error al cargar el módulo: ' + err.message + '</div>';
+		});
+	};
+
+	/* Handle browser back/forward */
+	window.addEventListener('popstate', function (e) {
+		if (e.state && e.state.moduleUrl) {
+			window._loadModule(e.state.moduleUrl, { skipHistory: true });
+		}
+	});
+
+	document.addEventListener('click', function (event) {
+		// Permitir abrir links en nueva pestaña / ventana sin interceptar.
+		if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+			return;
+		}
+
+		var modalTrigger = event.target.closest('[data-modal-url]');
+		if (modalTrigger) {
+			event.preventDefault();
+			window.openRemoteModal(modalTrigger.getAttribute('data-modal-url'));
+			return;
+		}
+
+		var moduleTrigger = event.target.closest('[data-module-url]');
+		if (moduleTrigger) {
+			var href = moduleTrigger.getAttribute('href') || moduleTrigger.getAttribute('data-module-url');
+			if (!href || href.charAt(0) === '#') {
+				return;
+			}
+			event.preventDefault();
+			window._loadModule(href);
+		}
+	});
+
+	document.addEventListener('keydown', function (event) {
+		if (event.key === 'Escape') {
+			closeAppModal();
+		}
+	});
+
+	document.addEventListener('click', function (event) {
+		var modal = document.getElementById('appModal');
+		var closeBtn = event.target.closest('#appModalClose');
+		if (closeBtn) {
+			closeAppModal();
+			return;
+		}
+		if (modal && event.target === modal) {
+			closeAppModal();
+		}
+	});
+})();
+</script>
+<script src="{{ url_for('static', filename='usuarios_ui.js') }}"></script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

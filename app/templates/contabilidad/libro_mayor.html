@@ -1,0 +1,42 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Libro Mayor | Finanzas | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Finanzas</h1>
+    <p class="page-subtitle">Libro mayor</p>
+  </div>
+  <div class="topbar-actions">
+    <a class="link-btn" href="{{ url_for('contabilidad.index') }}">📒 Plan de cuentas</a>
+    <a class="link-btn" href="{{ url_for('contabilidad.movimientos') }}">🧾 Libro diario</a>
+  </div>
+</div>
+
+<div style="overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;">
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Código</th>
+        <th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Cuenta</th>
+        <th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Debe</th>
+        <th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Haber</th>
+        <th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Saldo</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td style="padding:9px;border-bottom:1px solid #f1f5f9;">{{ r.cuenta.codigo }}</td>
+        <td style="padding:9px;border-bottom:1px solid #f1f5f9;">{{ r.cuenta.nombre }}</td>
+        <td style="padding:9px;border-bottom:1px solid #f1f5f9;">${{ '{:,.0f}'.format(r.debe).replace(',', '.') }}</td>
+        <td style="padding:9px;border-bottom:1px solid #f1f5f9;">${{ '{:,.0f}'.format(r.haber).replace(',', '.') }}</td>
+        <td style="padding:9px;border-bottom:1px solid #f1f5f9;">${{ '{:,.0f}'.format(r.saldo).replace(',', '.') }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" style="padding:16px;text-align:center;color:#64748b;">Sin datos para libro mayor.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

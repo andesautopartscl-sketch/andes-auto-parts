@@ -1,0 +1,1359 @@
+<script>
+(function () {
+    'use strict';
+
+    {% if is_supplier_doc %}
+    const URL_PARTY_LOOKUP = {{ url_for('ventas.api_proveedores')|tojson }};
+    const URL_PARTY_CREATE = {{ url_for('ventas.api_proveedor_create')|tojson }};
+    const PARTY_LIST_KEY = 'proveedores';
+    const PARTY_RESULT_KEY = 'proveedor';
+    const PARTY_KIND = 'proveedor';
+    {% else %}
+    const URL_PARTY_LOOKUP = {{ url_for('ventas.api_clientes')|tojson }};
+    const URL_PARTY_CREATE = {{ url_for('ventas.api_cliente_create')|tojson }};
+    const PARTY_LIST_KEY = 'clientes';
+    const PARTY_RESULT_KEY = 'cliente';
+    const PARTY_KIND = 'cliente';
+    {% endif %}
+    const URL_PRODUCTO = {{ url_for('ventas.api_producto')|tojson }};
+    const URL_PRODUCT_SEARCH = {{ url_for('ventas.api_productos_search')|tojson }};
+    const URL_API_TRACE = {{ url_for('ventas.api_traceability', numero='NUMERO_PLACEHOLDER')|tojson }};
+    const URL_CONV_CO_OV = {{ url_for('ventas.api_convert_cotizacion_orden_venta', numero='NUMERO_PLACEHOLDER')|tojson }};
+    const URL_CONV_OV_FA = {{ url_for('ventas.api_convert_orden_venta_factura', numero='NUMERO_PLACEHOLDER')|tojson }};
+    const URL_CONV_OC_ING = {{ url_for('ventas.api_convert_orden_compra_ingreso', documento_id=0)|tojson }};
+    const URL_CONV_FA_NC = {{ url_for('ventas.api_convert_factura_nota_credito', documento_id=0)|tojson }};
+    const PARTY_LABEL = {{ party_label|tojson }};
+    const DOC_TYPE = {{ doc_type|tojson }};
+
+    const form = document.getElementById('erpDocForm');
+    const hiddenPartyId = document.getElementById('hiddenPartyId');
+    const partyRutHidden = document.getElementById('partyRutHidden');
+    const partyName = document.getElementById('party_name');
+    const partyAddress = document.getElementById('party_address');
+    const partyTelefono = document.getElementById('party_telefono');
+    const partyEmail = document.getElementById('party_email');
+    const rutLookup = document.getElementById('rutLookup');
+    const partyStatus = document.getElementById('partyStatus');
+    const btnSearchParty = document.getElementById('btnSearchParty');
+    const btnNewParty = document.getElementById('btnNewParty');
+    const inlineCreate = document.getElementById('inlineCreateParty');
+    const chileGeoElement = document.getElementById('chileGeoData');
+    const icRegion = document.getElementById('ic_region');
+    const icCiudad = document.getElementById('ic_ciudad');
+    const btnSaveNewParty = document.getElementById('btnSaveNewParty');
+    const btnCancelNew = document.getElementById('btnCancelNewParty');
+    const itemsBody = document.getElementById('itemsBody');
+    const addRowBtn = document.getElementById('addRow');
+    const tSubtotal = document.getElementById('tSubtotal');
+    const tIva = document.getElementById('tIva');
+    const tTotal = document.getElementById('tTotal');
+    const tipoDocumento = document.getElementById('tipo_documento');
+    const docNumberInput = document.getElementById('doc_number');
+    const docDateInput = document.getElementById('doc_date');
+    const docValidInput = document.getElementById('doc_valid_until');
+    const statusInput = document.getElementById('status');
+    const notesInput = document.getElementById('notes');
+    const loadedDocumentIdInput = document.getElementById('loaded_document_id');
+    const btnConvertToOV = document.getElementById('btnConvertToOV');
+    const btnFacturarOV = document.getElementById('btnFacturarOV');
+    const btnRecibirOC = document.getElementById('btnRecibirOC');
+    const btnCreateNC = document.getElementById('btnCreateNC');
+    const btnTraceDoc = document.getElementById('btnTraceDoc');
+    const traceModal = document.getElementById('docTraceModal');
+    const traceList = document.getElementById('traceList');
+    const traceClose = document.getElementById('traceClose');
+    const traceClose2 = document.getElementById('traceClose2');
+    const traceHint = document.getElementById('traceHint');
+
+    const psModal = document.getElementById('productSearchModal');
+    const psInput = document.getElementById('psInput');
+    const psRun = document.getElementById('psRun');
+    const psClear = document.getElementById('psClear');
+    const psClose = document.getElementById('psClose');
+    const psClose2 = document.getElementById('psClose2');
+    const psApply = document.getElementById('psApply');
+    const psResults = document.getElementById('psResults');
+    const psSummary = document.getElementById('psSummary');
+    const psSelCount = document.getElementById('psSelCount');
+
+    const psSelected = new Map();
+    const chileGeo = JSON.parse(chileGeoElement ? chileGeoElement.textContent : '[]');
+    let activeSearchRow = null;
+    let searchTimer = null;
+    let partyTimer = null;
+
+    function parseNum(value) {
+        const number = Number(String(value || '').replace(',', '.').trim());
+        return Number.isFinite(number) && number >= 0 ? number : 0;
+    }
+    function fmtCLP(value) {
+        return '$' + Math.round(parseNum(value)).toLocaleString('es-CL');
+    }
+    function esc(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+    function normalize(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+    function currentDocumentId() {
+        return parseInt((loadedDocumentIdInput && loadedDocumentIdInput.value) || '0', 10) || 0;
+    }
+    function currentDocumentNumber() {
+        return String((docNumberInput && docNumberInput.value) || '').trim().toUpperCase();
+    }
+    function endpointWithId(base, id) {
+        return String(base || '').replace(/0$/, String(id));
+    }
+    function endpointWithNumber(base, number) {
+        return String(base || '').replace('NUMERO_PLACEHOLDER', encodeURIComponent(String(number || '').trim().toUpperCase()));
+    }
+    function postJson(url, payload) {
+        return fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify(payload || {})
+        }).then(function (response) {
+            return response.json().then(function (data) {
+                if (!response.ok || !data.success) {
+                    throw new Error((data && data.message) || 'Operacion no disponible');
+                }
+                return data;
+            });
+        });
+    }
+    function labelDocType(kind) {
+        const map = {
+            cotizacion: 'Cotizacion',
+            orden_venta: 'Orden de Venta',
+            orden_compra: 'Orden de Compra',
+            factura: 'Factura/Boleta',
+            factura_proveedor: 'Factura proveedor',
+            nota_credito: 'Nota de Credito'
+        };
+        return map[String(kind || '').toLowerCase()] || String(kind || '').replace(/_/g, ' ');
+    }
+    function renderTrace(chain) {
+        if (!traceList) return;
+        if (!Array.isArray(chain) || !chain.length) {
+            traceList.innerHTML = '<div class="trace-node"><div class="meta">Sin trazabilidad disponible.</div></div>';
+            return;
+        }
+        const html = chain.map(function (node, index) {
+            const total = Number(node.total || 0).toLocaleString('es-CL');
+            return '' +
+                '<div class="trace-step">' +
+                    '<div class="trace-step-rail">' +
+                        '<span class="trace-step-dot"></span>' +
+                        '<span class="trace-step-line"></span>' +
+                    '</div>' +
+                    '<div class="trace-node">' +
+                        '<div class="row1">' +
+                            '<span class="tag">' + esc(labelDocType(node.type)) + '</span>' +
+                            '<span class="num">' + esc(node.number || ('#' + node.id)) + '</span>' +
+                        '</div>' +
+                        '<div class="meta">Estado: <span class="meta-strong">' + esc(node.status || 'pendiente') + '</span> · Total: <span class="meta-strong">$' + total + '</span></div>' +
+                    '</div>' +
+                '</div>' +
+                '';
+        }).join('');
+        traceList.innerHTML = html;
+    }
+    function openTrace() {
+        const numero = currentDocumentNumber();
+        if (!numero) {
+            window.alert('Carga un documento guardado antes de ver trazabilidad.');
+            return;
+        }
+        if (!traceModal) return;
+        traceModal.classList.add('open');
+        if (traceList) traceList.innerHTML = '<div class="trace-node"><div class="meta">Cargando trazabilidad...</div></div>';
+        fetch(endpointWithNumber(URL_API_TRACE, numero), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (response) {
+                return response.json().then(function (data) {
+                    if (!response.ok || !data.success) {
+                        throw new Error((data && data.message) || 'No se pudo cargar trazabilidad');
+                    }
+                    return data;
+                });
+            })
+            .then(function (data) {
+                renderTrace(data.chain || []);
+                if (traceHint) traceHint.textContent = 'Cadena desde documento raiz';
+            })
+            .catch(function (error) {
+                if (traceList) traceList.innerHTML = '<div class="trace-node"><div class="meta">' + esc(error.message) + '</div></div>';
+            });
+    }
+    function closeTrace() {
+        if (traceModal) traceModal.classList.remove('open');
+    }
+    function getPartyDisplay(entity) {
+        return entity ? (entity.empresa || entity.nombre || '') : '';
+    }
+    function getRF(row) {
+        return {
+            codeInput: row.querySelector('.item-codigo'),
+            descInput: row.querySelector('.item-desc'),
+            marcaSel: row.querySelector('.item-marca'),
+            bodegaSel: row.querySelector('.item-bodega'),
+            qtyInput: row.querySelector('.item-qty'),
+            priceInput: row.querySelector('.item-price'),
+            subtotalEl: row.querySelector('.item-subtotal'),
+            stockEl: row.querySelector('.item-stock-row'),
+            metaEl: row.querySelector('.item-meta-line'),
+            srchBtn: row.querySelector('.code-srch-btn')
+        };
+    }
+    function itemKey(data) {
+        return [
+            String(data.codigo || '').trim().toUpperCase(),
+            String(data.marca || '').trim().toUpperCase(),
+            String(data.bodega || '').trim()
+        ].join('|');
+    }
+    function findRegionData(regionName) {
+        return chileGeo.find(function (item) {
+            return normalize(item && item.nombre) === normalize(regionName);
+        }) || null;
+    }
+    function updateInlineCities(regionName, selectedCity) {
+        if (!icCiudad) return;
+        const region = findRegionData(regionName);
+        const cities = region && Array.isArray(region.comunas) ? region.comunas : [];
+
+        icCiudad.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Seleccionar ciudad';
+        icCiudad.appendChild(placeholder);
+
+        cities.forEach(function (city) {
+            const option = document.createElement('option');
+            option.value = city;
+            option.textContent = city;
+            icCiudad.appendChild(option);
+        });
+
+        icCiudad.disabled = !regionName || !cities.length;
+        if (!selectedCity) {
+            icCiudad.value = '';
+            return;
+        }
+        const exists = cities.some(function (city) {
+            return normalize(city) === normalize(selectedCity);
+        });
+        icCiudad.value = exists ? selectedCity : '';
+    }
+
+    function updateRowSub(row) {
+        const fields = getRF(row);
+        const qty = Math.max(0, parseInt((fields.qtyInput && fields.qtyInput.value) || '0', 10) || 0);
+        const price = parseNum(fields.priceInput ? fields.priceInput.value : 0);
+        if (fields.subtotalEl) fields.subtotalEl.textContent = (qty * price).toFixed(2);
+        updateTotals();
+    }
+    function updateTotals() {
+        let subtotal = 0;
+        itemsBody.querySelectorAll('.item-row').forEach(function (row) {
+            const fields = getRF(row);
+            const qty = Math.max(0, parseInt((fields.qtyInput && fields.qtyInput.value) || '0', 10) || 0);
+            const price = parseNum(fields.priceInput ? fields.priceInput.value : 0);
+            subtotal += qty * price;
+        });
+        const iva = subtotal * 0.19;
+        const total = subtotal + iva;
+        if (tSubtotal) tSubtotal.textContent = fmtCLP(subtotal);
+        if (tIva) tIva.textContent = fmtCLP(iva);
+        if (tTotal) tTotal.textContent = fmtCLP(total);
+    }
+    function renumberRows() {
+        let count = 1;
+        itemsBody.querySelectorAll('.item-row').forEach(function (row) {
+            const rowNum = row.querySelector('.row-num');
+            if (rowNum) rowNum.textContent = String(count++);
+        });
+    }
+
+    function setPartyStatus(message, cssClass) {
+        if (!partyStatus) return;
+        partyStatus.textContent = message;
+        partyStatus.className = 'cot-rut-status ' + (cssClass || '');
+    }
+    function fillParty(entity) {
+        if (!entity) return;
+        hiddenPartyId.value = String(entity.id || 0);
+        partyName.value = getPartyDisplay(entity);
+        partyAddress.value = [entity.direccion, entity.comuna, entity.ciudad].filter(Boolean).join(', ');
+        partyTelefono.value = entity.telefono || '';
+        partyEmail.value = entity.email || '';
+        const formatted = (window.RutUtils && window.RutUtils.format)
+            ? window.RutUtils.format(entity.rut || '')
+            : (entity.rut || '');
+        partyRutHidden.value = formatted;
+        if (rutLookup) rutLookup.value = formatted;
+    }
+    function showInlineCreate(show) {
+        inlineCreate.hidden = !show;
+        if (!show) return;
+        const icRut = document.getElementById('ic_rut');
+        if (icRut && rutLookup && !icRut.value) icRut.value = rutLookup.value;
+        updateInlineCities(icRegion ? icRegion.value : '', icCiudad ? icCiudad.value : '');
+        if (window.RutUtils && window.RutUtils.autoBindRutInputs) {
+            window.RutUtils.autoBindRutInputs(inlineCreate);
+        }
+        const icNombre = document.getElementById('ic_nombre');
+        if (icNombre) window.setTimeout(function () { icNombre.focus(); }, 50);
+    }
+    function lookupByRut(rutRaw) {
+        const rut = String(rutRaw || '').replace(/\./g, '').replace(/-/g, '').trim();
+        if (rut.length < 4) {
+            setPartyStatus('', '');
+            return;
+        }
+        setPartyStatus('Buscando…', '');
+        fetch(URL_PARTY_LOOKUP + '?q=' + encodeURIComponent(rut), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                const list = (data && data[PARTY_LIST_KEY]) ? data[PARTY_LIST_KEY] : [];
+                if (list.length) {
+                    fillParty(list[0]);
+                    setPartyStatus('✓ ' + getPartyDisplay(list[0]), 'found');
+                    showInlineCreate(false);
+                } else {
+                    hiddenPartyId.value = '0';
+                    setPartyStatus('No encontrado — presiona Enter para crear nuevo ' + PARTY_KIND, 'notfound');
+                }
+            })
+            .catch(function () {
+                setPartyStatus('Error en búsqueda', 'notfound');
+            });
+    }
+    function saveNewParty() {
+        const nombre = (document.getElementById('ic_nombre').value || '').trim();
+        if (!nombre) {
+            window.alert('El nombre es obligatorio.');
+            return;
+        }
+        const rutRaw = document.getElementById('ic_rut').value || '';
+        const region = (icRegion ? icRegion.value : '').trim();
+        const ciudad = (icCiudad ? icCiudad.value : '').trim();
+        if (!region) {
+            window.alert('Selecciona una región.');
+            if (icRegion) icRegion.focus();
+            return;
+        }
+        if (!ciudad) {
+            window.alert('Selecciona una ciudad.');
+            if (icCiudad) icCiudad.focus();
+            return;
+        }
+        const payload = {
+            nombre: nombre,
+            rut: (window.RutUtils && window.RutUtils.clean) ? window.RutUtils.clean(rutRaw) : rutRaw,
+            giro: (document.getElementById('ic_giro').value || '').trim(),
+            direccion: (document.getElementById('ic_direccion').value || '').trim(),
+            telefono: (document.getElementById('ic_telefono').value || '').trim(),
+            email: (document.getElementById('ic_email').value || '').trim(),
+            region: region,
+            comuna: ciudad,
+            ciudad: ciudad,
+            pais: 'Chile'
+        };
+        {% if is_supplier_doc %}
+        payload.empresa = (document.getElementById('ic_empresa').value || '').trim();
+        {% endif %}
+
+        fetch(URL_PARTY_CREATE, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify(payload)
+        })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (!data.success) throw new Error(data.message || 'Error al crear ' + PARTY_KIND);
+                const entity = data[PARTY_RESULT_KEY];
+                fillParty(entity);
+                setPartyStatus('✓ ' + PARTY_LABEL + ' creado: ' + getPartyDisplay(entity), 'found');
+                showInlineCreate(false);
+            })
+            .catch(function (error) {
+                window.alert(error.message);
+            });
+    }
+
+    function renderChips(row, product, selectedMarca, selectedBodega) {
+        const fields = getRF(row);
+        if (!fields.stockEl) return;
+        const entries = Array.isArray(product.stock_entries) ? product.stock_entries : [];
+        if (!entries.length) {
+            fields.stockEl.innerHTML = '';
+            return;
+        }
+        fields.stockEl.innerHTML = entries.map(function (entry) {
+            const stock = parseInt(entry.stock || 0, 10);
+            const tone = stock > 0 ? 'ok' : 'zero';
+            const active =
+                String(entry.marca || '').trim().toUpperCase() === String(selectedMarca || '').trim().toUpperCase() &&
+                String(entry.bodega || '').trim() === String(selectedBodega || '').trim();
+            return '<span class="sc-chip ' + tone + (active ? ' act' : '') + '">' + esc(entry.marca || 'Default') + ' · ' + stock + '</span>';
+        }).join(' ');
+    }
+    function fillSelect(select, options, selectedValue) {
+        select.innerHTML = '';
+        options.forEach(function (item) {
+            const option = document.createElement('option');
+            option.value = item.value;
+            option.textContent = item.label;
+            if (String(item.value) === String(selectedValue)) option.selected = true;
+            select.appendChild(option);
+        });
+        if (!select.value && options.length) select.value = options[0].value;
+    }
+    function populateVariants(row, product, preferredMarca, preferredBodega) {
+        const fields = getRF(row);
+        if (!fields.marcaSel || !fields.bodegaSel) return;
+        const entries = Array.isArray(product.stock_entries) ? product.stock_entries : [];
+        const preferredBrand = String(preferredMarca || fields.marcaSel.value || product.default_marca || '').trim().toUpperCase();
+        const preferredWarehouse = String(preferredBodega || fields.bodegaSel.value || product.default_bodega || 'Bodega 1').trim();
+
+        if (!entries.length) {
+            fillSelect(fields.marcaSel, [{ value: '', label: 'Sin variante' }], '');
+            fillSelect(fields.bodegaSel, [{ value: 'Bodega 1', label: 'Bodega 1' }], 'Bodega 1');
+            renderChips(row, product, '', 'Bodega 1');
+            return;
+        }
+
+        const brandMap = {};
+        entries.forEach(function (entry) {
+            const key = String(entry.marca || '').trim().toUpperCase();
+            brandMap[key] = (brandMap[key] || 0) + parseInt(entry.stock || 0, 10);
+        });
+        const brandOptions = Object.keys(brandMap).map(function (key) {
+            return { value: key, label: (key || 'Sin variante') + ' (' + brandMap[key] + ')' };
+        });
+        fillSelect(fields.marcaSel, brandOptions, preferredBrand);
+
+        function syncWarehouse() {
+            const currentBrand = String(fields.marcaSel.value || '').trim().toUpperCase();
+            const warehouses = entries.filter(function (entry) {
+                return String(entry.marca || '').trim().toUpperCase() === currentBrand;
+            });
+            const warehouseOptions = (warehouses.length ? warehouses : entries).map(function (entry) {
+                const warehouse = String(entry.bodega || 'Bodega 1').trim() || 'Bodega 1';
+                return {
+                    value: warehouse,
+                    label: warehouse + ' (' + parseInt(entry.stock || 0, 10) + ')'
+                };
+            });
+            const value = warehouseOptions.some(function (option) { return option.value === preferredWarehouse })
+                ? preferredWarehouse
+                : warehouseOptions[0].value;
+            fillSelect(fields.bodegaSel, warehouseOptions, value);
+            renderChips(row, product, currentBrand, fields.bodegaSel.value);
+        }
+
+        fields.marcaSel.onchange = syncWarehouse;
+        fields.bodegaSel.onchange = function () {
+            renderChips(row, product, fields.marcaSel.value, fields.bodegaSel.value);
+        };
+        syncWarehouse();
+    }
+    function applyProduct(row, product, options) {
+        const fields = getRF(row);
+        const opts = options || {};
+        row._pd = product;
+        if (fields.codeInput) fields.codeInput.value = product.codigo || '';
+        if (fields.descInput && (!fields.descInput.value.trim() || opts.forceDesc)) fields.descInput.value = product.descripcion || '';
+        if (fields.priceInput && (!fields.priceInput.value || parseNum(fields.priceInput.value) <= 0 || opts.forcePrice)) {
+            fields.priceInput.value = Number(product.precio || 0).toFixed(2);
+        }
+        if (fields.metaEl) {
+            const parts = [];
+            if (product.oem) parts.push('OEM: ' + product.oem);
+            if (product.modelo) parts.push(product.modelo);
+            fields.metaEl.textContent = parts.join(' · ');
+        }
+        populateVariants(row, product, opts.marca, opts.bodega);
+        updateRowSub(row);
+    }
+    function clearRow(row) {
+        const fields = getRF(row);
+        row._pd = null;
+        if (fields.metaEl) fields.metaEl.textContent = '';
+        if (fields.stockEl) fields.stockEl.innerHTML = '';
+        if (fields.marcaSel) fields.marcaSel.innerHTML = '<option value="">Sin variante</option>';
+        if (fields.bodegaSel) fields.bodegaSel.innerHTML = '<option value="Bodega 1">Bodega 1</option>';
+    }
+    function fetchProduct(code) {
+        return fetch(URL_PRODUCTO + '?codigo=' + encodeURIComponent(code), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (!data.success || !data.producto) throw new Error(data.message || 'No encontrado');
+                return data.producto;
+            });
+    }
+    function lookupCode(row, options) {
+        const fields = getRF(row);
+        const code = String(fields.codeInput ? fields.codeInput.value : '').trim().toUpperCase();
+        const opts = options || {};
+        if (!code) {
+            clearRow(row);
+            return Promise.resolve(null);
+        }
+        fields.codeInput.value = code;
+        return fetchProduct(code)
+            .then(function (product) {
+                applyProduct(row, product, opts);
+                if (opts.focusNext) {
+                    if (product.has_variantes) fields.marcaSel.focus();
+                    else if (fields.qtyInput) { fields.qtyInput.focus(); fields.qtyInput.select(); }
+                }
+                return product;
+            })
+            .catch(function (error) {
+                if (!opts.silent) {
+                    clearRow(row);
+                    if (fields.metaEl) fields.metaEl.textContent = error.message;
+                }
+                return null;
+            });
+    }
+    function findExisting(data) {
+        const key = itemKey(data);
+        return Array.from(itemsBody.querySelectorAll('.item-row')).find(function (row) {
+            const fields = getRF(row);
+            return key === itemKey({
+                codigo: fields.codeInput ? fields.codeInput.value : '',
+                marca: fields.marcaSel ? fields.marcaSel.value : '',
+                bodega: fields.bodegaSel ? fields.bodegaSel.value : ''
+            });
+        }) || null;
+    }
+    function findEmpty() {
+        return Array.from(itemsBody.querySelectorAll('.item-row')).find(function (row) {
+            const fields = getRF(row);
+            return !String(fields.codeInput ? fields.codeInput.value : '').trim();
+        }) || null;
+    }
+    function mergeOrInsert(item) {
+        let row = findExisting(item);
+        if (row) {
+            const fields = getRF(row);
+            const qty = Math.max(1, parseInt(fields.qtyInput.value || '1', 10) || 1);
+            fields.qtyInput.value = String(qty + Math.max(1, parseInt(item.cantidad || 1, 10) || 1));
+            updateRowSub(row);
+            return row;
+        }
+        row = findEmpty() || addRow();
+        applyProduct(row, item, { marca: item.marca, bodega: item.bodega, forceDesc: true, forcePrice: true });
+        const fields = getRF(row);
+        if (fields.qtyInput) fields.qtyInput.value = String(Math.max(1, parseInt(item.cantidad || 1, 10) || 1));
+        if (fields.priceInput) fields.priceInput.value = Number(item.precio || 0).toFixed(2);
+        updateRowSub(row);
+        return row;
+    }
+    function wireRow(row) {
+        const fields = getRF(row);
+        row.querySelectorAll('.item-qty, .item-price').forEach(function (input) {
+            input.addEventListener('input', function () { updateRowSub(row); });
+        });
+
+        const removeBtn = row.querySelector('.remove-row-btn');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', function () {
+                const rows = itemsBody.querySelectorAll('.item-row');
+                if (rows.length <= 1) {
+                    row.querySelectorAll('input').forEach(function (input) { input.value = ''; });
+                    if (fields.marcaSel) fields.marcaSel.innerHTML = '<option value="">Sin variante</option>';
+                    if (fields.bodegaSel) fields.bodegaSel.innerHTML = '<option value="Bodega 1">Bodega 1</option>';
+                    if (fields.qtyInput) fields.qtyInput.value = '1';
+                    if (fields.priceInput) fields.priceInput.value = '0';
+                    clearRow(row);
+                    updateRowSub(row);
+                    return;
+                }
+                row.remove();
+                renumberRows();
+                updateTotals();
+            });
+        }
+
+        if (fields.codeInput) {
+            let rowTimer = null;
+            fields.codeInput.addEventListener('blur', function () {
+                lookupCode(row, { silent: true });
+            });
+            fields.codeInput.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    lookupCode(row, { focusNext: true });
+                }
+                if (event.key === 'F2') {
+                    event.preventDefault();
+                    openPSModal(row, fields.codeInput.value);
+                }
+            });
+            fields.codeInput.addEventListener('input', function () {
+                if (rowTimer) clearTimeout(rowTimer);
+                const code = String(fields.codeInput.value || '').trim();
+                if (code.length < 3) {
+                    clearRow(row);
+                    return;
+                }
+                rowTimer = setTimeout(function () {
+                    lookupCode(row, { silent: true });
+                }, 280);
+            });
+        }
+
+        if (fields.srchBtn) {
+            fields.srchBtn.addEventListener('click', function () {
+                openPSModal(row, fields.codeInput ? fields.codeInput.value : '');
+            });
+        }
+
+        updateRowSub(row);
+        const code = String(fields.codeInput ? fields.codeInput.value : '').trim();
+        if (code) lookupCode(row, { silent: true });
+    }
+    function addRow() {
+        const index = itemsBody.querySelectorAll('.item-row').length + 1;
+        const row = document.createElement('tr');
+        row.className = 'item-row';
+        row.innerHTML =
+            '<td class="tc-num"><span class="row-num">' + index + '</span></td>' +
+            '<td class="tc-code"><div class="code-wrap">' +
+                '<input name="item_codigo[]" class="item-codigo" autocomplete="off" placeholder="Código">' +
+                '<button class="code-srch-btn no-print" type="button" title="Buscar (F2)">&#128269;</button>' +
+            '</div><span class="item-meta-line"></span></td>' +
+            '<td class="tc-desc"><input name="item_descripcion[]" class="item-desc" placeholder="Descripción"><div class="item-stock-row"></div></td>' +
+            '<td class="tc-brand"><select name="item_marca[]" class="item-marca"><option value="">Sin variante</option></select></td>' +
+            '<td class="tc-wh"><select name="item_bodega[]" class="item-bodega"><option value="Bodega 1">Bodega 1</option></select></td>' +
+            '<td class="tc-qty"><input name="item_cantidad[]" class="item-qty" type="number" min="1" value="1"></td>' +
+            '<td class="tc-price"><input name="item_precio[]" class="item-price" type="number" min="0" step="0.01" value="0"></td>' +
+            '<td class="tc-sub"><span class="item-subtotal">0.00</span></td>' +
+            '<td class="tc-rm no-print"><button class="btn sm danger remove-row-btn" type="button">&#10005;</button></td>';
+        itemsBody.appendChild(row);
+        wireRow(row);
+        return row;
+    }
+
+    function clearItemRows() {
+        if (!itemsBody) return;
+        itemsBody.innerHTML = '';
+    }
+
+    function setRowsFromDocument(items) {
+        clearItemRows();
+        const safeItems = Array.isArray(items) && items.length ? items : [{
+            codigo: '',
+            descripcion: '',
+            marca: '',
+            bodega: 'Bodega 1',
+            cantidad: 1,
+            precio: 0,
+        }];
+        safeItems.forEach(function (item) {
+            const row = addRow();
+            const fields = getRF(row);
+            if (fields.codeInput) fields.codeInput.value = item.codigo || '';
+            if (fields.descInput) fields.descInput.value = item.descripcion || '';
+            if (fields.qtyInput) fields.qtyInput.value = String(Math.max(1, parseInt(item.cantidad || 1, 10) || 1));
+            if (fields.priceInput) fields.priceInput.value = Number(item.precio || 0).toFixed(2);
+            lookupCode(row, {
+                silent: true,
+                marca: item.marca || '',
+                bodega: item.bodega || 'Bodega 1',
+                forceDesc: true,
+                forcePrice: true,
+            }).then(function () {
+                const refreshed = getRF(row);
+                if (refreshed.marcaSel && item.marca) refreshed.marcaSel.value = item.marca;
+                if (refreshed.bodegaSel && item.bodega) refreshed.bodegaSel.value = item.bodega;
+                updateRowSub(row);
+            });
+        });
+        renumberRows();
+        updateTotals();
+    }
+
+    function currentDocApiUrl(numero) {
+        const key = String(DOC_TYPE || '').trim().toLowerCase();
+        const encoded = encodeURIComponent(String(numero || '').trim());
+        if (key === 'cotizacion') return '/ventas/api/cotizacion/' + encoded;
+        if (key === 'orden_venta') return '/ventas/api/orden_venta/' + encoded;
+        if (key === 'factura') return '/ventas/api/factura/' + encoded;
+        return '/ventas/api/orden_compra/' + encoded;
+    }
+
+    function hydrateFromDocument(doc) {
+        if (!doc) return;
+        if (loadedDocumentIdInput) loadedDocumentIdInput.value = String(doc.id || 0);
+        if (docNumberInput) docNumberInput.value = doc.numero || '';
+        if (docDateInput) docDateInput.value = doc.fecha_documento || '';
+        if (docValidInput) docValidInput.value = doc.fecha_vencimiento || '';
+        if (statusInput && doc.status) statusInput.value = doc.status;
+        if (tipoDocumento && doc.tipo_documento) tipoDocumento.value = doc.tipo_documento;
+        if (notesInput) notesInput.value = doc.notes || '';
+
+        const p = doc.party || {};
+        hiddenPartyId.value = String(p.id || 0);
+        partyName.value = p.name || '';
+        partyAddress.value = p.address || '';
+        partyTelefono.value = p.telefono || '';
+        partyEmail.value = p.email || '';
+        partyRutHidden.value = p.rut || '';
+        if (rutLookup) rutLookup.value = p.rut || '';
+        setPartyStatus(PARTY_LABEL + ' cargado: ' + (p.name || ''), 'found');
+
+        setRowsFromDocument(doc.items || []);
+        if (doc.totals) {
+            if (tSubtotal) tSubtotal.textContent = doc.totals.subtotal_fmt || fmtCLP(doc.totals.subtotal || 0);
+            if (tIva) tIva.textContent = doc.totals.iva_fmt || fmtCLP(doc.totals.iva || 0);
+            if (tTotal) tTotal.textContent = doc.totals.total_fmt || fmtCLP(doc.totals.total || 0);
+        }
+    }
+
+    function loadDocument(numero) {
+        const cleanNumber = String(numero || '').trim();
+        if (!cleanNumber) return;
+        fetch(currentDocApiUrl(cleanNumber), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (response) {
+                return response.json().then(function (data) {
+                    if (!response.ok || !data.success || !data.documento) {
+                        throw new Error((data && data.message) || 'Documento no encontrado');
+                    }
+                    return data.documento;
+                });
+            })
+            .then(function (doc) {
+                hydrateFromDocument(doc);
+            })
+            .catch(function () {
+                window.alert('Documento no encontrado');
+            });
+    }
+
+    function updateSelCount() {
+        if (psSelCount) psSelCount.textContent = psSelected.size + ' seleccionado(s)';
+    }
+    function closePSModal() {
+        psModal.classList.remove('open');
+        psSelected.clear();
+        updateSelCount();
+    }
+    function renderPSRows(items) {
+        if (!psResults) return;
+        if (!items.length) {
+            psResults.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#94a3b8;">Sin resultados.</td></tr>';
+            return;
+        }
+        psResults.innerHTML = items.map(function (item) {
+            const stock = parseInt(item.variant_stock || 0, 10);
+            const tone = stock > 0 ? 'ok' : 'zero';
+            const key = itemKey(item);
+            const checked = psSelected.has(key) ? 'checked' : '';
+            const selected = psSelected.has(key) ? 'sel' : '';
+            return '<tr class="' + selected + '" data-key="' + esc(key) + '">' +
+                '<td style="text-align:center;"><input type="checkbox" class="ps-chk" data-key="' + esc(key) + '" ' + checked + '></td>' +
+                '<td><div class="ps-spill"><strong>' + esc(item.codigo) + '</strong><small>' + esc(item.oem || '') + '</small></div></td>' +
+                '<td><div class="ps-spill"><strong>' + esc(item.descripcion || '—') + '</strong><small>' + esc(item.modelo || '') + '</small></div></td>' +
+                '<td>' + esc(item.marca || '—') + '</td>' +
+                '<td>' + esc(item.bodega || 'Bodega 1') + '</td>' +
+                '<td><span class="ps-stk ' + tone + '">' + stock + ' disp.</span></td>' +
+                '<td style="text-align:right;">$' + Math.round(Number(item.precio || 0)).toLocaleString('es-CL') + '</td>' +
+                '</tr>';
+        }).join('');
+
+        psResults.querySelectorAll('.ps-chk').forEach(function (checkbox) {
+            checkbox.addEventListener('change', function () {
+                const key = checkbox.dataset.key;
+                const data = items.find(function (item) { return itemKey(item) === key; });
+                if (!data) return;
+                if (checkbox.checked) psSelected.set(key, data);
+                else psSelected.delete(key);
+                updateSelCount();
+                renderPSRows(items);
+            });
+        });
+
+        psResults.querySelectorAll('tr[data-key]').forEach(function (row) {
+            row.addEventListener('dblclick', function () {
+                const key = row.dataset.key;
+                const data = items.find(function (item) { return itemKey(item) === key; });
+                if (!data) return;
+                psSelected.clear();
+                psSelected.set(key, data);
+                applySelected();
+            });
+        });
+    }
+    function runPSSearch(term) {
+        const query = String(term || '').trim();
+        if (!psSummary) return;
+        if (query.length < 2) {
+            psSummary.textContent = 'Escribe al menos 2 caracteres.';
+            if (psResults) psResults.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:#94a3b8;">Sin búsqueda ejecutada.</td></tr>';
+            return;
+        }
+        psSummary.textContent = 'Buscando…';
+        fetch(URL_PRODUCT_SEARCH + '?q=' + encodeURIComponent(query) + '&limit=80', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                const items = (data && data.success && Array.isArray(data.items)) ? data.items : [];
+                psSummary.textContent = items.length + ' resultado(s) para "' + query + '"';
+                renderPSRows(items);
+            })
+            .catch(function (error) {
+                psSummary.textContent = 'Error: ' + error.message;
+            });
+    }
+    function openPSModal(row, preset) {
+        if (!psModal) return;
+        activeSearchRow = row || null;
+        psSelected.clear();
+        updateSelCount();
+        psModal.classList.add('open');
+        if (psInput) {
+            psInput.value = String(preset || '').trim();
+            psInput.focus();
+        }
+        runPSSearch(psInput ? psInput.value : preset);
+    }
+    function applySelected() {
+        const items = Array.from(psSelected.values());
+        if (!items.length) return;
+        items.forEach(function (item, index) {
+            const target = index === 0 && activeSearchRow ? activeSearchRow : null;
+            if (target) {
+                applyProduct(target, item, { marca: item.marca, bodega: item.bodega, forceDesc: true, forcePrice: true });
+                const fields = getRF(target);
+                if (fields.qtyInput && !parseInt(fields.qtyInput.value || '0', 10)) fields.qtyInput.value = '1';
+                updateRowSub(target);
+            } else {
+                mergeOrInsert(Object.assign({}, item, { cantidad: 1 }));
+            }
+        });
+        closePSModal();
+    }
+
+    if (rutLookup) {
+        rutLookup.dataset.rutBound = '1';
+        rutLookup.removeAttribute('disabled');
+        rutLookup.removeAttribute('readonly');
+        rutLookup.disabled = false;
+        rutLookup.readOnly = false;
+        rutLookup.style.pointerEvents = 'auto';
+        rutLookup.style.zIndex = '10';
+        rutLookup.style.position = 'relative';
+
+        const rutParent = rutLookup.parentElement;
+        if (rutParent) {
+            rutParent.style.pointerEvents = 'auto';
+            rutParent.style.position = 'relative';
+            rutParent.style.zIndex = '9';
+        }
+
+        const rutBar = rutParent ? rutParent.parentElement : null;
+        if (rutBar) {
+            rutBar.style.pointerEvents = 'auto';
+            rutBar.style.position = 'relative';
+            rutBar.style.zIndex = '8';
+        }
+
+        rutLookup.addEventListener('input', function () {
+            if (partyTimer) clearTimeout(partyTimer);
+            if (rutLookup.value.trim().length < 4) {
+                setPartyStatus('', '');
+                return;
+            }
+            partyTimer = setTimeout(function () { lookupByRut(rutLookup.value); }, 420);
+        });
+        rutLookup.addEventListener('paste', function () {
+            window.setTimeout(function () {
+                if (partyTimer) clearTimeout(partyTimer);
+                if (rutLookup.value.trim().length < 4) {
+                    setPartyStatus('', '');
+                    return;
+                }
+                partyTimer = setTimeout(function () { lookupByRut(rutLookup.value); }, 120);
+            }, 0);
+        });
+        rutLookup.addEventListener('keyup', function (event) {
+            if (event.key !== 'Enter') return;
+            if (partyStatus && partyStatus.textContent.indexOf('No encontrado') !== -1) showInlineCreate(true);
+            else lookupByRut(rutLookup.value);
+        });
+        rutLookup.addEventListener('blur', function () {
+            const formatted = (window.RutUtils && window.RutUtils.format)
+                ? window.RutUtils.format(rutLookup.value)
+                : rutLookup.value;
+            if (formatted) rutLookup.value = formatted;
+            lookupByRut(rutLookup.value);
+        });
+    }
+    if (btnSearchParty) btnSearchParty.addEventListener('click', function () { lookupByRut(rutLookup ? rutLookup.value : ''); });
+    if (btnNewParty) btnNewParty.addEventListener('click', function () { showInlineCreate(inlineCreate.hidden); });
+    if (btnSaveNewParty) btnSaveNewParty.addEventListener('click', saveNewParty);
+    if (btnCancelNew) btnCancelNew.addEventListener('click', function () { showInlineCreate(false); });
+    if (icRegion) {
+        icRegion.addEventListener('change', function () {
+            updateInlineCities(icRegion.value, '');
+        });
+    }
+    updateInlineCities(icRegion ? icRegion.value : '', icCiudad ? icCiudad.value : '');
+
+    if (docNumberInput) {
+        docNumberInput.addEventListener('keydown', function (event) {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            loadDocument(docNumberInput.value);
+        });
+        docNumberInput.addEventListener('blur', function () {
+            var typed = String(docNumberInput.value || '').trim().toUpperCase();
+            var original = String('{{ doc_number or "" }}').trim().toUpperCase();
+            /* Only search when the user changed the value to something different */
+            if (typed && typed !== original) {
+                loadDocument(typed);
+            }
+        });
+    }
+
+    if (btnConvertToOV) {
+        btnConvertToOV.addEventListener('click', function () {
+            const numero = currentDocumentNumber();
+            if (!numero) {
+                window.alert('Carga una cotizacion guardada para convertir.');
+                return;
+            }
+            postJson(endpointWithNumber(URL_CONV_CO_OV, numero), {})
+                .then(function (data) {
+                    if (data.redirect_url) {
+                        if (window._loadModule) {
+                            window._loadModule(data.redirect_url);
+                        } else {
+                            window.location.href = data.redirect_url;
+                        }
+                        return;
+                    }
+                    window.alert('Convertida a Orden de Venta: ' + ((data.documento && data.documento.numero) || ''));
+                })
+                .catch(function (error) { window.alert(error.message); });
+        });
+    }
+
+    if (btnFacturarOV) {
+        btnFacturarOV.addEventListener('click', function () {
+            const numero = currentDocumentNumber();
+            if (!numero) {
+                window.alert('Carga una orden de venta guardada para facturar.');
+                return;
+            }
+            const tipo = String((tipoDocumento && tipoDocumento.value) || 'factura').trim().toLowerCase();
+            postJson(endpointWithNumber(URL_CONV_OV_FA, numero), { tipo_documento: tipo })
+                .then(function (data) {
+                    if (data.redirect_url) {
+                        if (window._loadModule) {
+                            window._loadModule(data.redirect_url);
+                        } else {
+                            window.location.href = data.redirect_url;
+                        }
+                        return;
+                    }
+                    window.alert('Factura creada: ' + ((data.documento && data.documento.numero) || ''));
+                })
+                .catch(function (error) { window.alert(error.message); });
+        });
+    }
+
+    if (btnRecibirOC) {
+        btnRecibirOC.addEventListener('click', function () {
+            const id = currentDocumentId();
+            if (!id) {
+                window.alert('Carga una orden de compra guardada para recibir.');
+                return;
+            }
+            postJson(endpointWithId(URL_CONV_OC_ING, id), {})
+                .then(function (data) {
+                    window.alert('Ingreso registrado: ' + ((data.documento && data.documento.numero) || ''));
+                })
+                .catch(function (error) { window.alert(error.message); });
+        });
+    }
+
+    if (btnCreateNC) {
+        btnCreateNC.addEventListener('click', function () {
+            const id = currentDocumentId();
+            if (!id) {
+                window.alert('Carga una factura guardada para crear nota de credito.');
+                return;
+            }
+            const razon = window.prompt('Razon de la nota de credito:', 'Devolucion total') || 'Devolucion total';
+            postJson(endpointWithId(URL_CONV_FA_NC, id), { razon: razon })
+                .then(function (data) {
+                    const nc = data.nota_credito || {};
+                    window.alert('Nota de credito creada: ' + (nc.numero || ''));
+                })
+                .catch(function (error) { window.alert(error.message); });
+        });
+    }
+
+    if (btnTraceDoc) btnTraceDoc.addEventListener('click', openTrace);
+    if (traceClose) traceClose.addEventListener('click', closeTrace);
+    if (traceClose2) traceClose2.addEventListener('click', closeTrace);
+    if (traceModal) {
+        traceModal.addEventListener('click', function (event) {
+            if (event.target === traceModal) closeTrace();
+        });
+    }
+
+    if (itemsBody) itemsBody.querySelectorAll('.item-row').forEach(wireRow);
+    if (addRowBtn) {
+        addRowBtn.addEventListener('click', function () {
+            const row = addRow();
+            const fields = getRF(row);
+            if (fields.codeInput) fields.codeInput.focus();
+        });
+    }
+    updateTotals();
+
+    if (psRun) psRun.addEventListener('click', function () { runPSSearch(psInput ? psInput.value : ''); });
+    if (psClear) psClear.addEventListener('click', function () { if (psInput) psInput.value = ''; runPSSearch(''); });
+    if (psClose) psClose.addEventListener('click', closePSModal);
+    if (psClose2) psClose2.addEventListener('click', closePSModal);
+    if (psApply) psApply.addEventListener('click', applySelected);
+    if (psModal) psModal.addEventListener('click', function (event) { if (event.target === psModal) closePSModal(); });
+    if (psInput) {
+        psInput.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                runPSSearch(psInput.value);
+            }
+        });
+        psInput.addEventListener('input', function () {
+            if (searchTimer) clearTimeout(searchTimer);
+            searchTimer = setTimeout(function () { runPSSearch(psInput.value); }, 220);
+        });
+    }
+
+    function showInlineToast(message) {
+        const toast = document.getElementById('ventasFlashToast');
+        if (!toast) {
+            window.alert(message || 'Operación completada');
+            return;
+        }
+        toast.innerHTML = '<div>' + esc(message || 'Operación completada') + '</div>';
+        toast.style.display = 'block';
+        window.setTimeout(function () {
+            toast.style.display = 'none';
+        }, 2600);
+    }
+
+    if (form) {
+        form.addEventListener('submit', function (event) {
+            const partyId = parseInt(hiddenPartyId ? hiddenPartyId.value : '0', 10) || 0;
+            const needsParty = DOC_TYPE === 'cotizacion' || DOC_TYPE === 'orden_venta' || DOC_TYPE === 'factura' || DOC_TYPE === 'orden_compra';
+            if (needsParty && !partyId) {
+                event.preventDefault();
+                window.alert('Debes buscar o crear un ' + PARTY_KIND + ' antes de guardar el documento.');
+                if (rutLookup) rutLookup.focus();
+                return;
+            }
+            itemsBody.querySelectorAll('.item-row').forEach(updateRowSub);
+
+            var ajaxDocTypes = ['cotizacion', 'orden_venta', 'orden_compra', 'factura'];
+            if (ajaxDocTypes.indexOf(DOC_TYPE) === -1) {
+                return;
+            }
+
+            event.preventDefault();
+            const formData = new FormData(form);
+            fetch(form.action || window.location.pathname, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: formData
+            })
+                .then(function (response) {
+                    return response.json().then(function (data) {
+                        if (!response.ok || !data.success) {
+                            throw new Error((data && data.message) || 'No se pudo guardar el documento');
+                        }
+                        return data;
+                    });
+                })
+                .then(function (data) {
+                    if (docNumberInput && data.doc_number) {
+                        docNumberInput.value = data.doc_number;
+                    }
+                    if (loadedDocumentIdInput) {
+                        loadedDocumentIdInput.value = loadedDocumentIdInput.value || '0';
+                    }
+                    showInlineToast(data.message || 'Documento guardado correctamente');
+                })
+                .catch(function (error) {
+                    window.alert(error.message || 'No se pudo guardar el documento');
+                });
+        });
+    }
+})();
+</script>
+
+{% if doc_id and doc_type in ['orden_venta', 'factura'] %}
+<script>
+(function () {
+    'use strict';
+    const DOC_ID = {{ doc_id|tojson }};
+    const PARTY_EMAIL = {{ (party_email or '')|tojson }};
+    const PARTY_PHONE = {{ (party_phone or '')|tojson }};
+    const DOC_NUMERO = {{ (doc_number or '')|tojson }};
+    const DOC_TIPO = {{ (doc_type or '')|tojson }};
+
+    // ── PAYMENT MODAL ──────────────────────────────────────────
+    const btnRegistrarPago = document.getElementById('btnRegistrarPago');
+    const pagoModal = document.getElementById('pagoModal');
+    const pagoClose = document.getElementById('pagoModalClose');
+    const pagoCancel = document.getElementById('pagoModalCancel');
+    const pagoConfirm = document.getElementById('pagoModalConfirm');
+    const pagoError = document.getElementById('pagoModalError');
+
+    if (btnRegistrarPago && pagoModal) {
+        btnRegistrarPago.addEventListener('click', () => {
+            pagoModal.classList.add('open');
+        });
+        [pagoClose, pagoCancel].forEach(el => el && el.addEventListener('click', closePagoModal));
+
+        pagoConfirm && pagoConfirm.addEventListener('click', async () => {
+            const metodo = document.getElementById('selectMetodoPago').value;
+            pagoError.style.display = 'none';
+            pagoConfirm.disabled = true;
+            try {
+                const res = await fetch(`/ventas/api/documento/${DOC_ID}/pago`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ metodo_pago: metodo }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    closePagoModal();
+                    const badge = document.getElementById('pagoStatusBadge');
+                    const wrap = document.getElementById('pagoStatusWrap');
+                    if (badge) {
+                        badge.textContent = 'Pagado – ' + (data.metodo_label || metodo.replace(/_/g, ' '));
+                        badge.className = 'badge badge-ok';
+                    }
+                    if (btnRegistrarPago) btnRegistrarPago.remove();
+                } else {
+                    pagoError.textContent = data.error || 'Error al registrar pago';
+                    pagoError.style.display = 'block';
+                }
+            } catch (e) {
+                pagoError.textContent = 'Error de red al registrar pago';
+                pagoError.style.display = 'block';
+            } finally {
+                pagoConfirm.disabled = false;
+            }
+        });
+    }
+
+    function closePagoModal() {
+        if (pagoModal) { pagoModal.classList.remove('open'); }
+    }
+})();
+</script>
+{% endif %}
+
+<script>
+// Global document actions used by _erp_doc_actions.html
+(function () {
+    'use strict';
+
+    function withActionButtonState(actionKey, busy) {
+        const selector = `.doc-action-btn[data-action="${actionKey}"]`;
+        const btn = document.querySelector(selector);
+        if (!btn) return;
+        btn.disabled = !!busy;
+        btn.classList.toggle('is-loading', !!busy);
+    }
+
+    function notifyError(message) {
+        window.alert(message || 'No se pudo completar la acción');
+    }
+
+    function getActionMeta(docIdArg) {
+        const actions = document.querySelector('.doc-actions');
+        const docNumberInput = document.getElementById('doc_number');
+        const form = document.getElementById('erpDocForm');
+        const loadedIdInput = document.getElementById('loaded_document_id');
+
+        const formDocType = form ? (form.getAttribute('data-doc-type') || '') : '';
+        const formDocNumber = docNumberInput ? String(docNumberInput.value || '').trim() : '';
+        const loadedId = loadedIdInput ? String(loadedIdInput.value || '').trim() : '';
+
+        const docId = String(docIdArg || loadedId || (actions ? actions.dataset.docId : '') || '').trim();
+        const docType = String((actions ? actions.dataset.docType : '') || formDocType || '').trim();
+        const docNumber = String((actions ? actions.dataset.docNumber : '') || formDocNumber || '').trim();
+
+        return {
+            docId,
+            docType,
+            docNumber,
+            clientEmail: actions ? (actions.dataset.clientEmail || '') : '',
+            clientPhone: actions ? (actions.dataset.clientPhone || '') : '',
+        };
+    }
+
+    window.sendEmail = async function sendEmail(docId) {
+        const meta = getActionMeta(docId);
+        withActionButtonState('email', true);
+        try {
+            if (meta.docId) {
+                const response = await fetch(`/ventas/api/enviar_email/${encodeURIComponent(meta.docId)}`, { method: 'POST' });
+                const data = await response.json().catch(function () { return { ok: false, error: 'Respuesta inválida del servidor' }; });
+                if (!response.ok || !data.ok) {
+                    notifyError(data.error || 'No se pudo enviar el email');
+                    return;
+                }
+                window.alert(data.message || 'Email sent');
+                return;
+            }
+            if (!meta.docType || !meta.docNumber) {
+                notifyError('Guarda o carga el documento antes de enviarlo por correo.');
+                return;
+            }
+            const response = await fetch(`/ventas/api/enviar_email/${encodeURIComponent(meta.docType)}/${encodeURIComponent(meta.docNumber)}`, { method: 'POST' });
+            const data = await response.json().catch(function () { return { ok: false, error: 'Respuesta inválida del servidor' }; });
+            if (!response.ok || !data.ok) {
+                notifyError(data.error || 'No se pudo enviar el email');
+                return;
+            }
+            window.alert(data.message || 'Email sent');
+        } catch (error) {
+            notifyError(error.message || 'No se pudo enviar el email');
+        } finally {
+            withActionButtonState('email', false);
+        }
+    };
+
+    window.sendWhatsApp = function sendWhatsApp(docId) {
+        const meta = getActionMeta(docId);
+        if (meta.docId) {
+            withActionButtonState('whatsapp', true);
+            fetch(`/ventas/api/whatsapp/${encodeURIComponent(meta.docId)}?format=json`)
+                .then(function (response) {
+                    return response.json().then(function (data) {
+                        if (!response.ok || !data.ok) {
+                            throw new Error((data && data.error) || 'No se pudo generar mensaje de WhatsApp');
+                        }
+                        return data;
+                    });
+                })
+                .then(function (data) {
+                    if (!data.whatsapp_url) {
+                        throw new Error('No se recibió el link de WhatsApp');
+                    }
+                    window.open(data.whatsapp_url, '_blank', 'noopener,noreferrer');
+                })
+                .catch(function (error) {
+                    notifyError(error.message || 'No se pudo abrir WhatsApp');
+                })
+                .finally(function () {
+                    withActionButtonState('whatsapp', false);
+                });
+            return;
+        }
+        if (!meta.docType || !meta.docNumber) {
+            notifyError('Guarda o carga el documento antes de enviarlo por WhatsApp.');
+            return;
+        }
+        withActionButtonState('whatsapp', true);
+        fetch(`/ventas/api/whatsapp/${encodeURIComponent(meta.docType)}/${encodeURIComponent(meta.docNumber)}`)
+            .then(function (response) {
+                return response.json().then(function (data) {
+                    if (!response.ok || !data.ok) {
+                        throw new Error((data && data.error) || 'No se pudo generar mensaje de WhatsApp');
+                    }
+                    return data;
+                });
+            })
+            .then(function (data) {
+                if (!data.whatsapp_url) {
+                    throw new Error('No se recibió el link de WhatsApp');
+                }
+                window.open(data.whatsapp_url, '_blank', 'noopener,noreferrer');
+            })
+            .catch(function (error) {
+                notifyError(error.message || 'No se pudo abrir WhatsApp');
+            })
+            .finally(function () {
+                withActionButtonState('whatsapp', false);
+            });
+    };
+
+    window.resendDocument = async function resendDocument(docId) {
+        const meta = getActionMeta(docId);
+        withActionButtonState('resend', true);
+        try {
+            if (meta.docId) {
+                const response = await fetch(`/ventas/api/reenviar/${encodeURIComponent(meta.docId)}`, { method: 'POST' });
+                const data = await response.json().catch(function () { return { ok: false, error: 'Respuesta inválida del servidor' }; });
+                if (!response.ok || !data.ok) {
+                    notifyError(data.error || 'No se pudo reenviar el documento');
+                    return;
+                }
+                window.alert(data.message || 'Document resent');
+                return;
+            }
+            await window.sendEmail(docId);
+        } finally {
+            withActionButtonState('resend', false);
+        }
+    };
+
+    function bindDocumentActionButtons() {
+        const container = document.querySelector('.doc-actions');
+        if (!container) return;
+
+        const docIdFromData = (container.dataset.docId || '').trim();
+        container.querySelectorAll('.doc-action-btn[data-action]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const action = (btn.dataset.action || '').trim();
+                if (action === 'email') {
+                    window.sendEmail(docIdFromData);
+                    return;
+                }
+                if (action === 'whatsapp') {
+                    window.sendWhatsApp(docIdFromData);
+                    return;
+                }
+                if (action === 'resend') {
+                    window.resendDocument(docIdFromData);
+                    return;
+                }
+                notifyError('Acción desconocida');
+            });
+        });
+    }
+
+    bindDocumentActionButtons();
+})();
+</script>

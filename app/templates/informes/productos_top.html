@@ -1,0 +1,47 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Productos más vendidos | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Productos más vendidos</h1>
+    <p class="page-subtitle">Top 50 por unidades — facturas y boletas no anuladas</p>
+  </div>
+  <div class="topbar-actions">
+    <a class="link-btn" href="{{ url_for('informes.index') }}">← Informes</a>
+  </div>
+</div>
+
+<div style="overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;">
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">#</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Código</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Descripción</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Unidades vendidas</th>
+        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Total ventas</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in productos %}
+      <tr>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;">
+          {% if loop.index <= 3 %}
+          <span style="font-weight:800;color:{% if loop.index==1 %}#d97706{% elif loop.index==2 %}#64748b{% else %}#b45309{% endif %};">{{ loop.index }}</span>
+          {% else %}
+          <span style="color:#64748b;">{{ loop.index }}</span>
+          {% endif %}
+        </td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;font-weight:600;">{{ p.codigo }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;">{{ p.descripcion[:60] }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700;">{{ p.qty }}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;text-align:right;color:#1d4ed8;font-weight:700;">${{ '{:,.0f}'.format(p.venta).replace(',', '.') }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" style="padding:20px;text-align:center;color:#64748b;">Sin facturas registradas.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

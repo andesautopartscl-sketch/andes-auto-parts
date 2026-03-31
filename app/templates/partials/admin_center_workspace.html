@@ -1,0 +1,640 @@
+{% set options_modal_role = ((usuario_rol if usuario_rol else session.get('usuario_rol') or session.get('rol', '')) | lower) %}
+{% if 'admin' in options_modal_role %}
+<style>
+.options-modal-content {
+	padding: 20px;
+}
+
+.options-header h2 {
+	margin: 0;
+}
+
+.usuarios-toolbar {
+	display: flex;
+	gap: 10px;
+	margin: 15px 0;
+	flex-wrap: wrap;
+}
+
+.options-meta {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid #eef2f7;
+}
+.meta-left {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+.meta-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	border-radius: 999px;
+	border: 1px solid #dbe3ef;
+	background: #f8fafc;
+	font-size: 12px;
+	font-weight: 800;
+	color: #0f172a;
+}
+.meta-chip strong {
+	font-weight: 900;
+}
+.meta-status {
+	font-size: 13px;
+	color: #64748b;
+}
+
+.tabla-container {
+	overflow-x: auto;
+}
+
+.tabla-usuarios {
+	width: 100%;
+	min-width: 900px;
+	border-collapse: collapse;
+}
+
+.tabla-usuarios th,
+.tabla-usuarios td {
+	padding: 10px;
+	border-bottom: 1px solid #eee;
+}
+.tabla-usuarios td {
+	white-space: normal;
+	overflow: visible;
+	text-overflow: clip;
+}
+
+.acciones {
+	white-space: nowrap;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 160px;
+}
+
+.options-modal {
+	position: fixed;
+	inset: 0;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	padding: 18px;
+	background: rgba(15, 23, 42, 0.58);
+	backdrop-filter: blur(6px);
+	z-index: 1200;
+}
+
+.options-modal-box {
+	max-width: 1120px;
+	width: 96%;
+	max-height: calc(100vh - 36px);
+	padding: 0;
+	overflow: hidden;
+	border: 1px solid #d7dee8;
+	border-radius: 16px;
+	background: #ffffff;
+	box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
+}
+
+.options-modal-shell {
+	display: flex;
+	flex-direction: column;
+	max-height: calc(100vh - 36px);
+}
+
+.options-modal-body {
+	overflow-y: auto;
+}
+
+.options-modal-close {
+	width: 38px;
+	height: 38px;
+	border: 1px solid #d7dee8;
+	border-radius: 10px;
+	background: #ffffff;
+	color: #334155;
+	font-size: 20px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.options-modal-close:hover {
+	background: #f8fafc;
+}
+
+.options-submodal {
+	position: fixed;
+	inset: 0;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	padding: 18px;
+	background: rgba(15, 23, 42, 0.52);
+	backdrop-filter: blur(6px);
+	z-index: 1300;
+}
+.options-submodal.is-open { display: flex; }
+.submodal-card {
+	width: min(860px, 96vw);
+	max-height: calc(100vh - 36px);
+	overflow: auto;
+	background: #fff;
+	border: 1px solid #d7dee8;
+	border-radius: 16px;
+	box-shadow: 0 30px 80px rgba(15, 23, 42, 0.28);
+	padding: 18px;
+}
+.submodal-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 14px;
+}
+.submodal-head h3 { margin: 0; font-size: 18px; }
+.submodal-head p { margin: 6px 0 0; color: #64748b; font-size: 13px; }
+.submodal-close {
+	width: 38px;
+	height: 38px;
+	border: 1px solid #d7dee8;
+	border-radius: 10px;
+	background: #ffffff;
+	color: #334155;
+	font-size: 20px;
+	line-height: 1;
+	cursor: pointer;
+}
+.submodal-close:hover { background: #f8fafc; }
+.submodal-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+.submodal-grid .field { display: flex; flex-direction: column; gap: 6px; }
+.submodal-grid label { font-size: 12px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: .04em; }
+.submodal-grid input,
+.submodal-grid select {
+	height: 40px;
+	border-radius: 10px;
+	border: 1px solid #d7dee8;
+	padding: 0 12px;
+	font-size: 14px;
+}
+.field-full { grid-column: 1 / -1; }
+.submodal-actions {
+	display: flex;
+	gap: 10px;
+	justify-content: flex-end;
+	margin-top: 14px;
+	flex-wrap: wrap;
+}
+.submodal-msg {
+	margin-top: 10px;
+	font-size: 13px;
+	color: #64748b;
+}
+.submodal-msg.is-error { color: #b91c1c; }
+.submodal-msg.is-success { color: #166534; }
+@media (max-width: 900px) {
+	.submodal-grid { grid-template-columns: 1fr; }
+}
+
+.usuarios-toolbar input,
+.usuarios-toolbar select {
+	height: 38px;
+	padding: 0 10px;
+	border-radius: 8px;
+	border: 1px solid #d7dee8;
+	font-size: 13px;
+}
+
+.usuarios-toolbar input {
+	flex: 1;
+	min-width: 220px;
+}
+
+.usuarios-toolbar button {
+	height: 38px;
+	padding: 0 14px;
+	border-radius: 8px;
+	border: 1px solid #d7dee8;
+	background: #f8fafc;
+	color: #0f172a;
+	font-size: 13px;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.usuarios-toolbar button:hover {
+	background: #eef2f7;
+}
+
+#optionsCreateUserBtn {
+	background: #0f172a;
+	color: #ffffff;
+	border-color: #0f172a;
+}
+
+#optionsCreateUserBtn:hover {
+	background: #1e293b;
+}
+
+.tabla-usuarios thead th {
+	background: #f8fafc;
+	color: #475569;
+	font-size: 12px;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.tabla-usuarios tbody tr:hover {
+	background: #f8fbff;
+}
+
+.action-btn {
+	border: 1px solid #d7dee8;
+	padding: 6px 10px;
+	border-radius: 7px;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+	background: #f8fafc;
+}
+.action-btn.icon {
+	width: 34px;
+	height: 34px;
+	padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 16px;
+	line-height: 1;
+}
+
+.action-btn.edit {
+	background: #e0f2fe;
+	color: #075985;
+	border-color: #bae6fd;
+}
+
+.action-btn.toggle {
+	background: #fef9c3;
+	color: #854d0e;
+	border-color: #fde68a;
+}
+
+.action-btn.delete {
+	background: #fee2e2;
+	color: #991b1b;
+	border-color: #fecaca;
+}
+.reset-section {
+	margin-top: 18px;
+	padding-top: 12px;
+	border-top: 1px solid #eef2f7;
+}
+.reset-section h3 {
+	margin: 0 0 8px;
+	font-size: 15px;
+	color: #0f172a;
+}
+.reset-hint {
+	margin: 0 0 10px;
+	font-size: 12px;
+	color: #64748b;
+}
+.reset-row-note {
+	font-size: 12px;
+	color: #64748b;
+}
+
+.estado.activo {
+	color: #16a34a;
+	font-weight: 700;
+}
+
+.estado.inactivo {
+	color: #dc2626;
+	font-weight: 700;
+}
+
+.selected {
+	background: #e2ecff !important;
+}
+</style>
+
+<div id="optionsModal" class="modal options-modal" hidden style="display:none;"
+	 data-usuarios-api-url="{{ url_for('seguridad.api_usuarios') }}"
+	 data-roles-api-url="{{ url_for('seguridad.api_roles') }}"
+	 data-geo-api-url="{{ url_for('seguridad.api_geo_chile') }}"
+	 data-usuarios-crear-url="{{ url_for('seguridad.api_crear_usuario') }}"
+	 data-usuarios-get-url-template="{{ url_for('seguridad.api_obtener_usuario', id=0) }}"
+	 data-usuarios-edit-url-template="{{ url_for('seguridad.api_editar_usuario', id=0) }}"
+	 data-usuarios-toggle-url-template="{{ url_for('seguridad.api_toggle_usuario', id=0) }}"
+	 data-usuarios-unlock-url-template="{{ url_for('seguridad.api_unlock_usuario', id=0) }}"
+	 data-usuarios-delete-url-template="{{ url_for('seguridad.api_eliminar_usuario', id=0) }}"
+	 data-password-reset-api-url="{{ url_for('seguridad.api_password_reset_requests') }}"
+	 data-password-reset-resolve-url-template="{{ url_for('seguridad.api_password_reset_resolve', req_id=0) }}">
+	<div class="modal-box options-modal-box" role="dialog" aria-modal="true" aria-labelledby="optionsModalTitle">
+		<div class="options-modal-shell">
+			<div class="options-modal-body">
+				<div class="options-modal-content">
+					<div class="options-header" style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+						<div>
+							<h2 id="optionsModalTitle">Opciones administrativas</h2>
+							<p>Gestion completa de usuarios del sistema</p>
+						</div>
+						<button type="button" class="options-modal-close" data-modal-close="options" aria-label="Cerrar modal de opciones">x</button>
+					</div>
+
+					<div class="options-meta">
+						<div class="meta-left">
+							<span class="meta-chip">Usuarios: <strong id="optionsUsersCount">0</strong></span>
+							<span class="meta-chip">Activos: <strong id="optionsUsersActiveCount">0</strong></span>
+							<span class="meta-chip">Inactivos: <strong id="optionsUsersInactiveCount">0</strong></span>
+						</div>
+						<div class="meta-status" id="optionsUsersStatus">Listo</div>
+					</div>
+
+					<div class="usuarios-toolbar">
+						<input type="text" id="searchUsuarios" placeholder="Buscar usuario..." />
+						<select id="filterEstado">
+							<option value="all">Todos</option>
+							<option value="activo">Activos</option>
+							<option value="inactivo">Inactivos</option>
+						</select>
+
+						<button id="optionsCreateUserBtn" onclick="if (window.abrirCrearUsuario) { abrirCrearUsuario(); }">Crear usuario</button>
+						<button data-options-refresh-users="1" onclick="if (window.cargarUsuarios) { cargarUsuarios(); } else if (window.loadOptionsUsers) { loadOptionsUsers(true); }">Actualizar</button>
+					</div>
+
+					<div class="tabla-container">
+						<table class="tabla-usuarios">
+							<thead>
+								<tr>
+									<th>Nombre</th>
+									<th>Usuario</th>
+									<th>Rol</th>
+									<th>Estado</th>
+									<th>&Uacute;ltima actividad</th>
+									<th>Acciones</th>
+								</tr>
+							</thead>
+							<tbody id="usuariosTableBody"></tbody>
+						</table>
+					</div>
+
+					<div class="reset-section">
+						<h3>Solicitudes de cambio de contraseña</h3>
+						<p class="reset-hint">Las solicitudes llegan aquí y solo administración asigna la nueva clave.</p>
+						<div class="tabla-container">
+							<table class="tabla-usuarios">
+								<thead>
+									<tr>
+										<th>Usuario</th>
+										<th>Rol</th>
+										<th>Solicitado</th>
+										<th>Motivo</th>
+										<th>Estado</th>
+										<th>Acciones</th>
+									</tr>
+								</thead>
+								<tbody id="passwordResetTableBody"></tbody>
+							</table>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div id="optionsUserCreateModal" class="options-submodal" aria-hidden="true">
+	<div class="submodal-card" role="dialog" aria-modal="true" aria-labelledby="optionsUserCreateTitle">
+		<div class="submodal-head">
+			<div>
+				<h3 id="optionsUserCreateTitle">Crear usuario</h3>
+				<p>Completa los datos y guarda el nuevo usuario del sistema.</p>
+			</div>
+			<button type="button" class="submodal-close" data-options-create-close="1" aria-label="Cerrar">&times;</button>
+		</div>
+
+		<form id="optionsUserCreateForm" autocomplete="off" novalidate>
+			<div class="submodal-grid">
+				<div class="field">
+					<label>Nombre</label>
+					<input name="nombre" required placeholder="Ej: Juan Pérez">
+				</div>
+				<div class="field">
+					<label>Usuario</label>
+					<input name="usuario" required placeholder="Ej: jperez">
+				</div>
+				<div class="field">
+					<label>Contraseña</label>
+					<input name="password" type="password" required placeholder="••••••••">
+				</div>
+				<div class="field">
+					<label>Rol</label>
+					<select name="rol_id" id="optionsCreateRolSelect" required>
+						<option value="">Cargando roles...</option>
+					</select>
+				</div>
+				<div class="field">
+					<label>Correo</label>
+					<input name="correo" type="email" placeholder="correo@empresa.cl">
+				</div>
+				<div class="field">
+					<label>Teléfono</label>
+					<input name="telefono" placeholder="+56 9 1234 5678">
+				</div>
+				<div class="field">
+					<label>Región</label>
+					<select name="region" id="optionsCreateRegionSelect">
+						<option value="">Cargando regiones...</option>
+					</select>
+				</div>
+				<div class="field">
+					<label>Ciudad / Comuna</label>
+					<select name="comuna" id="optionsCreateComunaSelect" disabled>
+						<option value="">Selecciona región primero</option>
+					</select>
+				</div>
+				<div class="field field-full">
+					<label>Dirección</label>
+					<input name="direccion" placeholder="Dirección manual (calle, número, depto)">
+				</div>
+				<div class="field">
+					<label>Género</label>
+					<select name="genero">
+						<option value="">—</option>
+						<option value="Masculino">Masculino</option>
+						<option value="Femenino">Femenino</option>
+					</select>
+				</div>
+				<div class="field">
+					<label>Fecha de nacimiento</label>
+					<input name="fecha_nacimiento" type="date">
+				</div>
+				<div class="field field-full">
+					<label>RUT</label>
+					<input name="rut" placeholder="12.345.678-5">
+				</div>
+			</div>
+
+			<div class="submodal-actions">
+				<button type="button" class="action-btn" data-options-create-close="1">Cancelar</button>
+				<button type="submit" class="action-btn edit" id="optionsCreateSubmitBtn">Crear usuario</button>
+			</div>
+			<div class="submodal-msg" id="optionsCreateMsg"></div>
+		</form>
+	</div>
+</div>
+
+<div id="optionsUserEditModal" class="options-submodal" aria-hidden="true">
+	<div class="submodal-card" role="dialog" aria-modal="true" aria-labelledby="optionsUserEditTitle">
+		<div class="submodal-head">
+			<div>
+				<h3 id="optionsUserEditTitle">Editar usuario</h3>
+				<p id="optionsUserEditSubtitle">Actualiza los datos del usuario seleccionado.</p>
+			</div>
+			<button type="button" class="submodal-close" data-options-edit-close="1" aria-label="Cerrar">&times;</button>
+		</div>
+
+		<form id="optionsUserEditForm" autocomplete="off" novalidate>
+			<input type="hidden" name="id" id="optionsEditId">
+			<div class="submodal-grid">
+				<div class="field">
+					<label>Nombre</label>
+					<input name="nombre" id="optionsEditNombre" required>
+				</div>
+				<div class="field">
+					<label>Usuario</label>
+					<input name="usuario" id="optionsEditUsuario" required>
+				</div>
+				<div class="field">
+					<label>Contraseña (opcional)</label>
+					<input name="password" id="optionsEditPassword" type="password" placeholder="Dejar vacío para no cambiar">
+				</div>
+				<div class="field">
+					<label>Rol</label>
+					<select name="rol_id" id="optionsEditRolSelect" required>
+						<option value="">Cargando roles...</option>
+					</select>
+				</div>
+				<div class="field">
+					<label>Correo</label>
+					<input name="correo" id="optionsEditCorreo" type="email" placeholder="correo@empresa.cl">
+				</div>
+				<div class="field">
+					<label>Teléfono</label>
+					<input name="telefono" id="optionsEditTelefono" placeholder="+56 9 1234 5678">
+				</div>
+				<div class="field">
+					<label>Región</label>
+					<select name="region" id="optionsEditRegionSelect">
+						<option value="">Cargando regiones...</option>
+					</select>
+				</div>
+				<div class="field">
+					<label>Ciudad / Comuna</label>
+					<select name="comuna" id="optionsEditComunaSelect" disabled>
+						<option value="">Selecciona región primero</option>
+					</select>
+				</div>
+				<div class="field field-full">
+					<label>Dirección</label>
+					<input name="direccion" id="optionsEditDireccion" placeholder="Dirección manual (calle, número, depto)">
+				</div>
+				<div class="field">
+					<label>Género</label>
+					<select name="genero" id="optionsEditGenero">
+						<option value="">—</option>
+						<option value="Masculino">Masculino</option>
+						<option value="Femenino">Femenino</option>
+					</select>
+				</div>
+				<div class="field">
+					<label>Fecha de nacimiento</label>
+					<input name="fecha_nacimiento" id="optionsEditFechaNac" type="date">
+				</div>
+				<div class="field field-full">
+					<label>RUT</label>
+					<input name="rut" id="optionsEditRut" placeholder="12.345.678-5">
+				</div>
+				<div class="field field-full" style="display:flex;flex-direction:row;align-items:center;gap:10px;margin-top:4px;">
+					<input type="checkbox" id="optionsEditActivo" style="width:auto;height:auto;">
+					<label for="optionsEditActivo" style="margin:0;">Activo</label>
+				</div>
+				<div class="field field-full" style="display:flex;flex-direction:column;gap:8px;">
+					<label style="margin:0;">Permisos específicos</label>
+					<label style="display:flex; align-items:center; gap:8px; font-size:13px; text-transform:none; letter-spacing:0; font-weight:600; color:#334155;">
+						<input type="checkbox" id="optionsEditPermFinanzas" style="width:auto;height:auto;">
+						<span>Puede ver módulo Finanzas / Contabilidad</span>
+					</label>
+					<label style="display:flex; align-items:center; gap:8px; font-size:13px; text-transform:none; letter-spacing:0; font-weight:600; color:#334155;">
+						<input type="checkbox" id="optionsEditPermPrecioMayor" style="width:auto;height:auto;">
+						<span>Puede ver precio mayor (si no, solo precio final)</span>
+					</label>
+				</div>
+			</div>
+
+			<div class="submodal-actions">
+				<button type="button" class="action-btn" data-options-edit-close="1">Cancelar</button>
+				<button type="submit" class="action-btn edit" id="optionsEditSubmitBtn">Guardar cambios</button>
+			</div>
+			<div class="submodal-msg" id="optionsEditMsg"></div>
+		</form>
+	</div>
+</div>
+
+<div id="optionsPasswordResetModal" class="options-submodal" aria-hidden="true">
+	<div class="submodal-card" role="dialog" aria-modal="true" aria-labelledby="optionsPasswordResetTitle">
+		<div class="submodal-head">
+			<div>
+				<h3 id="optionsPasswordResetTitle">Atender solicitud de contraseña</h3>
+				<p>Asigna una nueva clave al usuario o rechaza la solicitud.</p>
+			</div>
+			<button type="button" class="submodal-close" data-options-reset-close="1" aria-label="Cerrar">&times;</button>
+		</div>
+
+		<form id="optionsPasswordResetForm" autocomplete="off" novalidate>
+			<input type="hidden" id="optionsResetId">
+			<div class="submodal-grid">
+				<div class="field">
+					<label>Usuario</label>
+					<input id="optionsResetUsuario" readonly>
+				</div>
+				<div class="field">
+					<label>Rol</label>
+					<input id="optionsResetRol" readonly>
+				</div>
+				<div class="field field-full">
+					<label>Nueva contraseña</label>
+					<input id="optionsResetPassword" type="password" minlength="6" required placeholder="Mínimo 6 caracteres">
+				</div>
+				<div class="field field-full">
+					<label>Nota administrativa (opcional)</label>
+					<input id="optionsResetNote" maxlength="255" placeholder="Observación interna">
+				</div>
+			</div>
+			<div class="submodal-actions">
+				<button type="button" class="action-btn" data-options-reset-close="1">Cancelar</button>
+				<button type="button" class="action-btn delete" id="optionsResetRejectBtn">Rechazar</button>
+				<button type="submit" class="action-btn edit" id="optionsResetSaveBtn">Asignar nueva clave</button>
+			</div>
+			<div class="submodal-msg" id="optionsResetMsg"></div>
+		</form>
+	</div>
+</div>
+
+{% endif %}

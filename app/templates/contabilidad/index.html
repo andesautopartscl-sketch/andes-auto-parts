@@ -1,0 +1,219 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Finanzas | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.conta-wrap { display:grid; gap:18px; }
+.conta-head {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.conta-panel {
+  background:#fff;
+  border:1px solid #e2e8f0;
+  border-radius:16px;
+  box-shadow:0 10px 20px rgba(15,23,42,0.05);
+  overflow:hidden;
+}
+.conta-panel-head {
+  padding:14px 20px;
+  border-bottom:1px solid #e2e8f0;
+  background:#f8fafc;
+}
+.conta-table-wrap { overflow-x:auto; }
+table.conta-table {
+  width:100%;
+  border-collapse:collapse;
+}
+table.conta-table th,
+table.conta-table td {
+  padding:11px 13px;
+  text-align:left;
+  font-size:13px;
+  border-bottom:1px solid #eef2f7;
+}
+table.conta-table th {
+  background:#f8fafc;
+  color:#64748b;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  font-size:11px;
+}
+table.conta-table tr:hover td { background:#f8fbff; }
+.badge {
+  display:inline-flex;
+  align-items:center;
+  padding:3px 9px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  border:1px solid transparent;
+}
+.badge.green { background:#dcfce7; color:#166534; border-color:#86efac; }
+.badge.slate { background:#e2e8f0; color:#334155; border-color:#cbd5e1; }
+.modal-overlay {
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(15,23,42,.45);
+  z-index:1000;
+  align-items:center;
+  justify-content:center;
+}
+.modal-card {
+  background:#fff;
+  border-radius:18px;
+  padding:28px;
+  max-width:480px;
+  width:95%;
+  box-shadow:0 24px 60px rgba(15,23,42,.22);
+}
+.form-group { display:flex; flex-direction:column; gap:5px; }
+.form-group label { font-size:12px; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.04em; }
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width:100%;
+  border:1px solid #dbe3ef;
+  border-radius:8px;
+  padding:9px 11px;
+  font-size:13px;
+}
+.btn.sm { padding:5px 10px; font-size:12px; border-radius:7px; }
+.btn.outline { background:transparent; border-color:#dbe3ef; color:#64748b; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Finanzas</h1>
+    <p class="page-subtitle">Plan de cuentas</p>
+  </div>
+  <div class="topbar-actions">
+    <a class="link-btn" href="{{ url_for('contabilidad.movimientos') }}">🧾 Libro diario</a>
+    <button class="btn btn-primary" id="btnNuevaCuenta" type="button">+ Nueva cuenta</button>
+  </div>
+</div>
+
+<div class="conta-wrap">
+  <div class="conta-head">
+    <div>
+      <h2 style="font-size:20px;">Plan de cuentas</h2>
+      <p style="color:var(--muted);font-size:13px;margin-top:3px;">Estructura contable base — fundación para libro diario y mayor</p>
+    </div>
+  </div>
+
+  <!-- Accounts grouped by type -->
+  {% for tipo in tipos_cuenta %}
+  {% set cuentas_tipo = cuentas|selectattr('tipo', 'equalto', tipo)|list %}
+  {% if cuentas_tipo %}
+  <section class="conta-panel">
+    <div class="conta-panel-head">
+      <h3 style="font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">{{ tipo }}</h3>
+    </div>
+    <div class="conta-table-wrap">
+      <table class="conta-table">
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Nombre</th>
+            <th>Descripción</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cuenta in cuentas_tipo %}
+          <tr>
+            <td><strong>{{ cuenta.codigo }}</strong></td>
+            <td>{{ cuenta.nombre }}</td>
+            <td>{{ cuenta.descripcion or '—' }}</td>
+            <td>
+              {% if cuenta.activo %}<span class="badge green">Activa</span>
+              {% else %}<span class="badge slate">Inactiva</span>{% endif %}
+            </td>
+            <td>
+              <form method="post" action="{{ url_for('contabilidad.cuenta_toggle', cid=cuenta.id) }}" style="display:inline;">
+                <button class="btn btn-secondary sm" type="submit">
+                  {% if cuenta.activo %}Desactivar{% else %}Activar{% endif %}
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+  {% endfor %}
+
+  {% if not cuentas %}
+  <div class="conta-panel" style="padding:40px;text-align:center;color:#64748b;">
+    <p style="font-size:16px;margin-bottom:8px;">No hay cuentas contables registradas.</p>
+    <p>Crea el plan de cuentas básico para comenzar.</p>
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- Modal: Nueva cuenta -->
+<div id="modalNuevaCuenta" class="modal-overlay">
+  <div class="modal-card">
+    <h3 style="margin:0 0 18px;font-size:18px;">Nueva cuenta contable</h3>
+    <form method="post" action="{{ url_for('contabilidad.cuenta_nueva') }}">
+      <div style="display:grid;gap:12px;">
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;">
+          <div class="form-group">
+            <label>Código</label>
+            <input type="text" name="codigo" placeholder="Ej: 1.1.01" required>
+          </div>
+          <div class="form-group">
+            <label>Nombre</label>
+            <input type="text" name="nombre" placeholder="Ej: Caja" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Tipo</label>
+          <select name="tipo" required>
+            <option value="">-- Seleccionar tipo --</option>
+            {% for t in tipos_cuenta %}
+            <option value="{{ t }}">{{ t }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Descripción (opcional)</label>
+          <textarea name="descripcion" rows="2" style="resize:vertical;"></textarea>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">
+          <button type="button" class="btn btn-secondary" id="btnCancelarCuenta">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Crear cuenta</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const modal = document.getElementById('modalNuevaCuenta');
+  document.getElementById('btnNuevaCuenta').addEventListener('click', () => {
+    modal.style.display = 'flex';
+  });
+  document.getElementById('btnCancelarCuenta').addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
+  modal.addEventListener('click', e => {
+    if (e.target === modal) modal.style.display = 'none';
+  });
+})();
+</script>
+{% endblock %}

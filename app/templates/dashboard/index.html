@@ -1,0 +1,187 @@
+{% extends 'base_content.html' if _partial else 'erp_shell.html' %}
+{% block title %}Dashboard | Andes Auto Parts{% endblock %}
+{% block header_subtitle %}Dashboard &mdash; Inteligencia de negocios{% endblock %}
+
+{% block content %}
+<div style="display:grid;gap:18px;">
+
+  <!-- KPI cards -->
+  <div class="card-grid">
+    <div class="card" style="border-top:4px solid #1d4ed8;">
+      <h3>Ventas del día</h3>
+      <div class="num">${{ '{:,.0f}'.format(ventas_hoy).replace(',', '.') }}</div>
+      <p>{{ docs_hoy }} documento{% if docs_hoy != 1 %}s{% endif %} hoy</p>
+    </div>
+    <div class="card" style="border-top:4px solid #16a34a;">
+      <h3>Ventas del mes</h3>
+      <div class="num" style="color:#16a34a;">${{ '{:,.0f}'.format(ventas_mes).replace(',', '.') }}</div>
+      <p>{{ docs_mes }} documento{% if docs_mes != 1 %}s{% endif %} este mes</p>
+    </div>
+    <div class="card" style="border-top:4px solid #d97706;">
+      <h3>Stock crítico</h3>
+      <div class="num" style="color:#d97706;">{{ stock_critico|length }}</div>
+      <p>productos con stock ≤ 3 unidades</p>
+    </div>
+    <div class="card" style="border-top:4px solid #7c3aed;">
+      <h3>Clientes activos</h3>
+      <div class="num" style="color:#7c3aed;">{{ top_clientes|length }}</div>
+      <p>con historial de compras</p>
+    </div>
+  </div>
+
+  <!-- Charts row -->
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;">
+    <!-- Sales chart -->
+    <div class="panel" style="padding:20px;">
+      <h3 style="margin-bottom:14px;font-size:15px;">Ventas últimos 30 días</h3>
+      <canvas id="chartVentas" height="90"></canvas>
+    </div>
+    <!-- Top clientes -->
+    <div class="panel" style="padding:20px;overflow:hidden;">
+      <h3 style="margin-bottom:12px;font-size:15px;">Top 10 clientes</h3>
+      {% if top_clientes %}
+      <div style="display:grid;gap:8px;">
+        {% for c in top_clientes %}
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:6px 0;border-bottom:1px solid #f1f5f9;">
+          <span style="font-weight:600;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.nombre }}</span>
+          <span style="color:var(--primary);font-weight:700;margin-left:10px;white-space:nowrap;">${{ '{:,.0f}'.format(c.total).replace(',', '.') }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color:var(--muted);font-size:13px;">Sin datos de ventas aún.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Bottom row -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+    <!-- Top productos -->
+    <div class="panel" style="padding:20px;overflow:hidden;">
+      <h3 style="margin-bottom:14px;font-size:15px;">Top 10 productos vendidos</h3>
+      {% if top_productos %}
+      <div style="overflow-x:auto;">
+        <table class="erp-table">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Descripción</th>
+              <th>Cant.</th>
+              <th>Ventas</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in top_productos %}
+            <tr>
+              <td><strong>{{ p.codigo }}</strong></td>
+              <td>{{ p.descripcion[:30] }}</td>
+              <td><span class="badge orange">{{ p.qty }}</span></td>
+              <td style="font-weight:700;color:var(--primary);">${{ '{:,.0f}'.format(p.venta).replace(',', '.') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p style="color:var(--muted);font-size:13px;">Sin facturas registradas aún.</p>
+      {% endif %}
+    </div>
+
+    <!-- Stock crítico -->
+    <div class="panel" style="padding:20px;overflow:hidden;">
+      <h3 style="margin-bottom:14px;font-size:15px;">Stock crítico (≤ 3 unidades)</h3>
+      {% if stock_critico %}
+      <div style="overflow-x:auto;">
+        <table class="erp-table">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Marca</th>
+              <th>Bodega</th>
+              <th>Stock</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in stock_critico %}
+            <tr>
+              <td><strong>{{ s.codigo }}</strong></td>
+              <td>{{ s.marca or '—' }}</td>
+              <td>{{ s.bodega }}</td>
+              <td>
+                {% if s.stock == 0 %}
+                <span class="badge red">0</span>
+                {% else %}
+                <span class="badge orange">{{ s.stock }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="padding:20px;text-align:center;color:#16a34a;font-weight:600;">
+        Sin problemas de stock crítico.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  const chartData = {{ chart_data|tojson }};
+  const labels = chartData.map(d => {
+    const parts = d.dia.split('-');
+    return parts[2] + '/' + parts[1];
+  });
+  const values = chartData.map(d => d.total);
+
+  const ctx = document.getElementById('chartVentas');
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Ventas ($)',
+        data: values,
+        backgroundColor: 'rgba(29, 78, 216, 0.15)',
+        borderColor: 'rgba(29, 78, 216, 0.8)',
+        borderWidth: 2,
+        borderRadius: 6,
+        tension: 0.4,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => '$' + ctx.parsed.y.toLocaleString('es-CL'),
+          },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: v => '$' + (v / 1000).toFixed(0) + 'k',
+            font: { size: 11 },
+          },
+          grid: { color: '#f1f5f9' },
+        },
+        x: {
+          ticks: { font: { size: 10 } },
+          grid: { display: false },
+        },
+      },
+    },
+  });
+})();
+</script>
+{% endblock %}

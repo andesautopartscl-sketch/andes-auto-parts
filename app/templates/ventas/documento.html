@@ -1,0 +1,38 @@
+{% extends 'ventas/base_partial.html' if _partial else 'ventas/base.html' %}
+
+{% block title %}{{ title }} | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+{% include 'ventas/_erp_styles.html' %}
+{% endblock %}
+
+{% block content %}
+{% set selected_party_id = selected_proveedor_id if is_supplier_doc else selected_client_id %}
+<form method="post" id="erpDocForm" autocomplete="off" novalidate data-doc-type="{{ doc_type }}" data-stock-direction="{{ 'in' if is_supplier_doc else ('out' if doc_type == 'orden_venta' else 'none') }}">
+    <input type="hidden" name="{{ 'proveedor_id' if is_supplier_doc else 'client_id' }}" id="hiddenPartyId" value="{{ selected_party_id or 0 }}">
+    <input type="hidden" name="party_rut" id="partyRutHidden" value="{{ party.rut }}">
+    <input type="hidden" name="loaded_document_id" id="loaded_document_id" value="{{ loaded_document_id or 0 }}">
+
+    <div class="cot-screen">
+        {% include 'ventas/_erp_doc_header.html' %}
+        {% include 'ventas/_erp_party_section.html' %}
+
+        <div class="cot-body">
+            <div class="cot-table-zone">
+                {% include 'ventas/_erp_items_table.html' %}
+            </div>
+            {% include 'ventas/_erp_totals_panel.html' %}
+        </div>
+
+        {% include 'ventas/_erp_doc_actions.html' %}
+        {% include 'ventas/_erp_footer.html' %}
+    </div>
+</form>
+
+<script id="chileGeoData" type="application/json">{{ chile_geo | tojson }}</script>
+{% include 'ventas/_erp_product_modal.html' %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% include 'ventas/_erp_scripts.html' %}
+{% endblock %}

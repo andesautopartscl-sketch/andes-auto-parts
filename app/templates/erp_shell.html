@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}ERP | Andes Auto Parts{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/erp_module.css') }}">
+{% block extra_head %}{% endblock %}
+</head>
+<body class="erp-shell-standalone">
+<div class="shell">
+  <header class="v-header">
+    <div class="v-header-brand">
+      <h1>Andes Auto Parts ERP</h1>
+      <p>{% block header_subtitle %}Sistema de gestión empresarial{% endblock %}</p>
+    </div>
+    <div class="v-header-actions">
+      <a class="btn sm outline" href="{{ url_for('ventas.index') }}" style="color:#93c5fd;border-color:#3b82f6;">Ventas</a>
+      <a class="btn sm outline" href="{{ url_for('dashboard.index') }}" style="color:#93c5fd;border-color:#3b82f6;">Dashboard</a>
+      <a class="btn sm" href="{{ url_for('auth.logout') }}" style="background:rgba(255,255,255,.1);color:#fff;border:none;">Salir</a>
+    </div>
+  </header>
+
+  <nav class="v-nav">
+    <a class="v-tab {% if active_page=='dashboard' %}active{% endif %}" href="{{ url_for('dashboard.index') }}">Dashboard</a>
+    <span class="v-tab-sep"></span>
+    <a class="v-tab {% if active_page=='transferencias' %}active{% endif %}" href="{{ url_for('inventario.transferencias') }}">Transferencias</a>
+    <a class="v-tab {% if active_page=='oportunidades' %}active{% endif %}" href="{{ url_for('oportunidades.index') }}">CRM</a>
+    <a class="v-tab {% if active_page=='postventa' %}active{% endif %}" href="{{ url_for('postventa.index') }}">Postventa</a>
+    <a class="v-tab {% if active_page=='contabilidad' %}active{% endif %}" href="{{ url_for('contabilidad.index') }}">Contabilidad</a>
+    {% block extra_nav %}{% endblock %}
+  </nav>
+
+  <div class="v-content">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <ul class="flash-list">
+      {% for cat, msg in messages %}
+      <li class="flash-msg {{ cat }}">{{ msg }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </div>
+</div>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

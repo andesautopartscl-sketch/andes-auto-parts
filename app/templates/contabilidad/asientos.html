@@ -1,0 +1,56 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Asientos Contables | Finanzas | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Finanzas</h1>
+    <p class="page-subtitle">Asientos contables</p>
+  </div>
+  <div class="topbar-actions">
+    <a class="link-btn" href="{{ url_for('contabilidad.index') }}">📒 Plan de cuentas</a>
+    <a class="link-btn" href="{{ url_for('contabilidad.movimientos') }}">🧾 Libro diario</a>
+  </div>
+</div>
+
+<form method="get" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
+  <div>
+    <label style="display:block;font-size:12px;color:#64748b;margin-bottom:6px;">Cuenta</label>
+    <select name="cuenta_id" style="min-width:220px;padding:10px;border:1px solid #cbd5e1;border-radius:10px;">
+      <option value="">Todas las cuentas</option>
+      {% for c in cuentas %}
+      <option value="{{ c.id }}" {% if cuenta_id_filter == c.id|string %}selected{% endif %}>{{ c.codigo }} — {{ c.nombre }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button class="btn btn-primary" type="submit">Filtrar</button>
+  <a class="btn btn-secondary" href="{{ url_for('contabilidad.asientos') }}">Limpiar</a>
+</form>
+
+<div style="overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;">
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Fecha</th>
+        <th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Cuenta</th>
+        <th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Tipo</th>
+        <th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Monto</th>
+        <th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Detalle</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in asientos %}
+      <tr>
+        <td style="padding:9px;border-bottom:1px solid #f1f5f9;">{{ a.fecha.strftime('%d/%m/%Y') if a.fecha else '-' }}</td>
+        <td style="padding:9px;border-bottom:1px solid #f1f5f9;">{{ a.cuenta.codigo if a.cuenta else '?' }} — {{ a.cuenta.nombre if a.cuenta else '-' }}</td>
+        <td style="padding:9px;border-bottom:1px solid #f1f5f9;">{{ a.tipo|upper }}</td>
+        <td style="padding:9px;border-bottom:1px solid #f1f5f9;">${{ '{:,.0f}'.format(a.monto or 0).replace(',', '.') }}</td>
+        <td style="padding:9px;border-bottom:1px solid #f1f5f9;">{{ a.descripcion or '-' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" style="padding:16px;text-align:center;color:#64748b;">Sin asientos contables.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

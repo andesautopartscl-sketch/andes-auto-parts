@@ -1,0 +1,331 @@
+{% extends 'base_content.html' if _partial else 'ventas/base.html' %}
+
+{% block title %}{{ form_title }} | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.form-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 860px) 280px;
+    gap: 16px;
+    align-items: start;
+}
+.form-card,
+.aside-card {
+    padding: 20px;
+}
+.form-card h2 {
+    margin: 0 0 6px;
+    font-size: 24px;
+}
+.form-card p {
+    color: #475569;
+    margin-bottom: 16px;
+}
+.group-title {
+    margin: 16px 0 10px;
+    font-size: 14px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #334155;
+    font-weight: 800;
+}
+.field-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+.field {
+    display: grid;
+    gap: 6px;
+}
+.field.full {
+    grid-column: 1 / -1;
+}
+.field label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #334155;
+}
+.field input,
+.field textarea,
+.field select {
+    width: 100%;
+    border: 1px solid #dbe3ef;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+    background: #fff;
+}
+.field textarea {
+    min-height: 92px;
+    resize: vertical;
+}
+.field-note {
+    font-size: 12px;
+    color: #64748b;
+}
+.hidden {
+    display: none !important;
+}
+.actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+}
+.aside-card h3 {
+    margin: 0 0 10px;
+    font-size: 16px;
+}
+.aside-card ul {
+    padding-left: 18px;
+    color: #475569;
+    display: grid;
+    gap: 8px;
+}
+@media (max-width: 1024px) {
+    .form-shell { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+    .field-grid { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="form-shell">
+    <section class="panel form-card">
+        <h2>{{ form_title }}</h2>
+        <p>Ficha completa para clientes con estructura tributaria y geografia para Chile e internacional.</p>
+
+        <form method="post" id="clienteForm">
+            <div class="group-title">Datos comerciales</div>
+            <div class="field-grid">
+                <div class="field full">
+                    <label for="nombre">Nombre / Razon social</label>
+                    <input id="nombre" name="nombre" value="{{ cliente.nombre or '' }}" required>
+                </div>
+                <div class="field">
+                    <label for="rut">RUT</label>
+                    <input id="rut" name="rut" data-rut-input value="{{ cliente.rut|format_rut if cliente.rut else '' }}">
+                </div>
+                <div class="field">
+                    <label for="giro">Giro</label>
+                    <input id="giro" name="giro" value="{{ cliente.giro or '' }}">
+                </div>
+                <div class="field">
+                    <label for="email">Email</label>
+                    <input id="email" name="email" type="email" value="{{ cliente.email or '' }}">
+                </div>
+                <div class="field">
+                    <label for="telefono">Telefono</label>
+                    <input id="telefono" name="telefono" value="{{ cliente.telefono or '' }}">
+                </div>
+            </div>
+
+            <div class="group-title">Ubicacion</div>
+            <div class="field-grid">
+                <div class="field">
+                    <label for="pais">Pais</label>
+                    <select id="pais" name="pais" required>
+                        <option value="{{ cliente.pais or 'Chile' }}" selected>{{ cliente.pais or 'Chile' }}</option>
+                    </select>
+                </div>
+
+                <div class="field" id="regionSelectWrap">
+                    <label for="region">Region</label>
+                    <select id="region" name="region">
+                        <option value="">Seleccionar region</option>
+                        {% for region_name in chile_regions %}
+                        <option value="{{ region_name }}" {% if cliente.region == region_name %}selected{% endif %}>{{ region_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="field hidden" id="regionTextWrap">
+                    <label for="region_text">Region / Estado</label>
+                    <input id="region_text" name="region_text" value="{{ cliente.region or '' }}">
+                </div>
+
+                <div class="field" id="comunaSelectWrap">
+                    <label for="comuna">Comuna</label>
+                    <select id="comuna" name="comuna">
+                        <option value="{{ cliente.comuna or '' }}" selected>{{ cliente.comuna or 'Seleccionar comuna' }}</option>
+                    </select>
+                </div>
+
+                <div class="field hidden" id="comunaTextWrap">
+                    <label for="comuna_text">Comuna / Distrito</label>
+                    <input id="comuna_text" name="comuna_text" value="{{ cliente.comuna or '' }}">
+                </div>
+
+                <div class="field">
+                    <label for="ciudad">Ciudad</label>
+                    <input id="ciudad" name="ciudad" value="{{ cliente.ciudad or '' }}">
+                </div>
+
+                <div class="field full">
+                    <label for="direccion">Direccion</label>
+                    <textarea id="direccion" name="direccion">{{ cliente.direccion or '' }}</textarea>
+                </div>
+                <div class="field full">
+                    <span class="field-note">Si el pais es Chile, region y comuna son obligatorias. La ciudad se sincroniza automaticamente con la comuna (editable).</span>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button class="btn primary" type="submit">{{ submit_label }}</button>
+                <a class="btn" href="{{ url_for('ventas.clientes') }}">Volver</a>
+            </div>
+        </form>
+    </section>
+
+    <aside class="panel aside-card">
+        <h3>Reglas ERP</h3>
+        <ul>
+            <li>Nombre y pais son obligatorios.</li>
+            <li>En Chile se exige region y comuna.</li>
+            <li>Cotizacion y orden de venta consumen esta ficha.</li>
+        </ul>
+    </aside>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script id="chileGeoData" type="application/json">{{ chile_geo | tojson }}</script>
+<script>
+(function () {
+    const CHILE_NAME = 'Chile';
+    const chileGeoElement = document.getElementById('chileGeoData');
+    const chileGeo = JSON.parse(chileGeoElement ? chileGeoElement.textContent : '[]');
+    const paisSelect = document.getElementById('pais');
+    const regionSelect = document.getElementById('region');
+    const comunaSelect = document.getElementById('comuna');
+    const regionText = document.getElementById('region_text');
+    const comunaText = document.getElementById('comuna_text');
+    const ciudadInput = document.getElementById('ciudad');
+    const regionSelectWrap = document.getElementById('regionSelectWrap');
+    const comunaSelectWrap = document.getElementById('comunaSelectWrap');
+    const regionTextWrap = document.getElementById('regionTextWrap');
+    const comunaTextWrap = document.getElementById('comunaTextWrap');
+
+    const countryDisplay = (code) => {
+        try {
+            return new Intl.DisplayNames(['es'], { type: 'region' }).of(code) || code;
+        } catch (_) {
+            return code;
+        }
+    };
+
+    const normalize = (value) => String(value || '').trim().toLowerCase();
+    const isChile = () => normalize(paisSelect.value) === 'chile' || normalize(paisSelect.value) === 'cl';
+
+    function populateCountries(selectedCountry) {
+        const current = selectedCountry || CHILE_NAME;
+        const options = [{ value: CHILE_NAME, label: CHILE_NAME }];
+
+        if (typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf === 'function') {
+            const seen = new Set([CHILE_NAME]);
+            const countryCodes = Intl.supportedValuesOf('region');
+            countryCodes.forEach((code) => {
+                const label = countryDisplay(code);
+                if (!label || seen.has(label)) return;
+                seen.add(label);
+                options.push({ value: label, label: label });
+            });
+        }
+
+        options.sort((a, b) => a.label.localeCompare(b.label, 'es'));
+        paisSelect.innerHTML = '';
+        options.forEach((item) => {
+            const opt = document.createElement('option');
+            opt.value = item.value;
+            opt.textContent = item.label;
+            paisSelect.appendChild(opt);
+        });
+
+        const match = options.find((opt) => normalize(opt.value) === normalize(current));
+        paisSelect.value = match ? match.value : CHILE_NAME;
+    }
+
+    function findRegionData(regionName) {
+        return chileGeo.find((item) => normalize(item.nombre) === normalize(regionName));
+    }
+
+    function populateComunas(regionName, selectedComuna) {
+        const region = findRegionData(regionName);
+        const comunas = region && Array.isArray(region.comunas) ? region.comunas : [];
+
+        comunaSelect.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Seleccionar comuna';
+        comunaSelect.appendChild(placeholder);
+
+        comunas.forEach((comuna) => {
+            const option = document.createElement('option');
+            option.value = comuna;
+            option.textContent = comuna;
+            comunaSelect.appendChild(option);
+        });
+
+        if (selectedComuna) {
+            const exists = comunas.some((comuna) => normalize(comuna) === normalize(selectedComuna));
+            comunaSelect.value = exists ? selectedComuna : '';
+        } else {
+            comunaSelect.value = '';
+        }
+    }
+
+    function syncCityFromComuna() {
+        if (!isChile()) return;
+        const comuna = comunaSelect.value;
+        if (!comuna) return;
+        if (!ciudadInput.value || normalize(ciudadInput.value) === normalize(comunaText.value)) {
+            ciudadInput.value = comuna;
+        }
+    }
+
+    function applyCountryRules() {
+        const chile = isChile();
+
+        regionSelectWrap.classList.toggle('hidden', !chile);
+        comunaSelectWrap.classList.toggle('hidden', !chile);
+        regionTextWrap.classList.toggle('hidden', chile);
+        comunaTextWrap.classList.toggle('hidden', chile);
+
+        regionSelect.required = chile;
+        comunaSelect.required = chile;
+        regionText.required = !chile;
+        comunaText.required = !chile;
+
+        if (chile) {
+            regionText.value = regionSelect.value || regionText.value;
+            comunaText.value = comunaSelect.value || comunaText.value;
+            populateComunas(regionSelect.value, comunaText.value || comunaSelect.value);
+            syncCityFromComuna();
+        } else {
+            if (!regionText.value) regionText.value = regionSelect.value || '';
+            if (!comunaText.value) comunaText.value = comunaSelect.value || '';
+        }
+    }
+
+    regionSelect.addEventListener('change', () => {
+        regionText.value = regionSelect.value || '';
+        populateComunas(regionSelect.value, '');
+    });
+
+    comunaSelect.addEventListener('change', () => {
+        comunaText.value = comunaSelect.value || '';
+        syncCityFromComuna();
+    });
+
+    paisSelect.addEventListener('change', applyCountryRules);
+
+    populateCountries(paisSelect.value || CHILE_NAME);
+    populateComunas(regionSelect.value || regionText.value, comunaText.value || comunaSelect.value);
+    applyCountryRules();
+})();
+</script>
+{% endblock %}

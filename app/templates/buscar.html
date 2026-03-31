@@ -1,126 +1,247 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Buscar | Andes Auto Parts</title>
+{% extends 'base_content.html' if _partial else 'base.html' %}
 
+{% block title %}Buscar | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
 <style>
-body{
-    margin:0;
-    font-family:'Segoe UI', sans-serif;
-    background:#f4f6fb;
-    transition:.3s;
+body.dark .content {
+    background:#111827;
+    border-color:#1f2937;
 }
 
-/* DARK MODE */
-body.dark{
-    background:#121826;
-    color:#e4e7ec;
+body.dark .page-title,
+body.dark .page-subtitle,
+body.dark .stats-card strong,
+body.dark .search-card label,
+body.dark .table-card h3,
+body.dark .results-meta {
+    color:#e5e7eb;
 }
 
-body.dark table{
+body.dark table {
     background:#1c2433;
     color:white;
 }
 
-body.dark th{
+body.dark th {
     background:#111827;
 }
 
-body.dark td{
+body.dark td {
     border-bottom:1px solid #2d3748;
 }
 
-/* LAYOUT */
-.layout{
+body.dark .search-card,
+body.dark .table-card,
+body.dark .stats-card,
+body.dark .modal-box {
+    background:#1f2937;
+    color:#e5e7eb;
+    border-color:#374151;
+}
+
+.toolbar-row {
     display:flex;
-    height:100vh;
+    gap:14px;
+    flex-wrap:wrap;
+    margin-bottom:18px;
 }
 
-.sidebar{
-    width:240px;
-    background:linear-gradient(180deg,#1e3c72,#2a5298);
-    color:white;
-    padding:25px 20px;
-    box-shadow:4px 0 20px rgba(0,0,0,0.15);
-}
-
-.sidebar h3{
-    margin-top:0;
-    font-weight:600;
-}
-
-.sidebar a{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    color:white;
-    margin:12px 0;
-    padding:10px 12px;
-    border-radius:8px;
-    text-decoration:none;
-    cursor:pointer;
-    transition:.25s;
-}
-
-.sidebar a:hover{
-    background:rgba(255,255,255,0.15);
-    transform:translateX(5px);
-}
-
-.sidebar hr{
-    border:none;
-    border-top:1px solid rgba(255,255,255,0.3);
-    margin:15px 0;
-}
-
-.toggle-dark{
-    margin-top:20px;
-    padding:8px 10px;
-    border:none;
-    border-radius:6px;
-    cursor:pointer;
-    font-weight:bold;
-}
-
-/* CONTENT */
-.content{
-    flex:1;
-    padding:30px;
-    overflow:auto;
-}
-
-/* TABLE */
-table{
-    width:100%;
-    border-collapse:collapse;
-    background:white;
-    border-radius:10px;
-    overflow:hidden;
+.stats-card,
+.search-card,
+.table-card {
+    background:#fff;
+    border:1px solid #e2e8f0;
+    border-radius:16px;
     box-shadow:0 10px 25px rgba(0,0,0,0.05);
-    table-layout:fixed;
 }
 
-th{
-    background:#1e3c72;
-    color:white;
-    padding:6px;
+.stats-card {
+    padding:16px 18px;
+    min-width:180px;
+}
+
+.stats-card span {
+    display:block;
+    color:#64748b;
     font-size:12px;
-    position:sticky;
-    top:0;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    margin-bottom:6px;
 }
 
-td{
-    padding:5px 6px;
-    font-size:11px;
-    border-bottom:1px solid #eee;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    cursor:pointer;
+.stats-card strong {
+    font-size:30px;
+    color:#0f172a;
 }
 
-/* ===== MODALS ===== */
+.search-card {
+    padding:18px;
+    margin-bottom:18px;
+}
+
+.search-form {
+    display:grid;
+    grid-template-columns:minmax(0, 1fr) auto auto auto;
+    gap:10px;
+    align-items:end;
+}
+
+.search-form label {
+    display:block;
+    margin-bottom:6px;
+    font-size:13px;
+    font-weight:600;
+    color:#334155;
+}
+
+.search-form input {
+    width:100%;
+    padding:11px 12px;
+    border:1px solid #cbd5e1;
+    border-radius:10px;
+    font-size:14px;
+}
+
+.table-card {
+    padding:18px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* Tabla contenida en el cuadro: sin scroll horizontal; filas con scroll vertical */
+.table-wrap {
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: min(78vh, 960px);
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+}
+
+table.buscar-productos {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.buscar-productos th,
+.buscar-productos td {
+    min-width: 0;
+    padding: 6px 5px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    hyphens: auto;
+    cursor: pointer;
+}
+
+.buscar-productos th {
+    background: #1e3c72;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.25;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.12);
+}
+
+/* Números compactos en una línea */
+.buscar-productos td.td-price,
+.buscar-productos td.td-price-mayor,
+.buscar-productos td.td-stock {
+    white-space: nowrap;
+    text-align: right;
+    word-break: normal;
+    overflow-wrap: normal;
+}
+
+.buscar-productos td:nth-child(11) {
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+    overflow: visible;
+}
+
+td.td-code {
+    cursor: default;
+}
+
+td.td-code .code-inline span {
+    line-height: 1.35;
+}
+
+td.td-oem,
+td.td-alt {
+    font-size: 10px;
+}
+
+.code-inline,
+.homologados-inline {
+    display:inline-flex;
+    align-items:flex-start;
+    gap:6px;
+    flex-wrap: wrap;
+    max-width: 100%;
+}
+.row-icon {
+    font-size:12px;
+    line-height:1;
+    text-decoration:none;
+    opacity:.85;
+}
+.row-icon:hover { opacity:1; }
+
+td mark {
+    background:#fde68a;
+    color:#7c2d12;
+    padding:0 2px;
+    border-radius:4px;
+}
+
+.results-meta {
+    margin:0 0 14px;
+    color:#475569;
+    font-size:14px;
+}
+
+.pagination-bar {
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    justify-content:center;
+    gap:12px 18px;
+    margin-top:16px;
+    padding-top:14px;
+    border-top:1px solid #e2e8f0;
+}
+
+.pagination-info {
+    font-size:14px;
+    color:#334155;
+}
+
+body.dark .pagination-bar {
+    border-top-color:#374151;
+}
+
+body.dark .pagination-info {
+    color:#e5e7eb;
+}
+
+.empty-state {
+    border:1px dashed #cbd5e1;
+    border-radius:16px;
+    padding:30px;
+    text-align:center;
+    color:#64748b;
+}
+
 .modal {
     display:none;
     position:fixed;
@@ -143,51 +264,22 @@ td{
     animation:fadeIn .2s ease;
 }
 
-body.dark .modal-box{
-    background:#1e293b;
-    color:white;
+@keyframes fadeIn {
+    from { opacity:0; transform:scale(.95); }
+    to { opacity:1; transform:scale(1); }
 }
 
-@keyframes fadeIn{
-    from{opacity:0; transform:scale(.95);}
-    to{opacity:1; transform:scale(1);}
-}
-
-.modal-box h3{
+.modal-box h3 {
     margin-top:0;
     color:#1e3c72;
 }
 
-body.dark .modal-box h3{
-    color:#60a5fa;
-}
-
-.modal-buttons{
+.modal-buttons {
     margin-top:20px;
     text-align:right;
 }
 
-.btn-primary{
-    background:#1e3c72;
-    color:white;
-    border:none;
-    padding:10px 18px;
-    border-radius:8px;
-    font-weight:600;
-    cursor:pointer;
-}
-
-.btn-secondary{
-    background:#e5e7eb;
-    border:none;
-    padding:10px 18px;
-    border-radius:8px;
-    font-weight:600;
-    cursor:pointer;
-}
-
-/* Spinner */
-.spinner{
+.spinner {
     border:4px solid #eee;
     border-top:4px solid #1e3c72;
     border-radius:50%;
@@ -198,85 +290,168 @@ body.dark .modal-box h3{
     display:none;
 }
 
-@keyframes spin{
-    to{transform:rotate(360deg);}
+@keyframes spin {
+    to { transform:rotate(360deg); }
+}
+
+@media (max-width: 960px) {
+    .search-form {
+        grid-template-columns:1fr;
+    }
 }
 </style>
-</head>
+{% endblock %}
 
-<body>
+{% block content %}
+<div class="topbar">
+    <div>
+        <h1 class="page-title">Buscar productos</h1>
+        <p class="page-subtitle">Explora el catálogo activo, valida stock y administra importación/exportación desde el mismo panel.</p>
+    </div>
+    <div class="topbar-actions">
+          <a class="btn"
+              href="{{ url_for('productos.editar_productos_view') }}"
+              data-module-url="{{ url_for('productos.editar_productos_view') }}">✏ Editar</a>
+          <a class="btn"
+              href="{{ url_for('productos.ver_desactivados') }}"
+              data-module-url="{{ url_for('productos.ver_desactivados') }}">📦 Desactivados</a>
+          <a class="btn btn-primary"
+              href="{{ url_for('productos.modal_crear_producto') }}"
+              data-modal-url="{{ url_for('productos.modal_crear_producto') }}">➕ Crear producto</a>
+    </div>
+</div>
 
-<div class="layout">
+<div class="toolbar-row">
+    <div class="stats-card">
+        <span>Resultados (total)</span>
+        <strong>{{ total_count if total_count is defined else (productos|length) }}</strong>
+    </div>
+    <div class="stats-card">
+        <span>Usuario</span>
+        <strong style="font-size:20px;">{{ session['user'] }}</strong>
+    </div>
+</div>
 
-<div class="sidebar">
-    <h3>Andes Auto Parts</h3>
-    <a href="/buscar">🔍 Buscar</a>
-    <a href="#">➕ Crear</a>
-    <a href="#">✏ Editar</a>
-    <a href="#">🗑 Eliminar</a>
+<section class="search-card">
+    <form method="get" class="search-form">
+        <div>
+            <label for="q">Búsqueda general</label>
+            <input id="q" name="q" value="{{ q }}" placeholder="Código, OEM o descripción">
+        </div>
+        <button class="btn btn-primary" type="submit">Buscar</button>
+        {% if q %}
+        <a class="btn btn-secondary" href="{{ url_for('productos.buscar') }}" data-module-url="{{ url_for('productos.buscar') }}">Limpiar</a>
+        {% endif %}
+        <input type="hidden" name="page" value="1">
+    </form>
+</section>
 
-    {% if session["rol"] == "admin" %}
-        <a href="/exportar">📥 Exportar Excel</a>
-        <a onclick="openImportModal()">📤 Importar Excel</a>
+<section class="table-card">
+    <h3 style="margin:0 0 8px;font-size:18px;color:#0f172a;">Resultados de búsqueda</h3>
+    <p class="results-meta">
+        <b>Total:</b> {{ total_count if total_count is defined else (productos|length) }}
+        {% if total_count is defined and total_count and productos|length %}
+        · <b>Mostrando:</b>
+        {{ ((page - 1) * per_page + 1) }}–{{ (page - 1) * per_page + (productos|length) }}
+        {% endif %}
+        {% if per_page is defined %}
+        · <b>Por página:</b> {{ per_page }}
+        {% endif %}
+    </p>
+
+    {% if productos %}
+    <div class="table-wrap">
+        <table class="buscar-productos">
+            <colgroup>
+                <col style="width:10%">
+                <col style="width:20%">
+                <col style="width:9%">
+                <col style="width:9%">
+                <col style="width:7%">
+                <col style="width:7%">
+                {% if can_view_precio_mayor %}
+                <col style="width:7%">
+                {% endif %}
+                <col style="width:6%">
+                <col style="width:9%">
+                <col style="width:9%">
+                <col style="width:7%">
+            </colgroup>
+            <tr>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th>Modelo</th>
+                <th>Motor</th>
+                <th>Marca</th>
+                <th>Precio</th>
+                {% if can_view_precio_mayor %}
+                <th>Mayor</th>
+                {% endif %}
+                <th>Stock</th>
+                <th>OEM</th>
+                <th>Alternativo</th>
+                <th>Homologados</th>
+            </tr>
+            {% for p in productos %}
+            <tr>
+                <td class="td-code">
+                    <span class="code-inline">
+                        <a class="row-icon" href="{{ url_for('productos.ver_producto', codigo=p.codigo) }}" data-modal-url="{{ url_for('productos.ver_producto', codigo=p.codigo) }}" title="Ver detalle">🔍</a>
+                        <a class="row-icon" href="{{ url_for('productos.historial_producto', codigo=p.codigo) }}" data-modal-url="{{ url_for('productos.historial_producto', codigo=p.codigo) }}" title="Ver historial">➡️</a>
+                        <span>{{ highlight_match(p.codigo, q) if q else p.codigo }}</span>
+                    </span>
+                </td>
+                <td onclick="openDescModal(`{{ (p.descripcion or '')|replace('`','') }}`)">{{ highlight_match(p.descripcion, q) if q else p.descripcion }}</td>
+                <td>{{ p.modelo }}</td>
+                <td>{{ p.motor }}</td>
+                <td>{{ p.marca }}</td>
+                <td class="td-price">${{ p.p_publico or 0 }}</td>
+                {% if can_view_precio_mayor %}
+                <td class="td-price-mayor">${{ p.prec_mayor or 0 }}</td>
+                {% endif %}
+                <td class="td-stock">{{ stock_total(p) }}</td>
+                <td class="td-oem" title="Clic para ver OEM completo" onclick="event.stopPropagation(); openFieldModal('Código OEM', this.dataset.full);" data-full="{{ (p.codigo_oem or '')|e }}">{{ highlight_match(p.codigo_oem, q) if q else p.codigo_oem }}</td>
+                <td class="td-alt" title="Clic para ver alternativo completo" onclick="event.stopPropagation(); openFieldModal('Código alternativo', this.dataset.full);" data-full="{{ (p.codigo_alternativo or '')|e }}">{{ p.codigo_alternativo }}</td>
+                <td>
+                    <span class="homologados-inline">
+                        <a class="row-icon" href="{{ url_for('productos.homologados_producto', codigo=p.codigo) }}" data-modal-url="{{ url_for('productos.homologados_producto', codigo=p.codigo) }}" title="Ver homologados">👁️</a>
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    {% if total_pages is defined and total_pages > 1 %}
+    <nav class="pagination-bar" aria-label="Paginación de resultados">
+        {% if page > 1 %}
+        {% if q %}
+        <a class="btn btn-secondary pagination-link" href="{{ url_for('productos.buscar', q=q, page=page-1) }}" data-module-url="{{ url_for('productos.buscar', q=q, page=page-1) }}">← Anterior</a>
+        {% else %}
+        <a class="btn btn-secondary pagination-link" href="{{ url_for('productos.buscar', page=page-1) }}" data-module-url="{{ url_for('productos.buscar', page=page-1) }}">← Anterior</a>
+        {% endif %}
+        {% endif %}
+        <span class="pagination-info">Página <strong>{{ page }}</strong> de <strong>{{ total_pages }}</strong></span>
+        {% if page < total_pages %}
+        {% if q %}
+        <a class="btn btn-secondary pagination-link" href="{{ url_for('productos.buscar', q=q, page=page+1) }}" data-module-url="{{ url_for('productos.buscar', q=q, page=page+1) }}">Siguiente →</a>
+        {% else %}
+        <a class="btn btn-secondary pagination-link" href="{{ url_for('productos.buscar', page=page+1) }}" data-module-url="{{ url_for('productos.buscar', page=page+1) }}">Siguiente →</a>
+        {% endif %}
+        {% endif %}
+    </nav>
     {% endif %}
 
-    <button class="toggle-dark" onclick="toggleDark()">🌙 Modo oscuro</button>
-
-    <hr>
-    <a href="/logout">🚪 Salir</a>
-</div>
-
-<div class="content">
-    <h2>Buscar productos</h2>
-    <p>Usuario: {{ session["user"] }} ({{ session["rol"] }})</p>
-
-    <form method="get">
-        <input name="q" value="{{ q }}" placeholder="🔎 Búsqueda general">
-        <button>Buscar</button>
-    </form>
-
-    <p><b>Resultados:</b> {{ productos|length }}</p>
-
-    <table>
-    <tr>
-        <th>Código</th>
-        <th>Descripción</th>
-        <th>Modelo</th>
-        <th>Motor</th>
-        <th>Marca</th>
-        <th>Precio</th>
-        <th>Mayor</th>
-        <th>Stock</th>
-        <th>OEM</th>
-        <th>Alternativo</th>
-        <th>Homologados</th>
-    </tr>
-
-    {% for p in productos %}
-    <tr>
-        <td>{{ p.codigo }}</td>
-        <td onclick="openDescModal(`{{ p.descripcion|replace('`','') }}`)">{{ p.descripcion }}</td>
-        <td>{{ p.modelo }}</td>
-        <td>{{ p.motor }}</td>
-        <td>{{ p.marca }}</td>
-        <td>${{ p.p_publico or 0 }}</td>
-        <td>${{ p.prec_mayor or 0 }}</td>
-        <td>{{ stock_total(p) }}</td>
-        <td>{{ p.codigo_oem }}</td>
-        <td>{{ p.codigo_alternativo }}</td>
-        <td onclick="openDescModal(`{{ p.homologados|replace('`','') }}`)">{{ p.homologados }}</td>
-    </tr>
-    {% endfor %}
-    </table>
-</div>
-
-</div>
+    {% else %}
+    <div class="empty-state">No se encontraron productos activos con el criterio actual.</div>
+    {% endif %}
+</section>
 
 <!-- MODAL DESCRIPCIÓN -->
 <div id="descModal" class="modal">
     <div class="modal-box">
-        <h3>Detalle</h3>
-        <div id="descText"></div>
+        <h3 id="descModalTitle">Detalle</h3>
+        <div id="descText" style="white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow:auto;"></div>
         <div class="modal-buttons">
             <button class="btn-primary" onclick="closeDescModal()">Cerrar</button>
         </div>
@@ -291,39 +466,123 @@ body.dark .modal-box h3{
         <div class="spinner" id="spinner"></div>
 
         <form id="importForm" enctype="multipart/form-data">
-            <input type="file" name="archivo" required style="width:100%; padding:8px; margin-top:10px;">
+            <p style="color:#555; font-size:13px; margin-top:4px;">Formatos aceptados: <strong>.xlsx, .xls, .csv</strong></p>
+            <input type="file" name="file" accept=".xlsx,.xls,.csv" required style="width:100%; padding:8px; margin-top:6px;">
             <div id="importMessage" style="margin-top:15px; font-weight:500;"></div>
 
             <div class="modal-buttons">
                 <button type="button" class="btn-secondary" onclick="closeImportModal()">Cancelar</button>
-                <button type="button" class="btn-primary" onclick="enviarImportacion()">Importar</button>
+                <button type="button" class="btn-primary" onclick="enviarImportacion()">📤 Importar</button>
             </div>
         </form>
     </div>
 </div>
 
-<script>
-function toggleDark(){
-    document.body.classList.toggle("dark");
-}
+<!-- MODAL EXPORTAR -->
+<div id="exportModal" class="modal">
+    <div class="modal-box">
+        <h3>📥 Exportar productos a Excel</h3>
 
-/* DESCRIPCION */
-function openDescModal(text){
-    document.getElementById("descText").innerText = text || "Sin información";
-    document.getElementById("descModal").style.display="flex";
-}
-function closeDescModal(){
+        <div style="margin-top:14px;">
+            <label style="font-weight:600; color:#1e3c72; display:block; margin-bottom:6px;">Filtro de productos</label>
+            <select id="exportFiltro" style="width:100%; padding:9px; border:1px solid #ddd; border-radius:8px; font-size:14px;">
+                <option value="activos">Solo activos</option>
+                <option value="todos">Todos (activos e inactivos)</option>
+                <option value="inactivos">Solo inactivos</option>
+            </select>
+        </div>
+
+        <div style="margin-top:18px;">
+            <label style="font-weight:600; color:#1e3c72; display:block; margin-bottom:8px;">Columnas a exportar</label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; font-size:13px;">
+                <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" name="col" value="codigo" checked disabled> Código *</label>
+                <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" name="col" value="descripcion" checked> Descripción</label>
+                <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" name="col" value="marca" checked> Marca</label>
+                <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" name="col" value="modelo" checked> Modelo</label>
+                <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" name="col" value="motor"> Motor</label>
+                <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" name="col" value="oem" checked> OEM</label>
+                <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" name="col" value="alternativo"> Alternativo</label>
+                <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" name="col" value="precio_publico" checked> Precio Público</label>
+                <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" name="col" value="precio_mayor"> Precio Mayor</label>
+                <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" name="col" value="homologados"> Homologados</label>
+            </div>
+        </div>
+
+        <div id="exportMessage" style="margin-top:14px; font-weight:500;"></div>
+
+        <div class="modal-buttons">
+            <button type="button" class="btn-secondary" onclick="closeExportModal()">Cancelar</button>
+            <button type="button" class="btn-primary" onclick="enviarExportacion()">📥 Exportar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+/* DESCRIPCION / OEM / ALTERNATIVO */
+window.openFieldModal = function (title, text) {
+    var h = document.getElementById("descModalTitle");
+    if (h) h.textContent = title || "Detalle";
+    var body = document.getElementById("descText");
+    var t = text;
+    if (t === undefined || t === null || String(t).trim() === "") {
+        body.innerText = "Sin información";
+    } else {
+        body.innerText = String(t);
+    }
+    document.getElementById("descModal").style.display = "flex";
+};
+window.openDescModal = function (text) {
+    openFieldModal("Descripción", text);
+};
+window.closeDescModal = function (){
     document.getElementById("descModal").style.display="none";
-}
+};
+
+/* EXPORTAR */
+window.openExportModal = function (){
+    document.getElementById("exportMessage").innerHTML = "";
+    document.getElementById("exportModal").style.display="flex";
+};
+window.closeExportModal = function (){
+    document.getElementById("exportModal").style.display="none";
+};
+window.enviarExportacion = function (){
+    const filtro = document.getElementById("exportFiltro").value;
+    const checks = document.querySelectorAll("#exportModal input[name='col']:checked");
+    const columnas = Array.from(checks).map(cb => cb.value).join(',');
+
+    if(!columnas){
+        const msg = document.getElementById("exportMessage");
+        msg.style.color = "orange";
+        msg.innerHTML = "⚠️ Selecciona al menos una columna";
+        return;
+    }
+
+    const msg = document.getElementById("exportMessage");
+    msg.style.color = "#1e3c72";
+    msg.innerHTML = "⏳ Preparando descarga...";
+
+    const url = "{{ url_for('productos.exportar_excel_productos') }}" +
+                "?filtro=" + encodeURIComponent(filtro) +
+                "&columnas=" + encodeURIComponent(columnas);
+
+    window.location.href = url;
+
+    setTimeout(function(){
+        closeExportModal();
+    }, 1500);
+};
 
 /* IMPORTAR */
-function openImportModal(){
+window.openImportModal = function (){
     document.getElementById("importModal").style.display="flex";
-}
-function closeImportModal(){
+};
+window.closeImportModal = function (){
     document.getElementById("importModal").style.display="none";
-}
-function enviarImportacion(){
+};
+window.enviarImportacion = function (){
 
     let form = document.getElementById("importForm");
     let formData = new FormData(form);
@@ -333,7 +592,7 @@ function enviarImportacion(){
     spinner.style.display="block";
     msg.innerHTML="";
 
-    fetch("/importar_excel",{
+    fetch("{{ url_for('productos.importar_excel_productos') }}",{
         method:"POST",
         body:formData
     })
@@ -362,8 +621,23 @@ function enviarImportacion(){
         msg.innerHTML="❌ Error inesperado";
         console.error(error);
     });
-}
-</script>
+};
 
-</body>
-</html>
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.location.hash === '#importar-excel') {
+        openImportModal();
+    } else if (window.location.hash === '#exportar-excel') {
+        openExportModal();
+    }
+});
+window.addEventListener('hashchange', function () {
+    if (window.location.hash === '#importar-excel') {
+        openImportModal();
+        history.replaceState(null, '', window.location.pathname);
+    } else if (window.location.hash === '#exportar-excel') {
+        openExportModal();
+        history.replaceState(null, '', window.location.pathname);
+    }
+});
+</script>
+{% endblock %}

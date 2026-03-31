@@ -1,0 +1,184 @@
+{% extends 'base_content.html' if _partial else 'erp_shell.html' %}
+{% block title %}Transferencias de Stock | Andes Auto Parts{% endblock %}
+{% block header_subtitle %}Inventario &mdash; Movimientos entre bodegas{% endblock %}
+
+{% block content %}
+<div style="display:grid;gap:18px;">
+
+  <!-- Transfer form card -->
+  <section class="card" style="padding:24px;">
+    <h2 style="font-size:18px;margin-bottom:16px;">Transferir stock entre bodegas</h2>
+    <form id="frmTransferencia">
+      <div class="form-grid" style="gap:14px;">
+        <div class="form-group">
+          <label>Código de producto</label>
+          <input type="text" id="inpCodigo" name="codigo" placeholder="Ej: LUB-001" autocomplete="off" required>
+        </div>
+        <div class="form-group">
+          <label>Marca</label>
+          <input type="text" id="inpMarca" name="marca" placeholder="Ej: CASTROL">
+        </div>
+        <div class="form-group">
+          <label>Cantidad</label>
+          <input type="number" id="inpCantidad" name="cantidad" min="1" value="1" required>
+        </div>
+        <div class="form-group">
+          <label>Bodega origen</label>
+          <select id="selOrigen" name="bodega_origen" required>
+            <option value="">-- Seleccionar bodega --</option>
+            {% for b in bodegas %}
+            <option value="{{ b }}">{{ b }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Bodega destino</label>
+          <select id="selDestino" name="bodega_destino" required>
+            <option value="">-- Seleccionar bodega --</option>
+            {% for b in bodegas %}
+            <option value="{{ b }}">{{ b }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Observación</label>
+          <input type="text" id="inpObs" name="observacion" placeholder="Opcional">
+        </div>
+      </div>
+
+      <!-- Stock display -->
+      <div id="stockInfo" style="display:none;margin-top:12px;padding:12px 16px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;font-size:13px;color:#166534;">
+        Stock disponible en origen: <strong id="stockOrigen">-</strong>
+      </div>
+
+      <div style="margin-top:16px;display:flex;gap:10px;align-items:center;">
+        <button class="btn primary" type="submit" id="btnTransferir">Transferir stock</button>
+        <span id="statusMsg" style="font-size:13px;font-weight:600;"></span>
+      </div>
+    </form>
+  </section>
+
+  <!-- History table -->
+  <section class="panel" style="overflow:hidden;">
+    <div style="padding:18px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="font-size:16px;">Historial de transferencias</h3>
+      <span style="font-size:12px;color:var(--muted);">Últimas 100 transferencias</span>
+    </div>
+    <div style="overflow-x:auto;">
+      {% if historial %}
+      <table class="erp-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Producto</th>
+            <th>Marca</th>
+            <th>Cantidad</th>
+            <th>Desde</th>
+            <th>Hacia</th>
+            <th>Usuario</th>
+            <th>Observación</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in historial %}
+          <tr>
+            <td>{{ t.fecha.strftime('%d/%m/%Y %H:%M') }}</td>
+            <td><strong>{{ t.codigo_producto }}</strong></td>
+            <td>{{ t.marca or '—' }}</td>
+            <td><span class="badge orange">{{ t.cantidad }}</span></td>
+            <td>{{ t.bodega_origen }}</td>
+            <td>{{ t.bodega_destino }}</td>
+            <td>{{ t.usuario or '—' }}</td>
+            <td>{{ t.observacion or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="padding:32px;text-align:center;color:var(--muted);">No hay transferencias registradas.</div>
+      {% endif %}
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const URL_TRANSFER = {{ url_for('inventario.api_transferencia')|tojson }};
+  const URL_STOCK = {{ url_for('inventario.api_stock_producto')|tojson }};
+
+  const form = document.getElementById('frmTransferencia');
+  const inpCodigo = document.getElementById('inpCodigo');
+  const inpMarca = document.getElementById('inpMarca');
+  const selOrigen = document.getElementById('selOrigen');
+  const stockInfo = document.getElementById('stockInfo');
+  const stockOrigenEl = document.getElementById('stockOrigen');
+  const statusMsg = document.getElementById('statusMsg');
+
+  function checkStock() {
+    const codigo = inpCodigo.value.trim().toUpperCase();
+    const marca = inpMarca.value.trim().toUpperCase();
+    const bodega = selOrigen.value;
+    if (!codigo || !bodega) { stockInfo.style.display = 'none'; return; }
+    fetch(URL_STOCK + '?codigo=' + encodeURIComponent(codigo) + '&marca=' + encodeURIComponent(marca))
+      .then(r => r.json())
+      .then(data => {
+        if (!data.ok) { stockInfo.style.display = 'none'; return; }
+        const variante = data.variantes.find(v => v.bodega === bodega);
+        if (variante !== undefined) {
+          stockOrigenEl.textContent = variante.stock;
+          stockInfo.style.display = 'block';
+        } else {
+          stockOrigenEl.textContent = '0';
+          stockInfo.style.display = 'block';
+        }
+      });
+  }
+
+  inpCodigo.addEventListener('blur', checkStock);
+  inpMarca.addEventListener('blur', checkStock);
+  selOrigen.addEventListener('change', checkStock);
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const btn = document.getElementById('btnTransferir');
+    btn.disabled = true;
+    statusMsg.textContent = '';
+
+    const payload = {
+      codigo: inpCodigo.value.trim().toUpperCase(),
+      marca: inpMarca.value.trim().toUpperCase(),
+      cantidad: parseInt(document.getElementById('inpCantidad').value) || 0,
+      bodega_origen: selOrigen.value,
+      bodega_destino: document.getElementById('selDestino').value,
+      observacion: document.getElementById('inpObs').value.trim(),
+    };
+
+    fetch(URL_TRANSFER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          statusMsg.style.color = '#16a34a';
+          statusMsg.textContent = 'Transferencia registrada correctamente.';
+          form.reset();
+          stockInfo.style.display = 'none';
+          setTimeout(() => window.location.reload(), 1200);
+        } else {
+          statusMsg.style.color = '#dc2626';
+          statusMsg.textContent = data.error || 'Error al procesar transferencia.';
+        }
+      })
+      .catch(() => {
+        statusMsg.style.color = '#dc2626';
+        statusMsg.textContent = 'Error de conexión.';
+      })
+      .finally(() => { btn.disabled = false; });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,110 @@
+{% set selected_party_id = selected_proveedor_id if is_supplier_doc else selected_client_id %}
+<div class="cot-section">
+    <div class="cot-section-header">
+        <div>
+            <span class="cot-section-title">{{ party_label }}</span>
+            {% if doc_type == 'orden_compra' %}
+            <p class="cot-section-note">Documento base de compra para recepcion de mercaderia y trazabilidad.</p>
+            {% elif doc_type == 'orden_venta' %}
+            <p class="cot-section-note">Desde aqui puedes convertir a facturacion con descuento automatico de stock.</p>
+            {% elif doc_type == 'factura' %}
+            <p class="cot-section-note">La facturacion de venta descuenta stock automaticamente al guardar o convertir.</p>
+            {% endif %}
+        </div>
+        <div class="cot-client-actions no-print" style="display:flex;gap:8px;">
+            {% if is_supplier_doc %}
+            <a class="btn sm" href="{{ url_for('ventas.proveedores') }}" target="_blank">Gestionar proveedores</a>
+            {% else %}
+            <a class="btn sm" href="{{ url_for('ventas.clientes') }}" target="_blank">Gestionar clientes</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="cot-rut-bar">
+        <div class="cot-rut-field">
+            <label for="rutLookup">RUT {{ party_label|lower }}</label>
+            <input id="rutLookup" type="text" placeholder="12.345.678-9" maxlength="13" autocomplete="off" data-rut-bound="1" value="{{ party.rut|format_rut if party.rut else '' }}">
+        </div>
+        <button class="btn sm outline no-print" type="button" id="btnSearchParty">Buscar</button>
+        <button class="btn sm no-print" type="button" id="btnNewParty">+ Nuevo {{ party_label|lower }}</button>
+        <span id="partyStatus" class="cot-rut-status {% if selected_party_id %}found{% endif %}">
+            {%- if selected_party_id and party.name -%}
+                {{ party_label }}: {{ party.name }}
+            {%- endif -%}
+        </span>
+    </div>
+
+    <div class="cot-client-grid">
+        <div class="cot-cf">
+            <span class="cot-cf-label">{{ party_label }}</span>
+            <input id="party_name" name="party_name" value="{{ party.name }}" required placeholder="{% if is_supplier_doc %}Empresa o proveedor{% else %}Nombre o empresa{% endif %}">
+        </div>
+        <div class="cot-cf">
+            <span class="cot-cf-label">Dirección</span>
+            <input id="party_address" name="party_address" value="{{ party.address }}" placeholder="Calle y número, ciudad">
+        </div>
+        <div class="cot-cf">
+            <span class="cot-cf-label">Teléfono</span>
+            <input id="party_telefono" name="party_telefono" value="{{ party.telefono }}" placeholder="+56 9 ...">
+        </div>
+        <div class="cot-cf">
+            <span class="cot-cf-label">Email</span>
+            <input id="party_email" name="party_email" type="email" value="{{ party.email }}" placeholder="correo@empresa.cl">
+        </div>
+    </div>
+
+    <div id="inlineCreateParty" class="cot-inline-create" hidden>
+        <div class="cot-inline-create-title">Crear nuevo {{ party_label|lower }}</div>
+        <div class="cot-ic-grid">
+            {% if is_supplier_doc %}
+            <div class="ic-f">
+                <label>Empresa</label>
+                <input id="ic_empresa" placeholder="Razón social o empresa">
+            </div>
+            {% endif %}
+            <div class="ic-f">
+                <label>{% if is_supplier_doc %}Nombre contacto *{% else %}Nombre *{% endif %}</label>
+                <input id="ic_nombre" placeholder="{% if is_supplier_doc %}Nombre de contacto{% else %}Nombre o razón social{% endif %}">
+            </div>
+            <div class="ic-f">
+                <label>RUT</label>
+                <input id="ic_rut" data-rut-input placeholder="12.345.678-9">
+            </div>
+            <div class="ic-f">
+                <label>Giro / Rubro</label>
+                <input id="ic_giro" placeholder="Ej: Servicios automotrices">
+            </div>
+            <div class="ic-f full">
+                <label>Dirección</label>
+                <input id="ic_direccion" placeholder="Calle, número, ciudad">
+            </div>
+            <div class="ic-f">
+                <label>Región</label>
+                <select id="ic_region">
+                    <option value="">Seleccionar región</option>
+                    {% for region_name in chile_regions %}
+                    <option value="{{ region_name }}">{{ region_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="ic-f">
+                <label>Ciudad</label>
+                <select id="ic_ciudad" disabled>
+                    <option value="">Seleccionar ciudad</option>
+                </select>
+            </div>
+            <div class="ic-f">
+                <label>Teléfono</label>
+                <input id="ic_telefono" placeholder="+56 9 ...">
+            </div>
+            <div class="ic-f">
+                <label>Email</label>
+                <input id="ic_email" type="email" placeholder="correo@empresa.cl">
+            </div>
+        </div>
+        <div class="ic-actions">
+            <button class="btn sm primary" type="button" id="btnSaveNewParty">Guardar {{ party_label|lower }}</button>
+            <button class="btn sm" type="button" id="btnCancelNewParty">Cancelar</button>
+        </div>
+    </div>
+</div>

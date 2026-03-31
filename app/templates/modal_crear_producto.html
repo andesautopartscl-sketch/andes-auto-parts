@@ -1,0 +1,780 @@
+<style>
+  .cp-modal {
+    --cp-border: #e2e8f0;
+    --cp-muted: #64748b;
+    --cp-heading: #0f172a;
+    --cp-accent: #1e40af;
+    --cp-accent-soft: #eff6ff;
+    --cp-radius: 12px;
+    --cp-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    color: var(--cp-heading);
+    max-width: 100%;
+  }
+
+  .cp-modal * {
+    box-sizing: border-box;
+  }
+
+  .cp-header {
+    margin: 0 0 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--cp-border);
+  }
+
+  .cp-kicker {
+    margin: 0 0 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--cp-muted);
+  }
+
+  .cp-title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--cp-heading);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .cp-title-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%);
+    font-size: 1.1rem;
+  }
+
+  .cp-sub {
+    margin: 8px 0 0;
+    font-size: 13px;
+    color: var(--cp-muted);
+    line-height: 1.45;
+  }
+
+  #alertaOEM.cp-alert {
+    display: none;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: var(--cp-radius);
+    margin-bottom: 20px;
+    font-size: 13px;
+    line-height: 1.5;
+    font-weight: 600;
+    border: 1px solid #fde68a;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    color: #92400e;
+    box-shadow: var(--cp-shadow);
+  }
+
+  #alertaOEM.cp-alert.is-visible {
+    display: flex;
+  }
+
+  .cp-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 20px;
+    align-items: start;
+  }
+
+  @media (max-width: 720px) {
+    .cp-form-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .cp-section {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+    padding: 16px 18px;
+    background: #f8fafc;
+    border: 1px solid var(--cp-border);
+    border-radius: 14px;
+    box-shadow: var(--cp-shadow);
+  }
+
+  .cp-section:first-of-type {
+    margin-top: 0;
+  }
+
+  .cp-section-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--cp-border);
+  }
+
+  .cp-section-icon {
+    font-size: 1.15rem;
+    line-height: 1;
+  }
+
+  .cp-section-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #334155;
+  }
+
+  .cp-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 16px;
+  }
+
+  @media (max-width: 720px) {
+    .cp-fields {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .cp-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .cp-field--full {
+    grid-column: 1 / -1;
+  }
+
+  .cp-field label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+    letter-spacing: 0.03em;
+  }
+
+  .cp-field input[type="text"],
+  .cp-field input[type="number"],
+  .cp-field select,
+  .cp-field textarea {
+    width: 100%;
+    margin: 0;
+    padding: 10px 12px;
+    font-size: 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #fff;
+    color: var(--cp-heading);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .cp-field input::placeholder,
+  .cp-field textarea::placeholder {
+    color: #94a3b8;
+  }
+
+  .cp-field input:hover,
+  .cp-field select:hover,
+  .cp-field textarea:hover {
+    border-color: #94a3b8;
+  }
+
+  .cp-field input:focus,
+  .cp-field select:focus,
+  .cp-field textarea:focus {
+    outline: none;
+    border-color: var(--cp-accent);
+    box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.15);
+  }
+
+  .cp-field textarea {
+    resize: vertical;
+    min-height: 88px;
+    line-height: 1.45;
+  }
+
+  .cp-search {
+    padding-left: 36px !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85zm-5.242.656a5 5 0 1 1 0-10 5 5 0 0 1 0 10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: 12px 50%;
+    background-size: 14px 14px;
+  }
+
+  .cp-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .cp-inline-hint {
+    font-size: 11px;
+    color: var(--cp-muted);
+    margin: 0;
+    line-height: 1.35;
+  }
+
+  .cp-btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--cp-accent);
+    background: rgba(30, 64, 175, 0.06);
+    border: 1px dashed rgba(30, 64, 175, 0.35);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .cp-btn-ghost:hover {
+    background: var(--cp-accent-soft);
+    border-color: var(--cp-accent);
+  }
+
+  .cp-files-block {
+    padding: 12px 14px;
+    background: #fff;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+  }
+
+  .cp-files-block label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+  }
+
+  .cp-file-input {
+    margin-top: 8px;
+    width: 100%;
+    font-size: 13px;
+    color: var(--cp-muted);
+  }
+
+  .cp-hint {
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: var(--cp-muted);
+    line-height: 1.4;
+  }
+
+  .galeria-producto {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .cp-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--cp-border);
+  }
+
+  .cp-actions .btn {
+    min-width: 120px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  .cp-actions .btn:active {
+    transform: scale(0.98);
+  }
+
+  .cp-actions .btn-primary {
+    box-shadow: 0 4px 14px rgba(30, 64, 175, 0.25);
+  }
+</style>
+
+<div class="cp-modal">
+  <header class="cp-header">
+    <p class="cp-kicker">Catálogo</p>
+    <h2 class="cp-title" id="appModalTitle">
+      <span class="cp-title-icon" aria-hidden="true">➕</span>
+      Crear producto
+    </h2>
+    <p class="cp-sub">Completa la identificación, la aplicación vehicular y los datos del repuesto. Podés adjuntar imágenes y archivos al final.</p>
+  </header>
+
+  <input type="hidden" id="marcaModelosData" value='{{ marca_modelos | tojson }}'>
+
+  <div id="alertaOEM" class="cp-alert" role="alert">
+    <span aria-hidden="true">⚠️</span>
+    <span>Este OEM ya existe en el sistema. Verificá modelo y motor antes de guardar.</span>
+  </div>
+
+  <form id="formCrearProducto" class="cp-form-root" enctype="multipart/form-data">
+    <div class="cp-form-grid">
+      <!-- Identificación -->
+      <section class="cp-section" aria-labelledby="cp-sec-id">
+        <div class="cp-section-head">
+          <span class="cp-section-icon" aria-hidden="true">📌</span>
+          <h3 class="cp-section-title" id="cp-sec-id">Identificación</h3>
+        </div>
+        <div class="cp-fields">
+          <div class="cp-field">
+            <label for="cp_codigo">Código interno</label>
+            <input id="cp_codigo" type="text" name="codigo" required autocomplete="off" placeholder="Ej. 2417">
+          </div>
+          <div class="cp-field">
+            <label for="codigoOEM">Código OEM</label>
+            <input type="text" name="codigo_oem" id="codigoOEM" autocomplete="off" placeholder="Ej. 3770100-E06">
+          </div>
+          <div class="cp-field cp-field--full">
+            <label for="cp_cod_alt">Código alternativo</label>
+            <input id="cp_cod_alt" type="text" name="codigo_alternativo" autocomplete="off" placeholder="Opcional">
+          </div>
+        </div>
+      </section>
+
+      <!-- Aplicación vehicular -->
+      <section class="cp-section" aria-labelledby="cp-sec-veh">
+        <div class="cp-section-head">
+          <span class="cp-section-icon" aria-hidden="true">🚗</span>
+          <h3 class="cp-section-title" id="cp-sec-veh">Aplicación vehicular</h3>
+        </div>
+        <div class="cp-fields">
+          <div class="cp-field">
+            <label for="selectMarca">Marca</label>
+            <div class="cp-stack">
+              <input type="text" id="buscarMarca" class="cp-search" placeholder="Buscar marca…" autocomplete="off" aria-label="Filtrar listado de marcas">
+              <select name="marca" id="selectMarca" aria-label="Marca">
+                <option value="">— Seleccionar marca —</option>
+                {% for m in marcas %}
+                <option value="{{ m }}">{{ m }}</option>
+                {% endfor %}
+              </select>
+              <input type="text" id="nuevaMarca" name="marca_nueva" placeholder="Nombre si creás una marca nueva" autocomplete="off">
+              <p class="cp-inline-hint">Si la marca no está en la lista, escribila arriba y guardá.</p>
+            </div>
+          </div>
+          <div class="cp-field">
+            <label for="selectModelo">Modelo</label>
+            <div class="cp-stack">
+              <input type="text" id="buscarModelo" class="cp-search" placeholder="Buscar modelo…" autocomplete="off" aria-label="Filtrar listado de modelos">
+              <select name="modelo" id="selectModelo" aria-label="Modelo">
+                <option value="">— Seleccionar modelo —</option>
+                {% for m in modelos %}
+                <option value="{{ m }}">{{ m }}</option>
+                {% endfor %}
+              </select>
+              <input type="text" id="nuevoModelo" name="modelo_nuevo" placeholder="Nombre si creás un modelo nuevo" autocomplete="off">
+              <p class="cp-inline-hint">Los modelos se filtran según la marca elegida cuando aplica.</p>
+            </div>
+          </div>
+          <div class="cp-field">
+            <label for="cp_motor">Motor</label>
+            <input id="cp_motor" type="text" name="motor" placeholder="Ej. 4J28TC3" autocomplete="off">
+          </div>
+          <div class="cp-field">
+            <label for="cp_anio">Año</label>
+            <input id="cp_anio" type="text" name="anio" placeholder="Ej. 2018" autocomplete="off">
+          </div>
+          <div class="cp-field cp-field--full">
+            <label for="cp_version">Versión</label>
+            <input id="cp_version" type="text" name="version" autocomplete="off">
+          </div>
+        </div>
+      </section>
+
+      <!-- Información del producto -->
+      <section class="cp-section" aria-labelledby="cp-sec-info">
+        <div class="cp-section-head">
+          <span class="cp-section-icon" aria-hidden="true">⚙️</span>
+          <h3 class="cp-section-title" id="cp-sec-info">Información del producto</h3>
+        </div>
+        <div class="cp-fields">
+          <div class="cp-field cp-field--full">
+            <label for="cp_desc">Descripción</label>
+            <input id="cp_desc" type="text" name="descripcion" placeholder="Nombre comercial del repuesto" autocomplete="off">
+          </div>
+          <div class="cp-field">
+            <label for="cp_medidas">Medidas</label>
+            <input id="cp_medidas" type="text" name="medidas" autocomplete="off">
+          </div>
+          <div class="cp-field">
+            <label for="cp_cat">Categoría</label>
+            <input id="cp_cat" type="text" name="categoria" autocomplete="off" list="cp_cat_list">
+            <datalist id="cp_cat_list"></datalist>
+          </div>
+          <div class="cp-field cp-field--full">
+            <label for="cp_subcat">Subcategoría</label>
+            <input id="cp_subcat" type="text" name="subcategoria" autocomplete="off" list="cp_subcat_list">
+            <datalist id="cp_subcat_list"></datalist>
+          </div>
+          <div class="cp-field cp-field--full">
+            <label for="cp_homo">Homologados</label>
+            <textarea id="cp_homo" name="homologados" rows="3" placeholder="Modelos o referencias compatibles, separados por comas…"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- Galería -->
+      <section class="cp-section" aria-labelledby="cp-sec-img">
+        <div class="cp-section-head">
+          <span class="cp-section-icon" aria-hidden="true">🖼️</span>
+          <h3 class="cp-section-title" id="cp-sec-img">Imágenes del producto</h3>
+        </div>
+        <div class="cp-files-block">
+          <label for="cp_imgs">Archivos de imagen</label>
+          <input id="cp_imgs" class="cp-file-input" type="file" name="imagenes" multiple accept="image/*">
+          <p class="cp-hint">La primera imagen será la principal automáticamente.</p>
+          <div id="previewGaleria" class="galeria-producto"></div>
+        </div>
+      </section>
+
+      <!-- Despiece -->
+      <section class="cp-section" aria-labelledby="cp-sec-desp">
+        <div class="cp-section-head">
+          <span class="cp-section-icon" aria-hidden="true">📎</span>
+          <h3 class="cp-section-title" id="cp-sec-desp">Despiece</h3>
+        </div>
+        <div class="cp-files-block">
+          <label for="cp_desp">Imagen de despiece</label>
+          <input id="cp_desp" class="cp-file-input" type="file" name="despiece_img" accept="image/*">
+          <div id="previewDespiece" style="margin-top:10px;"></div>
+        </div>
+      </section>
+
+      <!-- Modelo 3D -->
+      <section class="cp-section" aria-labelledby="cp-sec-3d">
+        <div class="cp-section-head">
+          <span class="cp-section-icon" aria-hidden="true">📦</span>
+          <h3 class="cp-section-title" id="cp-sec-3d">Modelo 3D</h3>
+        </div>
+        <div class="cp-files-block">
+          <label for="modelo3DInput">Archivo .glb</label>
+          <input id="modelo3DInput" class="cp-file-input" type="file" name="modelo_3d" accept=".glb">
+          <div id="preview3D" style="margin-top:10px;"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="cp-actions">
+      <button type="button" class="btn" onclick="if (window.closeAppModal) window.closeAppModal();">
+        Cancelar
+      </button>
+      <button type="submit" class="btn btn-primary">
+        💾 Guardar producto
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+var marcaModelos = {{ marca_modelos | tojson }};
+(function () {
+  var alerta = document.getElementById("alertaOEM");
+  var oemInput = document.getElementById("codigoOEM");
+  var buscarMarca = document.getElementById("buscarMarca");
+  var selectMarca = document.getElementById("selectMarca");
+  var buscarModelo = document.getElementById("buscarModelo");
+  var selectModelo = document.getElementById("selectModelo");
+  var catInput = document.getElementById("cp_cat");
+  var subcatInput = document.getElementById("cp_subcat");
+  var modeloBackup = [];
+
+  function showOemAlert(show) {
+    if (!alerta) return;
+    alerta.classList.toggle("is-visible", !!show);
+  }
+
+  if (oemInput) {
+    var tmo;
+    oemInput.addEventListener("input", function () {
+      clearTimeout(tmo);
+      var v = (oemInput.value || "").trim();
+      if (!v) {
+        showOemAlert(false);
+        return;
+      }
+      tmo = setTimeout(function () {
+        fetch("{{ url_for('productos.buscar_oem') }}?oem=" + encodeURIComponent(v), {
+          headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
+          credentials: "same-origin"
+        })
+          .then(function (r) {
+            return r.json();
+          })
+          .then(function (data) {
+            showOemAlert(data && data.encontrado === true);
+          })
+          .catch(function () {
+            showOemAlert(false);
+          });
+      }, 400);
+    });
+  }
+
+  function storeModeloOptions() {
+    modeloBackup = [];
+    if (!selectModelo) return;
+    for (var i = 0; i < selectModelo.options.length; i++) {
+      var o = selectModelo.options[i];
+      modeloBackup.push({ value: o.value, text: o.textContent });
+    }
+  }
+
+  function filterSelectOptions(selectEl, searchEl, allOptions) {
+    if (!selectEl || !searchEl || !allOptions || !allOptions.length) return;
+    var q = (searchEl.value || "").toLowerCase().trim();
+    var current = selectEl.value;
+    selectEl.innerHTML = "";
+    var opt0 = document.createElement("option");
+    opt0.value = "";
+    opt0.textContent = selectEl.id === "selectMarca" ? "— Seleccionar marca —" : "— Seleccionar modelo —";
+    selectEl.appendChild(opt0);
+    allOptions.forEach(function (item) {
+      if (!item.value) return;
+      if (q && item.text.toLowerCase().indexOf(q) === -1) return;
+      var opt = document.createElement("option");
+      opt.value = item.value;
+      opt.textContent = item.text;
+      selectEl.appendChild(opt);
+    });
+    if (current && Array.prototype.some.call(selectEl.options, function (o) { return o.value === current; })) {
+      selectEl.value = current;
+    } else {
+      selectEl.value = "";
+    }
+  }
+
+  var marcasOpts = [];
+  if (selectMarca) {
+    for (var mi = 0; mi < selectMarca.options.length; mi++) {
+      var mo = selectMarca.options[mi];
+      marcasOpts.push({ value: mo.value, text: mo.textContent });
+    }
+  }
+  storeModeloOptions();
+
+  if (buscarMarca && selectMarca) {
+    buscarMarca.addEventListener("input", function () {
+      filterSelectOptions(selectMarca, buscarMarca, marcasOpts);
+    });
+  }
+
+  function refreshModelosForMarca() {
+    if (!selectModelo || !marcaModelos) return;
+    var m = (selectMarca && selectMarca.value) ? selectMarca.value.trim() : "";
+    var list = [];
+    if (m && marcaModelos[m]) {
+      marcaModelos[m].forEach(function (mod) {
+        list.push({ value: mod, text: mod });
+      });
+    } else {
+      modeloBackup.forEach(function (item) {
+        if (item.value) list.push(item);
+      });
+    }
+    var q = buscarModelo ? (buscarModelo.value || "").toLowerCase().trim() : "";
+    selectModelo.innerHTML = "";
+    var o0 = document.createElement("option");
+    o0.value = "";
+    o0.textContent = "— Seleccionar modelo —";
+    selectModelo.appendChild(o0);
+    list.forEach(function (item) {
+      if (q && item.text.toLowerCase().indexOf(q) === -1) return;
+      var opt = document.createElement("option");
+      opt.value = item.value;
+      opt.textContent = item.text;
+      selectModelo.appendChild(opt);
+    });
+    selectModelo.value = "";
+  }
+
+  if (selectMarca) {
+    selectMarca.addEventListener("change", refreshModelosForMarca);
+  }
+  if (buscarModelo && selectModelo) {
+    buscarModelo.addEventListener("input", refreshModelosForMarca);
+  }
+
+  function fillDatalist(id, items) {
+    var dl = document.getElementById(id);
+    if (!dl) return;
+    dl.innerHTML = "";
+    (items || []).forEach(function (it) {
+      var op = document.createElement("option");
+      op.value = it.nombre || "";
+      dl.appendChild(op);
+    });
+  }
+
+  function loadTaxSuggestions(tipo, q, onDone) {
+    var url = "/productos/api/sugerencias_taxonomia?tipo=" + encodeURIComponent(tipo) + "&q=" + encodeURIComponent(q || "");
+    fetch(url, { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) { onDone((data && data.items) || []); })
+      .catch(function () { onDone([]); });
+  }
+
+  if (catInput) {
+    catInput.addEventListener("input", debounce(function () {
+      loadTaxSuggestions("categoria", catInput.value || "", function (items) {
+        fillDatalist("cp_cat_list", items);
+      });
+    }, 250));
+  }
+  if (subcatInput) {
+    subcatInput.addEventListener("input", debounce(function () {
+      loadTaxSuggestions("subcategoria", subcatInput.value || "", function (items) {
+        fillDatalist("cp_subcat_list", items);
+      });
+    }, 250));
+  }
+
+  function formPayload(form) {
+    var fd = new FormData(form);
+    var out = {};
+    fd.forEach(function (v, k) {
+      if (v instanceof File) return;
+      out[k] = v;
+    });
+    return out;
+  }
+
+  var form = document.getElementById("formCrearProducto");
+  var draftKey = "productos:create";
+
+  function saveDraftLocal() {
+    if (!form) return;
+    var payload = formPayload(form);
+    localStorage.setItem(draftKey, JSON.stringify({ payload: payload, ts: Date.now() }));
+  }
+
+  function syncDraftServer() {
+    if (!form) return;
+    fetch("/productos/draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        form_key: draftKey,
+        payload: formPayload(form),
+        producto_codigo: (form.querySelector("[name='codigo']") || {}).value || ""
+      })
+    }).catch(function () {});
+  }
+
+  function debounce(fn, wait) {
+    var t;
+    return function () {
+      clearTimeout(t);
+      t = setTimeout(fn, wait);
+    };
+  }
+
+  var debouncedDraft = debounce(function () {
+    saveDraftLocal();
+    syncDraftServer();
+  }, 700);
+
+  function applyPayload(payload) {
+    if (!payload || !form) return;
+    Object.keys(payload).forEach(function (k) {
+      var el = form.querySelector("[name='" + k.replace(/'/g, "\\'") + "']");
+      if (!el) return;
+      if (el.type === "file") return;
+      el.value = payload[k] == null ? "" : payload[k];
+    });
+  }
+
+  function restoreDraft() {
+    if (!form) return;
+    var local = null;
+    try {
+      local = JSON.parse(localStorage.getItem(draftKey) || "null");
+    } catch (e) {
+      local = null;
+    }
+    if (local && local.payload) applyPayload(local.payload);
+    fetch("/productos/draft?form_key=" + encodeURIComponent(draftKey), { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.success && data.draft && data.draft.payload) {
+          applyPayload(data.draft.payload);
+        }
+      })
+      .catch(function () {});
+  }
+
+  function validateRealtime() {
+    if (!form) return Promise.resolve(true);
+    var payload = formPayload(form);
+    return fetch("/productos/validar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(payload)
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var codigoEl = form.querySelector("[name='codigo']");
+        var oemEl = form.querySelector("[name='codigo_oem']");
+        if (codigoEl) codigoEl.setCustomValidity((data.errors && data.errors.codigo) || "");
+        if (oemEl && data.warnings && data.warnings.codigo_oem) {
+          showOemAlert(true);
+        }
+        return !!(data && data.valid);
+      })
+      .catch(function () { return true; });
+  }
+
+  if (form) {
+    restoreDraft();
+    form.addEventListener("input", debouncedDraft);
+    form.addEventListener("change", debouncedDraft);
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      validateRealtime().then(function (ok) {
+        if (!ok) {
+          form.reportValidity();
+          return;
+        }
+        var fd = new FormData(form);
+        fetch("/productos/crear", {
+          method: "POST",
+          body: fd,
+          credentials: "same-origin"
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (!data.success) {
+              alert(data.error || "No se pudo crear el producto");
+              return;
+            }
+            localStorage.removeItem(draftKey);
+            fetch("/productos/draft?form_key=" + encodeURIComponent(draftKey), { method: "DELETE", credentials: "same-origin" }).catch(function () {});
+            alert(data.message || "Producto creado correctamente");
+            if (window.closeAppModal) window.closeAppModal();
+            if (window._loadModule) window._loadModule("/buscar?q=" + encodeURIComponent((form.querySelector("[name='codigo']") || {}).value || ""));
+          })
+          .catch(function () {
+            alert("Error de conexión al crear producto");
+          });
+      });
+    });
+  }
+})();
+</script>

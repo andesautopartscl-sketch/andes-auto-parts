@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environments
+.venv/
+venv/
+env/
+
+# IDE / local
+.vscode/
+.cursor/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local databases and generated docs
+data/*.db
+data/public_docs/
+data/chat_uploads/
+
+# Large local catalog/assets not required for deploy
+SAIC EPC/
+app/static/productos_img/
+app/static/productos360/
+app/static/epc_despiece/
+

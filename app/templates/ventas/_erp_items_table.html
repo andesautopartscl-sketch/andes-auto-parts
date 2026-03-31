@@ -1,0 +1,60 @@
+<table class="erp-table">
+    <thead>
+        <tr>
+            <th class="tc-num">#</th>
+            <th class="tc-code">Código</th>
+            <th class="tc-desc">Descripción</th>
+            <th class="tc-brand">Marca</th>
+            <th class="tc-wh">Bodega</th>
+            <th class="tc-qty">Cant.</th>
+            <th class="tc-price">P. Unitario</th>
+            <th class="tc-sub">Subtotal</th>
+            <th class="tc-rm no-print"></th>
+        </tr>
+    </thead>
+    <tbody id="itemsBody">
+        {% for item in items %}
+        <tr class="item-row">
+            <td class="tc-num"><span class="row-num">{{ loop.index }}</span></td>
+            <td class="tc-code">
+                <div class="code-wrap">
+                    <input name="item_codigo[]" class="item-codigo" value="{{ item.codigo }}" autocomplete="off" placeholder="Código">
+                    <button class="code-srch-btn no-print" type="button" title="Buscar producto (F2)">&#128269;</button>
+                </div>
+                <span class="item-meta-line"></span>
+            </td>
+            <td class="tc-desc">
+                <input name="item_descripcion[]" class="item-desc" value="{{ item.descripcion }}" placeholder="Descripción del producto">
+                <div class="item-stock-row"></div>
+            </td>
+            <td class="tc-brand">
+                <select name="item_marca[]" class="item-marca">
+                    <option value="{{ item.marca or '' }}">{{ item.marca or 'Sin variante' }}</option>
+                </select>
+            </td>
+            <td class="tc-wh">
+                <select name="item_bodega[]" class="item-bodega">
+                    <option value="{{ item.bodega or 'Bodega 1' }}">{{ item.bodega or 'Bodega 1' }}</option>
+                </select>
+            </td>
+            <td class="tc-qty">
+                <input name="item_cantidad[]" class="item-qty" type="number" min="1" value="{{ item.cantidad }}">
+            </td>
+            <td class="tc-price">
+                <input name="item_precio[]" class="item-price" type="number" min="0" step="0.01" value="{{ item.precio }}">
+            </td>
+            <td class="tc-sub">
+                <span class="item-subtotal">{{ '%.2f'|format(item.subtotal) }}</span>
+            </td>
+            <td class="tc-rm no-print">
+                <button class="btn sm danger remove-row-btn" type="button" title="Quitar fila">&#10005;</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="table-foot no-print">
+    <button class="btn sm outline" type="button" id="addRow">+ Agregar fila</button>
+    <span class="table-hint">Enter = autocompletar · F2 o 🔍 = buscar · Doble clic en resultado = insertar</span>
+</div>
