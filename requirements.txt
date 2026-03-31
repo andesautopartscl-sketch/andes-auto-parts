@@ -6,6 +6,7 @@ openpyxl
 reportlab
 python-dotenv
 python-barcode
+qrcode
 Pillow
 
 # Optional (prod): only needed if deploying behind a WSGI server
