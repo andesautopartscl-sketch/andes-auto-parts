@@ -164,6 +164,20 @@ def create_app():
                 conn.execute(text("ALTER TABLE usuarios_sistema ADD COLUMN bloqueado_at DATETIME"))
             conn.execute(text("UPDATE usuarios_sistema SET intentos_fallidos = COALESCE(intentos_fallidos, 0)"))
             conn.execute(text("UPDATE usuarios_sistema SET bloqueado_seguridad = COALESCE(bloqueado_seguridad, 0)"))
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS usuarios_permisos (
+                        id INTEGER PRIMARY KEY,
+                        usuario_id INTEGER NOT NULL UNIQUE,
+                        ver_finanzas BOOLEAN NOT NULL DEFAULT 1,
+                        ver_precio_mayor BOOLEAN NOT NULL DEFAULT 1,
+                        actualizado_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usuarios_permisos_usuario_id ON usuarios_permisos(usuario_id)"))
 
             product_cols = conn.execute(text("PRAGMA table_info(productos)")).fetchall()
             product_col_names = {col[1] for col in product_cols}
