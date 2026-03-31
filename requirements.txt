@@ -5,6 +5,8 @@ pandas
 openpyxl
 reportlab
 python-dotenv
+python-barcode
+Pillow
 
 # Optional (prod): only needed if deploying behind a WSGI server
 gunicorn
