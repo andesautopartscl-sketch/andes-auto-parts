@@ -39,7 +39,6 @@ def login():
     error = None
 
     if request.method == "POST":
-
         username = request.form.get("username")
         password = request.form.get("password")
 
@@ -48,6 +47,13 @@ def login():
 
         # Unified auth source: same table/model used by /seguridad/api/usuarios
         user = UsuarioSistema.query.filter_by(usuario=username).first()
+        password_ok = False
+        if user:
+            try:
+                password_ok = check_password_hash(user.password_hash or "", password or "")
+            except Exception:
+                # Compatibilidad defensiva: hashes legados/rotos no deben tumbar login con 500.
+                password_ok = (str(user.password_hash or "") == str(password or ""))
 
         # -----------------------------
         # VALIDAR LOGIN (con bloqueo por intentos)
@@ -61,7 +67,7 @@ def login():
                 error = "Usuario bloqueado por seguridad. El administrador debe desbloquear tu cuenta."
                 return render_template("login.html", error=error)
 
-        if user and check_password_hash(user.password_hash, password):
+        if user and password_ok:
 
             session["user"] = user.usuario
             session["rol"] = user.rol.nombre if user.rol else ""

@@ -479,3 +479,7 @@ def create_app():
             return response
 
     return app
+
+
+# Compatibilidad de despliegue: soporta start command legado "gunicorn app:app".
+app = create_app()
