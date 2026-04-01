@@ -106,7 +106,7 @@ def login():
                     print(f"[LOGIN][ERROR] Error updating timestamps: {e}")
                     print("="*70 + "\n")
 
-                return redirect(url_for("auth.inicio_seguro"))
+                return redirect(url_for("productos.buscar"))
 
             else:
                 if user:
@@ -143,7 +143,7 @@ def login():
                     if legacy_user is not None and legacy_password_ok:
                         session["user"] = legacy_user.username
                         session["rol"] = legacy_user.rol or ""
-                        return redirect(url_for("auth.inicio_seguro"))
+                        return redirect(url_for("productos.buscar"))
 
                 error = "Usuario o clave incorrectos"
 
