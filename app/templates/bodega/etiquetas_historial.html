@@ -56,7 +56,7 @@
 .history-table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 860px;
+    min-width: 920px;
 }
 .history-table thead th {
     text-align: left;
@@ -76,6 +76,66 @@
 }
 .history-table tbody tr:hover {
     background: #f8fbff;
+}
+.history-table th.col-sel,
+.history-table td.col-sel {
+    width: 40px;
+    text-align: center;
+    vertical-align: middle;
+}
+.history-table th.col-sel input {
+    cursor: pointer;
+}
+.history-table td.col-qty input.hist-qty-input {
+    width: 64px;
+    height: 34px;
+    padding: 0 8px;
+    border: 1px solid #c7d3e2;
+    border-radius: 8px;
+    font-size: 14px;
+    text-align: center;
+}
+.history-table th.col-qty,
+.history-table td.col-qty {
+    width: 88px;
+    text-align: center;
+    vertical-align: middle;
+}
+.bulk-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    border-bottom: 1px solid #dbe4f0;
+    background: #f8fafc;
+}
+.bulk-bar .btn-primary {
+    background: #1d4ed8;
+    color: #fff;
+    border: 1px solid #1d4ed8;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+}
+.bulk-bar .btn-primary:hover {
+    background: #1e40af;
+}
+.hint-sel {
+    font-size: 13px;
+    color: #64748b;
+}
+.err-banner {
+    margin: 0 14px 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    font-size: 14px;
 }
 .muted {
     color: #64748b;
@@ -167,15 +227,34 @@
 </div>
 
 <div class="table-card">
+    {% if request.args.get('err') == 'no_sel' %}
+    <p class="err-banner" role="alert">Selecciona al menos una fila para reimprimir varias de una vez.</p>
+    {% endif %}
     {% if rows and rows|length > 0 %}
+    <form method="post" action="{{ url_for('bodega.etiquetas') }}">
+        <input type="hidden" name="bulk_historial" value="1">
+        <input type="hidden" name="skip_historial_register" value="1">
+        <input type="hidden" name="q" value="{{ q }}">
+        <input type="hidden" name="page" value="{{ page }}">
+        <div class="bulk-bar">
+            <div class="hint-sel">
+                <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="hist-sel-all" aria-label="Seleccionar todas las filas visibles">
+                    <span>Marcar todas las filas de esta página</span>
+                </label>
+                <span class="muted" style="display:block;margin-top:6px;">Puedes cambiar la cantidad en cada fila antes de reimprimir (columna «Cantidad (reimp.)»).</span>
+            </div>
+            <button type="submit" class="btn-primary">Reimprimir seleccionadas</button>
+        </div>
     <div class="table-scroll">
         <table class="history-table">
             <thead>
                 <tr>
+                    <th class="col-sel"></th>
                     <th>Código</th>
                     <th>Descripción</th>
                     <th>Modelo</th>
-                    <th>Cantidad</th>
+                    <th class="col-qty">Cantidad (reimp.)</th>
                     <th>Fecha</th>
                     <th>Usuario</th>
                     <th>Acción</th>
@@ -184,10 +263,15 @@
             <tbody>
                 {% for row in rows %}
                 <tr>
+                    <td class="col-sel">
+                        <input class="hist-row-cb" type="checkbox" name="historial_ids" value="{{ row.id }}" aria-label="Seleccionar {{ row.codigo_producto }}">
+                    </td>
                     <td><strong>{{ row.codigo_producto }}</strong></td>
                     <td>{{ row.descripcion }}</td>
                     <td>{{ row.modelo or '—' }}</td>
-                    <td>{{ row.cantidad }}</td>
+                    <td class="col-qty">
+                        <input class="hist-qty-input" type="number" name="historial_qty_{{ row.id }}" min="1" max="50" step="1" value="{{ row.cantidad or 1 }}" title="Copias a imprimir al reimprimir esta fila" aria-label="Cantidad reimpresión {{ row.codigo_producto }}">
+                    </td>
                     <td>
                         {{ row.fecha|chile_datetime }}
                         <div class="muted">{{ row.fecha.strftime('%Y-%m-%d %H:%M') if row.fecha else '' }} UTC</div>
@@ -201,6 +285,7 @@
             </tbody>
         </table>
     </div>
+    </form>
 
     <div class="pagination">
         <div class="muted">Mostrando {{ rows|length }} de {{ total }} registros</div>
@@ -230,4 +315,178 @@
     </div>
     {% endif %}
 </div>
+<script>
+(function () {
+    var STORAGE_SEL = "andes_hist_etiquetas_sel";
+    var STORAGE_QTY = "andes_hist_etiquetas_qty";
+    var MAX_SEL = 80;
+
+    function loadSel() {
+        try {
+            var a = JSON.parse(sessionStorage.getItem(STORAGE_SEL) || "[]");
+            return Array.isArray(a) ? a.map(String) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+    function loadQty() {
+        try {
+            var o = JSON.parse(sessionStorage.getItem(STORAGE_QTY) || "{}");
+            return o && typeof o === "object" ? o : {};
+        } catch (e) {
+            return {};
+        }
+    }
+    function saveSel(arr) {
+        var u = [];
+        var seen = {};
+        arr.forEach(function (id) {
+            id = String(id);
+            if (!seen[id]) {
+                seen[id] = 1;
+                u.push(id);
+            }
+        });
+        sessionStorage.setItem(STORAGE_SEL, JSON.stringify(u.slice(0, MAX_SEL)));
+    }
+    function saveQty(obj) {
+        sessionStorage.setItem(STORAGE_QTY, JSON.stringify(obj));
+    }
+    function mergeId(id, checked) {
+        id = String(id);
+        var s = loadSel();
+        var ix = s.indexOf(id);
+        if (checked && ix === -1) {
+            s.push(id);
+        }
+        if (!checked && ix !== -1) {
+            s.splice(ix, 1);
+        }
+        saveSel(s);
+        if (!checked) {
+            var qm = loadQty();
+            delete qm[id];
+            saveQty(qm);
+        }
+    }
+
+    var form = document.querySelector(".table-card form[method='post']");
+    var all = document.getElementById("hist-sel-all");
+
+    function syncQtyFromInput(cb) {
+        if (!cb.checked) return;
+        var row = cb.closest("tr");
+        var qtyIn = row && row.querySelector(".hist-qty-input");
+        var v = qtyIn ? Math.min(50, Math.max(1, parseInt(qtyIn.value, 10) || 1)) : 1;
+        var qm = loadQty();
+        qm[String(cb.value)] = v;
+        saveQty(qm);
+    }
+
+    function refreshSelectAllState() {
+        if (!all) return;
+        var boxes = document.querySelectorAll(".hist-row-cb");
+        if (!boxes.length) {
+            all.checked = false;
+            return;
+        }
+        var every = true;
+        boxes.forEach(function (cb) {
+            if (!cb.checked) {
+                every = false;
+            }
+        });
+        all.checked = every;
+    }
+
+    document.querySelectorAll(".hist-row-cb").forEach(function (cb) {
+        var id = String(cb.value);
+        var sel = loadSel();
+        if (sel.indexOf(id) !== -1) {
+            cb.checked = true;
+        }
+        var qm = loadQty();
+        if (cb.checked && qm[id] != null) {
+            var row = cb.closest("tr");
+            var qtyIn = row && row.querySelector(".hist-qty-input");
+            if (qtyIn) {
+                qtyIn.value = Math.min(50, Math.max(1, parseInt(qm[id], 10) || 1));
+            }
+        }
+        cb.addEventListener("change", function () {
+            mergeId(cb.value, cb.checked);
+            if (cb.checked) {
+                syncQtyFromInput(cb);
+            }
+            refreshSelectAllState();
+        });
+    });
+    refreshSelectAllState();
+
+    document.querySelectorAll(".hist-qty-input").forEach(function (inp) {
+        inp.addEventListener("change", function () {
+            var m = (inp.name || "").match(/^historial_qty_(\d+)$/);
+            if (!m) return;
+            var id = m[1];
+            var sel = loadSel();
+            if (sel.indexOf(id) === -1) return;
+            var qm = loadQty();
+            qm[id] = Math.min(50, Math.max(1, parseInt(inp.value, 10) || 1));
+            saveQty(qm);
+        });
+    });
+
+    if (all) {
+        all.addEventListener("change", function () {
+            var on = all.checked;
+            document.querySelectorAll(".hist-row-cb").forEach(function (cb) {
+                cb.checked = on;
+                mergeId(cb.value, on);
+                if (on) {
+                    syncQtyFromInput(cb);
+                }
+            });
+        });
+    }
+
+    if (form) {
+        form.addEventListener("submit", function () {
+            var sel = loadSel().slice(0, MAX_SEL);
+            var qm = loadQty();
+            document.querySelectorAll(".hist-row-cb").forEach(function (cb) {
+                cb.disabled = true;
+            });
+            document.querySelectorAll(".hist-qty-input").forEach(function (inp) {
+                inp.disabled = true;
+            });
+            sel.forEach(function (id) {
+                var h = document.createElement("input");
+                h.type = "hidden";
+                h.name = "historial_ids";
+                h.value = id;
+                form.appendChild(h);
+                var qv = qm[id];
+                if (qv == null) {
+                    var row = document.querySelector('.hist-row-cb[value="' + id + '"]');
+                    if (row) {
+                        var tr = row.closest("tr");
+                        var qi = tr && tr.querySelector(".hist-qty-input");
+                        if (qi) {
+                            qv = Math.min(50, Math.max(1, parseInt(qi.value, 10) || 1));
+                        }
+                    }
+                }
+                if (qv == null) {
+                    qv = 1;
+                }
+                var hq = document.createElement("input");
+                hq.type = "hidden";
+                hq.name = "historial_qty_" + id;
+                hq.value = String(Math.min(50, Math.max(1, parseInt(qv, 10) || 1)));
+                form.appendChild(hq);
+            });
+        });
+    }
+})();
+</script>
 {% endblock %}

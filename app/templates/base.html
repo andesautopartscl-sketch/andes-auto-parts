@@ -256,6 +256,48 @@ body.app-modal-is-open #apchat-root {
 		justify-content: flex-start;
 	}
 }
+
+/* Escritorio: layout a todo el ancho; scroll solo en el contenido — sidebar fijo a la vista */
+@media (min-width: 961px) {
+	html {
+		height: 100%;
+		overflow: hidden;
+	}
+	body {
+		height: 100%;
+		overflow: hidden;
+	}
+	.layout {
+		padding: 0;
+		gap: 0;
+		height: 100vh;
+		max-height: 100vh;
+		min-height: 0;
+		align-items: stretch;
+		overflow: hidden;
+	}
+	.layout .sidebar {
+		border-radius: 0;
+		height: 100vh;
+		max-height: 100vh;
+		min-height: 0;
+		flex-shrink: 0;
+		box-shadow: none;
+	}
+	.content {
+		border-radius: 0;
+		box-shadow: none;
+		flex: 1;
+		min-width: 0;
+		min-height: 0;
+		height: 100%;
+		overflow-y: auto;
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+		border: none;
+		border-left: 1px solid var(--line);
+	}
+}
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/erp_module.css') }}">
 {% block extra_head %}{% endblock %}
@@ -311,6 +353,11 @@ document.addEventListener('DOMContentLoaded', function () {
 (function () {
 	'use strict';
 
+	/* Evita condiciones de carrera al hacer clic rápido entre ítems del menú:
+	   respuestas viejas no deben pisar contenido ni updateSidebarActive (saltos del acordeón). */
+	var moduleLoadSeq = 0;
+	var moduleLoadAbort = null;
+
 	function executeScripts(container) {
 		/* Re-execute scripts injected via innerHTML (they don't auto-run) */
 		var scripts = Array.from(container.querySelectorAll('script'));
@@ -348,16 +395,36 @@ document.addEventListener('DOMContentLoaded', function () {
 			if (isActive) activeLink = a;
 		});
 
-		/* Sync accordion: collapse all, then open the parent of the active link */
+		if (!activeLink) {
+			document.querySelectorAll('.submenu').forEach(function (m) { m.classList.remove('open'); });
+			document.querySelectorAll('.module-header').forEach(function (h) { h.classList.remove('active'); });
+			return;
+		}
+
+		var submenu = activeLink.closest('.submenu');
+		if (!submenu) {
+			return;
+		}
+
+		var hdr = document.getElementById('hdr-' + submenu.id);
+		var otherSubmenuOpen = false;
+		document.querySelectorAll('.submenu.open').forEach(function (m) {
+			if (m !== submenu) {
+				otherSubmenuOpen = true;
+			}
+		});
+
+		/* Si solo cambia el ítem dentro del mismo módulo (ej. varias rutas /bodega/...), no cerrar y reabrir
+		   el acordeón: evita la animación max-height en bucle y los “saltos” al hacer clic seguido. */
+		if (!otherSubmenuOpen && submenu.classList.contains('open') && hdr && hdr.classList.contains('active')) {
+			return;
+		}
+
 		document.querySelectorAll('.submenu').forEach(function (m) { m.classList.remove('open'); });
 		document.querySelectorAll('.module-header').forEach(function (h) { h.classList.remove('active'); });
-		if (activeLink) {
-			var submenu = activeLink.closest('.submenu');
-			if (submenu) {
-				submenu.classList.add('open');
-				var hdr = document.getElementById('hdr-' + submenu.id);
-				if (hdr) hdr.classList.add('active');
-			}
+		submenu.classList.add('open');
+		if (hdr) {
+			hdr.classList.add('active');
 		}
 	}
 
@@ -494,7 +561,17 @@ document.addEventListener('DOMContentLoaded', function () {
 		closeAppModal();
 		showLoading(container);
 
+		moduleLoadSeq += 1;
+		var loadId = moduleLoadSeq;
+		if (moduleLoadAbort) {
+			try {
+				moduleLoadAbort.abort();
+			} catch (e) {}
+		}
+		moduleLoadAbort = new AbortController();
+
 		fetch(url, {
+			signal: moduleLoadAbort.signal,
 			headers: {
 				'X-Requested-With': 'XMLHttpRequest',
 				'Accept': 'text/html'
@@ -502,6 +579,9 @@ document.addEventListener('DOMContentLoaded', function () {
 			credentials: 'same-origin'
 		})
 		.then(function (res) {
+			if (loadId !== moduleLoadSeq) {
+				return Promise.reject({ stale: true });
+			}
 			if (res.redirected && res.url.indexOf('/login') !== -1) {
 				window.location.href = res.url;
 				return Promise.reject(new Error('redirect'));
@@ -510,10 +590,16 @@ document.addEventListener('DOMContentLoaded', function () {
 			return res.text();
 		})
 		.then(function (html) {
+			if (loadId !== moduleLoadSeq) {
+				return Promise.reject({ stale: true });
+			}
 			container.innerHTML = html;
 			return executeScripts(container);
 		})
 		.then(function () {
+			if (loadId !== moduleLoadSeq) {
+				return;
+			}
 			if (!options.skipHistory && window.history && window.history.pushState) {
 				var nextUrl = (url || '').toString();
 				if (nextUrl !== currentPath()) {
@@ -524,8 +610,20 @@ document.addEventListener('DOMContentLoaded', function () {
 			document.dispatchEvent(new CustomEvent('app:module-loaded', { detail: { url: url } }));
 		})
 		.catch(function (err) {
-			if (err.message === 'redirect') return;
-			container.innerHTML = '<div style="padding:40px;text-align:center;color:#dc2626;">❌ Error al cargar el módulo: ' + err.message + '</div>';
+			if (err && err.stale) {
+				return;
+			}
+			if (err && err.name === 'AbortError') {
+				return;
+			}
+			if (err && err.message === 'redirect') {
+				return;
+			}
+			if (loadId !== moduleLoadSeq) {
+				return;
+			}
+			var msg = (err && err.message) ? err.message : 'Error';
+			container.innerHTML = '<div style="padding:40px;text-align:center;color:#dc2626;">❌ Error al cargar el módulo: ' + msg + '</div>';
 		});
 	};
 

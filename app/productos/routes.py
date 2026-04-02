@@ -36,6 +36,7 @@ from ..utils.categoria_autodetect import (
     auto_asignar_categoria_si_vacio as _auto_asignar_categoria_si_vacio,
     bulk_auto_asignar_categorias_faltantes,
 )
+from ..utils.product_image_postprocess import process_uploaded_image
 
 
 productos_bp = Blueprint("productos", __name__)
@@ -266,6 +267,9 @@ def _save_uploaded_images(codigo: str, files: list) -> list[str]:
         target_name = f"{codigo}.jpg" if idx == 0 else f"{codigo}_{idx + 1}.{ext}"
         target = static_dir / target_name
         f.save(str(target))
+        out = process_uploaded_image(target)
+        if out is not None:
+            target_name = out.name
         rutas.append(f"productos_img/{target_name}")
     return rutas
 
@@ -1306,6 +1310,10 @@ def guardar_despiece_producto(codigo):
             fname = f"{base_fn}_{int(datetime.utcnow().timestamp())}{ext}"
             path = static_dir / fname
             upload.save(path)
+            out = process_uploaded_image(path)
+            if out is not None:
+                path = out
+                fname = out.name
             row.imagen_static = f"epc_despiece/{fname}"
         elif borrar_imagen:
             row.imagen_static = None
@@ -1687,6 +1695,9 @@ def crear_producto():
                 target = Path("app/static/productos_img") / target_name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 despiece.save(str(target))
+                out = process_uploaded_image(target)
+                if out is not None:
+                    target_name = out.name
                 p.despiece = f"productos_img/{target_name}"
 
         register_product_audit(

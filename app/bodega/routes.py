@@ -42,6 +42,11 @@ def _online_users() -> list[Usuario]:
 
 
 def _producto_por_codigo(codigo: str):
+    """Resuelve producto por código de catálogo. Acepta sufijo AA (ej. 2417AA → 2417) si no hay fila exacta."""
+    raw = (codigo or "").strip().upper()
+    if not raw:
+        return None
+
     query = text(
         """
         SELECT
@@ -52,12 +57,21 @@ def _producto_por_codigo(codigo: str):
                         COALESCE(P_PUBLICO, 0) AS precio_publico,
             COALESCE(STOCK_10JUL, 0) AS stock_actual
         FROM productos
-        WHERE UPPER(CODIGO) = :codigo
+        WHERE UPPER(TRIM(CODIGO)) = :codigo
           AND COALESCE(ACTIVO, 1) = 1
         LIMIT 1
         """
     )
-    return db.session.execute(query, {"codigo": codigo.upper()}).mappings().first()
+    row = db.session.execute(query, {"codigo": raw}).mappings().first()
+    if row:
+        return row
+    if len(raw) >= 3 and raw.endswith("AA"):
+        base = raw[:-2].strip()
+        if base:
+            row = db.session.execute(query, {"codigo": base}).mappings().first()
+            if row:
+                return row
+    return None
 
 
 def _normalize_brand(raw: str) -> str:
@@ -464,7 +478,24 @@ def generar_barcode(codigo: str) -> str:
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
+def _normalize_codigos_input(raw: str) -> str:
+    """Unifica signos de multiplicación y espacios para que x2 / ×2 / *2 se interpreten igual."""
+    if not raw:
+        return ""
+    t = raw.replace("\u00a0", " ").replace("\u202f", " ").replace("\u2009", " ")
+    for ch in ("\u00d7", "\u2715", "\u2716", "\u2717"):
+        t = t.replace(ch, "x")
+    t = t.replace("\uff58", "x")
+    return t
+
+
+def _split_glued_x_qty(part: str) -> str:
+    """CODE123x4 -> CODE123 x4. Solo 'x' minúscula (evita trocear códigos que terminen en X mayúscula)."""
+    return re.sub(r"(?<=[A-Za-z0-9])(x)(\d+)$", r" \1\2", part or "")
+
+
 def _parse_codigos(raw_codes: str) -> list[str]:
+    raw_codes = _normalize_codigos_input((raw_codes or "").strip())
     expanded_codes = []
     chunks = re.split(r"[\n,;]+", raw_codes or "")
 
@@ -472,6 +503,15 @@ def _parse_codigos(raw_codes: str) -> list[str]:
         part = (raw_part or "").strip()
         if not part:
             continue
+        # "CODE x" o "CODE *" sin número (estado intermedio al escribir) → solo el código, cantidad 1
+        incomplete = re.match(
+            r"^([A-Za-z0-9._\-/]+)\s*(?:x|\*)\s*$",
+            part,
+            flags=re.IGNORECASE,
+        )
+        if incomplete:
+            part = incomplete.group(1)
+        part = _split_glued_x_qty(part)
 
         match = re.match(r"^([A-Za-z0-9._\-/]+)(?:\s*(?:x|\*)\s*(\d+))?$", part, flags=re.IGNORECASE)
         if not match:
@@ -502,16 +542,109 @@ def _font_class_for_name(nombre: str) -> str:
     return ""
 
 
-def _build_labels_from_codes(codes: list[str], fp: str):
+def _build_labels_from_codes(
+    codes: list[str], fp: str, enrich_prev: dict[str, dict[str, str]] | None = None
+):
+    """Una etiqueta por entrada expandida. Código en etiqueta = lo escrito (p. ej. TOU001AA).
+    Si `enrich_prev` trae descripcion/modelo de la última vista (sesión), se reutiliza: así x2/x3 no
+    vuelven a la BD y no cambian textos. Si no, se enriquece con catálogo o placeholders."""
+    enrich_prev = enrich_prev or {}
     labels = []
     missing = []
     for code in codes:
-        producto = _producto_por_codigo(code)
-        if producto is None:
-            missing.append(code)
+        display = (code or "").strip().upper()
+        if not display:
             continue
-        descripcion = (producto.get("descripcion") or "SIN DESCRIPCION").strip()
-        modelo = (producto.get("modelo") or "").strip()
+        frozen = enrich_prev.get(display)
+        if frozen is not None:
+            descripcion = (frozen.get("descripcion") or "").strip() or "SIN DESCRIPCION"
+            modelo = (frozen.get("modelo") or "").strip()
+        else:
+            producto = _producto_por_codigo(display)
+            if producto is None:
+                missing.append(display)
+                descripcion = "SIN DESCRIPCION"
+                modelo = ""
+            else:
+                descripcion = (producto.get("descripcion") or "SIN DESCRIPCION").strip()
+                modelo = (producto.get("modelo") or "").strip()
+        labels.append(
+            {
+                "codigo": display,
+                "nombre": descripcion,
+                "descripcion": descripcion,
+                "modelo": modelo,
+                "fp": fp,
+                "name_class": _font_class_for_name(descripcion),
+                "qr_base64": generar_qr(display),
+                "barcode_base64": generar_barcode(display),
+            }
+        )
+    return labels, missing
+
+
+MAX_HISTORIAL_REPRINT_IDS = 80
+MAX_LABELS_EN_VISTA = 400
+# Textos por código mostrado (p. ej. TOU001AA): evita que x2/x3 reconsulten la BD y cambien descripción/modelo.
+ETIQUETAS_ENRICH_SESSION_KEY = "bodega_etiquetas_enrich"
+
+
+def _etiquetas_enrich_prev_for_codes(codes: list[str]) -> dict[str, dict[str, str]]:
+    seen = {(c or "").strip().upper() for c in codes if (c or "").strip()}
+    raw = session.get(ETIQUETAS_ENRICH_SESSION_KEY)
+    if not isinstance(raw, dict) or not seen:
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for k in seen:
+        v = raw.get(k)
+        if isinstance(v, dict):
+            out[k] = {
+                "descripcion": (v.get("descripcion") or "").strip(),
+                "modelo": (v.get("modelo") or "").strip(),
+            }
+    return out
+
+
+def _persist_etiquetas_enrich_from_labels(labels: list[dict]) -> None:
+    enrich: dict[str, dict[str, str]] = {}
+    for lbl in labels:
+        c = (lbl.get("codigo") or "").strip().upper()
+        if not c:
+            continue
+        enrich[c] = {
+            "descripcion": (lbl.get("descripcion") or lbl.get("nombre") or "").strip(),
+            "modelo": (lbl.get("modelo") or "").strip(),
+        }
+    session[ETIQUETAS_ENRICH_SESSION_KEY] = enrich
+    session.modified = True
+
+
+def _historial_reprint_qty_from_request(hid: int) -> int | None:
+    """Cantidad por fila en reimpresión masiva (historial_qty_<id>). None = usar la del registro."""
+    raw = request.values.get(f"historial_qty_{hid}")
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        return max(1, min(int(raw), 50))
+    except (ValueError, TypeError):
+        return None
+
+
+def _build_labels_from_historial_row(
+    item: HistorialEtiqueta, fp: str, override_qty: int | None = None
+) -> list[dict]:
+    """Reimprime usando solo el snapshot guardado (código inexistente en catálogo)."""
+    code = (item.codigo_producto or "").strip().upper()
+    if not code:
+        return []
+    descripcion = (item.descripcion or "SIN DESCRIPCION").strip()
+    modelo = (item.modelo or "").strip()
+    if override_qty is not None:
+        qty = max(1, min(int(override_qty), 50))
+    else:
+        qty = max(1, min(int(item.cantidad or 1), 50))
+    labels: list[dict] = []
+    for _ in range(qty):
         labels.append(
             {
                 "codigo": code,
@@ -524,7 +657,7 @@ def _build_labels_from_codes(codes: list[str], fp: str):
                 "barcode_base64": generar_barcode(code),
             }
         )
-    return labels, missing
+    return labels
 
 
 def _registrar_historial_etiquetas(labels: list[dict]) -> tuple[bool, str | None]:
@@ -1130,26 +1263,107 @@ def recepcion():
 def etiquetas():
     codigos_raw = (request.values.get("codigos") or "").strip()
     fp = (request.values.get("fp") or "").strip()
+    historial_id = request.values.get("historial_id", type=int)
+    skip_historial_register = (request.values.get("skip_historial_register") or "").strip() == "1"
+    bulk_historial = (request.values.get("bulk_historial") or "").strip() == "1"
 
     message = None
     labels = []
     missing = []
     codes = _parse_codigos(codigos_raw)
 
-    if codes:
+    ids_to_load: list[int] = []
+    if historial_id:
+        ids_to_load = [historial_id]
+    else:
+        for x in request.values.getlist("historial_ids"):
+            try:
+                ids_to_load.append(int(x))
+            except (ValueError, TypeError):
+                pass
+        ids_to_load = list(dict.fromkeys(ids_to_load))[:MAX_HISTORIAL_REPRINT_IDS]
+
+    if bulk_historial and not historial_id and not ids_to_load:
+        q_back = (request.values.get("q") or "").strip()
+        page_back = (request.values.get("page") or "1").strip() or "1"
+        return redirect(url_for("bodega.etiquetas_historial", q=q_back, page=page_back, err="no_sel"))
+
+    if ids_to_load:
+        rows_hi = HistorialEtiqueta.query.filter(HistorialEtiqueta.id.in_(ids_to_load)).all()
+        by_id = {r.id: r for r in rows_hi}
+        if len(ids_to_load) == 1 and ids_to_load[0] not in by_id:
+            message = {"type": "error", "text": "No se encontró el registro de historial de etiquetas."}
+        else:
+            try:
+                truncated = False
+                for hid in ids_to_load:
+                    if hid not in by_id:
+                        continue
+                    chunk = _build_labels_from_historial_row(
+                        by_id[hid], fp, override_qty=_historial_reprint_qty_from_request(hid)
+                    )
+                    for lbl in chunk:
+                        if len(labels) >= MAX_LABELS_EN_VISTA:
+                            truncated = True
+                            break
+                        labels.append(lbl)
+                    if len(labels) >= MAX_LABELS_EN_VISTA:
+                        truncated = True
+                        break
+                missing = []
+                if not codigos_raw:
+                    parts = []
+                    for hid in ids_to_load:
+                        if hid in by_id:
+                            it = by_id[hid]
+                            ov = _historial_reprint_qty_from_request(hid)
+                            n = ov if ov is not None else max(1, int(it.cantidad or 1))
+                            parts.append(f"{it.codigo_producto} x{n}")
+                    codigos_raw = ", ".join(parts)
+                skip_historial_register = True
+                if truncated:
+                    message = {
+                        "type": "success",
+                        "text": f"Se muestran hasta {MAX_LABELS_EN_VISTA} etiquetas por vista. Si necesitas más, reimprime en otro lote.",
+                    }
+                if not labels and not message:
+                    message = {
+                        "type": "error",
+                        "text": "No se encontraron registros de historial de etiquetas.",
+                    }
+            except Exception as exc:
+                message = {"type": "error", "text": f"No se pudo generar QR/Barcode: {exc}"}
+                labels = []
+    elif codes:
         try:
-            labels, missing = _build_labels_from_codes(codes, fp)
+            enrich_prev = _etiquetas_enrich_prev_for_codes(codes)
+            labels, missing = _build_labels_from_codes(codes, fp, enrich_prev)
         except Exception as exc:
             message = {"type": "error", "text": f"No se pudo generar QR/Barcode: {exc}"}
             labels = []
 
+    missing = sorted(set(missing))
     if missing:
-        message = {
-            "type": "error",
-            "text": "No encontrados o inactivos: " + ", ".join(missing[:15]),
-        }
+        codes_txt = ", ".join(missing[:15])
+        if labels:
+            message = {
+                "type": "warning",
+                "text": "Algunos códigos no se encontraron o están inactivos: " + codes_txt,
+            }
+        else:
+            message = {
+                "type": "error",
+                "text": "No encontrados o inactivos: " + codes_txt,
+            }
 
-    is_ajax = request.args.get("ajax") == "1"
+    if labels:
+        _persist_etiquetas_enrich_from_labels(labels)
+    else:
+        session.pop(ETIQUETAS_ENRICH_SESSION_KEY, None)
+        session.modified = True
+
+    # GET ?ajax=1 o POST (cuerpo) ajax=1 — la previsualización envía POST con ajax en el formulario.
+    is_ajax = (request.values.get("ajax") or "").strip() == "1"
 
     if is_ajax:
         return jsonify(
@@ -1160,13 +1374,8 @@ def etiquetas():
             }
         )
 
-    if labels:
-        saved, history_error = _registrar_historial_etiquetas(labels)
-        if not saved and not message:
-            message = {
-                "type": "error",
-                "text": "Las etiquetas se generaron, pero no se pudo registrar el historial.",
-            }
+    # El historial de impresión se registra solo vía POST /etiquetas/historial/register
+    # al imprimir (beforeprint en etiquetas.html), no al cargar la página — evita duplicados.
 
     return render_template(
         "bodega/etiquetas.html",
@@ -1246,8 +1455,14 @@ def etiquetas_historial_reimprimir(historial_id: int):
     if not item:
         return redirect(url_for("bodega.etiquetas_historial"))
 
-    codigos = f"{item.codigo_producto} x{max(1, int(item.cantidad or 1))}"
-    return redirect(url_for("bodega.etiquetas", codigos=codigos))
+    # Usa snapshot del historial (descripción/modelo) para códigos no existentes en catálogo.
+    return redirect(
+        url_for(
+            "bodega.etiquetas",
+            historial_id=historial_id,
+            skip_historial_register="1",
+        )
+    )
 
 
 @bodega_bp.route("/movimientos")

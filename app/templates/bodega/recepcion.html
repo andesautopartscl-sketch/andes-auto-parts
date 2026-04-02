@@ -18,7 +18,7 @@
 <div class="message {{ message.type }}">{{ message.text }}</div>
 {% endif %}
 
-<div class="form-card" style="max-width:920px;margin:0 auto;">
+<div class="form-card form-shell-full">
     <h2 class="section-title">Registrar Recepción</h2>
     <form method="post">
         <div class="form-grid">
@@ -55,7 +55,7 @@
 </div>
 
 {% if producto %}
-<div class="panel" style="max-width:920px;margin:18px auto 0;">
+<div class="panel panel-spaced form-shell-full">
     <h2 class="section-title">Producto Procesado</h2>
     <div class="product-summary">
         <div class="summary-box">
@@ -79,7 +79,7 @@
 {% endif %}
 
 {% if variantes %}
-<div class="panel" style="max-width:920px;margin:18px auto 0;">
+<div class="panel panel-spaced form-shell-full">
     <h2 class="section-title">Variantes Disponibles</h2>
     <div class="table-wrap">
         <table>

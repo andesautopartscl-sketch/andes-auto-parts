@@ -593,7 +593,6 @@
         }
         if (btnPrintLabels) {
             btnPrintLabels.addEventListener("click", function () {
-                registerPrintHistory();
                 window.print();
             });
         }

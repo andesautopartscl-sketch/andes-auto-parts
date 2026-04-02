@@ -149,6 +149,13 @@
     flex-direction: column;
 }
 .apchat-panel.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+/* Escritorio: panel más ancho/alto para aprovechar la pantalla (antes quedaba fijo ~940px). */
+@media (min-width: 901px) {
+    .apchat-panel {
+        width: min(92vw, 1400px);
+        height: min(78vh, 860px);
+    }
+}
 .apchat-header {
     background: linear-gradient(120deg, #0f172a 0%, #1e3a8a 100%);
     color: #fff;

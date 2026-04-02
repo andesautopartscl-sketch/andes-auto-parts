@@ -342,13 +342,41 @@
 
 .search-assist-item {
     display: grid;
-    grid-template-columns: 130px 170px minmax(0, 1fr) auto;
+    grid-template-columns: 120px 150px minmax(0, 1fr) auto;
     gap: 8px;
     align-items: center;
     border: 1px solid #dbe3ef;
     border-radius: 10px;
     padding: 7px 9px;
     background: #fff;
+}
+
+.search-assist-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.search-qty-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #475569;
+    white-space: nowrap;
+}
+
+.search-qty-input {
+    width: 48px;
+    height: 30px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0 6px;
+    font-size: 13px;
+    text-align: center;
 }
 
 .search-chip {
@@ -646,7 +674,7 @@ html[data-print-mode="thermal"] .barcode img {
 </div>
 
 {% if message %}
-<div class="message {{ message.type }} no-print">{{ message.text }}</div>
+<div id="etiquetasServerMessage" class="message {{ message.type }} no-print">{{ message.text }}</div>
 {% endif %}
 
 <div class="print-mode-wrap no-print">
@@ -659,26 +687,28 @@ html[data-print-mode="thermal"] .barcode img {
 
 <div class="form-card inputs-card no-print">
     <h2 class="section-title">Generador de Etiquetas</h2>
-    <form id="labelsForm" method="get">
+    <form id="labelsForm" method="get" novalidate>
         <div class="form-wide">
             <div class="field">
                 <label for="codigos">Códigos (ej: 2417 x2, 5433 x5, F204)</label>
-                <input id="codigos" name="codigos" value="{{ codigos or '' }}" placeholder="Ingresa códigos o usa el buscador por código, OEM o descripción" required>
+                <input id="codigos" name="codigos" value="{{ codigos or '' }}" placeholder="Ingresa códigos o usa el buscador por código, OEM o descripción" autocomplete="off">
             </div>
             <div class="field">
                 <label for="fp">F° P</label>
                 <input id="fp" name="fp" value="{{ fp or '' }}" placeholder="F° Proveedor">
             </div>
-            <div class="actions" style="margin:0;">
+            <div class="actions" style="margin:0;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                <button type="button" class="btn btn-outline" id="btnPreviewLabels" title="Actualiza la vista previa sin recargar la página">Vista previa</button>
                 <button class="btn btn-primary" type="submit">Generar</button>
             </div>
+            <p id="previewAjaxHint" class="search-help no-print" style="color:#b91c1c;display:none;margin-top:8px;" role="alert"></p>
         </div>
 
         <div class="search-assist">
             <p class="search-assist-title">Búsqueda Inteligente de Productos</p>
             <div class="search-assist-row">
                 <input id="label-search" class="search-assist-input" type="text" placeholder="Buscar por código, OEM o descripción..." autocomplete="off">
-                <div class="search-help">Escribe al menos 2 caracteres. Puedes agregar resultados al campo de códigos con un clic.</div>
+                <div class="search-help">Escribe al menos 2 caracteres. Elige cantidad y pulsa <strong>Agregar</strong> (o escribe a mano en el campo de arriba).</div>
                 <div id="label-search-results" class="search-assist-results"></div>
             </div>
         </div>
@@ -749,6 +779,19 @@ html[data-print-mode="thermal"] .barcode img {
     const labelSearchInput = document.getElementById('label-search');
     const labelSearchResults = document.getElementById('label-search-results');
     const sheet = document.getElementById('sheet');
+
+    if (labelSearchInput) {
+        labelSearchInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') e.preventDefault();
+        });
+    }
+    if (labelSearchResults) {
+        labelSearchResults.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && e.target && e.target.classList && e.target.classList.contains('search-qty-input')) {
+                e.preventDefault();
+            }
+        });
+    }
     const logoSrc = '{{ url_for("static", filename="logo_andes.png") }}';
     const printModeSelect = document.getElementById('printMode');
     const btnPrintLabels = document.getElementById('btnPrintLabels');
@@ -828,19 +871,60 @@ html[data-print-mode="thermal"] .barcode img {
         return escapeHtml(raw).replace(regex, '<mark>$1</mark>');
     }
 
-    function appendCodeToInput(code) {
-        const clean = String(code || '').trim().toUpperCase();
+    function parseCodigoChunk(part) {
+        part = String(part || '').trim();
+        if (!part) return null;
+        part = part.replace(/\u00a0/g, ' ');
+        part = part.replace(/[\u00d7\u2715\u2716\u2717]/g, 'x');
+        var inc = part.match(/^([A-Za-z0-9._\-/]+)\s*[x*]\s*$/i);
+        if (inc) {
+            part = inc[1];
+        }
+        part = part.replace(/([A-Za-z0-9])(x)(\d+)$/g, function (_, a, x, d) {
+            return a + ' ' + x + d;
+        });
+        var m = part.match(/^([A-Za-z0-9._\-/]+)(?:\s*[x*]\s*(\d+))?$/i);
+        if (m) {
+            var q = parseInt(m[2] || '1', 10);
+            if (isNaN(q)) q = 1;
+            return { code: m[1].toUpperCase(), qty: Math.max(1, Math.min(50, q)) };
+        }
+        return { code: part.toUpperCase(), qty: 1 };
+    }
+
+    function parseCodigosField(str) {
+        var out = [];
+        String(str || '').split(/[\n,;]+/).forEach(function (raw) {
+            var p = parseCodigoChunk(raw);
+            if (p) out.push(p);
+        });
+        return out;
+    }
+
+    function serializeCodigos(entries) {
+        return entries.map(function (e) {
+            return e.qty > 1 ? (e.code + ' x' + e.qty) : e.code;
+        }).join(', ');
+    }
+
+    function mergeCodeIntoField(code, qtyRaw) {
+        var clean = String(code || '').trim().toUpperCase();
         if (!clean || !codigosInput) return;
-        const current = (codigosInput.value || '').trim();
-        if (!current) {
-            codigosInput.value = clean;
-            return;
+        var n = Math.max(1, Math.min(50, parseInt(qtyRaw, 10) || 1));
+        var entries = parseCodigosField(codigosInput.value || '');
+        var found = false;
+        for (var i = 0; i < entries.length; i++) {
+            if (entries[i].code === clean) {
+                entries[i].qty = n;
+                found = true;
+                break;
+            }
         }
-        const normalized = current.toUpperCase();
-        if (normalized.split(/[\n,;]+/).map(function (x) { return x.trim(); }).includes(clean)) {
-            return;
+        if (!found) {
+            entries.push({ code: clean, qty: n });
         }
-        codigosInput.value = current + ', ' + clean;
+        codigosInput.value = serializeCodigos(entries);
+        refreshPreview();
     }
 
     function renderSearchResults(items, searchTerm) {
@@ -856,13 +940,19 @@ html[data-print-mode="thermal"] .barcode img {
                     '<div class="search-chip"><strong>' + highlightText(item.codigo || '', searchTerm) + '</strong></div>' +
                     '<div class="search-chip muted">OEM: ' + highlightText(item.codigo_oem || '—', searchTerm) + '</div>' +
                     '<div class="search-chip" title="' + escapeHtml(item.descripcion || '') + '">' + highlightText(item.descripcion || '', searchTerm) + '</div>' +
-                    '<button type="button" class="search-add-btn" data-code="' + escapeHtml(item.codigo || '') + '">Agregar</button>' +
+                    '<div class="search-assist-actions">' +
+                        '<label class="search-qty-label">Cant. <input type="number" class="search-qty-input" min="1" max="50" step="1" value="1" aria-label="Cantidad"></label>' +
+                        '<button type="button" class="search-add-btn" data-code="' + escapeHtml(item.codigo || '') + '">Agregar</button>' +
+                    '</div>' +
                 '</div>';
         }).join('');
 
         labelSearchResults.querySelectorAll('.search-add-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
-                appendCodeToInput(btn.getAttribute('data-code'));
+                var row = btn.closest('.search-assist-item');
+                var qtyIn = row ? row.querySelector('.search-qty-input') : null;
+                var q = qtyIn ? qtyIn.value : 1;
+                mergeCodeIntoField(btn.getAttribute('data-code'), q);
                 codigosInput.focus();
             });
         });
@@ -901,7 +991,9 @@ html[data-print-mode="thermal"] .barcode img {
 
     function renderLabels(labels) {
         if (!sheet) return;
-        if (!labels || !labels.length) { sheet.innerHTML = ''; return; }
+        if (!labels || !labels.length) {
+            return;
+        }
         sheet.innerHTML = labels.map(function (label) {
             return '<article class="label">' +
                 '<div class="label-header">' +
@@ -1105,27 +1197,108 @@ html[data-print-mode="thermal"] .barcode img {
     }
 
     let timer = null;
+    var previewAbort = null;
+    var previewToken = 0;
+    var emptySheetTimer = null;
+
     function refreshPreview() {
         const codigos = (codigosInput.value || '').trim();
         const fp = (fpInput.value || '').trim();
-        if (!codigos) { if (sheet) sheet.innerHTML = ''; return; }
-        const params = new URLSearchParams({ ajax: '1', codigos: codigos, fp: fp });
-        fetch('{{ url_for("bodega.etiquetas") }}?' + params.toString(), {
+        if (!codigos) {
+            previewToken += 1;
+            if (previewAbort) {
+                previewAbort.abort();
+                previewAbort = null;
+            }
+            if (emptySheetTimer) clearTimeout(emptySheetTimer);
+            emptySheetTimer = setTimeout(function () {
+                emptySheetTimer = null;
+                if (!((codigosInput.value || '').trim()) && sheet) {
+                    sheet.innerHTML = '';
+                }
+            }, 900);
+            return;
+        }
+        if (emptySheetTimer) {
+            clearTimeout(emptySheetTimer);
+            emptySheetTimer = null;
+        }
+        if (previewAbort) {
+            previewAbort.abort();
+        }
+        previewAbort = new AbortController();
+        var token = ++previewToken;
+        var params = new URLSearchParams({ ajax: '1', codigos: codigos, fp: fp });
+        var previewUrl = '{{ url_for("bodega.etiquetas") }}?' + params.toString();
+        fetch(previewUrl, {
             method: 'GET',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            signal: previewAbort.signal,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                Accept: 'application/json'
+            },
+            credentials: 'same-origin'
         })
-            .then(function (res) { return res.json(); })
-            .then(function (data) { if (data && data.labels) renderLabels(data.labels); })
-            .catch(function () {});
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (data) {
+                if (token !== previewToken) return;
+                var hint = document.getElementById('previewAjaxHint');
+                var serverMsg = document.getElementById('etiquetasServerMessage');
+                if (serverMsg) {
+                    serverMsg.style.display = 'none';
+                }
+                if (!data || !Array.isArray(data.labels)) return;
+                var miss = Array.isArray(data.missing) ? data.missing : [];
+                if (data.labels.length === 0) {
+                    if (hint && miss.length) {
+                        hint.textContent = 'No encontrados o inactivos: ' + miss.slice(0, 15).join(', ');
+                        hint.style.color = '#b91c1c';
+                        hint.style.display = 'block';
+                    } else if (hint) {
+                        hint.style.display = 'none';
+                        hint.textContent = '';
+                    }
+                    return;
+                }
+                renderLabels(data.labels);
+                if (hint) {
+                    if (miss.length) {
+                        hint.textContent = 'Sin etiqueta para (no encontrado o inactivo): ' + miss.slice(0, 15).join(', ');
+                        hint.style.color = '#b45309';
+                        hint.style.display = 'block';
+                    } else {
+                        hint.style.display = 'none';
+                        hint.textContent = '';
+                    }
+                }
+            })
+            .catch(function (err) {
+                if (err && err.name === 'AbortError') return;
+                var hint = document.getElementById('previewAjaxHint');
+                if (hint && token === previewToken) {
+                    hint.textContent = 'No se pudo actualizar la vista previa. Revisa la conexión o vuelve a intentar.';
+                    hint.style.display = 'block';
+                }
+            });
     }
 
     function debounce() {
         if (timer) clearTimeout(timer);
-        timer = setTimeout(refreshPreview, 380);
+        timer = setTimeout(refreshPreview, 480);
     }
 
     if (codigosInput) codigosInput.addEventListener('input', debounce);
     if (fpInput) fpInput.addEventListener('input', debounce);
+    var btnPreviewLabels = document.getElementById('btnPreviewLabels');
+    if (btnPreviewLabels) {
+        btnPreviewLabels.addEventListener('click', function () {
+            if (timer) clearTimeout(timer);
+            refreshPreview();
+        });
+    }
     if (labelSearchInput) labelSearchInput.addEventListener('input', debounceProductSearch);
     if (printModeSelect) {
         printModeSelect.addEventListener('change', function () {
@@ -1134,7 +1307,6 @@ html[data-print-mode="thermal"] .barcode img {
     }
     if (btnPrintLabels) {
         btnPrintLabels.addEventListener('click', function () {
-            registerPrintHistory();
             window.print();
         });
     }
@@ -1152,6 +1324,11 @@ html[data-print-mode="thermal"] .barcode img {
         optimizePrintGrid();
         registerPrintHistory();
     });
+
+    /* Evita que bodega_ui.js (initEtiquetasView) vuelva a enlazar el mismo formulario/botón
+       (duplicaba listeners, menú “doble” sensación y varios POST al historial). */
+    var __labelsFormBound = document.getElementById('labelsForm');
+    if (__labelsFormBound) __labelsFormBound.dataset.bodegaUiBound = '1';
 })();
 </script>
 {% endblock %}

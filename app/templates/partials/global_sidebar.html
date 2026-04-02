@@ -10,8 +10,15 @@
 {% set puede_ver_finanzas = (user_permissions.ver_finanzas if user_permissions is defined else True) %}
 {% set informes_activo = active_page in ['dashboard', 'informes', 'informes_ventas_periodo', 'informes_ventas_cliente', 'informes_utilidad', 'informes_stock', 'informes_productos_top', 'informes_movimientos', 'informes_compras', 'transferencias'] %}
 <style>
+/* Reserva hueco solo en el documento para que el contenido principal no “salte” al aparecer scroll del body */
+html {
+	scrollbar-gutter: stable;
+}
 .sidebar {
 	width:300px;
+	min-width:300px;
+	flex-shrink:0;
+	box-sizing:border-box;
 	border-radius:22px;
 	color:var(--text);
 	background:linear-gradient(180deg, var(--bg) 0%, var(--panel) 46%, var(--panel-soft) 100%);
@@ -20,28 +27,58 @@
 	padding:20px;
 	display:flex;
 	flex-direction:column;
+	height:100vh;
+	max-height:100vh;
+	overflow:hidden;
 }
 .user-card {
+	flex-shrink:0;
 	display:flex;
-	gap:12px;
+	gap:14px;
 	align-items:center;
-	margin-bottom:14px;
-	background:rgba(255,255,255,0.09);
-	border:1px solid rgba(255,255,255,0.15);
-	border-radius:14px;
-	padding:12px;
+	margin-bottom:16px;
+	padding:14px 14px 14px 14px;
+	border-radius:16px;
+	background:linear-gradient(145deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.05) 100%);
+	border:1px solid rgba(255,255,255,0.2);
+	box-shadow:
+		inset 0 1px 0 rgba(255,255,255,0.2),
+		0 8px 22px rgba(0,0,0,0.22);
+	transition:border-color .2s ease, box-shadow .2s ease;
+}
+.user-card:hover {
+	border-color:rgba(255,255,255,0.28);
+	box-shadow:
+		inset 0 1px 0 rgba(255,255,255,0.24),
+		0 10px 28px rgba(0,0,0,0.28);
+}
+.user-card-body {
+	min-width:0;
+	flex:1;
 }
 .avatar {
-	width:42px;
-	height:42px;
+	width:44px;
+	height:44px;
+	flex-shrink:0;
 	border-radius:50%;
 	display:flex;
 	align-items:center;
 	justify-content:center;
-	font-weight:700;
-	color:#0f172a;
-	background:linear-gradient(135deg,#60a5fa,#93c5fd);
+	color:rgba(15,23,42,0.9);
+	background:linear-gradient(145deg,#e0f2fe 0%,#7dd3fc 38%,#38bdf8 72%,#0284c7 100%);
+	box-shadow:
+		0 2px 10px rgba(14,165,233,0.45),
+		inset 0 1px 0 rgba(255,255,255,0.55);
+	border:1px solid rgba(255,255,255,0.45);
 	position:relative;
+}
+.avatar-icon {
+	width:24px;
+	height:24px;
+	display:block;
+	object-fit:contain;
+	pointer-events:none;
+	flex-shrink:0;
 }
 .avatar::after {
 	content:'';
@@ -51,22 +88,56 @@
 	border-radius:50%;
 	right:-1px;
 	bottom:-1px;
-	border:2px solid #0f172a;
+	border:2px solid rgba(15,23,42,0.88);
 	background:#22c55e;
+	box-shadow:0 0 0 1px rgba(0,0,0,0.2);
 }
-.user-name { font-weight:700; font-size:14px; }
-.user-role { font-size:12px; opacity:.8; margin-top:2px; }
+.user-name {
+	font-weight:700;
+	font-size:14px;
+	line-height:1.25;
+	letter-spacing:-0.02em;
+	color:#f8fafc;
+	overflow:hidden;
+	text-overflow:ellipsis;
+	white-space:nowrap;
+}
+.user-role {
+	font-size:10px;
+	font-weight:600;
+	letter-spacing:0.06em;
+	text-transform:uppercase;
+	margin-top:4px;
+	color:rgba(248,250,252,0.72);
+	overflow:hidden;
+	text-overflow:ellipsis;
+	white-space:nowrap;
+}
 .nav-modules {
 	display:flex;
 	flex-direction:column;
 	gap:4px;
 	margin-bottom:8px;
+	flex:1 1 auto;
+	min-height:0;
+	overflow-y:auto;
+	overflow-x:hidden;
+	-webkit-overflow-scrolling:touch;
+	/* Barra nativa oculta: evita el rail gris y el cambio de ancho al mostrar/ocultar scroll */
+	scrollbar-width:none;
+	-ms-overflow-style:none;
+}
+.nav-modules::-webkit-scrollbar {
+	display:none;
+	width:0;
+	height:0;
 }
 .nav-module { display:flex; flex-direction:column; }
 .module-header {
-	display:flex;
+	display:grid;
+	grid-template-columns:28px minmax(0,1fr) 22px;
 	align-items:center;
-	gap:9px;
+	gap:6px;
 	padding:10px 12px;
 	border-radius:10px;
 	cursor:pointer;
@@ -77,24 +148,38 @@
 	text-transform:uppercase;
 	background:rgba(255,255,255,0.07);
 	border:1px solid rgba(255,255,255,0.10);
-	transition:background .2s, transform .15s;
+	transition:background .2s;
 	user-select:none;
 }
 .module-header:hover {
 	background:rgba(255,255,255,0.14);
-	transform:scale(1.02);
 }
 .module-header.active {
 	background:rgba(255,255,255,0.16);
 	border-color:rgba(255,255,255,0.24);
 	box-shadow:0 4px 12px rgba(0,0,0,0.22);
 }
-.module-label { flex:1; }
+.module-header > span:first-child {
+	display:flex;
+	align-items:center;
+	justify-content:center;
+}
+.module-label {
+	text-align:center;
+	min-width:0;
+}
 .module-arrow {
 	font-size:11px;
-	display:inline-block;
+	display:flex;
+	align-items:center;
+	justify-content:center;
+	width:22px;
 	transition:transform .25s ease;
 	opacity:.7;
+}
+.module-arrow--spacer {
+	visibility:hidden;
+	pointer-events:none;
 }
 .module-header.active .module-arrow {
 	transform:rotate(-180deg);
@@ -106,7 +191,8 @@
 	transition:max-height .32s cubic-bezier(0.4,0,0.2,1);
 	padding-left:6px;
 }
-.submenu.open { max-height:520px; }
+/* Bodega tiene más ítems y textos largos; si el máximo es bajo, el contenido “late” al animar */
+.submenu.open { max-height:min(680px, 72vh); }
 .submenu a,
 .submenu .submenu-disabled {
 	display:flex;
@@ -120,12 +206,11 @@
 .submenu a {
 	color:rgba(255,255,255,0.85);
 	text-decoration:none;
-	transition:background .18s, color .15s, transform .15s;
+	transition:background .18s, color .15s;
 }
 .submenu a:hover {
 	background:rgba(255,255,255,0.14);
 	color:white;
-	transform:translateX(3px);
 }
 .submenu a.nav-active {
 	background:rgba(255,255,255,0.2);
@@ -137,6 +222,7 @@
 	font-style:italic;
 }
 .sidebar-logout {
+	flex-shrink:0;
 	padding-top:8px;
 	border-top:1px solid rgba(255,255,255,0.12);
 	margin-top:4px;
@@ -175,6 +261,7 @@
 	color:#fff;
 }
 .online-list {
+	flex-shrink:0;
 	margin-top:auto;
 	background:rgba(15,23,42,.34);
 	border:1px solid rgba(255,255,255,.11);
@@ -207,17 +294,33 @@
 @media (max-width: 960px) {
 	.sidebar {
 		width: 100%;
+		min-width: 0;
+		height: auto;
 		max-height: min(72vh, 560px);
 		overflow-y: auto;
 		overflow-x: hidden;
 		-webkit-overflow-scrolling: touch;
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+	}
+	.sidebar::-webkit-scrollbar {
+		display: none;
+		width: 0;
+		height: 0;
+	}
+	.nav-modules {
+		flex: none;
+		min-height: 0;
+		overflow: visible;
 	}
 }
 </style>
 <aside class="sidebar">
 	<div class="user-card">
-		<div class="avatar">{{ inicial_usuario }}</div>
-		<div>
+		<div class="avatar" aria-hidden="true">
+			<img class="avatar-icon" src="{{ url_for('static', filename='img/sidebar-user-icon.svg') }}" width="24" height="24" alt="" decoding="async">
+		</div>
+		<div class="user-card-body">
 			<div class="user-name">{{ nombre_usuario }}</div>
 			<div class="user-role">{{ usuario_rol if usuario_rol else session.get('rol', 'Sin rol') }}</div>
 		</div>
@@ -229,6 +332,7 @@
 			<div class="module-header" id="hdr-mod-opciones" onclick="openOptionsModal(); return false;">
 				<span>⚙️</span>
 				<span class="module-label">Opciones</span>
+				<span class="module-arrow module-arrow--spacer" aria-hidden="true">▾</span>
 			</div>
 		</div>
 		{% endif %}

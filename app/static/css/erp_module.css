@@ -39,9 +39,11 @@ body.erp-shell-standalone {
   margin: 0;
 }
 .shell {
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 16px;
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 12px 16px;
+  box-sizing: border-box;
 }
 .v-header {
   background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #1d4ed8 100%);
@@ -73,8 +75,10 @@ body.erp-shell-standalone {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  padding: 0 2px;
+  padding: 0;
   align-items: center;
+  justify-content: flex-start;
+  width: 100%;
 }
 .v-tab {
   padding: 9px 16px;
