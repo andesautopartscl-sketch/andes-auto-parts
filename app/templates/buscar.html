@@ -306,18 +306,28 @@ body.dark .pagination-info {
 <div class="topbar">
     <div>
         <h1 class="page-title">Buscar productos</h1>
+        {% if search_lite|default(false) %}
+        <p class="page-subtitle">Catálogo activo, precios y stock. Solo consulta.</p>
+        {% else %}
         <p class="page-subtitle">Explora el catálogo activo, valida stock y administra importación/exportación desde el mismo panel.</p>
+        {% endif %}
     </div>
     <div class="topbar-actions">
-          <a class="btn"
-              href="{{ url_for('productos.editar_productos_view') }}"
-              data-module-url="{{ url_for('productos.editar_productos_view') }}">✏ Editar</a>
-          <a class="btn"
-              href="{{ url_for('productos.ver_desactivados') }}"
-              data-module-url="{{ url_for('productos.ver_desactivados') }}">📦 Desactivados</a>
-          <a class="btn btn-primary"
-              href="{{ url_for('productos.modal_crear_producto') }}"
-              data-modal-url="{{ url_for('productos.modal_crear_producto') }}">➕ Crear producto</a>
+        {% if search_lite|default(false) %}
+        <form method="POST" action="{{ url_for('auth.logout') }}" style="margin:0;">
+            <button type="submit" class="btn btn-secondary">Cerrar sesión</button>
+        </form>
+        {% else %}
+        <a class="btn"
+            href="{{ url_for('productos.editar_productos_view') }}"
+            data-module-url="{{ url_for('productos.editar_productos_view') }}">✏ Editar</a>
+        <a class="btn"
+            href="{{ url_for('productos.ver_desactivados') }}"
+            data-module-url="{{ url_for('productos.ver_desactivados') }}">📦 Desactivados</a>
+        <a class="btn btn-primary"
+            href="{{ url_for('productos.modal_crear_producto') }}"
+            data-modal-url="{{ url_for('productos.modal_crear_producto') }}">➕ Crear producto</a>
+        {% endif %}
     </div>
 </div>
 
@@ -458,6 +468,7 @@ body.dark .pagination-info {
     </div>
 </div>
 
+{% if not search_lite|default(false) %}
 <!-- MODAL IMPORTAR -->
 <div id="importModal" class="modal">
     <div class="modal-box">
@@ -516,6 +527,7 @@ body.dark .pagination-info {
         </div>
     </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block extra_scripts %}
@@ -540,6 +552,7 @@ window.closeDescModal = function (){
     document.getElementById("descModal").style.display="none";
 };
 
+{% if not search_lite|default(false) %}
 /* EXPORTAR */
 window.openExportModal = function (){
     document.getElementById("exportMessage").innerHTML = "";
@@ -639,5 +652,6 @@ window.addEventListener('hashchange', function () {
         history.replaceState(null, '', window.location.pathname);
     }
 });
+{% endif %}
 </script>
 {% endblock %}

@@ -133,6 +133,9 @@ def create_app():
         "connect_args": {"check_same_thread": False, "timeout": 30},
     }
 
+    _app_mode = (os.environ.get("ANDES_APP_MODE") or "").strip().lower()
+    app.config["ANDES_APP_MODE"] = _app_mode
+
     db.init_app(app)
 
     # Importar modelos de seguridad
@@ -153,23 +156,39 @@ def create_app():
     # ===============================
     # REGISTRAR BLUEPRINTS
     # ===============================
+    # ANDES_APP_MODE=search_lite → solo login + catálogo /buscar (despliegue liviano en Render u otro host).
 
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(productos_bp)
-    app.register_blueprint(admin_bp, url_prefix="/admin")
-    app.register_blueprint(automotriz_bp)
-    app.register_blueprint(seguridad_bp, url_prefix="/seguridad")
-    app.register_blueprint(ventas_bp)
-    app.register_blueprint(bodega_bp)
-    app.register_blueprint(chat_bp)
-    # ERP expansion blueprints
-    app.register_blueprint(inventario_bp)
-    app.register_blueprint(oportunidades_bp)
-    app.register_blueprint(postventa_bp)
-    app.register_blueprint(dashboard_bp)
-    app.register_blueprint(contabilidad_bp)
-    app.register_blueprint(finanzas_bp)
-    app.register_blueprint(informes_bp)
+    if _app_mode == "search_lite":
+        app.register_blueprint(auth_bp)
+        app.register_blueprint(productos_bp)
+
+        @app.before_request
+        def _search_lite_logueado_va_a_buscar():
+            """auth.home sigue mapeado a /; con sesión activa, / debe ir al catálogo móvil."""
+            if (app.config.get("ANDES_APP_MODE") or "").strip().lower() != "search_lite":
+                return None
+            if (request.path or "") != "/" or request.method != "GET":
+                return None
+            if not (session.get("user") or "").strip():
+                return None
+            return redirect(url_for("productos.buscar"))
+    else:
+        app.register_blueprint(auth_bp)
+        app.register_blueprint(productos_bp)
+        app.register_blueprint(admin_bp, url_prefix="/admin")
+        app.register_blueprint(automotriz_bp)
+        app.register_blueprint(seguridad_bp, url_prefix="/seguridad")
+        app.register_blueprint(ventas_bp)
+        app.register_blueprint(bodega_bp)
+        app.register_blueprint(chat_bp)
+        # ERP expansion blueprints
+        app.register_blueprint(inventario_bp)
+        app.register_blueprint(oportunidades_bp)
+        app.register_blueprint(postventa_bp)
+        app.register_blueprint(dashboard_bp)
+        app.register_blueprint(contabilidad_bp)
+        app.register_blueprint(finanzas_bp)
+        app.register_blueprint(informes_bp)
 
     print(app.url_map)
 
@@ -489,9 +508,16 @@ def create_app():
         """
         return {"_partial": request.headers.get("X-Requested-With") == "XMLHttpRequest"}
 
+    @app.context_processor
+    def inject_search_lite():
+        m = (app.config.get("ANDES_APP_MODE") or "").strip().lower()
+        return {"search_lite": m == "search_lite"}
+
     @app.after_request
     def inject_chat_widget(response):
         # Inject chat globally for authenticated users in HTML responses.
+        if (app.config.get("ANDES_APP_MODE") or "").strip().lower() == "search_lite":
+            return response
         if request.endpoint in {"auth.login", "auth.inicio_seguro"}:
             return response
         if response.status_code != 200:

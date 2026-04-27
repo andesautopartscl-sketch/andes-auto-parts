@@ -49,6 +49,15 @@ body.dark {
 	gap:18px;
 	padding:16px;
 }
+/* Solo búsqueda móvil (ANDES_APP_MODE=search_lite): sin sidebar */
+body.search-lite-app .layout {
+	max-width: 100%;
+}
+body.search-lite-app .content {
+	width: 100%;
+	max-width: 1200px;
+	margin: 0 auto;
+}
 
 .content {
 	flex:1;
@@ -302,9 +311,11 @@ body.app-modal-is-open #apchat-root {
 <link rel="stylesheet" href="{{ url_for('static', filename='css/erp_module.css') }}">
 {% block extra_head %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% if search_lite|default(false) %}search-lite-app {% endif %}{% block body_class %}{% endblock %}">
 <div class="layout">
+	{% if not search_lite|default(false) %}
 	{% include 'partials/global_sidebar.html' %}
+	{% endif %}
 	<main class="content" id="appMainContent">
 		{% block content %}{% endblock %}
 	</main>
@@ -317,7 +328,9 @@ body.app-modal-is-open #apchat-root {
 	</div>
 </div>
 
+{% if not search_lite|default(false) %}
 {% include 'partials/admin_center_workspace.html' %}
+{% endif %}
 
 <script>
 function toggleMenu(id) {
