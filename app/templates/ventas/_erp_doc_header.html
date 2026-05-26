@@ -1,6 +1,6 @@
 <div class="cot-dochead">
     <div class="cot-company">
-        <img class="cot-company-logo" src="{{ url_for('static', filename='logo_andes.png') }}" alt="Andes Auto Parts" width="72" height="72">
+        <img class="cot-company-logo" src="{{ 'logo_andes.png' | static_or_cloud }}" alt="Andes Auto Parts" width="72" height="72">
         <div class="cot-company-text">
             <div class="cot-company-name">{{ company.name }}</div>
             <div class="cot-company-line"><strong>RUT:</strong> {{ company.rut }}</div>

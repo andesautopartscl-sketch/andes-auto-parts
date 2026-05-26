@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from flask import url_for
 
+from app.utils.cloudinary_static_map import get_cloudinary_url
+
 
 def is_remote_image_url(value: str | None) -> bool:
     v = (value or "").strip().lower()
@@ -11,15 +13,20 @@ def is_remote_image_url(value: str | None) -> bool:
 
 def product_image_src(value: str | None) -> str:
     """
-    Filtro Jinja / helper: si es URL http(s) la devuelve tal cual;
-    si no, asume ruta relativa bajo static (p. ej. productos_img/foo.jpg).
+    Filtro Jinja / helper: URL Cloudinary (mapa o http), o static local.
+    Acepta: URL completa, clave en CLOUDINARY_STATIC, ruta relativa (productos_img/, epc_despiece/, productos360/).
     """
     ref = (value or "").strip()
     if not ref:
         return ""
     if is_remote_image_url(ref):
         return ref
-    if ref.startswith("productos_img/") or ref.startswith("epc_despiece/"):
+    mapped = get_cloudinary_url(ref)
+    if mapped:
+        return mapped
+    if ref.startswith(
+        ("productos_img/", "epc_despiece/", "productos360/", "icons/", "img/")
+    ):
         return url_for("static", filename=ref)
     return url_for("static", filename=f"productos_img/{ref}")
 
@@ -34,6 +41,8 @@ def static_filename_from_ref(ref: str | None) -> str | None:
     r = (ref or "").strip()
     if not r or is_remote_image_url(r):
         return None
-    if r.startswith("productos_img/") or r.startswith("epc_despiece/"):
+    if r.startswith(
+        ("productos_img/", "epc_despiece/", "productos360/", "icons/", "img/")
+    ):
         return r
     return f"productos_img/{r}"

@@ -2,7 +2,7 @@
     <section id="apchat-panel" class="apchat-panel" aria-hidden="true">
         <header class="apchat-header">
             <div class="apchat-header-brand">
-                <img src="{{ url_for('static', filename='logo_andes.png') }}" alt="Andes Auto Parts" class="apchat-header-logo" data-fallback-src="{{ url_for('static', filename='logo.png') }}">
+                <img src="{{ 'logo_andes.png' | static_or_cloud }}" alt="Andes Auto Parts" class="apchat-header-logo" data-fallback-src="{{ 'logo.png' | static_or_cloud }}">
                 <div>
                     <h3>Chat Interno</h3>
                     <p>Andes Auto Parts ERP</p>
@@ -142,7 +142,7 @@
         <button type="button" class="apchat-drag-handle" id="apchat-drag-handle" aria-label="Arrastrar posición del chat" title="Arrastrá para mover (doble clic restablece)">⋮⋮</button>
         <button id="apchat-fab" class="apchat-fab" type="button" aria-label="Abrir chat interno">
             <span class="apchat-logo-wrap">
-                <img src="{{ url_for('static', filename='logo_andes.png') }}" alt="Andes Auto Parts" class="apchat-logo" data-fallback-src="{{ url_for('static', filename='logo.png') }}">
+                <img src="{{ 'logo_andes.png' | static_or_cloud }}" alt="Andes Auto Parts" class="apchat-logo" data-fallback-src="{{ 'logo.png' | static_or_cloud }}">
             </span>
             <span class="apchat-badge hidden" id="apchat-badge">0</span>
         </button>

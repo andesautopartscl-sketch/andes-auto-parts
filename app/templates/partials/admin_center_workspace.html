@@ -575,7 +575,7 @@
 	 data-usuarios-unlock-url-template="{{ url_for('seguridad.api_unlock_usuario', id=0) }}"
 	 data-usuarios-delete-url-template="{{ url_for('seguridad.api_eliminar_usuario', id=0) }}"
 	 data-usuarios-foto-url-template="{{ url_for('seguridad.api_usuario_subir_foto', uid=0) }}"
-	 data-default-avatar-url="{{ url_for('static', filename='icons/user.png') }}"
+	 data-default-avatar-url="{{ 'icons/user.png' | static_or_cloud }}"
 	 data-session-usuario-id="{{ session.get('usuario_id', '') }}"
 	 data-password-reset-api-url="{{ url_for('seguridad.api_password_reset_requests') }}"
 	 data-password-reset-resolve-url-template="{{ url_for('seguridad.api_password_reset_resolve', req_id=0) }}">
@@ -691,7 +691,7 @@
 					<label>Foto de perfil</label>
 					<div class="user-photo-upload">
 						<div class="user-photo-preview" id="optionsCreatePhotoPreview" aria-hidden="true">
-							<img class="user-photo-preview__img is-placeholder" src="{{ url_for('static', filename='icons/user.png') }}" alt="">
+							<img class="user-photo-preview__img is-placeholder" src="{{ 'icons/user.png' | static_or_cloud }}" alt="">
 						</div>
 						<div class="user-photo-body">
 							<input type="file" id="optionsCreatePhotoFile" class="user-photo-file-input" accept="image/jpeg,image/png,image/webp,image/gif">
@@ -895,7 +895,7 @@
 					<label>Foto de perfil</label>
 					<div class="user-photo-upload">
 						<div class="user-photo-preview" id="optionsEditPhotoPreview" aria-hidden="true">
-							<img class="user-photo-preview__img is-placeholder" src="{{ url_for('static', filename='icons/user.png') }}" alt="">
+							<img class="user-photo-preview__img is-placeholder" src="{{ 'icons/user.png' | static_or_cloud }}" alt="">
 						</div>
 						<div class="user-photo-body">
 							<input type="file" id="optionsEditPhotoFile" class="user-photo-file-input" accept="image/jpeg,image/png,image/webp,image/gif">

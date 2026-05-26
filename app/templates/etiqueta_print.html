@@ -95,7 +95,7 @@ body {
     <!-- HEADER -->
     <div class="header">
         <div class="logo">
-            <img src="{{ url_for('static', filename='logo_andes.png') }}">
+            <img src="{{ 'logo_andes.png' | static_or_cloud }}">
         </div>
 
         <div class="datos">

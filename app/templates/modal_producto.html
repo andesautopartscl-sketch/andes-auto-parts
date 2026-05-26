@@ -1289,7 +1289,7 @@ body.ficha-tecnica-page {
        class="ft-img-main img-producto"
        data-360='[
 {% for img in imagenes_360 %}
-"{{ url_for('static', filename='productos360/' + producto.codigo + '/' + img) }}"{% if not loop.last %},{% endif %}
+"{{ ('productos360/' + producto.codigo + '/' + img) | product_image_src }}"{% if not loop.last %},{% endif %}
 {% endfor %}
 ]'
        src="{{ imagenes[0] | product_image_src }}"
@@ -1306,7 +1306,7 @@ body.ficha-tecnica-page {
   {% endfor %}
   {% if imagenes_360 %}
   <div class="miniatura visor360-btn" onclick="activar360()" role="button" tabindex="0" aria-label="Vista 360°">
-    <img src="{{ url_for('static', filename='productos360/' + producto.codigo + '/' + imagenes_360[0]) }}"
+    <img src="{{ ('productos360/' + producto.codigo + '/' + imagenes_360[0]) | product_image_src }}"
          class="mini360" alt="">
     <div class="badge360">360°</div>
     <div class="spin-icon">↻</div>
@@ -1325,7 +1325,7 @@ body.ficha-tecnica-page {
 <section class="ft-col ft-col--specs">
 
 <div class="ft-brand-head">
-  <img src="{{ url_for('static', filename='logo_andes.png') }}" alt="Andes Auto Parts" class="ft-brand-logo" width="150" height="32">
+  <img src="{{ 'logo_andes.png' | static_or_cloud }}" alt="Andes Auto Parts" class="ft-brand-logo" width="150" height="32">
 </div>
 
 <h2 class="ft-panel-title">Especificaciones</h2>
@@ -2177,7 +2177,7 @@ window.interval360 = null;
 window.frame360 = 0;
 
 {% for img in imagenes_360 %}
-window.imagenes360.push("{{ url_for('static', filename='productos360/' + producto.codigo + '/' + img) }}");
+window.imagenes360.push("{{ ('productos360/' + producto.codigo + '/' + img) | product_image_src }}");
 {% endfor %}
 
 window.detener360Auto = function () {

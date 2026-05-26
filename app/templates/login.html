@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf-token" content="{{ csrf_token }}">
 <title>Login | Andes Auto Parts</title>
-<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='logo_andes.png') }}">
-<link rel="shortcut icon" href="{{ url_for('static', filename='logo_andes.png') }}">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ 'logo_andes.png' | static_or_cloud }}">
+<link rel="shortcut icon" href="{{ 'logo_andes.png' | static_or_cloud }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
@@ -389,7 +389,7 @@ html.login-reduced-motion #particles-js {
 
         <!-- Logo Andes Auto Parts -->
         <div class="login-logo-wrap">
-            <img class="login-brand-img" src="{{ url_for('static', filename='logo_andes.png') }}" width="56" height="56" alt="Andes Auto Parts">
+            <img class="login-brand-img" src="{{ 'logo_andes.png' | static_or_cloud }}" width="56" height="56" alt="Andes Auto Parts">
         </div>
 
         <h2>Andes Auto Parts</h2>
@@ -401,15 +401,15 @@ html.login-reduced-motion #particles-js {
             {% endif %}
 
             <div class="input-group">
-                <img class="icon-left" src="{{ url_for('static', filename='icons/user.png') }}?v=andes-login-3" alt="" width="18" height="18">
+                <img class="icon-left" src="{{ 'icons/user.png' | static_or_cloud }}?v=andes-login-3" alt="" width="18" height="18">
                 <input name="username" placeholder="Usuario" required autocomplete="username" autocapitalize="none">
             </div>
 
             <div class="input-group">
-                <img class="icon-left" src="{{ url_for('static', filename='icons/lock.png') }}" alt="" width="18" height="18">
+                <img class="icon-left" src="{{ 'icons/lock.png' | static_or_cloud }}" alt="" width="18" height="18">
                 <input type="password" id="password" name="password" placeholder="Clave" required autocomplete="current-password">
                 <img id="togglePassword" class="toggle-password"
-                     src="{{ url_for('static', filename='icons/eye.png') }}" alt="Mostrar u ocultar contraseña" width="18" height="18" role="button" tabindex="0">
+                     src="{{ 'icons/eye.png' | static_or_cloud }}" alt="Mostrar u ocultar contraseña" width="18" height="18" role="button" tabindex="0">
             </div>
 
             <button type="submit">Ingresar</button>
@@ -640,8 +640,8 @@ if (togglePassword && password) {
         password.setAttribute("type", type);
         togglePassword.src =
             type === "password"
-                ? "{{ url_for('static', filename='icons/eye.png') }}"
-                : "{{ url_for('static', filename='icons/eye-off.png') }}";
+                ? "{{ 'icons/eye.png' | static_or_cloud }}"
+                : "{{ 'icons/eye-off.png' | static_or_cloud }}";
         togglePassword.setAttribute("alt", type === "password" ? "Mostrar contraseña" : "Ocultar contraseña");
     }
     togglePassword.addEventListener("click", function (e) {

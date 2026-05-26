@@ -1067,7 +1067,7 @@ html[data-print-mode="thermal"] .barcode img {
         <div class="label-header">
             <div class="brand-row">
                 <div class="logo-wrap">
-                    <img class="logo-img" src="{{ url_for('static', filename='logo_andes.png') }}" alt="Logo Andes">
+                    <img class="logo-img" src="{{ 'logo_andes.png' | static_or_cloud }}" alt="Logo Andes">
                 </div>
                 <div class="empresa">ANDES AUTO PARTS LTDA</div>
             </div>

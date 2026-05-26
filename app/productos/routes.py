@@ -47,6 +47,7 @@ from ..utils.catalog_cache import get_or_load, invalidate_taxonomia
 from ..utils.cloudinary_config import is_configured as cloudinary_is_configured
 from ..utils.cloudinary_config import upload_image as cloudinary_upload_image
 from ..utils.cloudinary_config import delete_image_by_url
+from ..utils.cloudinary_static_map import keys_with_prefix
 from ..utils.product_image_url import (
     is_remote_image_url,
     normalize_stored_image_ref,
@@ -383,6 +384,31 @@ def _collect_imagenes_producto(producto: Producto) -> list[str]:
         for name in _collect_imagenes_producto_carpeta(folder, producto):
             add(f"productos_img/{name}")
     return out
+
+
+def _collect_imagenes_360(producto: Producto) -> list[str]:
+    """Nombres de archivo 360; el template arma productos360/CODIGO/archivo."""
+    codigo = (producto.codigo or "").strip()
+    if not codigo:
+        return []
+    prefix = f"productos360/{codigo}/"
+    seen: set[str] = set()
+    out: list[str] = []
+
+    for key in keys_with_prefix(prefix):
+        basename = key.rsplit("/", 1)[-1]
+        if basename and basename not in seen:
+            seen.add(basename)
+            out.append(basename)
+
+    folder = STATIC_PRODUCTOS_IMG.parent / "productos360" / codigo
+    if folder.is_dir():
+        for archivo in sorted(os.listdir(folder)):
+            low = archivo.lower()
+            if low.endswith((".jpg", ".jpeg", ".png", ".webp")) and archivo not in seen:
+                seen.add(archivo)
+                out.append(archivo)
+    return sorted(out, key=str.lower)
 
 
 def _producto_snapshot(p: Producto) -> dict:
@@ -1823,15 +1849,7 @@ def ver_producto(codigo):
         # BUSCAR IMÁGENES 360 POR CARPETA
         # =============================
 
-        ruta_360 = f"app/static/productos360/{producto.codigo}" if producto.codigo else ""
-        imagenes_360 = []
-
-        if os.path.isdir(ruta_360):
-            for archivo in os.listdir(ruta_360):
-                if archivo.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
-                    imagenes_360.append(archivo)
-
-        imagenes_360.sort()
+        imagenes_360 = _collect_imagenes_360(producto)
 
         despiece_row = None
         despiece_partes: list = []
@@ -2007,20 +2025,20 @@ def guardar_despiece_producto(codigo):
 
         upload = request.files.get("imagen")
         if upload and upload.filename:
-            try:
-                ext = "." + _validate_image_upload(upload)
-            except ValueError as exc:
-                return jsonify(success=False, message=str(exc)), 400
-            base_fn = secure_filename(normalized) or "codigo"
-            fname = f"{base_fn}_{int(datetime.utcnow().timestamp())}{ext}"
-            path = static_dir / fname
-            upload.save(path)
-            out = process_uploaded_image(path)
-            if out is not None:
-                path = out
-                fname = out.name
-            row.imagen_static = f"epc_despiece/{fname}"
+            if row.imagen_static:
+                _delete_product_image_ref(row.imagen_static)
+            stored = _upload_product_image_file(
+                upload,
+                codigo=normalized,
+                suffix=f"_despiece_{int(datetime.utcnow().timestamp())}",
+                allowed_exts={"jpg", "jpeg", "png", "webp"},
+            )
+            if not stored:
+                return jsonify(success=False, message="No se pudo guardar la imagen"), 400
+            row.imagen_static = stored
         elif borrar_imagen:
+            if row.imagen_static:
+                _delete_product_image_ref(row.imagen_static)
             row.imagen_static = None
 
         try:

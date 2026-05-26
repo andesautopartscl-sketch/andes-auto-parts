@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf-token" content="{{ csrf_token }}">
 <title>Login | Andes Auto Parts</title>
-<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='logo_andes.png') }}">
-<link rel="shortcut icon" href="{{ url_for('static', filename='logo_andes.png') }}">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ 'logo_andes.png' | static_or_cloud }}">
+<link rel="shortcut icon" href="{{ 'logo_andes.png' | static_or_cloud }}">
 <style>
 body {
   margin: 0;
@@ -87,7 +87,7 @@ body {
 <body>
 <div class="login-box">
   <div class="login-logo-wrap">
-    <img class="login-brand-img" src="{{ url_for('static', filename='logo_andes.png') }}" width="56" height="56" alt="Andes Auto Parts">
+    <img class="login-brand-img" src="{{ 'logo_andes.png' | static_or_cloud }}" width="56" height="56" alt="Andes Auto Parts">
   </div>
   <h2>Andes Auto Parts</h2>
   <form method="POST">

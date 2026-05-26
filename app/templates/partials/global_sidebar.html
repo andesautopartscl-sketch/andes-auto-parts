@@ -482,7 +482,7 @@ html {
 			{% if usuario_foto_url %}
 			<img class="avatar-photo" src="{{ usuario_foto_url }}?v={{ session.get('usuario_id', 0) }}" width="52" height="52" alt="" decoding="async">
 			{% else %}
-			<img class="avatar-icon" src="{{ url_for('static', filename='icons/user.png') }}?v=andes-login-3" width="28" height="28" alt="" decoding="async">
+			<img class="avatar-icon" src="{{ 'icons/user.png' | static_or_cloud }}?v=andes-login-3" width="28" height="28" alt="" decoding="async">
 			{% endif %}
 		</div>
 		<div class="user-card-body">

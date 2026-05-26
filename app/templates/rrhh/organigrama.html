@@ -280,7 +280,7 @@
               {% if u.has_foto and u.foto_url %}
               <img class="org-avatar__photo" src="{{ u.foto_url }}?v={{ u.id }}" width="56" height="56" alt="" decoding="async">
               {% endif %}
-              <img class="org-avatar__sil" src="{{ url_for('static', filename='icons/user.png') }}" width="56" height="56" alt="" decoding="async">
+              <img class="org-avatar__sil" src="{{ 'icons/user.png' | static_or_cloud }}" width="56" height="56" alt="" decoding="async">
               <span class="org-avatar__letters">{{ ini }}</span>
             </div>
             <h3 class="org-card__name">{{ u.nombre or u.usuario }}</h3>
@@ -324,7 +324,7 @@
                 {% if u.has_foto and u.foto_url %}
                 <img class="org-avatar__photo" src="{{ u.foto_url }}?v={{ u.id }}" width="56" height="56" alt="" decoding="async">
                 {% endif %}
-                <img class="org-avatar__sil" src="{{ url_for('static', filename='icons/user.png') }}" width="56" height="56" alt="" decoding="async">
+                <img class="org-avatar__sil" src="{{ 'icons/user.png' | static_or_cloud }}" width="56" height="56" alt="" decoding="async">
                 <span class="org-avatar__letters">{{ ini }}</span>
               </div>
               <h3 class="org-card__name">{{ u.nombre or u.usuario }}</h3>
