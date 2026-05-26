@@ -1,0 +1,594 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+
+{% block title %}Importar imágenes Cloudinary | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.topbar { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:18px; }
+.card {
+  background:#fff; border:1px solid #e2e8f0; border-radius:16px; padding:16px 18px;
+  margin-bottom:14px; box-shadow:0 10px 25px rgba(0,0,0,.05);
+}
+.note { font-size:12px; color:#64748b; line-height:1.45; }
+.dropzone {
+  position:relative; border:2px dashed #94a3b8; border-radius:16px; min-height:200px;
+  background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; padding:28px 20px; cursor:pointer; transition:border-color .15s,background .15s;
+}
+.dropzone.is-dragover { border-color:#2563eb; background:#eff6ff; box-shadow:inset 0 0 0 1px rgba(37,99,235,.15); }
+.dropzone-icon { font-size:42px; line-height:1; margin-bottom:10px; opacity:.85; }
+.dropzone-title { font-size:15px; font-weight:700; color:#0f172a; margin:0 0 6px; }
+.dropzone-hint { font-size:12px; color:#64748b; margin:0; max-width:520px; }
+.dropzone input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+.table-wrap { overflow:auto; max-height:min(55vh,620px); border:1px solid #e2e8f0; border-radius:10px; margin-top:12px; }
+table { width:100%; border-collapse:collapse; font-size:12px; }
+th, td { padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:middle; }
+th { background:#1e3a8a; color:#fff; font-size:11px; position:sticky; top:0; z-index:1; }
+.preview-thumb { width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid #e2e8f0; background:#fff; }
+.codigo-wrap { position:relative; min-width:140px; }
+.codigo-wrap input {
+  width:100%; box-sizing:border-box; padding:6px 8px; border:1px solid #cbd5e1;
+  border-radius:8px; font-size:12px; font-weight:600; text-transform:uppercase;
+}
+.codigo-suggest {
+  position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:20;
+  list-style:none; margin:0; padding:0; border:1px solid #e2e8f0; border-radius:8px;
+  background:#fff; max-height:160px; overflow:auto; box-shadow:0 8px 24px rgba(15,23,42,.12);
+}
+.codigo-suggest li { padding:7px 9px; cursor:pointer; border-bottom:1px solid #f1f5f9; font-size:11px; }
+.codigo-suggest li:hover { background:#eff6ff; }
+.codigo-suggest li:last-child { border-bottom:none; }
+.prod-ok { color:#065f46; font-weight:600; }
+.prod-warn { color:#b45309; font-weight:600; }
+.prod-muted { color:#94a3b8; }
+.progress-wrap { min-width:120px; }
+.progress-bar {
+  height:8px; border-radius:999px; background:#e2e8f0; overflow:hidden; margin-top:4px;
+}
+.progress-bar > span {
+  display:block; height:100%; width:0%; background:linear-gradient(90deg,#2563eb,#3b82f6);
+  transition:width .2s ease;
+}
+.progress-label { font-size:10px; color:#64748b; }
+.toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px; }
+.msg-inline { padding:10px 14px; border-radius:10px; font-size:13px; display:none; margin-top:10px; }
+.msg-inline.ok { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+.msg-inline.err { background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
+.badge-done { color:#065f46; font-weight:700; }
+.badge-err { color:#991b1b; font-weight:700; }
+.badge-skip { color:#64748b; }
+body.dark .card { background:#1f2937; border-color:#374151; color:#e5e7eb; }
+body.dark .note { color:#9ca3af; }
+body.dark .dropzone { background:#111827; border-color:#4b5563; }
+body.dark .dropzone-title { color:#f8fafc; }
+body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="page-title">Importar imágenes desde Cloudinary</h1>
+    <p class="page-subtitle">
+      Arrastra imágenes desde el explorador, otra pestaña o una página web. Revisa y edita el código
+      de cada una antes de subir. Todo va directo a Cloudinary — no se descarga nada en tu equipo.
+    </p>
+  </div>
+  <div class="topbar-actions">
+    <a class="btn" href="{{ url_for('productos.buscar') }}" data-module-url="{{ url_for('productos.buscar') }}">🔍 Buscar</a>
+  </div>
+</div>
+
+{% if not cloudinary_ok %}
+<section class="card">
+  <p class="note" style="color:#991b1b;margin:0;">
+    Cloudinary no está configurado. Definí <code>CLOUDINARY_CLOUD_NAME</code>,
+    <code>CLOUDINARY_API_KEY</code> y <code>CLOUDINARY_API_SECRET</code>.
+  </p>
+</section>
+{% else %}
+
+<section class="card">
+  <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Zona para arrastrar imágenes">
+    <div class="dropzone-icon" aria-hidden="true">🖼️</div>
+    <p class="dropzone-title">Arrastra imágenes aquí o haz click para seleccionar</p>
+    <p class="dropzone-hint">
+      Desde explorador de archivos, otra pestaña del navegador o una imagen en cualquier sitio web.
+      Formatos: JPG, PNG, WEBP, GIF · Carpeta: <code>andes_erp/productos</code>
+    </p>
+    <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif" multiple>
+  </div>
+</section>
+
+<section class="card" id="sec-asignacion" hidden>
+  <h2 style="margin:0 0 8px;font-size:15px;">Asignación antes de subir</h2>
+  <p class="note" style="margin-top:0;" id="cola-resumen"></p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Preview</th>
+          <th>Nombre detectado</th>
+          <th>Código a asignar</th>
+          <th>Producto encontrado</th>
+          <th>Progreso</th>
+          <th>Acción</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-cola"></tbody>
+    </table>
+  </div>
+  <div class="toolbar">
+    <button type="button" class="btn btn-primary" id="btn-subir-todas">Subir todas a Cloudinary</button>
+    <button type="button" class="btn" id="btn-limpiar-listas">Limpiar lista</button>
+    <span class="note" id="toolbar-hint"></span>
+  </div>
+  <div id="upload-msg" class="msg-inline" role="status"></div>
+</section>
+
+<section class="card" id="sec-resumen-final" hidden>
+  <h2 style="margin:0 0 8px;font-size:15px;">Resumen final</h2>
+  <p class="note" id="resumen-final"></p>
+</section>
+
+{% endif %}
+
+<script>
+(function () {
+  var dropzone = document.getElementById('dropzone');
+  if (!dropzone) return;
+
+  var fileInput = document.getElementById('file-input');
+  var secAsign = document.getElementById('sec-asignacion');
+  var secResumen = document.getElementById('sec-resumen-final');
+  var tbody = document.getElementById('tbody-cola');
+  var colaResumen = document.getElementById('cola-resumen');
+  var btnTodas = document.getElementById('btn-subir-todas');
+  var btnLimpiar = document.getElementById('btn-limpiar-listas');
+  var toolbarHint = document.getElementById('toolbar-hint');
+  var msg = document.getElementById('upload-msg');
+  var resumenFinal = document.getElementById('resumen-final');
+
+  var resolverUrl = {{ url_for('productos.importar_imagenes_cloudinary_resolver') | tojson }};
+  var searchUrl = {{ url_for('productos.importar_imagenes_cloudinary_buscar') | tojson }};
+  var subirUnoUrl = {{ url_for('productos.importar_imagenes_cloudinary_subir_uno') | tojson }};
+  var desdeUrlApi = {{ url_for('productos.importar_imagenes_cloudinary_desde_url') | tojson }};
+
+  var queue = [];
+  var nextId = 1;
+  var uploadingAll = false;
+
+  var ALLOWED_MIME = {
+    'image/jpeg': true, 'image/png': true, 'image/webp': true, 'image/gif': true
+  };
+
+  function showMsg(text, ok) {
+    msg.textContent = text;
+    msg.className = 'msg-inline ' + (ok ? 'ok' : 'err');
+    msg.style.display = 'block';
+  }
+
+  function codigoFromFilename(name) {
+    var base = (name || '').replace(/\\/g, '/').split('/').pop() || '';
+    var dot = base.lastIndexOf('.');
+    var stem = (dot > 0 ? base.slice(0, dot) : base).trim();
+    if (stem.toLowerCase().endsWith('_despiece')) stem = stem.slice(0, -9);
+    return stem.toUpperCase();
+  }
+
+  function isImageFile(file) {
+    if (!file) return false;
+    if (file.type && ALLOWED_MIME[file.type]) return true;
+    var n = (file.name || '').toLowerCase();
+    return /\.(jpe?g|png|webp|gif)$/.test(n);
+  }
+
+  function fetchResolver(codigo) {
+    if (!codigo) return Promise.resolve({ found: false });
+    return fetch(resolverUrl + '?codigo=' + encodeURIComponent(codigo), {
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    }).then(function (r) { return r.json(); });
+  }
+
+  function fetchSearch(q) {
+    return fetch(searchUrl + '?q=' + encodeURIComponent(q), {
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    }).then(function (r) { return r.json(); });
+  }
+
+  function productoCellHtml(item) {
+    if (item.uploadResult) {
+      if (item.uploadResult.estado === 'vinculado') {
+        var d = item.uploadResult.producto_descripcion ? ' — ' + item.uploadResult.producto_descripcion : '';
+        return '<span class="prod-ok">✅ ' + (item.uploadResult.producto_codigo || '') + d + '</span>';
+      }
+      if (item.uploadResult.estado === 'sin_producto') {
+        return '<span class="prod-warn">⚠️ Subida; sin producto en BD</span>';
+      }
+      if (item.uploadResult.estado === 'error') {
+        return '<span class="badge-err">❌ ' + (item.uploadResult.mensaje || 'Error') + '</span>';
+      }
+    }
+    if (item.producto && item.producto.found !== false && (item.producto.descripcion || item.producto.codigo)) {
+      var label = item.producto.descripcion || item.producto.codigo;
+      return '<span class="prod-ok">✅ ' + label + '</span>';
+    }
+    if ((item.codigo || '').trim()) {
+      return '<span class="prod-warn">⚠️ Sin coincidencia</span>';
+    }
+    return '<span class="prod-muted">—</span>';
+  }
+
+  function progressCellHtml(item) {
+    if (item.status === 'pending') return '<span class="prod-muted">Pendiente</span>';
+    if (item.status === 'uploading') {
+      return '<div class="progress-wrap"><div class="progress-label">' + item.progress + '%</div>' +
+        '<div class="progress-bar"><span style="width:' + item.progress + '%"></span></div></div>';
+    }
+    if (item.status === 'done') return '<span class="badge-done">✅ Completado</span>';
+    if (item.status === 'error') return '<span class="badge-err">❌ Error</span>';
+    if (item.status === 'skipped') return '<span class="badge-skip">Omitido</span>';
+    return '';
+  }
+
+  function updateColaResumen() {
+    var conCodigo = queue.filter(function (q) { return (q.codigo || '').trim(); }).length;
+    colaResumen.textContent = queue.length + ' imagen(es) en cola · ' + conCodigo + ' con código asignado';
+    secAsign.hidden = queue.length === 0;
+  }
+
+  function bindCodigoInput(item, input, suggestUl) {
+    var debounceSearch = null;
+    var debounceResolve = null;
+
+    function refreshProducto() {
+      var tr = tbody.querySelector('tr[data-id="' + item.id + '"]');
+      if (tr) tr.querySelector('.td-producto').innerHTML = productoCellHtml(item);
+    }
+
+    function pickSuggestion(it) {
+      item.codigo = (it.codigo || '').toUpperCase();
+      input.value = item.codigo;
+      item.producto = { found: true, codigo: it.codigo, descripcion: it.descripcion };
+      suggestUl.hidden = true;
+      refreshProducto();
+    }
+
+    input.addEventListener('input', function () {
+      item.codigo = (input.value || '').trim().toUpperCase();
+      input.value = item.codigo;
+      item.producto = null;
+      refreshProducto();
+      clearTimeout(debounceSearch);
+      clearTimeout(debounceResolve);
+      var q = item.codigo;
+      if (q.length < 1) { suggestUl.hidden = true; return; }
+      debounceSearch = setTimeout(function () {
+        fetchSearch(q).then(function (j) {
+          suggestUl.innerHTML = '';
+          (j.items || []).forEach(function (it) {
+            var li = document.createElement('li');
+            li.textContent = it.codigo + (it.descripcion ? ' — ' + it.descripcion : '');
+            li.addEventListener('mousedown', function (ev) {
+              ev.preventDefault();
+              pickSuggestion(it);
+            });
+            suggestUl.appendChild(li);
+          });
+          suggestUl.hidden = !(j.items && j.items.length);
+        });
+      }, 220);
+      debounceResolve = setTimeout(function () {
+        fetchResolver(q).then(function (j) {
+          if (j.found) {
+            item.producto = j;
+            if (j.codigo) item.codigo = j.codigo;
+            input.value = item.codigo;
+          } else {
+            item.producto = { found: false };
+          }
+          refreshProducto();
+        });
+      }, 420);
+    });
+
+    input.addEventListener('blur', function () {
+      setTimeout(function () { suggestUl.hidden = true; }, 150);
+    });
+  }
+
+  function renderRow(item) {
+    var tr = document.createElement('tr');
+    tr.dataset.id = String(item.id);
+    tr.innerHTML =
+      '<td><img class="preview-thumb" src="' + item.preview + '" alt=""></td>' +
+      '<td>' + (item.nombre || '') + '</td>' +
+      '<td class="td-codigo"><div class="codigo-wrap"><input type="text" autocomplete="off" spellcheck="false" value="' + (item.codigo || '') + '"><ul class="codigo-suggest" hidden></ul></div></td>' +
+      '<td class="td-producto"></td>' +
+      '<td class="td-progress"></td>' +
+      '<td class="td-action"><button type="button" class="btn btn-primary btn-subir-uno">Subir</button></td>';
+    tbody.appendChild(tr);
+    tr.querySelector('.td-producto').innerHTML = productoCellHtml(item);
+    tr.querySelector('.td-progress').innerHTML = progressCellHtml(item);
+    bindCodigoInput(item, tr.querySelector('.codigo-wrap input'), tr.querySelector('.codigo-suggest'));
+    tr.querySelector('.btn-subir-uno').addEventListener('click', function () {
+      uploadItem(item);
+    });
+  }
+
+  function refreshRow(item) {
+    var tr = tbody.querySelector('tr[data-id="' + item.id + '"]');
+    if (!tr) return;
+    tr.querySelector('.td-producto').innerHTML = productoCellHtml(item);
+    tr.querySelector('.td-progress').innerHTML = progressCellHtml(item);
+    var btn = tr.querySelector('.btn-subir-uno');
+    btn.disabled = item.status === 'uploading' || !(item.codigo || '').trim() || item.status === 'done';
+    if (item.status === 'done') btn.textContent = 'Listo';
+  }
+
+  function addFileToQueue(file, displayName) {
+    if (!isImageFile(file)) return Promise.resolve();
+    var nombre = displayName || file.name || 'imagen.jpg';
+    var stem = codigoFromFilename(nombre);
+    var preview = URL.createObjectURL(file);
+    var item = {
+      id: nextId++,
+      file: file,
+      nombre: nombre,
+      preview: preview,
+      codigo: '',
+      producto: null,
+      status: 'pending',
+      progress: 0,
+      uploadResult: null
+    };
+    queue.push(item);
+    renderRow(item);
+    updateColaResumen();
+    if (!stem) return Promise.resolve();
+    return fetchResolver(stem).then(function (j) {
+      if (j.found) {
+        item.codigo = j.codigo || stem;
+        item.producto = j;
+        var tr = tbody.querySelector('tr[data-id="' + item.id + '"]');
+        if (tr) {
+          tr.querySelector('.codigo-wrap input').value = item.codigo;
+          tr.querySelector('.td-producto').innerHTML = productoCellHtml(item);
+        }
+      }
+    });
+  }
+
+  function addFilesFromList(fileList) {
+    var tasks = [];
+    for (var i = 0; i < fileList.length; i++) {
+      tasks.push(addFileToQueue(fileList[i]));
+    }
+    return Promise.all(tasks);
+  }
+
+  function base64ToFile(b64, filename, mime) {
+    var binary = atob(b64);
+    var len = binary.length;
+    var bytes = new Uint8Array(len);
+    for (var i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+    return new File([bytes], filename, { type: mime || 'image/jpeg' });
+  }
+
+  function addFromUrl(url) {
+    return fetch(desdeUrlApi, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: JSON.stringify({ url: url })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (x) {
+        if (!x.ok || !x.j || !x.j.success) {
+          throw new Error((x.j && x.j.error) ? x.j.error : 'No se pudo importar la URL');
+        }
+        var file = base64ToFile(x.j.data_base64, x.j.filename, x.j.mime);
+        return addFileToQueue(file, x.j.filename);
+      });
+  }
+
+  function collectDropEntries(dataTransfer) {
+    var files = [];
+    var urlPromises = [];
+    if (dataTransfer.files && dataTransfer.files.length) {
+      for (var i = 0; i < dataTransfer.files.length; i++) {
+        if (isImageFile(dataTransfer.files[i])) files.push(dataTransfer.files[i]);
+      }
+      if (files.length) return { files: files, urlPromises: [] };
+    }
+    if (dataTransfer.items) {
+      for (var j = 0; j < dataTransfer.items.length; j++) {
+        var it = dataTransfer.items[j];
+        if (it.kind === 'file') {
+          var f = it.getAsFile();
+          if (f && isImageFile(f)) files.push(f);
+        } else if (it.kind === 'string' && it.type === 'text/uri-list') {
+          urlPromises.push(new Promise(function (resolve) {
+            it.getAsString(function (s) {
+              var u = (s || '').trim().split('\n')[0];
+              resolve(u);
+            });
+          }));
+        } else if (it.kind === 'string' && it.type === 'text/html') {
+          urlPromises.push(new Promise(function (resolve) {
+            it.getAsString(function (html) {
+              var m = html.match(/src=["']([^"']+)["']/i);
+              resolve(m ? m[1] : '');
+            });
+          }));
+        }
+      }
+    }
+    return { files: files, urlPromises: urlPromises };
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropzone.classList.remove('is-dragover');
+    var collected = collectDropEntries(e.dataTransfer);
+    var work = [];
+    if (collected.files.length) work.push(addFilesFromList(collected.files));
+    collected.urlPromises.forEach(function (p) {
+      work.push(p.then(function (url) {
+        if (url && /^https?:\/\//i.test(url)) return addFromUrl(url);
+      }));
+    });
+    Promise.all(work).catch(function (err) {
+      showMsg(err.message || 'Error al procesar imágenes arrastradas.', false);
+    });
+  }
+
+  ['dragenter', 'dragover'].forEach(function (evName) {
+    dropzone.addEventListener(evName, function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.add('is-dragover');
+    });
+  });
+  ['dragleave', 'drop'].forEach(function (evName) {
+    dropzone.addEventListener(evName, function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (evName === 'drop') handleDrop(e);
+      else dropzone.classList.remove('is-dragover');
+    });
+  });
+
+  fileInput.addEventListener('change', function () {
+    if (fileInput.files && fileInput.files.length) {
+      addFilesFromList(fileInput.files);
+      fileInput.value = '';
+    }
+  });
+
+  function uploadItemXHR(item) {
+    return new Promise(function (resolve, reject) {
+      if (!(item.codigo || '').trim()) {
+        item.status = 'skipped';
+        refreshRow(item);
+        resolve(item);
+        return;
+      }
+      if (item.status === 'done') {
+        resolve(item);
+        return;
+      }
+      item.status = 'uploading';
+      item.progress = 5;
+      refreshRow(item);
+
+      var fd = new FormData();
+      fd.append('imagen', item.file, item.nombre);
+      fd.append('codigo', item.codigo);
+
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', subirUnoUrl, true);
+      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+      xhr.upload.onprogress = function (ev) {
+        if (ev.lengthComputable) {
+          item.progress = Math.min(95, Math.round((ev.loaded / ev.total) * 90) + 5);
+          refreshRow(item);
+        }
+      };
+      xhr.onload = function () {
+        var j;
+        try { j = JSON.parse(xhr.responseText); } catch (e) { j = {}; }
+        if (xhr.status >= 200 && xhr.status < 300 && j.success !== false && j.estado !== 'error') {
+          item.status = 'done';
+          item.progress = 100;
+          item.uploadResult = j;
+          if (j.found || j.producto_codigo) {
+            item.producto = {
+              found: true,
+              codigo: j.producto_codigo || item.codigo,
+              descripcion: j.producto_descripcion || ''
+            };
+          }
+          refreshRow(item);
+          resolve(item);
+        } else {
+          item.status = 'error';
+          item.uploadResult = j;
+          refreshRow(item);
+          reject(new Error((j && (j.error || j.mensaje)) || 'Error al subir'));
+        }
+      };
+      xhr.onerror = function () {
+        item.status = 'error';
+        refreshRow(item);
+        reject(new Error('Error de red'));
+      };
+      xhr.send(fd);
+    });
+  }
+
+  function uploadItem(item) {
+    return uploadItemXHR(item).catch(function (err) {
+      showMsg(err.message || 'Error al subir imagen.', false);
+    });
+  }
+
+  btnTodas.addEventListener('click', function () {
+    if (uploadingAll) return;
+    var pending = queue.filter(function (q) {
+      return (q.codigo || '').trim() && q.status !== 'done' && q.status !== 'uploading';
+    });
+    if (!pending.length) {
+      showMsg('No hay imágenes con código asignado pendientes de subir.', false);
+      return;
+    }
+    uploadingAll = true;
+    btnTodas.disabled = true;
+    toolbarHint.textContent = 'Subiendo ' + pending.length + ' imagen(es)…';
+    msg.style.display = 'none';
+
+    var chain = Promise.resolve();
+    var ok = 0, err = 0, sinProd = 0;
+    pending.forEach(function (item) {
+      chain = chain.then(function () {
+        return uploadItemXHR(item).then(function (it) {
+          if (it.uploadResult && it.uploadResult.estado === 'vinculado') ok++;
+          else if (it.uploadResult && it.uploadResult.estado === 'sin_producto') sinProd++;
+          else if (it.status === 'error') err++;
+        }).catch(function () { err++; });
+      });
+    });
+    chain.then(function () {
+      uploadingAll = false;
+      btnTodas.disabled = false;
+      toolbarHint.textContent = '';
+      secResumen.hidden = false;
+      resumenFinal.textContent =
+        'Completado: ' + ok + ' vinculada(s), ' + sinProd + ' subida(s) sin producto en BD, ' +
+        err + ' error(es). Total procesadas: ' + pending.length + '.';
+      showMsg('Subida masiva finalizada.', true);
+    });
+  });
+
+  btnLimpiar.addEventListener('click', function () {
+    if (uploadingAll) return;
+    queue.forEach(function (q) {
+      if (q.preview) URL.revokeObjectURL(q.preview);
+    });
+    queue = [];
+    tbody.innerHTML = '';
+    secAsign.hidden = true;
+    secResumen.hidden = true;
+    msg.style.display = 'none';
+    updateColaResumen();
+  });
+})();
+</script>
+{% endblock %}

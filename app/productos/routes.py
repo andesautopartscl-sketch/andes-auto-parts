@@ -1,4 +1,4 @@
-from flask import Blueprint, current_app, render_template, request, session, send_file, jsonify, make_response, url_for
+from flask import Blueprint, current_app, render_template, request, session, send_file, jsonify, make_response, url_for, redirect
 from datetime import datetime, timedelta
 import re
 import time
@@ -47,6 +47,13 @@ from ..utils.catalog_cache import get_or_load, invalidate_taxonomia
 from ..utils.cloudinary_config import is_configured as cloudinary_is_configured
 from ..utils.cloudinary_config import upload_image as cloudinary_upload_image
 from ..utils.cloudinary_config import delete_image_by_url
+from ..utils.cloudinary_product_import import (
+    codigo_from_filename,
+    find_producto_by_image_code,
+    link_cloudinary_url_to_producto,
+    resolver_producto_por_codigo,
+    search_productos_for_assign,
+)
 from ..utils.cloudinary_static_map import keys_with_prefix
 from ..utils.product_image_url import (
     is_remote_image_url,
@@ -3308,5 +3315,342 @@ def panel_calidad_stock():
                 "dias_sin_movimiento": dias_sin_mov,
             },
         )
+    finally:
+        sess.close()
+
+
+# =========================================
+# IMPORTAR IMÁGENES DESDE CLOUDINARY
+# =========================================
+
+
+def _require_productos_crear_editar_json():
+    if not get_user_permissions(session.get("user"), session.get("rol")).get(
+        "productos_crear_editar", False
+    ):
+        return jsonify({"success": False, "error": "Permiso denegado"}), 403
+    return None
+
+
+def _procesar_subida_imagen_cloudinary(
+    sess,
+    file_obj,
+    *,
+    codigo_asignado: str,
+    archivo_nombre: str,
+) -> dict:
+    """Sube una imagen a Cloudinary y vincula al producto si existe."""
+    codigo = (codigo_asignado or "").strip().upper()
+    fname = (archivo_nombre or getattr(file_obj, "filename", None) or "imagen.jpg").strip()
+    row = {
+        "archivo": fname,
+        "codigo_asignado": codigo,
+        "producto_codigo": None,
+        "producto_descripcion": None,
+        "cloudinary_url": None,
+        "estado": "",
+        "mensaje": "",
+    }
+    if not codigo:
+        row["estado"] = "omitido"
+        row["mensaje"] = "Sin código asignado"
+        return row
+
+    stored = _upload_product_image_file(
+        file_obj,
+        codigo=codigo,
+        suffix="",
+        allowed_exts=ALLOWED_IMAGE_EXTENSIONS,
+    )
+    if not stored:
+        row["estado"] = "error"
+        row["mensaje"] = "No se pudo subir (formato o Cloudinary)"
+        return row
+
+    row["cloudinary_url"] = stored
+    producto = find_producto_by_image_code(sess, codigo)
+    if producto:
+        link_cloudinary_url_to_producto(sess, producto, stored)
+        row["producto_codigo"] = (producto.codigo or "").strip().upper()
+        row["producto_descripcion"] = (producto.descripcion or "")[:120]
+        row["estado"] = "vinculado"
+        row["mensaje"] = "Vinculado"
+    else:
+        row["estado"] = "sin_producto"
+        row["mensaje"] = "Subida a Cloudinary; producto no encontrado en BD"
+    return row
+
+
+@productos_bp.route("/productos/importar-imagenes-cloudinary")
+@admin_required
+def importar_imagenes_cloudinary_view():
+    if not get_user_permissions(session.get("user"), session.get("rol")).get(
+        "productos_crear_editar", False
+    ):
+        return redirect(url_for("productos.buscar"))
+    return render_template(
+        "productos/importar_imagenes_cloudinary.html",
+        cloudinary_ok=cloudinary_is_configured(),
+        online_users=_online_users(),
+        active_page="productos_importar_imagenes",
+    )
+
+
+@productos_bp.route("/productos/importar-imagenes-cloudinary/subir", methods=["POST"])
+@admin_required
+def importar_imagenes_cloudinary_subir():
+    denied = _require_productos_crear_editar_json()
+    if denied:
+        return denied
+    if not cloudinary_is_configured():
+        return jsonify(
+            {"success": False, "error": "Cloudinary no está configurado (variables CLOUDINARY_*)."}
+        ), 503
+
+    files = request.files.getlist("imagenes") or request.files.getlist("files") or []
+    codigos = request.form.getlist("codigos")
+    if not files:
+        single = request.files.get("file") or request.files.get("imagen")
+        if single and getattr(single, "filename", None):
+            files = [single]
+            codigos = [request.form.get("codigo") or ""]
+    if not files:
+        return jsonify({"success": False, "error": "No se seleccionaron archivos."}), 400
+
+    sess = SessionDB()
+    resultados: list[dict] = []
+    vinculados = omitidos = sin_producto = errores = 0
+
+    try:
+        for idx, f in enumerate(files):
+            fname = (getattr(f, "filename", None) or "").strip() or f"imagen_{idx + 1}.jpg"
+            codigo = (codigos[idx] if idx < len(codigos) else "").strip().upper()
+            if not codigo:
+                codigo = codigo_from_filename(fname)
+            row = _procesar_subida_imagen_cloudinary(sess, f, codigo_asignado=codigo, archivo_nombre=fname)
+            resultados.append(row)
+            st = row.get("estado")
+            if st == "vinculado":
+                vinculados += 1
+            elif st == "sin_producto":
+                sin_producto += 1
+            elif st == "omitido":
+                omitidos += 1
+            else:
+                errores += 1
+
+        if vinculados:
+            register_product_audit(
+                sess,
+                actor=_actor_usuario(),
+                action="update",
+                modulo="productos",
+                producto_codigo=None,
+                req=request,
+                metadata={
+                    "bulk_cloudinary_images": True,
+                    "vinculados": vinculados,
+                    "sin_producto": sin_producto,
+                    "errores": errores,
+                },
+            )
+        sess.commit()
+    except Exception as exc:
+        sess.rollback()
+        return jsonify({"success": False, "error": str(exc)}), 500
+    finally:
+        sess.close()
+
+    return jsonify(
+        {
+            "success": True,
+            "total": len(resultados),
+            "vinculados": vinculados,
+            "sin_producto": sin_producto,
+            "omitidos": omitidos,
+            "errores": errores,
+            "resultados": resultados,
+        }
+    )
+
+
+@productos_bp.route("/productos/importar-imagenes-cloudinary/subir-uno", methods=["POST"])
+@admin_required
+def importar_imagenes_cloudinary_subir_uno():
+    denied = _require_productos_crear_editar_json()
+    if denied:
+        return denied
+    if not cloudinary_is_configured():
+        return jsonify(
+            {"success": False, "error": "Cloudinary no está configurado (variables CLOUDINARY_*)."}
+        ), 503
+
+    file_obj = request.files.get("imagen") or request.files.get("file")
+    codigo = (request.form.get("codigo") or "").strip().upper()
+    if not file_obj or not getattr(file_obj, "filename", None):
+        return jsonify({"success": False, "error": "Falta archivo de imagen."}), 400
+    if not codigo:
+        return jsonify({"success": False, "error": "Falta código de producto."}), 400
+
+    fname = (file_obj.filename or "imagen.jpg").strip()
+    sess = SessionDB()
+    try:
+        row = _procesar_subida_imagen_cloudinary(
+            sess, file_obj, codigo_asignado=codigo, archivo_nombre=fname
+        )
+        if row.get("estado") == "vinculado":
+            register_product_audit(
+                sess,
+                actor=_actor_usuario(),
+                producto_codigo=row.get("producto_codigo"),
+                action="update",
+                modulo="productos",
+                req=request,
+                metadata={"cloudinary_image_upload": True, "archivo": fname[:120]},
+            )
+        sess.commit()
+        return jsonify({"success": row.get("estado") != "error", **row})
+    except Exception as exc:
+        sess.rollback()
+        return jsonify({"success": False, "error": str(exc)}), 500
+    finally:
+        sess.close()
+
+
+@productos_bp.route("/productos/importar-imagenes-cloudinary/resolver")
+@admin_required
+def importar_imagenes_cloudinary_resolver():
+    denied = _require_productos_crear_editar_json()
+    if denied:
+        return denied
+    codigo = (request.args.get("codigo") or "").strip().upper()
+    if not codigo:
+        return jsonify({"success": True, "found": False})
+    sess = SessionDB()
+    try:
+        info = resolver_producto_por_codigo(sess, codigo)
+        if info:
+            return jsonify({"success": True, "found": True, **info})
+        return jsonify({"success": True, "found": False, "codigo": codigo})
+    finally:
+        sess.close()
+
+
+@productos_bp.route("/productos/importar-imagenes-cloudinary/desde-url", methods=["POST"])
+@admin_required
+def importar_imagenes_cloudinary_desde_url():
+    """Obtiene imagen desde URL (drag desde web) sin descargar en el cliente."""
+    denied = _require_productos_crear_editar_json()
+    if denied:
+        return denied
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or request.form.get("url") or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        return jsonify({"success": False, "error": "URL inválida."}), 400
+
+    import base64
+    import mimetypes
+    import urllib.error
+    import urllib.request
+    from urllib.parse import unquote, urlparse
+
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "AndesAutoParts-ERP/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            raw = resp.read(MAX_IMAGE_UPLOAD_BYTES + 1)
+            if len(raw) > MAX_IMAGE_UPLOAD_BYTES:
+                return jsonify({"success": False, "error": "Imagen demasiado grande."}), 413
+            ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        return jsonify({"success": False, "error": f"No se pudo obtener la imagen: {exc}"}), 400
+
+    ext_map = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+    }
+    ext = ext_map.get(ctype)
+    if not ext:
+        guess = mimetypes.guess_extension(ctype or "") or ""
+        ext = guess.lstrip(".") if guess else ""
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        return jsonify({"success": False, "error": "Formato no permitido (use JPG, PNG, WEBP o GIF)."}), 400
+
+    path = unquote(urlparse(url).path or "")
+    stem = Path(path).stem.strip() if path else "imagen_web"
+    if not stem or stem.lower() in {"image", "img", "photo", "download"}:
+        stem = "imagen_web"
+    filename = f"{stem[:80]}.{ext}"
+    b64 = base64.b64encode(raw).decode("ascii")
+    return jsonify(
+        {
+            "success": True,
+            "filename": filename,
+            "mime": ctype or f"image/{ext}",
+            "data_base64": b64,
+        }
+    )
+
+
+@productos_bp.route("/productos/importar-imagenes-cloudinary/asignar", methods=["POST"])
+@admin_required
+def importar_imagenes_cloudinary_asignar():
+    denied = _require_productos_crear_editar_json()
+    if denied:
+        return denied
+
+    data = request.get_json(silent=True) or {}
+    cloudinary_url = (data.get("cloudinary_url") or request.form.get("cloudinary_url") or "").strip()
+    codigo = (data.get("codigo") or request.form.get("codigo") or "").strip().upper()
+    if not cloudinary_url or not codigo:
+        return jsonify({"success": False, "error": "Faltan cloudinary_url o codigo."}), 400
+
+    sess = SessionDB()
+    try:
+        producto = _find_producto_by_codigo(sess, codigo)
+        if producto is None:
+            return jsonify({"success": False, "error": "Producto no encontrado."}), 404
+        link_cloudinary_url_to_producto(sess, producto, cloudinary_url)
+        register_product_audit(
+            sess,
+            actor=_actor_usuario(),
+            producto_codigo=codigo,
+            action="update",
+            modulo="productos",
+            req=request,
+            metadata={"cloudinary_image_assign": True, "url": cloudinary_url[:200]},
+        )
+        sess.commit()
+        return jsonify(
+            {
+                "success": True,
+                "codigo": codigo,
+                "descripcion": (producto.descripcion or "")[:120],
+            }
+        )
+    except Exception as exc:
+        sess.rollback()
+        return jsonify({"success": False, "error": str(exc)}), 500
+    finally:
+        sess.close()
+
+
+@productos_bp.route("/productos/importar-imagenes-cloudinary/buscar")
+@admin_required
+def importar_imagenes_cloudinary_buscar():
+    denied = _require_productos_crear_editar_json()
+    if denied:
+        return denied
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 1:
+        return jsonify({"success": True, "items": []})
+    sess = SessionDB()
+    try:
+        items = search_productos_for_assign(sess, q, limit=12)
+        return jsonify({"success": True, "items": items})
     finally:
         sess.close()
