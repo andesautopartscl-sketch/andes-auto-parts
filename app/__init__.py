@@ -422,6 +422,22 @@ def create_app():
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_productos_descripcion ON productos(DESCRIPCION)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_productos_codigo_oem ON productos([CODIGO OEM])"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_productos_activo ON productos(ACTIVO)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_productos_marca ON productos(MARCA)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos(categoria_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_productos_subcategoria ON productos(subcategoria_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_productos_modelo ON productos(MODELO)"))
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_productos_activo_codigo "
+                    "ON productos(ACTIVO, CODIGO)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_producto_imagenes_codigo "
+                    "ON producto_imagenes(producto_codigo)"
+                )
+            )
 
             movimientos_cols = conn.execute(text("PRAGMA table_info(movimientos_stock)")).fetchall()
             movimientos_col_names = {col[1] for col in movimientos_cols}
@@ -455,6 +471,12 @@ def create_app():
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_variante_codigo ON productos_variantes_stock(codigo_producto)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_variante_marca ON productos_variantes_stock(marca)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_variante_bodega ON productos_variantes_stock(bodega)"))
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_variante_codigo_bodega "
+                    "ON productos_variantes_stock(codigo_producto, bodega)"
+                )
+            )
             variante_cols = conn.execute(text("PRAGMA table_info(productos_variantes_stock)")).fetchall()
             variante_col_names = {col[1] for col in variante_cols}
             if variante_cols and "margen_override_pct" not in variante_col_names:

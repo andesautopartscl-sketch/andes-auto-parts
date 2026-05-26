@@ -1,13 +1,14 @@
-from flask import Blueprint, render_template, request, session, send_file, jsonify, make_response, url_for
+from flask import Blueprint, current_app, render_template, request, session, send_file, jsonify, make_response, url_for
 from datetime import datetime, timedelta
 import re
+import time
 import unicodedata
 import json
 from pathlib import Path
 
 from markupsafe import Markup, escape
 from sqlalchemy import and_, case, func, literal, or_, text
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, noload
 from werkzeug.utils import secure_filename
 from ..models import (
     SessionDB,
@@ -42,9 +43,12 @@ from ..utils.categoria_autodetect import (
     bulk_auto_asignar_categorias_faltantes,
 )
 from ..utils.product_image_postprocess import process_uploaded_image
+from ..utils.catalog_cache import get_or_load, invalidate_taxonomia
 
 
 productos_bp = Blueprint("productos", __name__)
+BUSCAR_PER_PAGE_DEFAULT = 50
+BUSCAR_PER_PAGE_MAX = 50
 MAX_IMAGE_UPLOAD_BYTES = 8 * 1024 * 1024
 ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
 
@@ -315,6 +319,7 @@ def _resolve_taxonomia_create(sess, categoria_nombre: str, subcategoria_nombre: 
             cat = Categoria(nombre=categoria_nombre)
             sess.add(cat)
             sess.flush()
+            invalidate_taxonomia()
         categoria_id = cat.id
 
     if categoria_id and subcategoria_nombre:
@@ -328,6 +333,7 @@ def _resolve_taxonomia_create(sess, categoria_nombre: str, subcategoria_nombre: 
             sub = Subcategoria(nombre=subcategoria_nombre, categoria_id=categoria_id, palabras_clave="")
             sess.add(sub)
             sess.flush()
+            invalidate_taxonomia()
         subcategoria_id = sub.id
 
     return categoria_id, subcategoria_id
@@ -560,6 +566,59 @@ def _fold_like_contains(col, token_norm: str):
     return _sql_fold_busqueda(col).like(f"%{esc}%", escape="\\")
 
 
+def _producto_buscar_load_options():
+    """Evita JOINs eager (etiquetas, categoría, imágenes) en listados de búsqueda."""
+    return (
+        noload(Producto.etiquetas),
+        noload(Producto.categoria_rel),
+        noload(Producto.subcategoria_rel),
+        noload(Producto.imagenes),
+    )
+
+
+def _producto_q(sess, *options_extra):
+    opts = _producto_buscar_load_options()
+    if options_extra:
+        opts = opts + options_extra
+    return sess.query(Producto).options(*opts)
+
+
+def _paginate_producto_query(query, page: int, per_page: int):
+    """Pagina resultados; omite COUNT si la página actual es la última (parcial)."""
+    offset = (page - 1) * per_page
+    rows = query.offset(offset).limit(per_page).all()
+    if len(rows) < per_page:
+        total = offset + len(rows)
+        pages = max(1, page) if total else 1
+        return rows, total, pages
+    total = query.order_by(None).count()
+    pages = max(1, (total + per_page - 1) // per_page) if total else 1
+    page = max(1, min(page, pages))
+    return rows, total, pages
+
+
+def _load_taxonomia_productos(sess):
+    categorias = sess.query(Categoria).order_by(Categoria.nombre.asc()).all()
+    subs = sess.query(Subcategoria).order_by(Subcategoria.nombre.asc()).all()
+    subs_by_cat: dict[int, list] = {}
+    for sub in subs:
+        if sub.categoria_id is not None:
+            subs_by_cat.setdefault(sub.categoria_id, []).append(sub)
+    data = []
+    for cat in categorias:
+        cat_subs = subs_by_cat.get(cat.id, [])
+        data.append(
+            {
+                "id": cat.id,
+                "nombre": cat.nombre or "",
+                "subcategorias": [
+                    {"id": s.id, "nombre": s.nombre or ""} for s in cat_subs
+                ],
+            }
+        )
+    return data
+
+
 def _producto_busqueda_blob_expr():
     """
     Un solo texto con todos los campos buscables (espacios entre medias).
@@ -621,10 +680,11 @@ def _online_users() -> list[Usuario]:
 @login_required
 def buscar():
 
+    t0 = time.time()
     q = request.args.get("q", "").strip()
     page = request.args.get("page", 1, type=int) or 1
-    per_page = request.args.get("per_page", 100, type=int) or 100
-    per_page = max(25, min(int(per_page), 200))
+    per_page = request.args.get("per_page", BUSCAR_PER_PAGE_DEFAULT, type=int) or BUSCAR_PER_PAGE_DEFAULT
+    per_page = max(25, min(int(per_page), BUSCAR_PER_PAGE_MAX))
 
     sess = None
     online_users: list = []
@@ -669,8 +729,10 @@ def buscar():
         online_users = _online_users()
         user_perms = get_user_permissions(session.get("user"), session.get("rol"))
 
-        query = sess.query(Producto).filter(Producto.activo.is_(True))
+        query = _producto_q(sess).filter(Producto.activo.is_(True))
         productos = []
+        total_count = 0
+        total_pages = 1
 
         is_exact_codigo_search = False
         if q:
@@ -684,11 +746,11 @@ def buscar():
             # (evita ruido por OEM/descripciones que contienen la misma subcadena, p. ej. "2903").
             exacto_codigo_interno = None
             if len(palabras) == 1 and palabras[0].strip():
-                t0 = palabras[0].strip()
+                codigo_token = palabras[0].strip()
                 exacto_codigo_interno = (
-                    sess.query(Producto)
+                    _producto_q(sess)
                     .filter(Producto.activo.is_(True))
-                    .filter(func.upper(func.trim(Producto.codigo)) == t0.upper())
+                    .filter(func.upper(func.trim(Producto.codigo)) == codigo_token.upper())
                     .first()
                 )
                 is_exact_codigo_search = exacto_codigo_interno is not None
@@ -699,7 +761,7 @@ def buscar():
             if exacto_codigo_interno is not None:
                 # PK del modelo es CODIGO (no hay columna id).
                 query = (
-                    sess.query(Producto)
+                    _producto_q(sess)
                     .filter(Producto.activo.is_(True))
                     .filter(Producto.codigo == exacto_codigo_interno.codigo)
                     .order_by(Producto.codigo.asc())
@@ -709,7 +771,7 @@ def buscar():
                 # todos los repuestos de ese vehículo, ordenados por descripción.
                 if qstrip:
                     exacto_modelo = (
-                        sess.query(Producto)
+                        _producto_q(sess)
                         .filter(Producto.activo.is_(True))
                         .filter(Producto.modelo.isnot(None))
                         .filter(func.trim(Producto.modelo) != "")
@@ -721,7 +783,7 @@ def buscar():
                     func.coalesce(func.trim(Producto.descripcion), "")
                 )
                 query = (
-                    sess.query(Producto)
+                    _producto_q(sess)
                     .filter(Producto.activo.is_(True))
                     .filter(func.upper(func.trim(Producto.modelo)) == qstrip.upper())
                     .order_by(_desc_orden, Producto.codigo.asc())
@@ -731,7 +793,7 @@ def buscar():
                 # todos los ítems con ese OEM, por modelo alfabético.
                 if qstrip:
                     exacto_oem = (
-                        sess.query(Producto)
+                        _producto_q(sess)
                         .filter(Producto.activo.is_(True))
                         .filter(Producto.codigo_oem.isnot(None))
                         .filter(func.trim(Producto.codigo_oem) != "")
@@ -746,7 +808,7 @@ def buscar():
                     func.coalesce(func.trim(Producto.descripcion), "")
                 )
                 query = (
-                    sess.query(Producto)
+                    _producto_q(sess)
                     .filter(Producto.activo.is_(True))
                     .filter(func.upper(func.trim(Producto.codigo_oem)) == qstrip.upper())
                     .order_by(_modelo_orden_oem, _desc_orden_oem, Producto.codigo.asc())
@@ -823,12 +885,10 @@ def buscar():
             page = 1
             productos = query.limit(1).all()
         else:
-            total_count = query.count()
-            total_pages = max(1, (total_count + per_page - 1) // per_page) if total_count else 1
-            page = max(1, min(page, total_pages))
-            productos = (
-                query.offset((page - 1) * per_page).limit(per_page).all()
+            productos, total_count, total_pages = _paginate_producto_query(
+                query, page, per_page
             )
+            page = max(1, min(page, total_pages))
 
         productos = [p for p in productos if p is not None]
         codigos = sorted({(p.codigo or "").strip().upper() for p in productos if (p.codigo or "").strip()})
@@ -884,6 +944,19 @@ def buscar():
             except Exception:
                 sess.rollback()
 
+        try:
+            current_app.logger.info(
+                "Búsqueda productos: %.3fs | término=%r | resultados=%s | página=%s/%s | per_page=%s",
+                time.time() - t0,
+                q,
+                total_count,
+                page,
+                total_pages,
+                per_page,
+            )
+        except Exception:
+            pass
+
         return render_template(
             "buscar.html",
             productos=productos,
@@ -901,12 +974,20 @@ def buscar():
         )
     except Exception as exc:
         print("ERROR EN BUSCAR:", exc)
+        try:
+            current_app.logger.exception(
+                "Búsqueda productos falló en %.3fs | término=%r",
+                time.time() - t0,
+                q,
+            )
+        except Exception:
+            pass
         return render_template(
             "buscar.html",
             productos=[],
             q=q,
             page=1,
-            per_page=100,
+            per_page=BUSCAR_PER_PAGE_DEFAULT,
             total_count=0,
             total_pages=1,
             session=session,
@@ -940,26 +1021,7 @@ def api_taxonomia_productos():
     """Listas para asignar categoría y subcategoría en edición de producto."""
     sess = SessionDB()
     try:
-        categorias = (
-            sess.query(Categoria).order_by(Categoria.nombre.asc()).all()
-        )
-        data = []
-        for cat in categorias:
-            subs = (
-                sess.query(Subcategoria)
-                .filter(Subcategoria.categoria_id == cat.id)
-                .order_by(Subcategoria.nombre.asc())
-                .all()
-            )
-            data.append(
-                {
-                    "id": cat.id,
-                    "nombre": cat.nombre or "",
-                    "subcategorias": [
-                        {"id": s.id, "nombre": s.nombre or ""} for s in subs
-                    ],
-                }
-            )
+        data = get_or_load("taxonomia_productos", lambda: _load_taxonomia_productos(sess))
         return jsonify({"success": True, "categorias": data})
     finally:
         sess.close()
