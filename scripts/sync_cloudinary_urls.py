@@ -8,9 +8,6 @@ Generar SQL desde la máquina de desarrollo:
 Aplicar (local o Render Shell si está disponible):
   python scripts/sync_cloudinary_urls.py --apply
 
-Producción sin Shell (plan gratuito Render):
-  GET /admin/sync-cloudinary-urls?token=<ANDES_SYNC_TOKEN>
-
 Variables de entorno:
   ANDES_DB_PATH — ruta a andes.db
 """

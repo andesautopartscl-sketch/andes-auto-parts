@@ -8,8 +8,6 @@ Generar SQL:
 Aplicar (local / Render Shell):
   python scripts/sync_oem_despiece.py --apply
 
-Producción sin Shell:
-  GET /admin/sync-oem-despiece?token=<ANDES_SYNC_TOKEN>
 """
 
 from __future__ import annotations

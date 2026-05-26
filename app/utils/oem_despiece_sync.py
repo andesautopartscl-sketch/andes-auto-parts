@@ -110,7 +110,7 @@ def fetch_oem_despiece_rows(
 def build_insert_sql(rows: list[sqlite3.Row]) -> str:
     lines: list[str] = [
         "-- Generado por scripts/sync_oem_despiece.py --generate",
-        "-- Aplicar: GET /admin/sync-oem-despiece?token=... o python scripts/sync_oem_despiece.py --apply",
+        "-- Aplicar: python scripts/sync_oem_despiece.py --apply",
         "BEGIN TRANSACTION;",
         "",
     ]

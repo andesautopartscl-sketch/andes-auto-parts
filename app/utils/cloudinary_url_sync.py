@@ -1,7 +1,7 @@
 """
 Sincronización de URLs Cloudinary (oem_despiece.imagen_static, productos.despiece).
 
-Usado por scripts/sync_cloudinary_urls.py y GET /admin/sync-cloudinary-urls.
+Usado por scripts/sync_cloudinary_urls.py.
 """
 
 from __future__ import annotations

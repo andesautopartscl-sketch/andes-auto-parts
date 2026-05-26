@@ -1,6 +1,3 @@
-import hmac
-import os
-
 from flask import Blueprint, request, jsonify, render_template
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,18 +12,6 @@ from app.import_excel import import_products_from_excel
 admin_bp = Blueprint("admin", __name__)
 
 ALLOWED_IMPORT_EXTENSIONS = {".xlsx", ".xls", ".csv"}
-
-
-def _verify_andes_sync_token():
-    """403/503 si el token de sync remoto no es válido; None si OK."""
-    expected = (os.environ.get("ANDES_SYNC_TOKEN") or "").strip()
-    if not expected:
-        return jsonify(ok=False, error="ANDES_SYNC_TOKEN no configurado en el servidor"), 503
-
-    provided = (request.args.get("token") or "").strip()
-    if not provided or not hmac.compare_digest(provided, expected):
-        return jsonify(ok=False, error="token inválido"), 403
-    return None
 # Alto para no romper flujos actuales; evita DoS por archivos enormes.
 MAX_IMPORT_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
 
@@ -323,44 +308,3 @@ def generar_hoja_etiquetas(codigo):
         barcode_img=barcode_base64,
         cantidad=cantidad
     )
-
-
-# ===============================
-# SYNC URLS CLOUDINARY (Render sin Shell)
-# ===============================
-
-
-@admin_bp.route("/sync-cloudinary-urls", methods=["GET"])
-def sync_cloudinary_urls():
-    """
-    Aplica scripts/sync_cloudinary_urls.sql en la BD de producción.
-    Protegido por ANDES_SYNC_TOKEN (query ?token=...). No requiere sesión.
-    """
-    auth_err = _verify_andes_sync_token()
-    if auth_err:
-        return auth_err
-
-    from app.utils.cloudinary_url_sync import apply_cloudinary_url_sync
-
-    result = apply_cloudinary_url_sync()
-    body = result.to_dict()
-    status = 200 if result.ok else (500 if result.error else 207)
-    return jsonify(body), status
-
-
-@admin_bp.route("/sync-oem-despiece", methods=["GET"])
-def sync_oem_despiece():
-    """
-    Inserta/actualiza filas oem_despiece desde scripts/sync_oem_despiece.sql.
-    Ejecutar antes de sync-cloudinary-urls si faltan registros en producción.
-    """
-    auth_err = _verify_andes_sync_token()
-    if auth_err:
-        return auth_err
-
-    from app.utils.oem_despiece_sync import apply_oem_despiece_sql
-
-    result = apply_oem_despiece_sql()
-    body = result.to_dict()
-    status = 200 if result.ok else (500 if result.error else 207)
-    return jsonify(body), status
