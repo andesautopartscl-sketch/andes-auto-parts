@@ -8,6 +8,7 @@ python-dotenv
 python-barcode
 qrcode
 Pillow
+requests
 
 # Optional (prod): only needed if deploying behind a WSGI server
 gunicorn

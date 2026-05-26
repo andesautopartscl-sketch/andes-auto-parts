@@ -23,7 +23,16 @@ from email.mime.text import MIMEText
 
 
 def _cfg(key: str, default: str = "") -> str:
-    """Read config from environment (allow Flask app.config override later)."""
+    """Read config from Flask app.config or environment."""
+    try:
+        from flask import has_app_context, current_app
+
+        if has_app_context():
+            val = current_app.config.get(key)
+            if val is not None and str(val).strip():
+                return str(val).strip()
+    except Exception:
+        pass
     return os.environ.get(key, default)
 
 

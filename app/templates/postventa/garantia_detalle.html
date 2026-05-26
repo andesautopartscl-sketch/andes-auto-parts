@@ -1,0 +1,180 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Garantía {{ garantia.numero }} | Trazabilidad{% endblock %}
+
+{% block extra_head %}
+<style>
+.trace-grid { display: grid; gap: 16px; max-width: 960px; margin: 0 auto; }
+.trace-card h3 { margin: 0 0 12px; font-size: 16px; color: #0f172a; }
+.trace-meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; font-size: 13px; }
+.trace-meta dt { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 4px; }
+.trace-meta dd { margin: 0; font-weight: 600; color: #0f172a; }
+.trace-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.hint { font-size: 12px; color: #64748b; margin-top: 8px; }
+.mini-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mini-table th, .mini-table td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+.mini-table th { background: #f8fafc; font-size: 11px; text-transform: uppercase; color: #475569; }
+.history-scroll { max-height: 280px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="trace-grid">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div>
+      <h2 style="font-size:20px;margin:0;">Trazabilidad — {{ garantia.numero }}</h2>
+      <p style="color:var(--muted);font-size:13px;margin-top:4px;">Vínculos entre garantía, venta tributaria, línea y notas de crédito</p>
+    </div>
+    <a href="{{ url_for('postventa.index') }}" class="btn outline sm">← Volver al listado</a>
+  </div>
+
+  <section class="panel trace-card">
+    <h3>Caso de garantía</h3>
+    <dl class="trace-meta">
+      <div><dt>Estado</dt><dd>{{ garantia.estado }}</dd></div>
+      <div><dt>Cliente</dt><dd>{{ garantia.cliente_nombre or '—' }}</dd></div>
+      <div><dt>RUT</dt><dd>{{ garantia.cliente_rut or '—' }}</dd></div>
+      <div><dt>Producto</dt><dd>{{ garantia.producto_codigo or '—' }}{% if garantia.producto_descripcion %} — {{ garantia.producto_descripcion }}{% endif %}</dd></div>
+      <div><dt>Registrado</dt><dd>{{ garantia.fecha.strftime('%d/%m/%Y %H:%M') if garantia.fecha else '—' }}</dd></div>
+      <div><dt>Usuario</dt><dd>{{ garantia.usuario or '—' }}</dd></div>
+    </dl>
+    {% if garantia.motivo %}
+    <p style="margin:12px 0 0;font-size:13px;line-height:1.45;color:#334155;"><strong>Motivo:</strong> {{ garantia.motivo }}</p>
+    {% endif %}
+  </section>
+
+  <section class="panel trace-card">
+    <h3>Documento de venta</h3>
+    {% if documento %}
+    <dl class="trace-meta">
+      <div><dt>Tipo</dt><dd>{{ (documento.tipo or '')|upper }}</dd></div>
+      <div><dt>Número</dt><dd>{{ documento.numero or ('#' ~ documento.id) }}</dd></div>
+      <div><dt>Fecha</dt><dd>{{ documento.fecha_documento.strftime('%d/%m/%Y') if documento.fecha_documento else '—' }}</dd></div>
+      <div><dt>Cliente (documento)</dt><dd>{{ documento.cliente_nombre or '—' }}</dd></div>
+    </dl>
+    <div class="trace-actions">
+      <a class="btn primary sm"
+         href="{{ url_for('ventas.facturacion', numero=documento.numero, tipo_documento=documento.tipo if documento.tipo in ['factura','boleta'] else 'factura') }}">
+        Abrir en facturación
+      </a>
+    </div>
+    {% else %}
+    <p style="margin:0;color:#64748b;font-size:14px;">No hay documento de venta vinculado. Al registrar la garantía, indica el <strong>número exacto</strong> de factura/boleta/orden tal como figura en el sistema para enlazar automáticamente.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel trace-card">
+    <h3>Línea de venta (ítem)</h3>
+    {% if linea %}
+    <dl class="trace-meta">
+      <div><dt>Código</dt><dd>{{ linea.codigo_producto }}</dd></div>
+      <div><dt>Descripción</dt><dd>{{ linea.descripcion or '—' }}</dd></div>
+      <div><dt>Cantidad</dt><dd>{{ linea.cantidad }}</dd></div>
+      <div><dt>Precio unit.</dt><dd>${{ '{:,.0f}'.format(linea.precio_unitario or 0).replace(',', '.') }}</dd></div>
+      <div><dt>Marca / bodega</dt><dd>{{ linea.marca or '—' }} / {{ linea.bodega or '—' }}</dd></div>
+    </dl>
+    {% elif documento %}
+    <p style="margin:0;color:#64748b;font-size:14px;">Incluye el <strong>código de producto</strong> al crear la garantía para enlazar la línea; si ya existe el documento pero no el código, no se puede inferir la línea.</p>
+    {% else %}
+    <p style="margin:0;color:#64748b;font-size:14px;">—</p>
+    {% endif %}
+  </section>
+
+  <section class="panel trace-card">
+    <h3>Notas de crédito (devoluciones sobre este documento)</h3>
+    {% if documento and notas_credito %}
+    <div style="overflow-x:auto;">
+      <table class="mini-table">
+        <thead>
+          <tr>
+            <th>N° NC</th>
+            <th>Fecha</th>
+            <th>Razón</th>
+            <th>Stock</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for nc in notas_credito %}
+          <tr>
+            <td><strong>{{ nc.numero or ('#' ~ nc.id) }}</strong></td>
+            <td>{{ nc.fecha_documento.strftime('%d/%m/%Y') if nc.fecha_documento else '—' }}</td>
+            <td>{{ nc.razon or '—' }}</td>
+            <td>{% if nc.stock_restored %}<span class="badge green">Restaurado</span>{% else %}<span class="badge orange">Pendiente</span>{% endif %}</td>
+            <td><a class="btn sm outline" href="{{ url_for('ventas.nota_credito_detalle', nid=nc.id) }}">Ver NC</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif documento %}
+    <p style="margin:0;color:#64748b;font-size:14px;">Aún no hay notas de crédito registradas para este documento.</p>
+    {% else %}
+    <p style="margin:0;color:#64748b;font-size:14px;">Vincula primero un documento de venta para ver las NC asociadas.</p>
+    {% endif %}
+
+    {% if documento %}
+    <form method="post" action="{{ url_for('postventa.garantia_vincular_nc', gid=garantia.id) }}" style="margin-top:16px;padding-top:14px;border-top:1px solid #e2e8f0;">
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Vincular esta garantía a una NC concreta (opcional)</label>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+        <select name="nota_credito_id" style="min-width:220px;padding:8px 10px;border-radius:8px;border:1px solid #cbd5e1;">
+          <option value="">— Sin vincular —</option>
+          {% for nc in notas_credito %}
+          <option value="{{ nc.id }}" {% if garantia.nota_credito_id == nc.id %}selected{% endif %}>{{ nc.numero or ('#' ~ nc.id) }} — {{ (nc.razon or '')[:40] }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn sm primary">Guardar vínculo</button>
+      </div>
+      <p class="hint">Sirve para dejar explícita qué NC de devolución corresponde a este caso de garantía.</p>
+    </form>
+    {% endif %}
+  </section>
+
+  {% if garantia.nota_credito_id %}
+  <section class="panel trace-card">
+    <h3>NC vinculada al caso</h3>
+    <p style="margin:0;font-size:14px;">
+      <a href="{{ url_for('ventas.nota_credito_detalle', nid=garantia.nota_credito_id) }}">Abrir nota de crédito #{{ garantia.nota_credito_id }}</a>
+    </p>
+  </section>
+  {% endif %}
+
+  {% if historial_producto and garantia.producto_codigo %}
+  <section class="panel trace-card">
+    <h3>Resumen de movimientos del código ({{ garantia.producto_codigo }})</h3>
+    <p class="hint">Datos del sistema de stock y ventas; útil para ver ingresos, ventas y devoluciones del mismo código.</p>
+    {% if historial_producto.stock_summary %}
+    <p style="font-size:13px;margin:8px 0;"><strong>Stock por variante:</strong>
+      {% for k, v in historial_producto.stock_summary.items() %}
+        {{ k }}: {{ v.stock }}{% if not loop.last %} · {% endif %}
+      {% endfor %}
+    </p>
+    {% endif %}
+    <div class="history-scroll">
+      <table class="mini-table">
+        <thead>
+          <tr><th>Tipo</th><th>Documento</th><th>Fecha</th><th>Cant.</th></tr>
+        </thead>
+        <tbody>
+          {% for row in (historial_producto.ventas|default([]))[:12] %}
+          <tr>
+            <td>Venta</td>
+            <td>{{ row.documento_tipo or '' }} {{ row.documento_numero or '' }}</td>
+            <td>{{ (row.fecha or '')[:10] }}</td>
+            <td>{{ row.cantidad }}</td>
+          </tr>
+          {% endfor %}
+          {% for row in (historial_producto.notas_credito|default([]))[:12] %}
+          <tr>
+            <td>NC</td>
+            <td>{{ row.numero or '' }}</td>
+            <td>{{ (row.fecha or '')[:10] }}</td>
+            <td>{{ row.cantidad }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

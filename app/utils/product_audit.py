@@ -80,3 +80,48 @@ def register_product_audit(
             )
         )
     return event
+
+
+# Sinónimos en español (y variaciones) → código almacenado en ProductoAuditEvent.action
+_AUDIT_ACTION_ALIASES: dict[str, str] = {
+    "search": "search",
+    "buscar": "search",
+    "busqueda": "search",
+    "view": "view",
+    "ver": "view",
+    "vista": "view",
+    "ficha": "view",
+    "consulta": "view",
+    "update": "update",
+    "actualizar": "update",
+    "edicion": "update",
+    "modificar": "update",
+    "create": "create",
+    "crear": "create",
+    "alta": "create",
+    "deactivate": "deactivate",
+    "desactivar": "deactivate",
+    "baja": "deactivate",
+    "reactivate": "reactivate",
+    "reactivar": "reactivate",
+    "reactivate_bulk": "reactivate_bulk",
+    "despiece_save": "despiece_save",
+    "despiece": "despiece_save",
+    "unknown": "unknown",
+    "desconocido": "unknown",
+}
+
+
+def _unaccent_lower(s: str) -> str:
+    t = (s or "").strip().lower()
+    for old, new in (("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"), ("ñ", "n")):
+        t = t.replace(old, new)
+    return t
+
+
+def resolve_producto_audit_action_filter(user_input: str) -> str:
+    """Convierte lo escrito en el filtro a un action exacto; si no hay mapa, usa el valor tal cual."""
+    t = _unaccent_lower(user_input)
+    if not t:
+        return ""
+    return _AUDIT_ACTION_ALIASES.get(t, t)

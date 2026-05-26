@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from app.extensions import db
 from app.utils.rut_utils import format_rut
+from app.utils.phone_format import format_phone_display
 
 
 # =====================================================
@@ -44,8 +45,10 @@ class DocumentoVenta(db.Model):
     status = db.Column(db.String(50), default="pendiente")  # pendiente, aprobada, entregada, anulada
 
     # Payment
-    metodo_pago = db.Column(db.String(50), default="")   # efectivo, transferencia, tarjeta_debito, tarjeta_credito, credito_30, credito_60, credito_90, cheque
+    metodo_pago = db.Column(db.String(50), default="")   # efectivo, transferencia, tarjeta_debito, tarjeta_credito, credito_30, credito_60, credito_90, cheque, saldo_favor
     estado_pago = db.Column(db.String(30), default="pendiente")  # pendiente, pagado
+    pago_referencia = db.Column(db.String(200), default="")  # voucher, turno, nota de caja (opcional)
+    monto_saldo_favor = db.Column(db.Float, default=0.0)  # monto Tributario cubierto con crédito a favor del cliente
     
     # Tracking
     source_id = db.Column(db.Integer, index=True)
@@ -74,13 +77,16 @@ class DocumentoVentaItem(db.Model):
     # Product info
     codigo_producto = db.Column(db.String(100), nullable=False, index=True)
     descripcion = db.Column(db.String(255))
+    modelo_linea = db.Column(db.String(255))  # OEM / modelo referencia (editable en linea)
     marca = db.Column(db.String(120))  # Variant: brand/model
     bodega = db.Column(db.String(120))  # Warehouse
+    origen_compra = db.Column(db.String(20), nullable=False, default="nacional", index=True)  # nacional/importacion
     
     # Quantity & pricing
     cantidad = db.Column(db.Integer, nullable=False, default=1)
     precio_unitario = db.Column(db.Float, nullable=False, default=0.0)
     descuento_item = db.Column(db.Float, default=0.0)  # Item discount percentage
+    margen_porcentaje = db.Column(db.Float, nullable=True)
     subtotal = db.Column(db.Float, default=0.0)
     
     # Relationship
@@ -118,7 +124,13 @@ class NotaCredito(db.Model):
     
     # Stock reversal info
     stock_restored = db.Column(db.Boolean, default=False)  # True if stock was restored
-    
+
+    # Cómo se liquida el monto de la NC frente al cliente (contable / operativo)
+    modo_liquidacion = db.Column(
+        db.String(32),
+        default="saldo_favor",
+    )  # saldo_favor | devolucion_dinero
+
     # Relationships
     documento_original = db.relationship("DocumentoVenta", back_populates="credit_notes")
     items = db.relationship("NotaCreditoItem", back_populates="nota_credito", cascade="all, delete-orphan")
@@ -136,6 +148,7 @@ class NotaCreditoItem(db.Model):
     descripcion = db.Column(db.String(255))
     marca = db.Column(db.String(120))  # Variant: brand/model
     bodega = db.Column(db.String(120))  # Warehouse
+    origen_compra = db.Column(db.String(20), nullable=False, default="nacional", index=True)
     
     # Quantity & pricing (from original sale)
     cantidad = db.Column(db.Integer, nullable=False, default=1)
@@ -144,6 +157,24 @@ class NotaCreditoItem(db.Model):
     
     # Relationship
     nota_credito = db.relationship("NotaCredito", back_populates="items")
+
+
+class ClienteSaldoFavorMovimiento(db.Model):
+    """Movimientos de saldo a favor (crédito no facturado a favor del cliente)."""
+
+    __tablename__ = "ventas_clientes_saldo_movimientos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cliente_id = db.Column(db.Integer, db.ForeignKey("ventas_clientes.id"), index=True, nullable=False)
+    monto = db.Column(db.Float, nullable=False)  # suma: positivo acredita, negativo consume
+    tipo = db.Column(db.String(32), nullable=False)  # manual_ingreso | ajuste_documento | nota_credito_credito
+    ref_factura_numero = db.Column(db.String(100))
+    ref_nota_credito_numero = db.Column(db.String(100))
+    razon = db.Column(db.String(2000))
+    documento_venta_id = db.Column(db.Integer, db.ForeignKey("ventas_documentos.id"), index=True)
+    nota_credito_id = db.Column(db.Integer, db.ForeignKey("ventas_notas_credito.id"), index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    usuario = db.Column(db.String(100))
 
 
 class Cliente(db.Model):
@@ -161,6 +192,8 @@ class Cliente(db.Model):
     telefono = db.Column(db.String(50), default="")
     email = db.Column(db.String(150), default="")
     activo = db.Column(db.Boolean, default=True)
+    cliente_mayorista = db.Column(db.Boolean, default=False)
+    margen_descuento_pct = db.Column(db.Float, default=0.0)  # % sobre subtotal de lineas antes de IVA
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -174,8 +207,10 @@ class Cliente(db.Model):
             "comuna": self.comuna or "",
             "ciudad": self.ciudad or "",
             "pais": self.pais or "Chile",
-            "telefono": self.telefono or "",
+            "telefono": format_phone_display(self.telefono or ""),
             "email": self.email or "",
+            "cliente_mayorista": bool(getattr(self, "cliente_mayorista", False)),
+            "margen_descuento_pct": round(float(getattr(self, "margen_descuento_pct", 0) or 0), 4),
         }
 
 
@@ -209,6 +244,6 @@ class Proveedor(db.Model):
             "comuna": self.comuna or "",
             "ciudad": self.ciudad or "",
             "pais": self.pais or "Chile",
-            "telefono": self.telefono or "",
+            "telefono": format_phone_display(self.telefono or ""),
             "email": self.email or "",
         }

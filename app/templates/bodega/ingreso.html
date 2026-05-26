@@ -6,11 +6,122 @@
 {{ super() }}
 <style>
 .supplier-card {
-    padding:14px;
-    margin-bottom:14px;
-    border:1px solid #dbe4f0;
-    border-radius:12px;
-    background:#fff;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    border: 1px solid #dbe4f0;
+    border-radius: 10px;
+    background: #fff;
+}
+.ingreso-form-card .supplier-card.ingreso-supplier-card--hidden {
+    display: none !important;
+}
+.ingreso-form-card .supplier-card .form-grid {
+    gap: 8px 10px !important;
+}
+.ingreso-form-card .supplier-card .field > label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #475569;
+    margin: 0 0 2px 0;
+    padding: 0;
+    line-height: 1.25;
+}
+.ingreso-form-card .supplier-card .field input,
+.ingreso-form-card .supplier-card .field textarea {
+    min-height: 30px;
+    padding: 3px 8px;
+    font-size: 12px;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+.ingreso-form-card .supplier-card .field textarea {
+    min-height: 56px;
+    resize: vertical;
+    width: 100%;
+}
+.ingreso-tel-help-under {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+.ingreso-tel-help-btn {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+}
+.ingreso-tel-help-modal-card {
+    width: min(420px, 100%);
+    max-height: min(70vh, 520px);
+}
+.ingreso-supplier-ubic-title {
+    grid-column: 1 / -1;
+    font-size: 11px;
+    font-weight: 700;
+    color: #334155;
+    margin: 4px 0 0;
+    letter-spacing: 0.02em;
+}
+.ingreso-sup-field-span2 {
+    grid-column: span 2;
+}
+@media (max-width: 960px) {
+    .ingreso-sup-field-span2 {
+        grid-column: 1 / -1;
+    }
+}
+.ingreso-supplier-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.ingreso-supplier-card-head .ingreso-supplier-card-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.ingreso-supplier-card-head .btn-success {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 7px;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+.ingreso-form-card .supplier-card .form-grid.ingreso-supplier-fields {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+.ingreso-supplier-fields .ingreso-supplier-direccion {
+    grid-column: 1 / span 2;
+}
+@media (max-width: 960px) {
+    .ingreso-form-card .supplier-card .form-grid.ingreso-supplier-fields {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+    .ingreso-supplier-fields .ingreso-supplier-direccion {
+        grid-column: 1 / -1;
+    }
+}
+.ingreso-form-card .supplier-card select {
+    min-height: 30px;
+    padding: 3px 8px;
+    font-size: 12px;
+    border-radius: 8px;
+    box-sizing: border-box;
+    width: 100%;
 }
 
 .supplier-inline {
@@ -37,18 +148,24 @@
 .supplier-summary {
     display:none;
     border:1px solid #dbe4f0;
-    border-radius:12px;
+    border-radius:10px;
     background:#f8fbff;
-    padding:10px 12px;
-    margin-bottom:14px;
+    padding:8px 10px;
+    margin-bottom:10px;
 }
 
 .supplier-summary.is-visible {
     display:flex;
     align-items:center;
     justify-content:space-between;
-    gap:12px;
+    gap:10px;
     flex-wrap:wrap;
+}
+.supplier-summary .btn {
+    padding: 5px 10px;
+    font-size: 12px;
+    border-radius: 8px;
+    line-height: 1.2;
 }
 
 .supplier-summary-main {
@@ -60,29 +177,449 @@
 .supplier-summary-title {
     font-weight:700;
     color:#0f172a;
+    font-size: 14px;
+    line-height: 1.25;
 }
 
 .supplier-summary-meta {
     color:#475569;
-    font-size:13px;
+    font-size:12px;
 }
 
 .products-card {
     margin-top:4px;
 }
-.products-card table th:first-child,
-.products-card table td:first-child {
-    min-width: 170px;
+/* Tabla de ítems: cabe en el ancho disponible sin scroll horizontal (compacta) */
+/* Gana a .table-wrap { overflow:auto } de _module_styles.html */
+.table-wrap.ingreso-items-table-wrap {
+    overflow-x: hidden;
+    overflow-y: auto;
 }
-.products-card table td {
+table.ingreso-items-table {
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+    min-width: 0;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+table.ingreso-items-table th.ingreso-item-num-th,
+table.ingreso-items-table td.ingreso-item-num-cell {
+    width: 1.65rem;
+    min-width: 1.65rem;
+    max-width: 1.85rem;
+    padding: 1px 1px;
+    text-align: center;
     vertical-align: middle;
+    background: rgba(248, 250, 252, 0.85);
+    border-right: 1px solid #f1f5f9;
+    font-variant-numeric: tabular-nums;
 }
-.products-card input {
-    min-height: 38px;
+table.ingreso-items-table thead th.ingreso-item-num-th {
+    background: rgba(241, 245, 249, 0.65);
+    color: #94a3b8;
+    font-weight: 500;
+    font-size: 8px;
+    letter-spacing: 0.04em;
+    padding: 3px 1px;
+    border-bottom: 1px solid #f1f5f9;
+}
+table.ingreso-items-table .ingreso-item-num {
+    display: inline-block;
+    min-width: 0.75rem;
+    font-size: 9px;
+    font-weight: 500;
+    color: #94a3b8;
+    line-height: 1.15;
+    user-select: none;
+}
+table.ingreso-items-table thead th {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    line-height: 1.25;
+    padding: 5px 3px;
+    text-align: left;
+    vertical-align: bottom;
+    border-bottom: 1px solid #e2e8f0;
+    color: #334155;
+}
+table.ingreso-items-table tbody td {
+    padding: 3px 2px;
+}
+/* top: evita que al mostrar la ayuda bajo Marca el input suba */
+table.ingreso-items-table td {
+    vertical-align: top;
+}
+table.ingreso-items-table input,
+table.ingreso-items-table select.ingreso-bodega-select {
+    min-height: 30px;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    font-size: 12px;
+    padding: 4px 6px;
+}
+table.ingreso-items-table select.ingreso-bodega-select {
+    min-width: 0;
+}
+table.ingreso-items-table select.ingreso-origen-select {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    min-height: 30px;
+    height: 30px;
+    padding: 4px 22px 4px 6px;
+    font-size: 12px;
+    line-height: 1.2;
+    border-radius: 8px;
+}
+table.ingreso-items-table .btnRemove {
+    min-height: 24px;
+    height: 24px;
+    min-width: 24px;
+    width: 24px;
+    padding: 0;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    border: 1px solid #dbe3ef;
+    background: #ffffff;
+    color: #94a3b8;
+    box-shadow: none;
+    transition: border-color .12s ease, color .12s ease, background .12s ease;
+}
+table.ingreso-items-table .btnRemove:hover {
+    border-color: #fecaca;
+    background: #fff5f5;
+    color: #b91c1c;
+    box-shadow: none;
+}
+table.ingreso-items-table .btnRemove:focus-visible {
+    outline: none;
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+}
+/* Contenedor externo: puede incluir mensaje de error bajo el input */
+.ingreso-code-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 0;
+}
+/* Solo input + lupa: el botón se posiciona respecto a esta caja, no al mensaje de error */
+.ingreso-code-input-wrap {
+    position: relative;
+    width: 100%;
+    display: block;
+}
+.ingreso-code-input-wrap input[name='codigo_producto[]'] {
+    width: 100%;
+    padding-right: 34px !important;
+    box-sizing: border-box;
+}
+.ingreso-code-input-wrap input[name='codigo_producto[]'].ingreso-codigo-interno-invalido {
+    border-color: #dc2626 !important;
+    background: #fff5f5;
+}
+.ingreso-margen-input.ingreso-requerido-invalido,
+.ingreso-precio-venta-input.ingreso-requerido-invalido {
+    border-color: #dc2626 !important;
+    background: #fff5f5;
+}
+.ingreso-codigo-interno-msg {
+    display: block;
+    font-size: 10px;
+    color: #b91c1c;
+    margin-top: 2px;
+    line-height: 1.25;
+    padding-left: 1px;
+}
+.ingreso-code-input-wrap .ingreso-code-search-btn {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    min-width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    border: 0;
+    background: transparent;
+    color: #475569;
+    font-size: 13px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 2;
+    flex-shrink: 0;
+}
+.ingreso-code-input-wrap .ingreso-code-search-btn:hover {
+    background: #eef6ff;
+    color: #1d4ed8;
+}
+.products-card .cell-marca-stack {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    gap: 0;
+}
+.products-card .cell-marca .ingreso-marca-input {
+    width: 100%;
+}
+.products-card .ingreso-marca-hint {
+    margin-top: 6px;
+    line-height: 1.35;
+    color: #64748b;
+    font-size: 11px;
 }
 .products-card .btnRemove {
-    min-height: 36px;
-    width: 100%;
+    min-height: 24px;
+    width: 24px;
+}
+table.ingreso-items-table th:nth-child(6),
+table.ingreso-items-table td:nth-child(6) {
+    min-width: 0;
+}
+table.ingreso-items-table th:nth-child(12),
+table.ingreso-items-table td:nth-child(12) {
+    min-width: 84px;
+    text-align: center;
+    vertical-align: middle;
+}
+table.ingreso-items-table td:nth-child(12) {
+    padding-left: 0;
+    padding-right: 0;
+}
+table.ingreso-items-table td:nth-child(12) .btnRemove {
+    min-width: 24px;
+    width: 24px;
+    margin: 0 auto;
+}
+
+.ingreso-totals-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 12px 14px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+.ingreso-totals {
+    display: grid;
+    grid-template-columns: 1.45fr 1fr;
+    grid-template-areas:
+      "factura iva"
+      "factura total";
+    gap: 8px 10px;
+    align-items: stretch;
+    width: min(520px, 100%);
+}
+.ingreso-total-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+.ingreso-total-field label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+}
+/* Ajuste factura: más discreto que IVA/Total calculados */
+.ingreso-total-field--factura {
+    grid-area: factura;
+    min-width: 0;
+    max-width: none;
+    gap: 3px;
+    align-items: flex-start;
+    width: fit-content;
+    max-width: 100%;
+    margin-left: 52px;
+    align-self: start;
+}
+.ingreso-total-field.is-iva { grid-area: iva; }
+.ingreso-total-field.is-total { grid-area: total; }
+.ingreso-total-field--factura label {
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0.01em;
+    color: #94a3b8;
+}
+.ingreso-total-field input.ingreso-total-factura-input {
+    display: block;
+    width: 200px;
+    max-width: 100%;
+    min-height: 28px;
+    padding: 4px 8px;
+    border: 1px dashed #e2e8f0;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.65);
+    font-size: 12px;
+    font-weight: 400;
+    color: #334155;
+    text-align: left;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ingreso-total-field input.ingreso-total-factura-input:hover {
+    border-color: #cbd5e1;
+    background: #fff;
+}
+.ingreso-total-field input.ingreso-total-factura-input:focus {
+    outline: none;
+    border-style: solid;
+    border-color: #93c5fd;
+    background: #fff;
+    box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.25);
+}
+.ingreso-total-field input.ingreso-total-factura-input::placeholder {
+    color: #cbd5e1;
+    font-weight: 400;
+    font-size: 12px;
+}
+.ingreso-total-field .ingreso-total-factura-hint {
+    display: block;
+    font-size: 8px;
+    font-weight: 400;
+    color: #cbd5e1;
+    text-transform: none;
+    letter-spacing: 0;
+    line-height: 1.3;
+    max-width: 200px;
+}
+.ingreso-total-field output {
+    display: block;
+    min-height: 32px;
+    padding: 6px 9px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    color: #0f172a;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+@media (max-width: 900px) {
+    .ingreso-totals {
+        width: 100%;
+    }
+}
+
+.ingreso-form-card {
+    position: relative;
+    padding-bottom: 52px;
+}
+.ingreso-help-anchor {
+    position: absolute;
+    bottom: 14px;
+    left: 14px;
+    z-index: 6;
+}
+.ingreso-help-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid #93c5fd;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    color: #1e3a8a;
+    font-weight: 800;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.14);
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .15s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+}
+.ingreso-help-btn svg {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+.ingreso-help-btn:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border-color: #60a5fa;
+    box-shadow: 0 12px 24px rgba(30, 64, 175, 0.24);
+}
+.ingreso-help-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+.ingreso-help-panel {
+    position: absolute;
+    bottom: 52px;
+    left: 0;
+    width: min(460px, calc(100vw - 32px));
+    max-height: min(72vh, 460px);
+    overflow: auto;
+    padding: 14px 16px;
+    border: 1px solid #dbe4f0;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 16px 42px rgba(15, 23, 42, 0.16);
+}
+.ingreso-help-panel[hidden] {
+    display: none !important;
+}
+.ingreso-help-title {
+    margin: 0 0 10px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.ingreso-help-text {
+    margin: 0 0 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #475569;
+}
+.ingreso-help-text strong {
+    color: #334155;
+}
+.ingreso-help-section {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+.ingreso-help-section-title {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+.ingreso-help-list {
+    margin: 0;
+    padding-left: 18px;
+    color: #334155;
+    font-size: 13px;
+    line-height: 1.45;
+}
+.ingreso-help-list li + li {
+    margin-top: 4px;
 }
 
 @media (max-width: 900px) {
@@ -90,10 +627,177 @@
         flex-wrap:wrap;
     }
 }
+.ingreso-rut-row {
+    margin-bottom: 8px;
+}
+.ingreso-rut-row > label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #475569;
+    display: block;
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+.ingreso-rut-row .supplier-inline {
+    gap: 6px;
+    align-items: center;
+}
+.ingreso-rut-row #supplier_rut {
+    min-height: 30px;
+    padding: 3px 8px;
+    font-size: 12px;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+.ingreso-rut-row #btnBuscarProveedor {
+    padding: 5px 11px;
+    font-size: 12px;
+    border-radius: 8px;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+.ingreso-rut-row #rutStatus {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px !important;
+    line-height: 1.35;
+    color: #64748b;
+}
+.ingreso-doc-meta-grid {
+    display: grid;
+    grid-template-columns: minmax(116px, 0.7fr) minmax(0, 0.9fr) minmax(0, 1.05fr) minmax(0, 1.3fr);
+    gap: 6px 8px;
+    margin-bottom: 8px;
+    align-items: start;
+}
+.ingreso-doc-meta-grid .field {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.ingreso-doc-meta-grid .field > label {
+    margin: 0;
+    line-height: 1.15;
+    font-size: 11px;
+    font-weight: 600;
+    color: #475569;
+}
+.ingreso-doc-meta-grid .field input:not([type="hidden"]),
+.ingreso-doc-meta-grid .field select {
+    width: 100%;
+    min-height: 30px;
+    padding: 3px 7px;
+    font-size: 12px;
+    border-radius: 7px;
+    box-sizing: border-box;
+}
+@media (max-width: 1100px) {
+    .ingreso-doc-meta-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px 8px;
+    }
+}
+.ingreso-product-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 1200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.ingreso-product-modal.open {
+    display: flex;
+}
+.ingreso-product-modal-card {
+    width: min(880px, 100%);
+    max-height: min(82vh, 700px);
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #dbe4f0;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.ingreso-product-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.ingreso-product-modal-head h3 {
+    margin: 0;
+    font-size: 15px;
+    color: #0f172a;
+}
+.ingreso-product-modal-body {
+    padding: 10px 12px;
+    overflow: auto;
+}
+.ingreso-product-search {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.ingreso-product-results {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: auto;
+    max-height: 48vh;
+}
+.ingreso-product-item {
+    display: grid;
+    grid-template-columns: 120px 1fr 130px 90px auto;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 8px;
+    border-bottom: 1px solid #eef2f7;
+    font-size: 12px;
+}
+.ingreso-product-item:last-child {
+    border-bottom: none;
+}
+.ingreso-product-item:hover {
+    background: #f8fbff;
+}
+.ingreso-product-meta {
+    font-size: 10px;
+    color: #64748b;
+}
+.ingreso-product-item strong {
+    font-size: 11px;
+    font-weight: 700;
+}
+.ingreso-product-item .btn.btn-primary.btn-sm {
+    padding: 5px 10px;
+    font-size: 11px;
+    border-radius: 8px;
+    min-height: 28px;
+}
+#ingresoProductSearchInput {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+#ingresoProductSearchBtn {
+    min-height: 34px;
+    padding: 6px 12px;
+    font-size: 12px;
+}
 </style>
 {% endblock %}
 
 {% block content %}
+{% set ingreso_mostrar_resumen_proveedor = ingreso_mostrar_resumen_proveedor|default(false) %}
+{% set ingreso_mostrar_tarjeta_proveedor = ingreso_mostrar_tarjeta_proveedor|default(false) %}
+{% set chile_geo_ingreso = chile_geo_ingreso|default([]) %}
+{% set chile_regions_ingreso = chile_regions_ingreso|default([]) %}
 <div class="topbar">
     <div>
         <h1 class="page-title">Ingreso de Productos</h1>
@@ -101,42 +805,61 @@
     </div>
     <div class="topbar-actions">
         <a class="link-btn" href="{{ url_for('bodega.movimientos') }}">📊 Ver movimientos</a>
+        <a class="link-btn" href="{{ url_for('bodega.ingreso_historial') }}">🧾 Historial ingresos</a>
         <a class="link-btn" href="{{ url_for('bodega.index') }}">🏠 Panel Bodega</a>
     </div>
 </div>
 
 {% if message %}
-<div class="message {{ message.type }}">{{ message.text }}</div>
+<div class="message {{ message.type }}{% if message.type == 'success' %} ingreso-flash-message{% endif %}" role="alert">{{ message.text }}</div>
 {% endif %}
 
-<div class="form-card">
+<div class="form-card ingreso-form-card">
     <h2 class="section-title">Ingreso ERP de Stock</h2>
-    <form method="post" id="ingresoForm">
-        <div class="field" style="margin-bottom:12px;">
+    <form method="post" id="ingresoForm"
+          data-marcas-url="{{ url_for('bodega.ingreso_marcas_por_codigo') }}"
+          data-product-search-url="{{ url_for('ventas.api_productos_search') }}"
+          data-codigo-prov-url="/bodega/ingreso/codigo_interno_por_proveedor"
+          data-bodegas='{{ bodegas_opciones | tojson }}'
+          data-default-bodega="{{ default_bodega }}"
+          data-supplier-found="{{ '1' if ingreso_mostrar_resumen_proveedor else '' }}"
+          data-supplier-registration="{{ '1' if ingreso_mostrar_tarjeta_proveedor else '' }}">
+        <div class="field ingreso-rut-row">
             <label for="supplier_rut">RUT del proveedor (requerido)</label>
             <div class="supplier-inline">
                 <input id="supplier_rut" name="supplier_rut" data-rut-input data-rut-required="1" value="{{ form_data.supplier_rut|format_rut if form_data.supplier_rut else '' }}" placeholder="Ej: 76.123.456-7" required>
                 <button type="button" class="btn btn-primary" id="btnBuscarProveedor" data-search-url="{{ url_for('bodega.ingreso_proveedor_por_rut') }}">Buscar</button>
             </div>
-            <small id="rutStatus" style="color:#64748b;">Ingresa el RUT para autocompletar proveedor.</small>
+            <small id="rutStatus">Ingresa el RUT para autocompletar proveedor.</small>
         </div>
 
-        <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:14px;">
+        <div class="ingreso-doc-meta-grid">
             <div class="field">
                 <label for="fecha_documento">Fecha</label>
                 <input id="fecha_documento" name="fecha_documento" type="date" value="{{ form_data.fecha_documento }}" required>
             </div>
             <div class="field">
-                <label for="numero_documento">N° Documento (opcional)</label>
-                <input id="numero_documento" name="numero_documento" value="{{ form_data.numero_documento }}" placeholder="Factura/Guia interna">
+                <label for="numero_documento" title="Número de factura o guía (requerido)">N° documento</label>
+                <input id="numero_documento" name="numero_documento" value="{{ form_data.numero_documento }}" placeholder="Factura / guía" required>
             </div>
             <div class="field">
-                <label for="observacion">Observación general</label>
-                <input id="observacion" name="observacion" value="{{ form_data.observacion }}" placeholder="Observación del ingreso">
+                <label for="ingresoMetodoPago" title="Cómo pagaste esta factura al proveedor">Método de pago</label>
+                {% set mp = (form_data.metodo_pago or '') %}
+                {% set mp_presets = metodos_pago_opciones or [] %}
+                <select id="ingresoMetodoPago" name="metodo_pago" required>
+                    <option value="">— Seleccione —</option>
+                    {% for label in mp_presets %}
+                    <option value="{{ label }}" {% if mp == label %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="observacion" title="Observación general del ingreso">Observación</label>
+                <input id="observacion" name="observacion" value="{{ form_data.observacion }}" placeholder="Nota u observación">
             </div>
         </div>
 
-        <div id="supplierSummary" class="supplier-summary" aria-live="polite">
+        <div id="supplierSummary" class="supplier-summary{% if ingreso_mostrar_resumen_proveedor %} is-visible{% endif %}" aria-live="polite">
             <div class="supplier-summary-main">
                 <span class="supplier-summary-title" id="supplierSummaryName">Proveedor seleccionado</span>
                 <span class="supplier-summary-meta" id="supplierSummaryMeta">RUT y datos del proveedor</span>
@@ -144,13 +867,23 @@
             <button type="button" class="btn" id="btnEditarProveedor">Cambiar proveedor</button>
         </div>
 
-        <div class="supplier-card">
-            <h3 style="margin:0 0 12px;font-size:15px;color:#0f172a;">Proveedor</h3>
-            <div id="supplierFormWrap" class="supplier-form-wrap">
-            <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));">
-                <div class="field">
-                    <label for="supplier_name">Nombre / Razón social</label>
-                    <input id="supplier_name" name="supplier_name" value="{{ form_data.supplier_name }}" placeholder="Proveedor">
+        <script id="ingresoChileGeoData" type="application/json">{{ chile_geo_ingreso | tojson }}</script>
+
+        <div class="supplier-card{% if not ingreso_mostrar_tarjeta_proveedor %} ingreso-supplier-card--hidden{% endif %}">
+            <div class="ingreso-supplier-card-head">
+                <h3 class="ingreso-supplier-card-title">Proveedor</h3>
+                <button type="button" class="btn btn-success" id="btnGuardarProveedorIngreso"
+                        data-guardar-url="{{ url_for('bodega.ingreso_guardar_proveedor') }}">Guardar proveedor</button>
+            </div>
+            <div id="supplierFormWrap" class="supplier-form-wrap{% if not ingreso_mostrar_tarjeta_proveedor %} is-collapsed{% endif %}">
+            <div class="form-grid ingreso-supplier-fields">
+                <div class="field ingreso-sup-field-span2">
+                    <label for="supplier_name">Empresa / Razón social</label>
+                    <input id="supplier_name" name="supplier_name" value="{{ form_data.supplier_name }}" placeholder="Razón social o nombre comercial">
+                </div>
+                <div class="field ingreso-sup-field-span2">
+                    <label for="supplier_contact">Nombre contacto (opcional)</label>
+                    <input id="supplier_contact" name="supplier_contact" value="{{ (form_data.supplier_contact or '') }}" placeholder="Persona de contacto en el proveedor" autocomplete="name">
                 </div>
                 <div class="field">
                     <label for="supplier_giro">Giro</label>
@@ -160,52 +893,143 @@
                     <label for="supplier_email">Email</label>
                     <input id="supplier_email" name="supplier_email" value="{{ form_data.supplier_email }}" type="email" placeholder="contacto@proveedor.cl">
                 </div>
-                <div class="field field-full" style="grid-column:1 / span 2;">
-                    <label for="supplier_address">Dirección</label>
-                    <input id="supplier_address" name="supplier_address" value="{{ form_data.supplier_address }}" placeholder="Dirección comercial">
+                <div class="field ingreso-sup-field-span2">
+                    <label for="supplier_telefono">Teléfono</label>
+                    <input id="supplier_telefono" name="supplier_telefono" value="{{ form_data.supplier_telefono or '' }}" type="tel" placeholder="+56 9 …" maxlength="80" autocomplete="tel">
+                    <div class="ingreso-tel-help-under">
+                        <button type="button" class="ingreso-tel-help-btn" id="ingresoSupplierTelHelpBtn" aria-haspopup="dialog" aria-controls="ingresoTelHelpModalDialog" title="Ver ayuda de formato de teléfono" aria-label="Ayuda: formato de teléfono">?</button>
+                    </div>
+                </div>
+                <div class="field ingreso-supplier-direccion">
+                    <label for="supplier_address">Calle y número</label>
+                    <textarea id="supplier_address" name="supplier_address" rows="2" placeholder="Ej. Av. Principal 1234, of. 501">{{ form_data.supplier_address }}</textarea>
+                </div>
+                <p class="ingreso-supplier-ubic-title">Ubicación (Chile: región y comuna obligatorias; ciudad se sugiere en RM como Santiago)</p>
+                <div class="field">
+                    <label for="ingresoSupplierRegion">Región</label>
+                    <select id="ingresoSupplierRegion" name="supplier_region" aria-label="Región">
+                        <option value="">Seleccionar región</option>
+                        {% for rname in chile_regions_ingreso %}
+                        <option value="{{ rname }}" {% if form_data.supplier_region == rname %}selected{% endif %}>{{ rname }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div class="field">
-                    <label for="supplier_comuna">Comuna</label>
-                    <input id="supplier_comuna" name="supplier_comuna" value="{{ form_data.supplier_comuna }}" placeholder="Comuna">
+                    <label for="ingresoSupplierComuna">Comuna</label>
+                    <select id="ingresoSupplierComuna" name="supplier_comuna" data-initial-comuna="{{ form_data.supplier_comuna|e }}" aria-label="Comuna">
+                        <option value="">Seleccionar comuna</option>
+                    </select>
                 </div>
                 <div class="field">
-                    <label for="supplier_region">Región</label>
-                    <input id="supplier_region" name="supplier_region" value="{{ form_data.supplier_region }}" placeholder="Región">
+                    <label for="supplier_ciudad">Ciudad</label>
+                    <input id="supplier_ciudad" name="supplier_ciudad" value="{{ (form_data.supplier_ciudad or '') }}" placeholder="Ej. Santiago" autocomplete="address-level2">
                 </div>
                 <div class="field">
                     <label for="supplier_country">País</label>
                     <input id="supplier_country" name="supplier_country" value="{{ form_data.supplier_country or 'Chile' }}" placeholder="País">
                 </div>
             </div>
-            <small style="color:#64748b;">Si el RUT no existe, al guardar se creará automáticamente este proveedor en línea.</small>
             </div>
         </div>
 
-        <div class="table-wrap products-card" style="border:1px solid #e2e8f0;border-radius:12px;overflow:auto;">
-            <table>
+        <div class="table-wrap products-card ingreso-items-table-wrap" style="border:1px solid #e2e8f0;border-radius:12px;">
+            <table class="ingreso-items-table">
+                <colgroup>
+                    <col style="width:2.5%">
+                    <col style="width:7.5%">
+                    <col style="width:10%">
+                    <col style="width:17%">
+                    <col style="width:9%">
+                    <col style="width:9%">
+                    <col style="width:7%">
+                    <col style="width:8%">
+                    <col style="width:8%">
+                    <col style="width:8%">
+                    <col style="width:8%">
+                    <col style="width:6%">
+                </colgroup>
                 <thead>
                     <tr>
-                        <th>Código</th>
-                        <th>Marca / Variante</th>
-                        <th>Bodega</th>
-                        <th>Cantidad</th>
-                        <th>Nota</th>
-                        <th style="width:90px;">Acción</th>
+                        <th class="ingreso-item-num-th" scope="col" title="Número de línea">#</th>
+                        <th title="Código proveedor (Cod. Pro.)">Cód. prov.</th>
+                        <th title="Código interno">Cód. int.</th>
+                        <th title="Marca o variante">Marca</th>
+                        <th title="Bodega">Bodega</th>
+                        <th title="Origen de compra">Origen</th>
+                        <th title="Cantidad. Si cambiás el número y ya hay V. neto, el neto de línea se escala en la misma proporción (mantiene el costo unitario; el total de abajo se actualiza).">Cant.</th>
+                        <th title="Valor neto unitario (costo)">V. neto</th>
+                        <th title="Margen % sobre precio de venta neto (P. neto = costo unit. ÷ (1 − margen/100))">Marg. %</th>
+                        <th title="Precio venta neto unitario (sin IVA). Con V. neto y cantidad, al escribir aquí se calcula el margen %.">P. neto</th>
+                        <th title="Nota">Nota</th>
+                        <th title="Quitar línea">Acción</th>
                     </tr>
                 </thead>
                 <tbody id="itemsBody">
                     {% for row in rows %}
                     <tr class="item-row">
-                        <td><input name="codigo_producto[]" value="{{ row.codigo }}" placeholder="Código" required></td>
-                        <td><input name="marca_producto[]" value="{{ row.marca }}" placeholder="Marca"></td>
-                        <td><input name="bodega_producto[]" value="{{ row.bodega or 'Bodega 1' }}" placeholder="Bodega"></td>
+                        <td class="ingreso-item-num-cell"><span class="ingreso-item-num">{{ loop.index }}</span></td>
+                        <td><input name="codigo_proveedor_producto[]" class="ingreso-codigo-proveedor-input" value="{{ row.codigo_proveedor }}" placeholder="Cód. prov." autocomplete="off" aria-label="Código del proveedor"></td>
+                        <td>
+                            <div class="ingreso-code-cell">
+                                <div class="ingreso-code-input-wrap">
+                                    <input name="codigo_producto[]" value="{{ row.codigo }}" placeholder="Interno" required autocomplete="off">
+                                    <button type="button" class="ingreso-code-search-btn" title="Buscar producto" aria-label="Buscar producto">🔎</button>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="cell-marca">
+                            <div class="cell-marca-stack">
+                                <datalist class="ingreso-marca-datalist" id="ingreso-marca-dl-{{ loop.index0 }}"></datalist>
+                                <input name="marca_producto[]" class="ingreso-marca-input" value="{{ row.marca }}" placeholder="Marca / variante" list="ingreso-marca-dl-{{ loop.index0 }}" autocomplete="off" aria-label="Marca o variante">
+                                <small class="ingreso-marca-hint" style="display:none;">Marcas ya registradas para este código: desplegá el campo o escribí otra.</small>
+                            </div>
+                        </td>
+                        <td>
+                            <select name="bodega_producto[]" class="ingreso-bodega-select" required aria-label="Bodega">
+                                {% set rb = row.bodega or default_bodega %}
+                                {% for b in bodegas_opciones %}
+                                <option value="{{ b }}" {% if rb == b %}selected{% endif %}>{{ b }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <select name="origen_compra_producto[]" class="ingreso-origen-select" required aria-label="Origen de compra">
+                                {% set ro = row.origen_compra or 'nacional' %}
+                                {% for o in origen_compra_opciones %}
+                                <option value="{{ o }}" {% if ro == o %}selected{% endif %}>{{ o|capitalize }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
                         <td><input name="cantidad_producto[]" type="number" min="1" step="1" value="{{ row.cantidad }}" required></td>
-                        <td><input name="nota_producto[]" value="{{ row.nota }}" placeholder="Nota opcional"></td>
-                        <td><button type="button" class="btn btn-warn btnRemove" style="padding:8px 10px;">Quitar</button></td>
+                        <td><input name="valor_neto_producto[]" type="text" inputmode="decimal" value="{% if row.valor_neto is not none %}{{ row.valor_neto }}{% endif %}" placeholder="Neto unit." title="Costo neto unitario según documento del proveedor, opcional" autocomplete="off" aria-label="Valor neto costo"></td>
+                        <td><input name="margen_pct_producto[]" class="ingreso-margen-input" type="text" inputmode="decimal" value="{% if row.margen_pct is not none %}{{ row.margen_pct }}{% endif %}" placeholder="%" title="Margen % sobre P. venta neto. P. neto = costo unit. ÷ (1 − margen/100)" autocomplete="off" aria-label="Margen porcentaje sobre precio de venta"></td>
+                        <td><input name="precio_venta_neto_producto[]" class="ingreso-precio-venta-input" type="text" inputmode="decimal" value="{% if row.precio_venta_neto is not none %}{{ row.precio_venta_neto }}{% endif %}" placeholder="P. venta" title="Precio de venta neto unitario sin IVA. Con V. neto y cantidad, al escribir aquí se calcula el margen %." autocomplete="off" aria-label="Precio venta neto unitario"></td>
+                        <td><input name="nota_producto[]" value="{{ row.nota }}" placeholder="Nota"></td>
+                        <td><button type="button" class="btn btn-warn btnRemove" title="Quitar fila" aria-label="Quitar fila">&#10005;</button></td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+            <div class="ingreso-totals-bar" aria-live="polite">
+                <div class="ingreso-totals">
+                    <div class="ingreso-total-field ingreso-total-field--factura">
+                        <label for="ingresoTotalFactura">Total factura (c/IVA)</label>
+                        <input id="ingresoTotalFactura" class="ingreso-total-factura-input" name="total_factura"
+                               type="text" inputmode="decimal" value="{{ form_data.total_factura or '' }}"
+                               placeholder="Ej. 38000" autocomplete="off"
+                               title="Opcional. Monto total con IVA según factura impresa; al completarlo, IVA y total del resumen coinciden con el documento.">
+                        <span class="ingreso-total-factura-hint">Solo si querés cuadrar con el papel</span>
+                    </div>
+                    <div class="ingreso-total-field is-iva">
+                        <label for="ingresoIvaResumen">IVA</label>
+                        <output id="ingresoIvaResumen">—</output>
+                    </div>
+                    <div class="ingreso-total-field is-total">
+                        <label for="ingresoTotalResumen">Total</label>
+                        <output id="ingresoTotalResumen">—</output>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="actions">
@@ -213,6 +1037,96 @@
             <button class="btn btn-success" type="submit">Guardar ingreso</button>
             <a class="link-btn" href="{{ url_for('bodega.ingreso') }}">Limpiar formulario</a>
         </div>
+
+        <div class="ingreso-help-anchor">
+            <button type="button" class="ingreso-help-btn" id="ingresoHelpBtn" aria-expanded="false" aria-controls="ingresoHelpPanel" title="Ayuda del ingreso de stock" aria-label="Ayuda">
+                <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                    <path d="M32 8c-10.5 0-19 7.7-19 17.2 0 2.7 2.2 4.8 4.9 4.8 2.7 0 4.9-2.2 4.9-4.8 0-4.1 4.1-7.4 9.2-7.4 5.1 0 9.2 3.3 9.2 7.4 0 3.3-2.4 5.1-5.8 7.5-3.9 2.8-8.7 6.3-8.7 13.6 0 2.7 2.2 4.8 4.9 4.8s4.9-2.2 4.9-4.8c0-2 1.1-3 4.7-5.6 3.9-2.8 9.8-7 9.8-15.5C51 15.7 42.5 8 32 8z" fill="currentColor"/>
+                    <circle cx="32" cy="55" r="5.5" fill="currentColor"/>
+                </svg>
+            </button>
+            <div id="ingresoHelpPanel" class="ingreso-help-panel" role="region" aria-labelledby="ingresoHelpTitle" hidden>
+                <h3 id="ingresoHelpTitle" class="ingreso-help-title">Cómo ingresar stock</h3>
+
+                <div class="ingreso-help-section">
+                    <h4 class="ingreso-help-section-title">1) Proveedor</h4>
+                    <ul class="ingreso-help-list">
+                        <li>Ingresá el RUT y presioná <strong>Buscar</strong>.</li>
+                        <li>Si existe, se autocompleta y podés seguir con los productos.</li>
+                        <li>Si no existe, se abre la ficha <strong>Proveedor</strong>; completá datos y presioná <strong>Guardar proveedor</strong>.</li>
+                    </ul>
+                </div>
+
+                <div class="ingreso-help-section">
+                    <h4 class="ingreso-help-section-title">2) Productos</h4>
+                    <ul class="ingreso-help-list">
+                        <li>Podés cargar por <strong>Cód. prov.</strong> o por <strong>Cód. int.</strong>.</li>
+                        <li>El campo <strong>Marca</strong> sugiere variantes ya registradas.</li>
+                        <li><strong>Bodega</strong>, <strong>Cant.</strong> y <strong>V. neto</strong> (unitario) definen el ingreso.</li>
+                    </ul>
+                </div>
+
+                <div class="ingreso-help-section">
+                    <h4 class="ingreso-help-section-title">3) Precio y margen</h4>
+                    <ul class="ingreso-help-list">
+                        <li><strong>Marg. %</strong> aplica sobre precio de venta neto.</li>
+                        <li><strong>P. neto</strong> desde margen: costo unitario ÷ (1 − margen/100). Si escribís <strong>P. neto</strong> primero, el <strong>margen %</strong> se calcula solo.</li>
+                        <li>El resumen de <strong>IVA</strong> y <strong>Total</strong> usa <strong>Cant. × V. neto unitario</strong> por cada línea.</li>
+                        <li>El resumen de <strong>IVA</strong> y <strong>Total</strong> sigue los netos de línea; el campo opcional <strong>Total factura (c/IVA)</strong> sirve para igualar el monto al documento impreso.</li>
+                    </ul>
+                </div>
+
+                <button type="button" class="btn" id="ingresoHelpClose">Cerrar</button>
+            </div>
+        </div>
     </form>
 </div>
+
+<div id="ingresoProductModal" class="ingreso-product-modal" aria-hidden="true">
+    <div class="ingreso-product-modal-card" role="dialog" aria-modal="true" aria-labelledby="ingresoProductModalTitle">
+        <div class="ingreso-product-modal-head">
+            <h3 id="ingresoProductModalTitle">Buscar producto</h3>
+            <button type="button" class="btn" id="ingresoProductModalClose">Cerrar</button>
+        </div>
+        <div class="ingreso-product-modal-body">
+            <div class="ingreso-product-search">
+                <input type="text" id="ingresoProductSearchInput" placeholder="Código, descripción o OEM (mín. 2 letras)">
+                <button type="button" class="btn btn-primary" id="ingresoProductSearchBtn">Buscar</button>
+            </div>
+            <div id="ingresoProductSearchStatus" class="muted" style="margin-bottom:8px;">Escribe para buscar productos.</div>
+            <div id="ingresoProductResults" class="ingreso-product-results"></div>
+        </div>
+    </div>
+</div>
+
+<div id="ingresoTelHelpModal" class="ingreso-product-modal" aria-hidden="true">
+    <div class="ingreso-product-modal-card ingreso-tel-help-modal-card" role="dialog" aria-modal="true" aria-labelledby="ingresoTelHelpModalTitle" id="ingresoTelHelpModalDialog">
+        <div class="ingreso-product-modal-head">
+            <h3 id="ingresoTelHelpModalTitle">Formato de teléfono</h3>
+            <button type="button" class="btn" id="ingresoTelHelpModalClose">Cerrar</button>
+        </div>
+        <div class="ingreso-product-modal-body">
+            <p style="margin:0 0 8px;font-size:12px;line-height:1.45;color:#334155;"><strong>Formato</strong></p>
+            <p style="margin:0;font-size:12px;line-height:1.45;color:#475569;">Ej.: <code>926152826</code> o <code>+56 9 2615 2826</code>. Desde el extranjero: <code>+</code> y código país.</p>
+        </div>
+    </div>
+</div>
+{% if message and message.type == 'success' %}
+<script>
+(function () {
+    var el = document.querySelector('.ingreso-flash-message.message.success');
+    if (!el) return;
+    var remove = function () {
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+    };
+    var t = window.setTimeout(remove, 8000);
+    el.style.cursor = 'pointer';
+    el.setAttribute('title', 'Clic para cerrar');
+    el.addEventListener('click', function () {
+        window.clearTimeout(t);
+        remove();
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -2,45 +2,354 @@
 {% block title %}Libro de Compras | Andes Auto Parts{% endblock %}
 
 {% block content %}
-<div class="topbar">
-	<div>
-		<h1 class="page-title">Contabilidad</h1>
-		<p class="page-subtitle">Libro de compras</p>
+<div class="contab-compact">
+	<style>
+		.lc-filters {
+			display: grid;
+			grid-template-columns: 2fr 1.1fr 1fr 1fr 1fr 1fr .8fr auto;
+			gap: 8px;
+			align-items: end;
+			margin-bottom: 8px;
+			padding: 9px 10px;
+			border: 1px solid #e2e8f0;
+			border-radius: 10px;
+			background: #fff;
+		}
+		.lc-rut-quick {
+			margin: 6px 0 10px;
+			padding: 10px;
+			border: 1px solid #e2e8f0;
+			border-radius: 10px;
+			background: #fff;
+			display: grid;
+			grid-template-columns: minmax(240px, 380px) auto;
+			align-items: end;
+			gap: 8px;
+		}
+		.lc-field { display: flex; flex-direction: column; gap: 4px; }
+		.lc-field label {
+			font-size: 9px;
+			font-weight: 700;
+			color: #64748b;
+			text-transform: uppercase;
+			letter-spacing: .05em;
+		}
+		.lc-field input, .lc-field select {
+			height: 30px;
+			padding: 4px 8px;
+			border: 1px solid #cbd5e1;
+			border-radius: 8px;
+			font-size: 11px;
+		}
+		.lc-actions { display: flex; gap: 8px; }
+		.lc-quick-ranges {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 6px;
+			margin: 0 0 8px;
+		}
+		.lc-chip {
+			height: 26px;
+			padding: 0 9px;
+			border-radius: 999px;
+			border: 1px solid #cbd5e1;
+			background: #fff;
+			font-size: 10px;
+			font-weight: 700;
+			color: #334155;
+			cursor: pointer;
+		}
+		.lc-chip:hover {
+			background: #eff6ff;
+			border-color: #93c5fd;
+			color: #1d4ed8;
+		}
+		.lc-btn {
+			height: 30px;
+			padding: 0 10px;
+			border-radius: 8px;
+			border: 1px solid #cbd5e1;
+			background: #fff;
+			font-size: 11px;
+			font-weight: 600;
+			text-decoration: none;
+			color: #0f172a;
+			display: inline-flex;
+			align-items: center;
+		}
+		.lc-btn.primary {
+			background: #1d4ed8;
+			border-color: #1d4ed8;
+			color: #fff;
+		}
+		.lc-resumen {
+			display: grid;
+			grid-template-columns: repeat(6, minmax(0, 1fr));
+			gap: 8px;
+			margin-bottom: 8px;
+		}
+		.lc-card {
+			border: 1px solid #e2e8f0;
+			border-radius: 10px;
+			background: #fff;
+			padding: 8px 10px;
+		}
+		.lc-card .k {
+			font-size: 9px;
+			font-weight: 700;
+			color: #64748b;
+			text-transform: uppercase;
+			letter-spacing: .05em;
+		}
+		.lc-card .v {
+			margin-top: 2px;
+			font-size: 15px;
+			font-weight: 800;
+			color: #0f172a;
+		}
+		.lc-estado {
+			display: inline-flex;
+			align-items: center;
+			padding: 2px 8px;
+			border-radius: 999px;
+			font-size: 10px;
+			font-weight: 700;
+			border: 1px solid transparent;
+		}
+		.lv-table thead th { font-size: 10px; padding: 7px 8px; }
+		.lv-table tbody td { font-size: 12px; padding: 8px; }
+		.lc-estado.pagado {
+			background: #dcfce7;
+			color: #166534;
+			border-color: #86efac;
+		}
+		.lc-estado.pendiente {
+			background: #fef3c7;
+			color: #92400e;
+			border-color: #fcd34d;
+		}
+		@media (max-width: 1300px) {
+			.lc-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+			.lc-actions { grid-column: 1 / -1; }
+			.lc-resumen { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+		}
+		@media (max-width: 800px) {
+			.lc-filters { grid-template-columns: 1fr; }
+			.lc-resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+			.lc-rut-quick { grid-template-columns: 1fr; }
+		}
+	</style>
+	<div class="topbar">
+		<div>
+			<h1 class="page-title">Contabilidad</h1>
+			<p class="page-subtitle">Facturas de compra registradas en <strong>Bodega → Ingreso</strong> (nacional / importación). No incluye ventas (FA).</p>
+		</div>
+		<div class="topbar-actions">
+			<a class="link-btn" href="{{ url_for('contabilidad.cuentas_por_pagar') }}">💰 Cuentas por pagar</a>
+			<a class="link-btn" href="{{ url_for('contabilidad.iva') }}">🧮 IVA</a>
+		</div>
 	</div>
-	<div class="topbar-actions">
-		<a class="link-btn" href="{{ url_for('contabilidad.cuentas_por_pagar') }}">💰 Cuentas por pagar</a>
-		<a class="link-btn" href="{{ url_for('contabilidad.iva') }}">🧮 IVA</a>
-	</div>
-</div>
 
-<div style="overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;">
-	<table style="width:100%;border-collapse:collapse;">
-		<thead>
-			<tr>
-				<th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Fecha</th>
-				<th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Tipo</th>
-				<th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Documento</th>
-				<th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Proveedor</th>
-				<th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Neto</th>
-				<th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">IVA</th>
-				<th style="padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;">Total</th>
-			</tr>
-		</thead>
-		<tbody>
-			{% for d in documentos %}
-			<tr>
-				<td style="padding:9px;border-bottom:1px solid #f1f5f9;">{{ d.fecha_documento.strftime('%d/%m/%Y') if d.fecha_documento else '-' }}</td>
-				<td style="padding:9px;border-bottom:1px solid #f1f5f9;">{{ d.tipo }}</td>
-				<td style="padding:9px;border-bottom:1px solid #f1f5f9;">{{ d.numero or '-' }}</td>
-				<td style="padding:9px;border-bottom:1px solid #f1f5f9;">{{ d.cliente_nombre or '-' }}</td>
-				<td style="padding:9px;border-bottom:1px solid #f1f5f9;">${{ '{:,.0f}'.format(d.subtotal or 0).replace(',', '.') }}</td>
-				<td style="padding:9px;border-bottom:1px solid #f1f5f9;">${{ '{:,.0f}'.format(d.impuesto or 0).replace(',', '.') }}</td>
-				<td style="padding:9px;border-bottom:1px solid #f1f5f9;">${{ '{:,.0f}'.format(d.total or 0).replace(',', '.') }}</td>
-			</tr>
-			{% else %}
-			<tr><td colspan="7" style="padding:16px;text-align:center;color:#64748b;">Sin registros en libro de compras.</td></tr>
-			{% endfor %}
-		</tbody>
-	</table>
+	<form method="get" class="lc-rut-quick" id="lcRutQuickForm">
+		<div class="lc-field">
+			<label for="lcRut">Búsqueda rápida por RUT proveedor</label>
+			<input id="lcRut" name="rut" value="{{ filtros.rut or '' }}" placeholder="Ej: 76.123.456-7">
+		</div>
+		<div class="lc-actions">
+			<button class="lc-btn primary" type="submit">Buscar por RUT</button>
+		</div>
+	</form>
+
+	<form method="get" class="lc-filters" id="lcFiltersForm">
+		<input type="hidden" name="rut" value="{{ filtros.rut or '' }}">
+		<div class="lc-field">
+			<label for="lcProveedor">Proveedor</label>
+			<input id="lcProveedor" name="proveedor" value="{{ filtros.proveedor }}" placeholder="Nombre o razón social">
+		</div>
+		<div class="lc-field">
+			<label for="lcNumero">Documento</label>
+			<input id="lcNumero" name="numero" value="{{ filtros.numero }}" placeholder="N° factura o guía del proveedor" title="Corresponde al número que ingresás en el documento de ingreso de bodega, no al correlativo FA de ventas.">
+		</div>
+		<div class="lc-field">
+			<label for="lcTipo">Tipo</label>
+			<select id="lcTipo" name="tipo" title="Origen comercial de las líneas del ingreso">
+				<option value="">Todos</option>
+				<option value="nacional" {% if filtros.tipo == 'nacional' %}selected{% endif %}>Nacional</option>
+				<option value="importacion" {% if filtros.tipo == 'importacion' %}selected{% endif %}>Importación</option>
+			</select>
+		</div>
+		<div class="lc-field">
+			<label for="lcEstadoPago">Estado pago</label>
+			<select id="lcEstadoPago" name="estado_pago" title="Según método de pago informado al registrar el ingreso (vacío = pendiente)">
+				<option value="">Todos</option>
+				<option value="pendiente" {% if filtros.estado_pago == 'pendiente' %}selected{% endif %}>Sin método de pago</option>
+				<option value="pagado" {% if filtros.estado_pago == 'pagado' %}selected{% endif %}>Con método de pago</option>
+			</select>
+		</div>
+		<div class="lc-field">
+			<label for="lcDesde">Desde</label>
+			<input id="lcDesde" type="date" name="desde" value="{{ filtros.desde }}">
+		</div>
+		<div class="lc-field">
+			<label for="lcHasta">Hasta</label>
+			<input id="lcHasta" type="date" name="hasta" value="{{ filtros.hasta }}">
+		</div>
+		<div class="lc-field">
+			<label for="lcLimit">Máx. filas</label>
+			<select id="lcLimit" name="limit">
+				<option value="100" {% if filtros.limit == 100 %}selected{% endif %}>100</option>
+				<option value="300" {% if filtros.limit == 300 %}selected{% endif %}>300</option>
+				<option value="600" {% if filtros.limit == 600 %}selected{% endif %}>600</option>
+				<option value="1000" {% if filtros.limit == 1000 %}selected{% endif %}>1000</option>
+			</select>
+		</div>
+		<div class="lc-actions">
+			<button class="lc-btn primary" type="submit">Filtrar</button>
+			<button class="lc-btn" type="submit" name="export" value="csv">Exportar CSV</button>
+			<button class="lc-btn" type="submit" name="export" value="excel">Exportar Excel</button>
+			<a class="lc-btn" href="{{ url_for('contabilidad.libro_compras') }}">Limpiar</a>
+		</div>
+	</form>
+
+	<div class="lc-quick-ranges">
+		<button type="button" class="lc-chip" data-range="this-month">Este mes</button>
+		<button type="button" class="lc-chip" data-range="prev-month">Mes pasado</button>
+		<button type="button" class="lc-chip" data-range="last-30">Últimos 30 días</button>
+	</div>
+
+	<div class="lc-resumen">
+		<div class="lc-card"><div class="k">Registros</div><div class="v">{{ resumen.cantidad }}</div></div>
+		<div class="lc-card"><div class="k">Neto</div><div class="v">${{ '{:,.0f}'.format(resumen.neto).replace(',', '.') }}</div></div>
+		<div class="lc-card"><div class="k">IVA</div><div class="v">${{ '{:,.0f}'.format(resumen.iva).replace(',', '.') }}</div></div>
+		<div class="lc-card"><div class="k">Total</div><div class="v">${{ '{:,.0f}'.format(resumen.total).replace(',', '.') }}</div></div>
+		<div class="lc-card"><div class="k">Pendientes</div><div class="v">{{ resumen.pendientes }}</div></div>
+		<div class="lc-card"><div class="k">Pagadas</div><div class="v">{{ resumen.pagadas }}</div></div>
+	</div>
+
+	<div class="lv-table-wrap">
+		<table class="lv-table lv-money-tail3 lv-muted-col2">
+			<thead>
+				<tr>
+					<th>Fecha</th>
+					<th title="Origen de compra (líneas del ingreso)">Origen</th>
+					<th title="N° factura o guía del proveedor (ingreso bodega)">Documento</th>
+					<th>Proveedor</th>
+					<th>Estado pago</th>
+					<th>Neto</th>
+					<th>IVA</th>
+					<th>Total</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for d in documentos %}
+				<tr>
+					<td>{{ d.fecha_documento.strftime('%d/%m/%Y') if d.fecha_documento else '-' }}</td>
+					<td>{{ d.tipo }}</td>
+					<td>{{ d.numero or '-' }}</td>
+					<td>{{ d.cliente_nombre or '-' }}</td>
+					<td>
+						{% set ep = (d.estado_pago or 'pendiente')|lower %}
+						<span class="lc-estado {{ 'pagado' if ep == 'pagado' else 'pendiente' }}">
+							{{ 'Pagado' if ep == 'pagado' else 'Pendiente' }}
+						</span>
+					</td>
+					<td>${{ '{:,.0f}'.format(d.subtotal or 0).replace(',', '.') }}</td>
+					<td>${{ '{:,.0f}'.format(d.impuesto or 0).replace(',', '.') }}</td>
+					<td>${{ '{:,.0f}'.format(d.total or 0).replace(',', '.') }}</td>
+				</tr>
+				{% else %}
+				<tr><td class="lv-empty" colspan="8">Sin registros para los filtros seleccionados.</td></tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
 </div>
+<script>
+(function () {
+	var form = document.getElementById('lcFiltersForm');
+	var rutQuickForm = document.getElementById('lcRutQuickForm');
+	if (!form) return;
+	var desde = document.getElementById('lcDesde');
+	var hasta = document.getElementById('lcHasta');
+	if (!desde || !hasta) return;
+
+	function buildTargetUrl(targetForm) {
+		var action = targetForm.getAttribute('action') || window.location.pathname;
+		var fd = new FormData(targetForm);
+		var params = new URLSearchParams();
+		fd.forEach(function (value, key) {
+			var v = String(value || '').trim();
+			if (v) params.append(key, v);
+		});
+		return params.toString() ? (action + '?' + params.toString()) : action;
+	}
+
+	function navigateSmart(targetUrl) {
+		if (typeof window._loadModule === 'function') {
+			window._loadModule(targetUrl);
+			return;
+		}
+		window.location.assign(targetUrl);
+	}
+
+	function submitFiltersSoft() {
+		var target = buildTargetUrl(form);
+		navigateSmart(target);
+	}
+
+	form.addEventListener('submit', function (ev) {
+		var submitter = ev.submitter;
+		// Export buttons must keep full request/response download behavior.
+		if (submitter && submitter.name === 'export') return;
+		ev.preventDefault();
+		submitFiltersSoft();
+	});
+
+	if (rutQuickForm) {
+		rutQuickForm.addEventListener('submit', function (ev) {
+			ev.preventDefault();
+			var rutInput = document.getElementById('lcRut');
+			var rutHidden = form.querySelector('input[name=\"rut\"]');
+			if (!rutInput || !rutHidden) return;
+			rutHidden.value = String(rutInput.value || '').trim();
+			submitFiltersSoft();
+		});
+	}
+
+	function fmtDate(d) {
+		var y = d.getFullYear();
+		var m = String(d.getMonth() + 1).padStart(2, '0');
+		var day = String(d.getDate()).padStart(2, '0');
+		return y + '-' + m + '-' + day;
+	}
+
+	function applyRange(kind) {
+		var now = new Date();
+		var from;
+		var to;
+		if (kind === 'this-month') {
+			from = new Date(now.getFullYear(), now.getMonth(), 1);
+			to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+		} else if (kind === 'prev-month') {
+			from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+			to = new Date(now.getFullYear(), now.getMonth(), 0);
+		} else if (kind === 'last-30') {
+			to = now;
+			from = new Date(now);
+			from.setDate(now.getDate() - 29);
+		} else {
+			return;
+		}
+		desde.value = fmtDate(from);
+		hasta.value = fmtDate(to);
+		submitFiltersSoft();
+	}
+
+	document.querySelectorAll('.lc-chip[data-range]').forEach(function (btn) {
+		btn.addEventListener('click', function () {
+			applyRange(btn.getAttribute('data-range'));
+		});
+	});
+})();
+</script>
 {% endblock %}

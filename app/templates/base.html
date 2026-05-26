@@ -167,7 +167,7 @@ body.search-lite-app .content {
 	width: min(1180px, 99.5vw);
 	max-height: none;
 	overflow: visible;
-	padding: 4px 5px 54px;
+	padding: 4px 5px 28px;
 }
 
 /* Ficha en iframe: el scroll va en el overlay (#appModal), no en el diálogo ni dentro del iframe (evita doble barra). */
@@ -177,7 +177,7 @@ body.search-lite-app .content {
 	-webkit-overflow-scrolling: touch;
 	align-items: flex-start;
 	justify-content: center;
-	padding: 3px 5px 8px;
+	padding: 3px 5px 4px;
 	box-sizing: border-box;
 }
 
@@ -230,6 +230,36 @@ body.app-modal-is-open #apchat-root {
 }
 #appModal.is-open ~ #apchat-root {
 	display: none !important;
+}
+
+@media print {
+	#apchat-root,
+	.sidebar-frame,
+	.sidebar,
+	#adminCenterWorkspace,
+	#idleSessionWarning {
+		display: none !important;
+		visibility: hidden !important;
+	}
+	.layout {
+		display: block !important;
+		padding: 0 !important;
+		margin: 0 !important;
+		min-height: auto !important;
+		gap: 0 !important;
+	}
+	.content,
+	#appMainContent {
+		width: 100% !important;
+		max-width: none !important;
+		margin: 0 !important;
+		padding: 0 !important;
+		border: none !important;
+		box-shadow: none !important;
+		border-radius: 0 !important;
+		overflow: visible !important;
+		background: #fff !important;
+	}
 }
 
 @media (max-width: 960px) {
@@ -285,13 +315,12 @@ body.app-modal-is-open #apchat-root {
 		align-items: stretch;
 		overflow: hidden;
 	}
-	.layout .sidebar {
-		border-radius: 0;
+	.layout .sidebar-frame {
 		height: 100vh;
 		max-height: 100vh;
 		min-height: 0;
 		flex-shrink: 0;
-		box-shadow: none;
+		align-self: stretch;
 	}
 	.content {
 		border-radius: 0;
@@ -305,10 +334,13 @@ body.app-modal-is-open #apchat-root {
 		-webkit-overflow-scrolling: touch;
 		border: none;
 		border-left: 1px solid var(--line);
+		/* Espacio para la franja del chat (esquina inferior derecha) y totales al pie */
+		padding-bottom: max(88px, calc(72px + env(safe-area-inset-bottom, 0px)));
 	}
 }
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/erp_module.css') }}">
+<meta name="csrf-token" content="{{ csrf_token }}">
 {% block extra_head %}{% endblock %}
 </head>
 <body class="{% if search_lite|default(false) %}search-lite-app {% endif %}{% block body_class %}{% endblock %}">
@@ -333,6 +365,60 @@ body.app-modal-is-open #apchat-root {
 {% endif %}
 
 <script>
+(function () {
+	'use strict';
+	var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+	function currentToken() {
+		return tokenMeta ? (tokenMeta.getAttribute('content') || '') : '';
+	}
+	function ensureFormToken(form) {
+		if (!form || form.hasAttribute('data-csrf-ignore')) return;
+		var method = (form.getAttribute('method') || 'GET').toUpperCase();
+		if (['GET', 'HEAD', 'OPTIONS'].indexOf(method) !== -1) return;
+		var token = currentToken();
+		if (!token) return;
+		var input = form.querySelector('input[name="csrf_token"]');
+		if (!input) {
+			input = document.createElement('input');
+			input.type = 'hidden';
+			input.name = 'csrf_token';
+			form.appendChild(input);
+		}
+		input.value = token;
+	}
+	function decorateForms(root) {
+		(root || document).querySelectorAll('form').forEach(ensureFormToken);
+	}
+	window.getCsrfToken = currentToken;
+	window.ensureCsrfForms = decorateForms;
+	var originalFetch = window.fetch ? window.fetch.bind(window) : null;
+	if (originalFetch) {
+		window.fetch = function (input, init) {
+			var cfg = init ? Object.assign({}, init) : {};
+			var method = String(cfg.method || 'GET').toUpperCase();
+			if (['GET', 'HEAD', 'OPTIONS', 'TRACE'].indexOf(method) === -1) {
+				var headers = new Headers(cfg.headers || {});
+				if (!headers.has('X-CSRF-Token')) {
+					var token = currentToken();
+					if (token) headers.set('X-CSRF-Token', token);
+				}
+				cfg.headers = headers;
+			}
+			return originalFetch(input, cfg);
+		};
+	}
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', function () { decorateForms(document); }, { once: true });
+	} else {
+		decorateForms(document);
+	}
+	document.addEventListener('app:module-loaded', function (event) {
+		var main = document.getElementById('appMainContent');
+		decorateForms(main || document);
+	});
+})();
+</script>
+<script>
 function toggleMenu(id) {
 	var el = document.getElementById(id);
 	var hdr = document.getElementById('hdr-' + id);
@@ -348,23 +434,31 @@ function toggleMenu(id) {
 	}
 }
 
-document.addEventListener('DOMContentLoaded', function () {
-	var activeLink = document.querySelector('.submenu a.nav-active');
-	if (activeLink) {
-		var submenu = activeLink.closest('.submenu');
-		if (submenu) {
-			submenu.classList.add('open');
-			var header = document.getElementById('hdr-' + submenu.id);
-			if (header) {
-				header.classList.add('active');
-			}
-		}
-	}
-});
+/* Acordeón del sidebar: inicio con todos los módulos cerrados; el usuario abre el que necesite. */
 
 /* ── Dynamic module loader ─────────────────────────────── */
 (function () {
 	'use strict';
+
+	var HIST_ETIQUETAS_SEL_KEY = 'andes_hist_etiquetas_sel';
+	var HIST_ETIQUETAS_QTY_KEY = 'andes_hist_etiquetas_qty';
+
+	/* Historial de etiquetas: la selección vive en sessionStorage para búsqueda/paginación.
+	   Al salir de esta pantalla (otro módulo u otra URL) debe borrarse. */
+	function clearHistEtiquetasSessionIfNotHistorialUrl(urlOrPath) {
+		try {
+			var u = (urlOrPath || '').toString();
+			if (u.indexOf('/etiquetas/historial') !== -1) {
+				return;
+			}
+			sessionStorage.removeItem(HIST_ETIQUETAS_SEL_KEY);
+			sessionStorage.removeItem(HIST_ETIQUETAS_QTY_KEY);
+		} catch (e) {}
+	}
+
+	try {
+		clearHistEtiquetasSessionIfNotHistorialUrl(window.location.pathname || '');
+	} catch (e) {}
 
 	/* Evita condiciones de carrera al hacer clic rápido entre ítems del menú:
 	   respuestas viejas no deben pisar contenido ni updateSidebarActive (saltos del acordeón). */
@@ -395,17 +489,36 @@ document.addEventListener('DOMContentLoaded', function () {
 	}
 
 	function updateSidebarActive(url) {
-		/* Normalise: strip trailing slash, query string, and hash for comparison */
-		function norm(u) { return (u || '').replace(/\/$/, '').split('?')[0].split('#')[0]; }
-		var target = norm(url);
+		/* Misma ruta puede diferir por query (ej. /ventas/facturacion vs ?tipo_documento=boleta).
+		   También por hash: /buscar vs /buscar#exportar-excel (mismo pathname, ítems distintos en el menú). */
+		function sidebarNavKey(u) {
+			try {
+				var abs = new URL(u || '', window.location.href);
+				var p = abs.pathname.replace(/\/$/, '') || '/';
+				/* Misma vista en /ventas/facturacion y /ventas/factura; sin esto el path
+				   sin sufijo "facturacion" ignora el query y ambos ítems quedan activos. */
+				if (/\/ventas\/(facturacion|factura)$/.test(p)) {
+					var tipo = (abs.searchParams.get('tipo_documento') || abs.searchParams.get('tipo') || '').toLowerCase();
+					var basePath = p.replace(/\/factura$/, '/facturacion');
+					return basePath + (tipo === 'boleta' ? '?td=boleta' : '?td=factura');
+				}
+				var h = abs.hash || '';
+				return p + h;
+			} catch (e) {
+				return String(u || '').replace(/\/$/, '').split('?')[0].split('#')[0];
+			}
+		}
+		var target = sidebarNavKey(url);
 		var activeLink = null;
 
 		document.querySelectorAll('.submenu a').forEach(function (a) {
-			/* Prefer data-module-url; fall back to href */
-			var candidate = norm(a.dataset.moduleUrl || a.getAttribute('href') || '');
+			/* Prefer data-module-url; fall back a href */
+			var candidate = sidebarNavKey(a.dataset.moduleUrl || a.getAttribute('href') || '');
 			var isActive = candidate !== '' && candidate === target;
 			a.classList.toggle('nav-active', isActive);
-			if (isActive) activeLink = a;
+			if (isActive) {
+				activeLink = a;
+			}
 		});
 
 		if (!activeLink) {
@@ -427,8 +540,7 @@ document.addEventListener('DOMContentLoaded', function () {
 			}
 		});
 
-		/* Si solo cambia el ítem dentro del mismo módulo (ej. varias rutas /bodega/...), no cerrar y reabrir
-		   el acordeón: evita la animación max-height en bucle y los “saltos” al hacer clic seguido. */
+		/* Mismo módulo ya abierto: no cerrar/reabrir (evita saltos del acordeón). */
 		if (!otherSubmenuOpen && submenu.classList.contains('open') && hdr && hdr.classList.contains('active')) {
 			return;
 		}
@@ -450,6 +562,7 @@ document.addEventListener('DOMContentLoaded', function () {
 	}
 
 	function closeAppModal() {
+		window._andesResizeProductoIframe = null;
 		var modal = document.getElementById('appModal');
 		var modalBody = document.getElementById('appModalBody');
 		var dlg = document.querySelector('#appModal .app-modal-dialog');
@@ -491,7 +604,6 @@ document.addEventListener('DOMContentLoaded', function () {
 			if (modalEl) modalEl.classList.add('app-modal--tall-iframe');
 			openAppModal();
 			var iframe = modalBody.querySelector('iframe');
-			var lastFtH = 0;
 			function resizeProductoIframe() {
 				if (!iframe) return;
 				try {
@@ -510,15 +622,11 @@ document.addEventListener('DOMContentLoaded', function () {
 						);
 					}
 					if (h > 0) {
-						// Si por algún motivo el `load` de imágenes dispara un crecimiento incremental,
-						// evitamos que el modal vaya agrandándose indefinidamente.
-						if (!lastFtH) lastFtH = h;
-						if (h > lastFtH + 2) h = lastFtH;
-						else lastFtH = Math.max(lastFtH, h);
-						iframe.style.height = (h + 8) + 'px';
+						iframe.style.height = (h + 4) + 'px';
 					}
 				} catch (e) {}
 			}
+			window._andesResizeProductoIframe = resizeProductoIframe;
 			if (iframe) {
 				iframe.onload = function () {
 					resizeProductoIframe();
@@ -569,10 +677,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
 	window._loadModule = function (url, options) {
 		options = options || {};
+		var softNav = !!options.softNav;
 		var container = document.getElementById('appMainContent');
 		if (!container) return;
 		closeAppModal();
-		showLoading(container);
+		/* softNav: mismo módulo (ej. filtros en /buscar) sin vaciar el panel — evita parpadeo y “Cargando…”. */
+		if (!softNav) {
+			showLoading(container);
+		}
 
 		moduleLoadSeq += 1;
 		var loadId = moduleLoadSeq;
@@ -600,27 +712,50 @@ document.addEventListener('DOMContentLoaded', function () {
 				return Promise.reject(new Error('redirect'));
 			}
 			if (!res.ok) throw new Error('HTTP ' + res.status);
-			return res.text();
+			var finalUrl = res.url || '';
+			return res.text().then(function (html) {
+				return { html: html, finalUrl: finalUrl };
+			});
 		})
-		.then(function (html) {
+		.then(function (data) {
 			if (loadId !== moduleLoadSeq) {
 				return Promise.reject({ stale: true });
 			}
-			container.innerHTML = html;
-			return executeScripts(container);
+			container.innerHTML = data.html;
+			return executeScripts(container).then(function () {
+				return data.finalUrl;
+			});
 		})
-		.then(function () {
+		.then(function (finalUrl) {
 			if (loadId !== moduleLoadSeq) {
 				return;
 			}
+			var pushUrl = (url || '').toString();
+			var requestKey = '';
+			var requestHash = '';
+			try {
+				var reqU = new URL(pushUrl, window.location.origin);
+				requestKey = reqU.pathname + reqU.search;
+				requestHash = reqU.hash || '';
+			} catch (eReq) {}
+			try {
+				if (finalUrl) {
+					var parsed = new URL(finalUrl, window.location.origin);
+					pushUrl = parsed.pathname + parsed.search + parsed.hash;
+					/* fetch/res.url no incluye fragmento; conservar # de la URL pedida si misma ruta */
+					if (!parsed.hash && requestHash && (parsed.pathname + parsed.search) === requestKey) {
+						pushUrl += requestHash;
+					}
+				}
+			} catch (e) {}
+			clearHistEtiquetasSessionIfNotHistorialUrl(pushUrl);
 			if (!options.skipHistory && window.history && window.history.pushState) {
-				var nextUrl = (url || '').toString();
-				if (nextUrl !== currentPath()) {
-					history.pushState({ moduleUrl: url }, '', url);
+				if (pushUrl !== currentPath()) {
+					history.pushState({ moduleUrl: pushUrl }, '', pushUrl);
 				}
 			}
-			updateSidebarActive(url);
-			document.dispatchEvent(new CustomEvent('app:module-loaded', { detail: { url: url } }));
+			updateSidebarActive(pushUrl);
+			document.dispatchEvent(new CustomEvent('app:module-loaded', { detail: { url: pushUrl } }));
 		})
 		.catch(function (err) {
 			if (err && err.stale) {
@@ -690,6 +825,7 @@ document.addEventListener('DOMContentLoaded', function () {
 	});
 })();
 </script>
+{% include 'partials/idle_session_warning.html' %}
 <script src="{{ url_for('static', filename='usuarios_ui.js') }}"></script>
 {% block extra_scripts %}{% endblock %}
 </body>

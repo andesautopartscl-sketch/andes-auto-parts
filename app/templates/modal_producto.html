@@ -6,6 +6,9 @@
 <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
 <meta http-equiv="Pragma" content="no-cache">
 <title>Ficha Técnica | {{ producto.codigo }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
 <style>
 :root {
@@ -20,7 +23,7 @@
   --ft-success: #059669;
   --ft-radius: 14px;
   --ft-shadow: 0 3px 18px rgba(15, 23, 42, 0.06);
-  --ft-font: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --ft-font: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 /* Sin scroll interno en el documento del iframe: una sola barra en el modal padre */
@@ -28,6 +31,7 @@ html {
   overflow-x: hidden;
   overflow-y: visible;
   height: auto;
+  font-family: var(--ft-font);
 }
 
 body.ficha-tecnica-page {
@@ -57,7 +61,18 @@ body.ficha-tecnica-page {
   border: 1px solid var(--ft-border);
   box-shadow: var(--ft-shadow);
   overflow: hidden;
-  padding-bottom: 38px;
+  padding-bottom: 22px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+
+.ft-card .ft-title,
+.ft-card .ft-desc,
+.ft-card .ft-spec-dd,
+.ft-card .ft-homologados-text,
+.ft-card .chip-hom {
+  letter-spacing: 0.05em;
 }
 
 /* Top bar */
@@ -89,11 +104,26 @@ body.ficha-tecnica-page {
   color: var(--ft-accent);
 }
 
+.ft-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .ft-top-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 10px;
+  justify-content: flex-end;
+}
+
+.ft-top-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .ft-code-pill {
@@ -120,6 +150,16 @@ body.ficha-tecnica-page {
   border-radius: 9px;
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ft-btn--ghost {
+  background: #eef2ff;
+  color: #1e3a8a;
+  border: 1px solid #c7d2fe;
+}
+.ft-btn--ghost:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(30, 64, 175, 0.14);
 }
 
 .ft-btn--primary {
@@ -398,6 +438,10 @@ body.ficha-tecnica-page {
 .ft-stock-line-label {
   color: #64748b;
   font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  word-break: break-word;
 }
 
 .ft-stock-line-val {
@@ -423,6 +467,83 @@ body.ficha-tecnica-page {
 .ft-stock-line--total .ft-stock-line-val {
   font-size: 0.98rem;
   color: var(--ft-accent);
+}
+
+/* Varias marcas en la misma bodega: una fila cabecera + desplegable */
+.ft-stock-details {
+  border-bottom: 1px solid #eef2f6;
+}
+.ft-stock-details-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ft-accent);
+  user-select: none;
+}
+.ft-stock-details-summary::-webkit-details-marker,
+.ft-stock-details-summary::marker {
+  display: none;
+  content: "";
+}
+.ft-stock-details-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.ft-stock-details-label::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 6px;
+  color: #94a3b8;
+  font-size: 9px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.ft-stock-details[open] .ft-stock-details-label::before {
+  transform: rotate(90deg);
+}
+.ft-stock-details-total {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--ft-text);
+}
+.ft-stock-details-body {
+  padding: 2px 0 6px 0;
+  margin: 0 0 2px 16px;
+  border-left: 2px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ft-stock-subline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  padding: 1px 0 1px 10px;
+}
+.ft-stock-subline-marca {
+  color: #64748b;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+.ft-stock-subline-qty {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--ft-text);
 }
 
 /* Specs column */
@@ -543,6 +664,7 @@ body.ficha-tecnica-page {
   position: fixed;
   inset: 0;
   z-index: 10000;
+  font-family: var(--ft-font);
   background: rgba(15, 23, 42, 0.48);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
@@ -1117,6 +1239,11 @@ body.ficha-tecnica-page {
   }
 }
 
+/* Modal etiquetas: misma familia tipográfica que la ficha */
+#modalEtiqueta {
+  font-family: var(--ft-font);
+}
+
 </style>
 </head>
 
@@ -1128,10 +1255,17 @@ body.ficha-tecnica-page {
 <header class="ft-topbar">
   <div>
     <p class="ft-kicker">Catálogo</p>
-    <h1 class="ft-title">Ficha técnica</h1>
+    <div class="ft-title-row">
+      <h1 class="ft-title">Ficha técnica</h1>
+      <span class="ft-code-pill" title="Código interno">{{ producto.codigo }}</span>
+    </div>
   </div>
   <div class="ft-top-actions">
-    <span class="ft-code-pill" title="Código interno">{{ producto.codigo }}</span>
+    <div class="ft-top-meta">
+      <button type="button" class="ft-btn ft-btn--ghost" onclick="abrirModalHistorialProducto()" title="Ver historial del producto">
+        <span aria-hidden="true">🕘</span> Historial
+      </button>
+    </div>
     <button type="button" class="ft-btn ft-btn--primary" onclick="abrirModalEtiqueta()">
       <span aria-hidden="true">🖨</span> Generar etiquetas
     </button>
@@ -1141,12 +1275,7 @@ body.ficha-tecnica-page {
   </div>
 </header>
 
-{% set s1 = producto.stock_10jul or 0 %}
-{% set s2 = producto.stock_brasil or 0 %}
-{% set s3 = producto.stock_g_avenida or 0 %}
-{% set s4 = producto.stock_orientales or 0 %}
-{% set s5 = producto.stock_b20_outlet or 0 %}
-{% set s6 = producto.stock_transito or 0 %}
+{% set fs = ficha_stock %}
 
 <div class="ft-body">
 
@@ -1254,15 +1383,39 @@ body.ficha-tecnica-page {
 
 <div class="ft-stock-card">
   <h3 class="ft-stock-card-title">Repuestos disponibles</h3>
-  <div class="ft-stock-line"><span class="ft-stock-line-label">Bodega 1</span><span class="ft-stock-line-val">{{ s1 }}</span></div>
-  <div class="ft-stock-line"><span class="ft-stock-line-label">Bodega 2</span><span class="ft-stock-line-val">{{ s2 }}</span></div>
-  <div class="ft-stock-line"><span class="ft-stock-line-label">Bodega 3</span><span class="ft-stock-line-val">{{ s3 }}</span></div>
-  <div class="ft-stock-line"><span class="ft-stock-line-label">Bodega 4</span><span class="ft-stock-line-val">{{ s4 }}</span></div>
-  <div class="ft-stock-line"><span class="ft-stock-line-label">Bodega 5</span><span class="ft-stock-line-val">{{ s5 }}</span></div>
-  <div class="ft-stock-line"><span class="ft-stock-line-label">En tránsito</span><span class="ft-stock-line-val">{{ s6 }}</span></div>
+  {% for b in fs.bodegas %}
+    {% if b.lineas|length > 1 %}
+    <details class="ft-stock-details">
+      <summary class="ft-stock-details-summary">
+        <span class="ft-stock-details-label">{{ b.nombre }}</span>
+        <span class="ft-stock-details-total">{{ b.subtotal }}</span>
+      </summary>
+      <div class="ft-stock-details-body">
+        {% for L in b.lineas %}
+        <div class="ft-stock-subline">
+          <span class="ft-stock-subline-marca">{{ L.marca }}</span>
+          <span class="ft-stock-subline-qty">{{ L.stock }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </details>
+    {% else %}
+    <div class="ft-stock-line">
+      <span class="ft-stock-line-label">{{ b.nombre }} · {{ b.lineas[0].marca }}</span>
+      <span class="ft-stock-line-val">{{ b.lineas[0].stock }}</span>
+    </div>
+    {% endif %}
+  {% endfor %}
+  {% for o in fs.otras_lineas %}
+  <div class="ft-stock-line">
+    <span class="ft-stock-line-label">{{ o.bodega }} · {{ o.marca }}</span>
+    <span class="ft-stock-line-val">{{ o.stock }}</span>
+  </div>
+  {% endfor %}
+  <div class="ft-stock-line"><span class="ft-stock-line-label">En tránsito</span><span class="ft-stock-line-val">{{ fs.s6 }}</span></div>
   <div class="ft-stock-line ft-stock-line--total">
     <span class="ft-stock-line-label">Total inventario</span>
-    <span class="ft-stock-line-val">{{ s1 + s2 + s3 + s4 + s5 + s6 }}</span>
+    <span class="ft-stock-line-val">{{ fs.stotal }}</span>
   </div>
 </div>
 
@@ -1470,7 +1623,21 @@ Imprimir
 </button>
 
 </div>
+
 </div>
+</div>
+
+<div id="modalHistorialProducto" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.52);z-index:10000;backdrop-filter:blur(4px);" onclick="if(event.target===this)cerrarModalHistorialProducto();">
+  <div style="width:min(1100px,calc(100vw - 40px));height:min(760px,calc(100vh - 40px));background:#fff;border-radius:16px;box-shadow:0 24px 80px rgba(15,23,42,.28);overflow:hidden;display:flex;flex-direction:column;margin:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid #e2e8f0;background:#f8fafc;">
+      <div>
+        <h3 style="margin:0;font-size:15px;font-weight:800;color:#0f172a;">Historial del producto</h3>
+        <p style="margin:2px 0 0;font-size:12px;color:#64748b;">{{ producto.codigo }} · compras, costos, proveedores y movimientos</p>
+      </div>
+      <button type="button" onclick="cerrarModalHistorialProducto()" aria-label="Cerrar historial" style="min-width:34px;height:34px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;font-size:18px;cursor:pointer;">×</button>
+    </div>
+    <iframe id="ftHistoryFrame" src="{{ url_for('productos.historial_producto', codigo=producto.codigo, embed=1, solo_mov=1) }}" loading="lazy" title="Historial del producto {{ producto.codigo }}" style="width:100%;height:100%;border:0;background:#fff;"></iframe>
+  </div>
 </div>
 
 <script>
@@ -1971,6 +2138,19 @@ window.cerrarModalEtiqueta = function(){
 document.getElementById("modalEtiqueta").style.display="none"
 }
 
+window.abrirModalHistorialProducto = function(){
+var modal = document.getElementById("modalHistorialProducto")
+if(!modal) return
+modal.style.display="flex"
+modal.style.alignItems="center"
+modal.style.justifyContent="center"
+}
+
+window.cerrarModalHistorialProducto = function(){
+var modal = document.getElementById("modalHistorialProducto")
+if(modal) modal.style.display="none"
+}
+
 window.imprimirEtiqueta = function(codigo){
 
 const cantidad=document.getElementById("cantidadEtiqueta").value
@@ -2077,25 +2257,30 @@ window.activar360 = function () {
     if (window.ftResetImgZoomPan) window.ftResetImgZoomPan(img);
     else img.classList.remove("ft-img-main--zoomed");
 
-    var rotando = false;
     var startX = 0;
+    window.__ft360Rotando = false;
 
     img.style.cursor = "grab";
 
     img.onmousedown = function (e) {
+        /* No mezclar arrastre 360 con zoom+pan: si no, el mousemove del 360 cambia fotogramas al mover la imagen ampliada. */
+        if (img.classList.contains("ft-img-main--zoomed")) {
+            window.__ft360Rotando = false;
+            return;
+        }
         window.detener360Auto();
-        rotando = true;
+        window.__ft360Rotando = true;
         startX = e.clientX;
         img.style.cursor = "grabbing";
     };
 
     document.onmouseup = function () {
-        rotando = false;
+        window.__ft360Rotando = false;
         img.style.cursor = "grab";
     };
 
     document.onmousemove = function (e) {
-        if (!rotando) return;
+        if (!window.__ft360Rotando || img.classList.contains("ft-img-main--zoomed")) return;
         var diff = e.clientX - startX;
         if (Math.abs(diff) > 10) {
             if (diff > 0) {
@@ -2195,6 +2380,10 @@ window.activar360 = function () {
 
     function onPointerDown(e) {
         if (e.button !== 0 && e.type === "mousedown") return;
+        if (img.classList.contains("ft-img-main--zoomed")) {
+            window.detener360Auto && window.detener360Auto();
+            window.__ft360Rotando = false;
+        }
         if (window.interval360) return;
         var cx = e.clientX != null ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
         var cy = e.clientY != null ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
@@ -2267,6 +2456,23 @@ window.activar360 = function () {
             applyZoomTransform();
         }
     });
+})();
+</script>
+
+<script>
+(function () {
+  function notifyParentResize() {
+    try {
+      if (window.parent && typeof window.parent._andesResizeProductoIframe === 'function') {
+        requestAnimationFrame(function () {
+          window.parent._andesResizeProductoIframe();
+        });
+      }
+    } catch (e) { /* cross-origin or closed */ }
+  }
+  document.querySelectorAll('.ft-stock-details').forEach(function (el) {
+    el.addEventListener('toggle', notifyParentResize);
+  });
 })();
 </script>
 

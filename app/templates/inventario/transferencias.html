@@ -1,15 +1,18 @@
-{% extends 'base_content.html' if _partial else 'erp_shell.html' %}
+{% extends 'base_content.html' if _partial else 'base.html' %}
 {% block title %}Transferencias de Stock | Andes Auto Parts{% endblock %}
-{% block header_subtitle %}Inventario &mdash; Movimientos entre bodegas{% endblock %}
 
 {% block content %}
-<div style="display:grid;gap:18px;">
+<div class="transferencias-page">
+  <div class="topbar" style="margin-bottom:8px;">
+    <div>
+      <h1 class="page-title" style="font-size:20px;margin:0;">Transferir stock entre bodegas</h1>
+      <p class="page-subtitle" style="margin:2px 0 0;font-size:12px;">Movimientos entre bodegas</p>
+    </div>
+  </div>
 
-  <!-- Transfer form card -->
-  <section class="card" style="padding:24px;">
-    <h2 style="font-size:18px;margin-bottom:16px;">Transferir stock entre bodegas</h2>
+  <section class="card">
     <form id="frmTransferencia">
-      <div class="form-grid" style="gap:14px;">
+      <div class="form-grid">
         <div class="form-group">
           <label>Código de producto</label>
           <input type="text" id="inpCodigo" name="codigo" placeholder="Ej: LUB-001" autocomplete="off" required>
@@ -46,23 +49,21 @@
         </div>
       </div>
 
-      <!-- Stock display -->
-      <div id="stockInfo" style="display:none;margin-top:12px;padding:12px 16px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;font-size:13px;color:#166534;">
+      <div id="stockInfo" class="transferencias-stock-info">
         Stock disponible en origen: <strong id="stockOrigen">-</strong>
       </div>
 
-      <div style="margin-top:16px;display:flex;gap:10px;align-items:center;">
+      <div class="transferencias-actions">
         <button class="btn primary" type="submit" id="btnTransferir">Transferir stock</button>
-        <span id="statusMsg" style="font-size:13px;font-weight:600;"></span>
+        <span id="statusMsg" style="font-size:12px;font-weight:600;"></span>
       </div>
     </form>
   </section>
 
-  <!-- History table -->
   <section class="panel" style="overflow:hidden;">
-    <div style="padding:18px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;">
-      <h3 style="font-size:16px;">Historial de transferencias</h3>
-      <span style="font-size:12px;color:var(--muted);">Últimas 100 transferencias</span>
+    <div style="border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;">
+      <h3>Historial de transferencias</h3>
+      <span style="font-size:11px;color:var(--muted);">Últimas 100 transferencias</span>
     </div>
     <div style="overflow-x:auto;">
       {% if historial %}
@@ -95,7 +96,7 @@
         </tbody>
       </table>
       {% else %}
-      <div style="padding:32px;text-align:center;color:var(--muted);">No hay transferencias registradas.</div>
+      <div class="transferencias-empty">No hay transferencias registradas.</div>
       {% endif %}
     </div>
   </section>

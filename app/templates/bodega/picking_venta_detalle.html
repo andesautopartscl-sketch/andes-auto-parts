@@ -1,0 +1,394 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+
+{% block title %}Picking #{{ picking.id }} | Bodega{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+.pvd-wrap { max-width: 1100px; margin: 0 auto; }
+.pvd-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    margin-bottom: 16px;
+}
+.pvd-top h1 { margin: 0 0 6px; font-size: 1.35rem; font-weight: 800; color: #0f172a; }
+.pvd-top .sub { margin: 0; color: #64748b; font-size: 14px; line-height: 1.45; }
+.pvd-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pvd-actions a, .pvd-actions button {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #1e40af;
+    cursor: pointer;
+    font-family: inherit;
+}
+.pvd-actions a:hover, .pvd-actions button:hover:not(:disabled) { background: #f8fafc; }
+.pvd-actions .danger { color: #b91c1c; border-color: #fecaca; }
+.pvd-actions .danger:hover { background: #fef2f2; }
+.pvd-actions .primary { background: #166534; color: #fff; border-color: #166534; }
+.pvd-actions .primary:hover { filter: brightness(1.05); }
+.pvd-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+}
+.pvd-card h2 { margin: 0 0 12px; font-size: 14px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.04em; }
+.pvd-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px 20px;
+    margin-bottom: 14px;
+}
+.pvd-meta dt { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin: 0 0 3px; font-weight: 700; }
+.pvd-meta dd { margin: 0; font-size: 14px; font-weight: 600; color: #0f172a; }
+.pvd-badge {
+    display: inline-flex;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+.pvd-badge.ok { background: #dcfce7; color: #166534; }
+.pvd-badge.wip { background: #fef3c7; color: #92400e; }
+.pvd-badge.new { background: #e0e7ff; color: #3730a3; }
+.pvd-progress { margin-top: 4px; }
+.pvd-progress .bar {
+    height: 8px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+    margin-top: 6px;
+}
+.pvd-progress .fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #2563eb, #4f46e5);
+    transition: width 0.25s ease;
+}
+.pvd-progress .txt { font-size: 12px; color: #64748b; margin-top: 4px; }
+.pvd-hint {
+    font-size: 13px;
+    color: #475569;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    line-height: 1.5;
+}
+.pvd-table-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 12px; }
+.pvd-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+.pvd-table th {
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    font-weight: 800;
+}
+.pvd-table td { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+.pvd-table tr:last-child td { border-bottom: none; }
+.pvd-table input.pv-qty {
+    width: 72px;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13px;
+}
+.pvd-foot-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 20px;
+    align-items: stretch;
+}
+.pvd-foot-actions .pvd-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease;
+}
+.pvd-foot-actions .pvd-btn:active { transform: scale(0.98); }
+.pvd-btn-save {
+    color: #fff;
+    background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+    border-color: #1e40af;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+}
+.pvd-btn-save:hover {
+    background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+}
+.pvd-btn-fill {
+    color: #1e40af;
+    background: #fff;
+    border-color: #93c5fd;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+.pvd-btn-fill:hover {
+    background: #eff6ff;
+    border-color: #60a5fa;
+}
+.pvd-btn-close {
+    color: #fff;
+    background: linear-gradient(180deg, #059669 0%, #047857 100%);
+    border-color: #065f46;
+    box-shadow: 0 2px 8px rgba(5, 150, 105, 0.35);
+}
+.pvd-btn-close:hover {
+    background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+    box-shadow: 0 4px 14px rgba(5, 150, 105, 0.4);
+}
+#pickingFlash { margin-bottom: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pvd-wrap">
+    <div class="pvd-top">
+        <div>
+            <h1>Picking <span style="color:#64748b;font-weight:600;">#{{ picking.id }}</span></h1>
+            <p class="sub">
+                Orden <strong>{{ orden.numero if orden else picking.orden_venta_id }}</strong>
+                · Cliente <strong>{{ orden.cliente_nombre if orden else '—' }}</strong>
+                ·
+                {% if picking.status == 'entregado' %}
+                <span class="pvd-badge ok">Entregado al vendedor</span>
+                {% elif picking.status == 'en_preparacion' %}
+                <span class="pvd-badge wip">En preparación</span>
+                {% else %}
+                <span class="pvd-badge new">Pendiente</span>
+                {% endif %}
+            </p>
+        </div>
+        <div class="pvd-actions">
+            <a href="{{ url_for('bodega.picking_venta_lista') }}">← Listado</a>
+            {% if orden and orden.numero %}
+            <a href="{{ url_for('ventas.orden_venta', numero=orden.numero) }}">Ver OV en ventas</a>
+            {% endif %}
+            {% if picking.status != 'entregado' %}
+            <button type="button" class="danger" id="btnEliminarPicking">Eliminar picking</button>
+            {% endif %}
+        </div>
+    </div>
+
+    <p id="pickingFlash" style="display:none;padding:12px 14px;border-radius:10px;"></p>
+
+    <div class="pvd-card">
+        <h2>Resumen</h2>
+        <dl class="pvd-meta">
+            <div>
+                <dt>ID picking</dt>
+                <dd>#{{ picking.id }}</dd>
+            </div>
+            <div>
+                <dt>ID documento (OV)</dt>
+                <dd>{{ picking.orden_venta_id }}</dd>
+            </div>
+            <div>
+                <dt>Creado</dt>
+                <dd>{{ picking.created_at.strftime('%d-%m-%Y %H:%M') if picking.created_at else '—' }}</dd>
+            </div>
+            <div>
+                <dt>Última actualización</dt>
+                <dd>{{ picking.updated_at.strftime('%d-%m-%Y %H:%M') if picking.updated_at else '—' }}</dd>
+            </div>
+            {% if picking.usuario_creacion %}
+            <div>
+                <dt>Solicitado por</dt>
+                <dd>{{ picking.usuario_creacion }}</dd>
+            </div>
+            {% endif %}
+            {% if picking.usuario_entrega %}
+            <div>
+                <dt>Entregó (bodega)</dt>
+                <dd>{{ picking.usuario_entrega }}</dd>
+            </div>
+            {% endif %}
+        </dl>
+        <div class="pvd-progress">
+            <div class="txt">Avance de cantidades: <strong>{{ total_entregado }}</strong> / <strong>{{ total_pedido }}</strong> unidades ({{ pct_avance }}%)</div>
+            <div class="bar"><div class="fill" style="width: {{ pct_avance }}%;"></div></div>
+        </div>
+    </div>
+
+    <div class="pvd-card">
+        <h2>Líneas a preparar</h2>
+        <div class="pvd-hint">
+            Registre la cantidad <strong>física entregada</strong> al vendedor en mostrador. Esto no mueve stock en el sistema; el descuento de inventario ocurre al emitir factura o boleta desde la orden.
+        </div>
+        <div class="pvd-table-wrap">
+            <table class="pvd-table">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Descripción</th>
+                        <th>Marca</th>
+                        <th>Bodega</th>
+                        <th>Pedido</th>
+                        <th>Stock disp.</th>
+                        <th>Entregado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in lineas_ctx %}
+                    {% set ln = row.linea %}
+                    <tr data-line-id="{{ ln.id }}" data-pedido="{{ ln.cantidad_pedida }}">
+                        <td><strong>{{ ln.codigo_producto }}</strong></td>
+                        <td>{{ ln.descripcion or '—' }}</td>
+                        <td>{{ ln.marca or '—' }}</td>
+                        <td>{{ ln.bodega }}</td>
+                        <td>{{ ln.cantidad_pedida }}</td>
+                        <td>{% if row.stock_disp is not none %}{{ row.stock_disp }}{% else %}—{% endif %}</td>
+                        <td>
+                            {% if picking.status == 'entregado' %}
+                            <strong>{{ ln.cantidad_entregada }}</strong>
+                            {% else %}
+                            <input type="number" class="pv-qty" min="0" max="{{ ln.cantidad_pedida }}" value="{{ ln.cantidad_entregada }}">
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if picking.status != 'entregado' %}
+        <div class="pvd-foot-actions">
+            <button type="button" class="pvd-btn pvd-btn-save" id="btnGuardarPicking">Guardar avance</button>
+            <button type="button" class="pvd-btn pvd-btn-fill" id="btnMarcarTodo">Marcar todo entregado</button>
+            <button type="button" class="pvd-btn pvd-btn-close" id="btnEntregarVendedor">Cerrar: entregar a vendedor</button>
+        </div>
+        {% else %}
+        <p style="margin-top:16px;color:#166534;font-weight:600;">Picking cerrado. El vendedor puede facturar o boletear desde la orden de venta.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+(function () {
+    var pid = {{ picking.id|int }};
+    var entregado = {{ (picking.status == 'entregado')|tojson }};
+    var flash = document.getElementById('pickingFlash');
+
+    function showFlash(ok, msg) {
+        if (!flash) return;
+        flash.style.display = 'block';
+        flash.style.background = ok ? '#dcfce7' : '#fee2e2';
+        flash.style.color = ok ? '#166534' : '#991b1b';
+        flash.textContent = msg || '';
+    }
+
+    function collectLineas() {
+        var rows = document.querySelectorAll('tr[data-line-id]');
+        var lineas = [];
+        rows.forEach(function (tr) {
+            var id = parseInt(tr.getAttribute('data-line-id'), 10);
+            var inp = tr.querySelector('.pv-qty');
+            if (!inp || !id) return;
+            lineas.push({ id: id, cantidad_entregada: parseInt(inp.value, 10) || 0 });
+        });
+        return lineas;
+    }
+
+    if (!entregado) {
+        document.getElementById('btnGuardarPicking') && document.getElementById('btnGuardarPicking').addEventListener('click', function () {
+            fetch('/bodega/api/picking-venta/' + pid + '/lineas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ lineas: collectLineas() })
+            }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+            .then(function (x) {
+                if (x.ok && x.d.success) {
+                    showFlash(true, 'Avance guardado.');
+                } else {
+                    showFlash(false, (x.d && x.d.message) || 'No se pudo guardar');
+                }
+            }).catch(function () { showFlash(false, 'Error de red'); });
+        });
+
+        document.getElementById('btnMarcarTodo') && document.getElementById('btnMarcarTodo').addEventListener('click', function () {
+            var n = 0;
+            document.querySelectorAll('tr[data-line-id]').forEach(function (tr) {
+                var inp = tr.querySelector('.pv-qty');
+                if (!inp) return;
+                var raw = tr.getAttribute('data-pedido');
+                var cap = raw != null && raw !== '' ? parseInt(raw, 10) : NaN;
+                if (isNaN(cap) || cap < 0) {
+                    var mx = inp.getAttribute('max');
+                    cap = mx != null && mx !== '' ? parseInt(mx, 10) : parseInt(inp.value, 10) || 0;
+                }
+                inp.value = String(cap);
+                n += 1;
+            });
+            if (n) {
+                showFlash(true, 'Cada línea quedó con "Entregado" = cantidad pedida. Guarde avance o use Cerrar para finalizar.');
+            } else {
+                showFlash(false, 'No hay líneas editables.');
+            }
+        });
+
+        document.getElementById('btnEntregarVendedor') && document.getElementById('btnEntregarVendedor').addEventListener('click', function () {
+            if (!window.confirm('¿Confirma que toda la mercadería fue entregada al vendedor? Cada línea debe quedar con cantidad entregada igual al pedido.')) return;
+            fetch('/bodega/api/picking-venta/' + pid + '/lineas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ lineas: collectLineas() })
+            }).then(function () {
+                return fetch('/bodega/api/picking-venta/' + pid + '/entregar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    body: '{}'
+                });
+            }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+            .then(function (x) {
+                if (x.ok && x.d.success) {
+                    window.location.reload();
+                } else {
+                    showFlash(false, (x.d && x.d.message) || 'No se pudo cerrar el picking');
+                }
+            }).catch(function () { showFlash(false, 'Error de red'); });
+        });
+
+        document.getElementById('btnEliminarPicking') && document.getElementById('btnEliminarPicking').addEventListener('click', function () {
+            if (!window.confirm('¿Eliminar este picking? La orden de venta no se borra. Podrá solicitar picking de nuevo desde ventas.')) return;
+            fetch('/bodega/api/picking-venta/' + pid, {
+                method: 'DELETE',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+            .then(function (x) {
+                if (x.ok && x.d.success && x.d.redirect_url) {
+                    window.location.href = x.d.redirect_url;
+                } else {
+                    window.alert((x.d && x.d.message) || 'No se pudo eliminar');
+                }
+            }).catch(function () { window.alert('Error de red'); });
+        });
+    }
+})();
+</script>
+{% endblock %}

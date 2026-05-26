@@ -4,98 +4,361 @@
 
 {% block extra_head %}
 <style>
-.panel {
+.hist-embed-root {
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 11px;
+    color: #0f172a;
+}
+.hist-embed-root .panel {
     background:#fff;
     border:1px solid #e2e8f0;
-    border-radius:14px;
-    box-shadow:0 8px 20px rgba(15,23,42,0.05);
-    padding:16px;
+    border-radius:12px;
+    box-shadow:0 6px 14px rgba(15,23,42,0.04);
+    padding:10px;
 }
-.table-wrap { overflow:auto; }
-table.erp-compact {
+.hist-embed-root .table-wrap { overflow:auto; }
+.hist-embed-root table.erp-compact {
     width:100%;
     border-collapse:collapse;
     table-layout:fixed;
 }
-table.erp-compact th,
-table.erp-compact td {
-    padding:8px 10px;
-    font-size:12px;
+.hist-embed-root table.erp-compact th,
+.hist-embed-root table.erp-compact td {
+    padding:3px 5px;
+    font-size:11px;
     border-bottom:1px solid #eef2f7;
     text-align:left;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
 }
-table.erp-compact th {
+.hist-embed-root table.erp-compact th {
     background:#f8fafc;
-    color:#64748b;
+    color:#556b8a;
     text-transform:uppercase;
-    letter-spacing:.05em;
-    font-size:11px;
-}
-.badge {
-    display:inline-flex;
-    align-items:center;
-    padding:2px 8px;
-    border-radius:999px;
-    font-size:11px;
+    letter-spacing:.09em;
+    font-size:9px;
     font-weight:700;
 }
-.badge.in { background:#dcfce7; color:#166534; }
-.badge.out { background:#fee2e2; color:#991b1b; }
-.badge.adj { background:#ffedd5; color:#9a3412; }
+.hist-embed-root .badge {
+    display:inline-flex;
+    align-items:center;
+    padding:1px 7px;
+    border-radius:999px;
+    font-size:10px;
+    font-weight:700;
+}
+.hist-embed-root .badge.in { background:#dcfce7; color:#166534; }
+.hist-embed-root .badge.out { background:#fee2e2; color:#991b1b; }
+.hist-embed-root .badge.adj { background:#ffedd5; color:#9a3412; }
+.hist-embed-toolbar {
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-bottom:8px;
+    margin-top:4px;
+    padding-left:8px;
+    padding-right:28px; /* evita choque visual con X del modal */
+}
+.hist-embed-toolbar .hist-embed-code {
+    margin:3px 0 0;
+    font-size:10px;
+    color:#556b8a;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    font-weight:800;
+}
+.hist-embed-controls {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+}
+.hist-embed-filter {
+    height:26px;
+    min-width:170px;
+    border:1px solid #dbe3ef;
+    border-radius:8px;
+    padding:4px 8px;
+    font-size:9px;
+    color:#334155;
+    background:#fff;
+}
+.hist-embed-link {
+    display:inline-flex;
+    align-items:center;
+    height:26px;
+    padding:0 9px;
+    border-radius:8px;
+    border:1px solid #dbe3ef;
+    background:#fff;
+    font-size:9px;
+    font-weight:600;
+    color:#1d4ed8;
+    text-decoration:none;
+}
+.hist-embed-link:hover { background:#f8fafc; text-decoration:none; }
+.hist-embed-jump {
+    font-size:9px;
+    font-weight:600;
+    color:#0f766e;
+    text-decoration:none;
+}
+.hist-embed-jump:hover { text-decoration:underline; }
+.hist-filter-empty {
+    display:none;
+    margin:8px 0 0;
+    color:#64748b;
+    font-size:10px;
+}
+.hist-sections {
+    display:grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap:10px;
+}
+.hist-sections.hist-sections--solo {
+    grid-template-columns: minmax(0, 1fr);
+}
+.hist-subtitle {
+    margin:0 0 6px;
+    font-size:10px;
+    font-weight:800;
+    color:#556b8a;
+    letter-spacing:.09em;
+    text-transform:uppercase;
+}
+.hist-toolbar-2 {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-bottom:6px;
+}
+.hist-search {
+    height:26px;
+    min-width:190px;
+    border:1px solid #dbe3ef;
+    border-radius:8px;
+    padding:4px 8px;
+    font-size:9px;
+}
+@media (max-width: 920px) {
+    .hist-sections { grid-template-columns: 1fr; }
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="topbar">
-    <div>
-        <h1 class="page-title">Historial de producto</h1>
-        <p class="page-subtitle">Codigo: {{ codigo }}</p>
-    </div>
-    <div class="topbar-actions">
-        <a class="link-btn" href="{{ url_for('productos.buscar', q=codigo) }}">↩ Volver a buscar</a>
-        <a class="link-btn" href="{{ url_for('productos.ver_producto', codigo=codigo) }}" data-modal-url="{{ url_for('productos.ver_producto', codigo=codigo) }}">Ver detalle</a>
-    </div>
-</div>
-
-<section class="panel">
-    {% if movimientos %}
-    <div class="table-wrap">
-        <table class="erp-compact">
-            <thead>
-                <tr>
-                    <th>Fecha</th>
-                    <th>Tipo</th>
-                    <th>Cantidad</th>
-                    <th>Marca</th>
-                    <th>Bodega</th>
-                    <th>Usuario</th>
-                    <th>Observacion</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for m in movimientos %}
-                <tr>
-                    <td>{{ m.fecha.strftime('%d/%m/%Y %H:%M') if m.fecha else '-' }}</td>
-                    <td>
-                        {% if m.tipo == 'ingreso' %}<span class="badge in">Ingreso</span>
-                        {% elif m.tipo == 'salida' %}<span class="badge out">Salida</span>
-                        {% else %}<span class="badge adj">Ajuste</span>{% endif %}
-                    </td>
-                    <td>{{ m.cantidad or 0 }}</td>
-                    <td>{{ m.marca or '-' }}</td>
-                    <td>{{ m.bodega or '-' }}</td>
-                    <td>{{ m.usuario or '-' }}</td>
-                    <td>{{ m.observacion or '-' }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<div class="hist-embed-root">
+    {% if not embed_modal %}
+    <div class="topbar">
+        <div>
+            <h1 class="page-title">Historial de producto</h1>
+            <p class="page-subtitle">Codigo: {{ codigo }}</p>
+        </div>
+        <div class="topbar-actions">
+            <a class="link-btn" href="{{ url_for('productos.buscar', q=codigo) }}">↩ Volver a buscar</a>
+            <a class="link-btn" href="{{ url_for('productos.ver_producto', codigo=codigo) }}" data-modal-url="{{ url_for('productos.ver_producto', codigo=codigo) }}">Ver detalle</a>
+        </div>
     </div>
     {% else %}
-    <p style="margin:0;color:#64748b;">No hay movimientos registrados para este producto.</p>
+    <div class="hist-embed-toolbar">
+        <p class="hist-embed-code">Código: <strong>{{ codigo }}</strong></p>
+        <div class="hist-embed-controls">
+            <select
+                class="hist-embed-filter"
+                id="historialFiltroSel"
+                data-base-url="{{ url_for('productos.historial_producto', codigo=codigo, embed=1) }}"
+                onchange="(function(s){var r=s.closest('.hist-embed-root');if(!r)return;var w=(s.value||'todos').toLowerCase();var rows=r.querySelectorAll('#historialRowsBody tr[data-ref-type]');var v=0;rows.forEach(function(tr){var ref=(tr.getAttribute('data-ref-type')||'otros').toLowerCase();var mov=(tr.getAttribute('data-mov-type')||'').toLowerCase();var sh=false;if(w==='todos'){sh=true;}else if(w==='mov_stock'){sh=(mov==='ingreso'||mov==='salida');}else if(w==='ajuste'){sh=(mov==='ajuste');}else if(w==='salida'){sh=(mov==='salida');}else{sh=(ref===w);}tr.style.display=sh?'':'none';if(sh)v++;});var emp=r.querySelector('#historialFiltroVacio');if(emp)emp.style.display=v>0?'none':'block';var showJump=(w==='ingreso'||w==='mov_stock'||w==='todos');var jh=r.querySelector('.hist-col-jump');if(jh)jh.style.display=showJump?'':'none';r.querySelectorAll('.hist-cell-jump').forEach(function(td){td.style.display=showJump?'':'none';});})(this);"
+            >
+                <option value="todos" {% if filtro == 'todos' %}selected{% endif %}>Mostrar: todos los movimientos</option>
+                <option value="ingreso" {% if filtro == 'ingreso' %}selected{% endif %}>Solo ingresos</option>
+                <option value="mov_stock" {% if filtro == 'mov_stock' %}selected{% endif %}>Movimientos de stock</option>
+                <option value="ajuste" {% if filtro == 'ajuste' %}selected{% endif %}>Solo ajustes</option>
+                <option value="salida" {% if filtro == 'salida' %}selected{% endif %}>Solo salidas</option>
+                <option value="factura" {% if filtro == 'factura' %}selected{% endif %}>Solo facturas</option>
+                <option value="boleta" {% if filtro == 'boleta' %}selected{% endif %}>Solo boletas</option>
+            </select>
+            <a class="hist-embed-link" href="{{ url_for('productos.ver_producto', codigo=codigo) }}" data-modal-url="{{ url_for('productos.ver_producto', codigo=codigo) }}">Ver ficha del producto</a>
+        </div>
+    </div>
     {% endif %}
-</section>
+
+    <section class="panel">
+        <div class="hist-sections{% if solo_mov %} hist-sections--solo{% endif %}">
+            <div>
+                <div class="hist-toolbar-2">
+                    <h3 class="hist-subtitle">Movimientos</h3>
+                    <input id="historialMovSearch" class="hist-search" type="search" placeholder="Buscar en observación, marca, bodega...">
+                </div>
+                {% if movimientos %}
+                <div class="table-wrap">
+                    <table class="erp-compact">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Tipo</th>
+                                <th>Cantidad</th>
+                                <th>Marca</th>
+                                <th>Bodega</th>
+                                <th>Usuario</th>
+                                <th>Observacion</th>
+                                <th class="hist-col-jump"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="historialRowsBody">
+                            {% for m in movimientos %}
+                            <tr data-ref-type="{{ m.ref_type or 'otros' }}" data-mov-type="{{ (m.row.tipo or '')|lower }}">
+                                <td>{{ m.row.fecha.strftime('%d/%m/%Y %H:%M') if m.row.fecha else '-' }}</td>
+                                <td>
+                                    {% if m.row.tipo == 'ingreso' %}<span class="badge in">Ingreso</span>
+                                    {% elif m.row.tipo == 'salida' %}<span class="badge out">Salida</span>
+                                    {% else %}<span class="badge adj">Ajuste</span>{% endif %}
+                                </td>
+                                <td>{{ m.row.cantidad or 0 }}</td>
+                                <td>{{ m.row.marca or '-' }}</td>
+                                <td>{{ m.row.bodega or '-' }}</td>
+                                <td>{{ m.row.usuario or '-' }}</td>
+                                <td>{{ m.row.observacion or '-' }}</td>
+                                <td class="hist-cell-jump">
+                                    {% if m.view_url %}
+                                    <a class="hist-embed-jump" href="{{ m.view_url }}" data-module-url="{{ m.view_url }}">{{ m.view_label or 'Abrir' }}</a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p id="historialFiltroVacio" class="hist-filter-empty">No hay movimientos para este filtro.</p>
+                {% else %}
+                <p style="margin:0;color:#64748b;">No hay movimientos registrados para este producto.</p>
+                {% endif %}
+            </div>
+            {% if not solo_mov %}
+            <div>
+                <div class="hist-toolbar-2">
+                    <h3 class="hist-subtitle">Historial de compras</h3>
+                    <input id="historialComprasSearch" class="hist-search" type="search" placeholder="Buscar proveedor, documento, marca...">
+                </div>
+                {% if compras %}
+                <div class="table-wrap">
+                    <table class="erp-compact">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Proveedor</th>
+                                <th>Doc</th>
+                                <th>Marca</th>
+                                <th>Cant.</th>
+                                <th>Costo</th>
+                                <th>P. neto</th>
+                                <th>Total neto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historialComprasBody">
+                            {% for c in compras %}
+                            <tr data-search="{{ (c.proveedor ~ ' ' ~ c.numero_documento ~ ' ' ~ c.marca ~ ' ' ~ c.bodega ~ ' ' ~ c.origen_compra)|lower }}">
+                                <td>
+                                    {% if c.fecha %}{{ c.fecha.strftime('%d/%m/%Y') if c.fecha.strftime else c.fecha }}{% else %}-{% endif %}
+                                </td>
+                                <td title="{{ c.proveedor }}">{{ c.proveedor }}</td>
+                                <td>
+                                    {% if c.doc_url %}
+                                    <a class="hist-embed-jump" href="{{ c.doc_url }}" data-module-url="{{ c.doc_url }}">{{ c.numero_documento }}</a>
+                                    {% else %}
+                                    {{ c.numero_documento }}
+                                    {% endif %}
+                                </td>
+                                <td>{{ c.marca }}</td>
+                                <td>{{ c.cantidad }}</td>
+                                <td>${{ '{:,.2f}'.format(c.costo_unitario).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                <td>{% if c.precio_venta_neto %}${{ '{:,.2f}'.format(c.precio_venta_neto).replace(',', 'X').replace('.', ',').replace('X', '.') }}{% else %}-{% endif %}</td>
+                                <td>${{ '{:,.2f}'.format(c.total_neto).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p id="historialComprasVacio" class="hist-filter-empty">No hay compras para este filtro.</p>
+                {% else %}
+                <p style="margin:0;color:#64748b;">No hay compras registradas para este producto.</p>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </section>
+</div>
+<script>
+function historialProductoAplicarFiltroLocal(filterValue) {
+    var body = document.getElementById('historialRowsBody');
+    var empty = document.getElementById('historialFiltroVacio');
+    var jumpHeader = document.querySelector('.hist-col-jump');
+    var jumpCells = Array.prototype.slice.call(document.querySelectorAll('.hist-cell-jump'));
+    if (!body || !empty) return;
+    var rows = Array.prototype.slice.call(body.querySelectorAll('tr[data-ref-type]'));
+    if (!rows.length) return;
+
+    var wanted = (filterValue || 'todos').toLowerCase();
+    var showJump = (wanted === 'ingreso' || wanted === 'mov_stock' || wanted === 'todos');
+    if (jumpHeader) jumpHeader.style.display = showJump ? '' : 'none';
+    jumpCells.forEach(function (td) { td.style.display = showJump ? '' : 'none'; });
+
+    var visible = 0;
+    rows.forEach(function (row) {
+        var ref = (row.getAttribute('data-ref-type') || 'otros').toLowerCase();
+        var mov = (row.getAttribute('data-mov-type') || '').toLowerCase();
+        var show = false;
+        if (wanted === 'todos') {
+            show = true;
+        } else if (wanted === 'mov_stock') {
+            show = (mov === 'ingreso' || mov === 'salida');
+        } else if (wanted === 'ajuste') {
+            show = (mov === 'ajuste');
+        } else if (wanted === 'salida') {
+            show = (mov === 'salida');
+        } else {
+            show = (ref === wanted);
+        }
+        row.style.display = show ? '' : 'none';
+        if (show) visible += 1;
+    });
+    empty.style.display = visible > 0 ? 'none' : 'block';
+}
+
+function historialProductoInitFiltro() {
+    var sel = document.getElementById('historialFiltroSel');
+    if (!sel) return;
+    // Forzar aplicación inicial usando el mismo handler inline del <select>.
+    try { sel.onchange(); } catch (e) { historialProductoAplicarFiltroLocal(sel.value || 'todos'); }
+}
+function historialProductoBindSearch(inputId, bodyId, emptyId) {
+    var input = document.getElementById(inputId);
+    var body = document.getElementById(bodyId);
+    var empty = document.getElementById(emptyId);
+    if (!input || !body || !empty) return;
+    var rows = Array.prototype.slice.call(body.querySelectorAll('tr'));
+    var apply = function () {
+        var wanted = (input.value || '').trim().toLowerCase();
+        var visible = 0;
+        rows.forEach(function (row) {
+            var haystack = ((row.getAttribute('data-search') || '') + ' ' + (row.textContent || '')).toLowerCase();
+            var show = !wanted || haystack.indexOf(wanted) >= 0;
+            row.style.display = show ? '' : 'none';
+            if (show) visible += 1;
+        });
+        empty.style.display = visible > 0 ? 'none' : 'block';
+    };
+    input.addEventListener('input', apply);
+    apply();
+}
+// En modales inyectados por AJAX, DOMContentLoaded puede no disparar de nuevo.
+historialProductoInitFiltro();
+setTimeout(historialProductoInitFiltro, 0);
+historialProductoBindSearch('historialMovSearch', 'historialRowsBody', 'historialFiltroVacio');
+historialProductoBindSearch('historialComprasSearch', 'historialComprasBody', 'historialComprasVacio');
+</script>
 {% endblock %}

@@ -1,0 +1,298 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block content %}
+<style>
+  .rrhh-config {
+    max-width: 1180px;
+  }
+  .rrhh-config .rc-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .rrhh-config .rc-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+  }
+  .rrhh-config .rc-subtitle {
+    margin: 2px 0 0;
+    font-size: 12px;
+    font-weight: 400;
+    color: #94a3b8;
+  }
+  .rrhh-config .rc-subtitle strong {
+    color: #64748b;
+    font-weight: 600;
+  }
+  .rrhh-config .rc-period-form {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .rrhh-config .rc-input {
+    height: 34px;
+    border-radius: 9px;
+    border: 1px solid var(--line, #e2e8f0);
+    padding: 0 10px;
+    background: #fff;
+    font-size: 12px;
+    font-weight: 400;
+    color: #334155;
+  }
+  .rrhh-config .rc-input:focus {
+    outline: none;
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.35);
+  }
+  .rrhh-config .panel {
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  }
+  .rrhh-config .rc-panel-head {
+    border-bottom: 1px solid var(--line, #e2e8f0);
+    padding: 8px 10px;
+    background: linear-gradient(180deg, #fafbfc 0%, #fff 100%);
+  }
+  .rrhh-config .rc-panel-head h3 {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #475569;
+    letter-spacing: 0.02em;
+  }
+  .rrhh-config .rc-panel-head .rc-hint {
+    margin-top: 2px;
+    font-size: 11px;
+    font-weight: 400;
+    color: #94a3b8;
+    line-height: 1.35;
+  }
+  .rrhh-config .rc-panel-body {
+    padding: 10px;
+  }
+  .rrhh-config .rc-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px 10px;
+  }
+  .rrhh-config .rc-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 10px;
+  }
+  .rrhh-config .rc-cols {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .rrhh-config .field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .rrhh-config .field label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
+  }
+  .rrhh-config .rc-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 2px;
+  }
+  .rrhh-config .rc-afp-form {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .rrhh-config .rc-afp-form .field {
+    flex: 1;
+    min-width: 160px;
+  }
+  .rrhh-config .rc-afp-form .field.rc-narrow {
+    flex: 0 0 auto;
+    min-width: 0;
+    width: 118px;
+  }
+  .rrhh-config .rc-btn {
+    height: 34px;
+    padding: 0 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 8px;
+  }
+  .rrhh-config table.erp-table th,
+  .rrhh-config table.erp-table td {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .rrhh-config table.erp-table th {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
+    background: #f8fafc;
+  }
+  .rrhh-config table.erp-table tr:hover td {
+    background: #fafbff;
+  }
+  .rrhh-config .rc-empty {
+    color: #94a3b8;
+    font-size: 12px;
+  }
+  @media (max-width: 900px) {
+    .rrhh-config .rc-grid-3,
+    .rrhh-config .rc-cols {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+<div class="rrhh-config">
+  <div class="rc-topbar">
+    <div>
+      <h1 class="rc-title">Configuración RRHH</h1>
+      <p class="rc-subtitle">Período: <strong>{{ periodo }}</strong></p>
+    </div>
+    <div class="topbar-actions">
+      <form method="GET" action="{{ url_for('rrhh.config') }}" class="rc-period-form">
+        <input class="rc-input" name="periodo" value="{{ periodo }}" placeholder="YYYY-MM" aria-label="Período YYYY-MM">
+        <button type="submit" class="btn btn-primary rc-btn">Ir</button>
+      </form>
+    </div>
+  </div>
+
+  <section class="panel" style="overflow:hidden;">
+    <div class="rc-panel-head">
+      <h3>Parámetros del período</h3>
+      <div class="rc-hint">Ajusta tasas base (si no estás seguro, deja valores por defecto).</div>
+    </div>
+    <form method="POST" action="{{ url_for('rrhh.config', periodo=periodo) }}" class="rc-panel-body rc-grid-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="save_periodo">
+      <div class="field">
+        <label for="cfg-fonasa">FONASA %</label>
+        <input id="cfg-fonasa" class="rc-input" name="fonasa_tasa_pct" value="{{ params.fonasa_tasa_pct }}" style="width:100%; box-sizing:border-box;">
+      </div>
+      <div class="field">
+        <label for="cfg-isapre">ISAPRE % (si aplica)</label>
+        <input id="cfg-isapre" class="rc-input" name="isapre_tasa_pct" value="{{ params.isapre_tasa_pct }}" style="width:100%; box-sizing:border-box;">
+      </div>
+      <div class="field">
+        <label for="cfg-afc">AFC trabajador %</label>
+        <input id="cfg-afc" class="rc-input" name="afc_trabajador_tasa_pct" value="{{ params.afc_trabajador_tasa_pct }}" style="width:100%; box-sizing:border-box;">
+      </div>
+      <div class="rc-actions">
+        <button type="submit" class="btn btn-primary rc-btn">Guardar</button>
+      </div>
+    </form>
+  </section>
+
+  <div class="rc-cols">
+    <section class="panel" style="overflow:hidden;">
+      <div class="rc-panel-head">
+        <h3>Tasas AFP</h3>
+      </div>
+      <form method="POST" action="{{ url_for('rrhh.config', periodo=periodo) }}" class="rc-panel-body rc-afp-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="action" value="add_afp">
+        <div class="field">
+          <label for="cfg-afp-nombre">AFP</label>
+          <input id="cfg-afp-nombre" class="rc-input" name="afp_nombre" list="afpChileList" placeholder="Ej: Habitat" style="width:100%; box-sizing:border-box;">
+        </div>
+        <div class="field rc-narrow">
+          <label for="cfg-afp-tasa">Tasa %</label>
+          <input id="cfg-afp-tasa" class="rc-input" name="afp_tasa_pct" placeholder="Ej: 11.44" style="width:100%; box-sizing:border-box;">
+        </div>
+        <button type="submit" class="btn btn-primary rc-btn">Guardar</button>
+      </form>
+      <datalist id="afpChileList">
+        <option value="AFP Capital"></option>
+        <option value="AFP Cuprum"></option>
+        <option value="AFP Habitat"></option>
+        <option value="AFP Modelo"></option>
+        <option value="AFP PlanVital"></option>
+        <option value="AFP Provida"></option>
+        <option value="AFP Uno"></option>
+      </datalist>
+      <div style="overflow:auto;">
+        <table class="erp-table" style="min-width:360px;">
+          <thead><tr><th>AFP</th><th>Tasa %</th></tr></thead>
+          <tbody>
+            {% for a in afps %}
+            <tr>
+              <td>{{ a.nombre }}</td>
+              <td>{{ a.tasa_pct }}</td>
+            </tr>
+            {% endfor %}
+            {% if not afps %}
+            <tr><td colspan="2" class="rc-empty">No hay AFP configuradas aún.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" style="overflow:hidden;">
+      <div class="rc-panel-head">
+        <h3>Impuesto Único (tramos)</h3>
+      </div>
+      <form method="POST" action="{{ url_for('rrhh.config', periodo=periodo) }}" class="rc-panel-body rc-grid-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="action" value="add_tramo">
+        <div class="field">
+          <label for="cfg-vigente">Vigente desde</label>
+          <input id="cfg-vigente" class="rc-input" name="vigente_desde" type="date" style="width:100%; box-sizing:border-box;">
+        </div>
+        <div class="field">
+          <label for="cfg-desde">Desde (CLP)</label>
+          <input id="cfg-desde" class="rc-input" name="tramo_desde" type="number" min="0" step="1" style="width:100%; box-sizing:border-box;">
+        </div>
+        <div class="field">
+          <label for="cfg-hasta">Hasta (CLP, opcional)</label>
+          <input id="cfg-hasta" class="rc-input" name="tramo_hasta" type="number" min="0" step="1" style="width:100%; box-sizing:border-box;">
+        </div>
+        <div class="field">
+          <label for="cfg-tasa">Tasa %</label>
+          <input id="cfg-tasa" class="rc-input" name="tramo_tasa_pct" placeholder="Ej: 4" style="width:100%; box-sizing:border-box;">
+        </div>
+        <div class="field">
+          <label for="cfg-rebaja">Rebaja (CLP)</label>
+          <input id="cfg-rebaja" class="rc-input" name="tramo_rebaja" type="number" min="0" step="1" value="0" style="width:100%; box-sizing:border-box;">
+        </div>
+        <div class="rc-actions">
+          <button type="submit" class="btn btn-primary rc-btn">Agregar</button>
+        </div>
+      </form>
+      <div style="overflow:auto;">
+        <table class="erp-table" style="min-width:560px;">
+          <thead><tr><th>Vigente</th><th>Desde</th><th>Hasta</th><th>Tasa%</th><th>Rebaja</th></tr></thead>
+          <tbody>
+            {% for t in tramos[:40] %}
+            <tr>
+              <td>{{ t.vigente_desde }}</td>
+              <td>{{ t.desde }}</td>
+              <td>{{ t.hasta if t.hasta is not none else '—' }}</td>
+              <td>{{ t.tasa_pct }}</td>
+              <td>{{ t.rebaja }}</td>
+            </tr>
+            {% endfor %}
+            {% if not tramos %}
+            <tr><td colspan="5" class="rc-empty">No hay tramos configurados. Si no configuras, el impuesto se calculará como 0.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,6 @@
+Origen: C:\Users\alber\OneDrive\Desktop\Pics
+Destino: C:\AndesAutoParts\app\static\productos_img
+Dry-run: False
+
+
+Movidos: 79329, no coinciden catálogo (omitidos): 7325, errores: 0

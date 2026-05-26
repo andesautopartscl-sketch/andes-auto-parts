@@ -2,8 +2,519 @@
 
 {% block title %}Ajuste de Stock | Andes Auto Parts{% endblock %}
 
+{% block extra_head %}
+{{ super() }}
+<style>
+.ajuste-view-topbar {
+    margin-bottom: 8px;
+    align-items: flex-start;
+}
+.ajuste-view-topbar .page-title {
+    font-size: 1.35rem;
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+.ajuste-view-topbar .page-subtitle {
+    font-size: 12px;
+    line-height: 1.35;
+    margin: 0;
+}
+.ajuste-view-topbar .topbar-actions .link-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 8px;
+}
+.ajuste-form-card.form-card {
+    position: relative;
+    padding: 14px 16px 40px;
+}
+.ajuste-form-card > .section-title {
+    font-size: 15px;
+    margin: 0 0 10px;
+}
+.ajuste-form-card .form-grid {
+    gap: 8px 12px;
+}
+.ajuste-form-card .field label {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 3px;
+    color: #475569;
+}
+.ajuste-form-card .form-grid .field input#marca {
+    width: 100%;
+}
+.ajuste-form-card .form-grid .field input:not([type="hidden"]),
+.ajuste-form-card .form-grid .field select,
+.ajuste-form-card .form-grid .field textarea {
+    min-height: 30px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+.ajuste-form-card .form-grid .field textarea#observacion {
+    min-height: 58px;
+    line-height: 1.35;
+    resize: vertical;
+}
+.ajuste-form-card .actions {
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
+    flex-wrap: wrap;
+}
+.ajuste-form-card .actions .btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    min-height: 32px;
+    border-radius: 8px;
+}
+.ajuste-form-card .actions .link-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+}
+.ajuste-form-card .field.field-full .message.success {
+    font-size: 12px;
+    padding: 8px 10px;
+    line-height: 1.4;
+}
+.ajuste-marca-hint {
+    margin: 2px 0 0;
+    font-size: 10px;
+    color: #64748b;
+    line-height: 1.35;
+}
+/* Código: lupa dentro del mismo borde (misma idea que code-srch en ventas) */
+.ajuste-codigo-wrap {
+    position: relative;
+    display: block;
+    width: 100%;
+}
+.ajuste-codigo-wrap input#codigo {
+    width: 100%;
+    min-width: 0;
+    padding-right: 36px;
+    box-sizing: border-box;
+}
+.ajuste-codigo-wrap .ajuste-codigo-search-btn {
+    position: absolute;
+    z-index: 1;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 24px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.12s ease, color 0.12s ease;
+    flex-shrink: 0;
+    box-shadow: none;
+    font: inherit;
+}
+.ajuste-codigo-wrap .ajuste-codigo-search-btn:hover {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+.ajuste-codigo-wrap .ajuste-codigo-search-btn:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 1px;
+}
+.ajuste-codigo-wrap .ajuste-codigo-search-btn svg {
+    display: block;
+    flex-shrink: 0;
+}
+/* Mismo patrón visual que Ingreso (modal buscar producto) */
+.ingreso-product-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 1200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.ingreso-product-modal.open {
+    display: flex;
+}
+.ingreso-product-modal-card {
+    width: min(880px, 100%);
+    max-height: min(82vh, 700px);
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #dbe4f0;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.ingreso-product-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.ingreso-product-modal-head h3 {
+    margin: 0;
+    font-size: 15px;
+    color: #0f172a;
+}
+.ingreso-product-modal-body {
+    padding: 10px 12px;
+    overflow: auto;
+}
+.ingreso-product-search {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.ingreso-product-results {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: auto;
+    max-height: 48vh;
+}
+.ingreso-product-item {
+    display: grid;
+    grid-template-columns: 120px 1fr 130px 90px auto;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 8px;
+    border-bottom: 1px solid #eef2f7;
+    font-size: 12px;
+}
+.ingreso-product-item:last-child {
+    border-bottom: none;
+}
+.ingreso-product-item:hover {
+    background: #f8fbff;
+}
+.ingreso-product-meta {
+    font-size: 10px;
+    color: #64748b;
+}
+.ingreso-product-item strong {
+    font-size: 11px;
+    font-weight: 700;
+}
+.ingreso-product-item .btn.btn-primary.btn-sm {
+    padding: 5px 10px;
+    font-size: 11px;
+    border-radius: 8px;
+    min-height: 28px;
+}
+#ajusteProductSearchInput {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+#ajusteProductSearchBtn {
+    min-height: 34px;
+    padding: 6px 12px;
+    font-size: 12px;
+}
+/* Franja "Producto encontrado" más compacta solo en esta pantalla */
+.ajuste-producto-panel.panel {
+    margin-top: 10px;
+    padding: 12px 14px;
+}
+.ajuste-producto-panel .section-title {
+    margin-bottom: 6px;
+    font-size: 15px;
+}
+.ajuste-producto-panel .product-summary {
+    gap: 6px;
+}
+.ajuste-producto-panel .summary-box {
+    padding: 6px 8px;
+    border-radius: 8px;
+}
+.ajuste-producto-panel .summary-box h4 {
+    margin: 0 0 3px;
+    font-size: 10px;
+}
+.ajuste-producto-panel .summary-box > p {
+    font-size: 13px;
+    line-height: 1.3;
+}
+.ajuste-stock-variantes-title {
+    margin: 0 0 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #1e3a5f;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+.ajuste-stock-desglose {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12px;
+    line-height: 1.35;
+    color: #0f172a;
+}
+.ajuste-stock-desglose li {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 2px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+.ajuste-stock-desglose li:last-of-type {
+    border-bottom: none;
+}
+.ajuste-stock-desglose .marca {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    font-size: 12px;
+}
+.ajuste-stock-desglose .qty {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    min-width: 2ch;
+    text-align: right;
+    font-size: 13px;
+}
+.ajuste-stock-total-line {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 11px;
+    font-weight: 700;
+    color: #1e3a5f;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+.ajuste-stock-meta {
+    font-size: 11px;
+    color: #64748b;
+    margin: 6px 0 0;
+    line-height: 1.35;
+}
+.ajuste-stock-meta-line {
+    display: block;
+    margin-top: 4px;
+}
+.ajuste-stock-meta-line:first-child {
+    margin-top: 0;
+}
+.ajuste-multi-wrap {
+    grid-column: 1 / -1;
+    margin-top: 2px;
+    padding: 8px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+.ajuste-multi-wrap .ajuste-multi-title {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e3a5f;
+}
+.ajuste-multi-table-wrap {
+    overflow-x: auto;
+}
+.ajuste-multi-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+.ajuste-multi-table th,
+.ajuste-multi-table td {
+    padding: 4px 6px;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: middle;
+}
+.ajuste-multi-table th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #64748b;
+    font-weight: 700;
+}
+.ajuste-multi-table input[type="text"],
+.ajuste-multi-table input[type="number"] {
+    width: 100%;
+    min-height: 28px;
+    padding: 3px 6px;
+    font-size: 11px;
+    box-sizing: border-box;
+}
+.ajuste-multi-table .ajuste-stock-act {
+    font-variant-numeric: tabular-nums;
+    color: #0f172a;
+    font-weight: 600;
+}
+.ajuste-multi-actions {
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.ajuste-multi-actions .btn-ghost {
+    font-size: 11px;
+    padding: 5px 8px;
+    border: 1px dashed #94a3b8;
+    background: #fff;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #334155;
+}
+.ajuste-multi-actions .btn-ghost:hover {
+    border-color: #64748b;
+    background: #f1f5f9;
+}
+.ajuste-multi-hint {
+    margin: 0 0 6px;
+    font-size: 10px;
+    color: #64748b;
+    line-height: 1.35;
+}
+.ajuste-variantes-panel.panel {
+    margin-top: 12px !important;
+    padding: 12px 14px;
+}
+.ajuste-variantes-panel .section-title {
+    font-size: 15px;
+    margin-bottom: 6px;
+}
+.ajuste-variantes-panel .page-subtitle {
+    font-size: 12px;
+    line-height: 1.35;
+}
+.ajuste-variantes-panel .table-wrap table {
+    font-size: 12px;
+}
+.ajuste-variantes-panel .table-wrap th,
+.ajuste-variantes-panel .table-wrap td {
+    padding: 6px 8px;
+}
+.ajuste-variantes-panel .btn.sm {
+    font-size: 11px;
+    padding: 4px 8px;
+    min-height: 28px;
+}
+.ajuste-single-hidden {
+    display: none !important;
+}
+.ajuste-help-anchor {
+    position: absolute;
+    bottom: 10px;
+    left: 12px;
+    z-index: 6;
+}
+.ajuste-help-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    border: 1px solid #93c5fd;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    color: #1e3a8a;
+    font-weight: 800;
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.12);
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .15s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+}
+.ajuste-help-btn svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+.ajuste-help-btn:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border-color: #60a5fa;
+    box-shadow: 0 12px 24px rgba(30, 64, 175, 0.24);
+}
+.ajuste-help-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+.ajuste-help-panel {
+    position: absolute;
+    bottom: 46px;
+    left: 0;
+    width: min(420px, calc(100vw - 28px));
+    max-height: min(68vh, 400px);
+    overflow: auto;
+    padding: 12px 14px;
+    border: 1px solid #dbe4f0;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 16px 42px rgba(15, 23, 42, 0.16);
+}
+.ajuste-help-panel[hidden] {
+    display: none !important;
+}
+.ajuste-help-title {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.ajuste-help-section {
+    margin: 0 0 8px;
+    padding: 8px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+.ajuste-help-section-title {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+.ajuste-help-list {
+    margin: 0;
+    padding-left: 16px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #475569;
+}
+.ajuste-help-list li + li {
+    margin-top: 6px;
+}
+.ajuste-help-list strong {
+    color: #334155;
+}
+.ajuste-help-panel > .btn {
+    font-size: 12px;
+    padding: 5px 12px;
+    min-height: 30px;
+    margin-top: 2px;
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="topbar">
+<div class="topbar ajuste-view-topbar">
     <div>
         <h1 class="page-title">Ajuste de Stock</h1>
         <p class="page-subtitle">Corrige inventario manualmente y deja registrado el diferencial aplicado.</p>
@@ -15,43 +526,183 @@
 </div>
 
 {% if message %}
-<div class="message {{ message.type }}">{{ message.text }}</div>
+<div class="message {{ message.type }}{% if message.type == 'success' %} ajuste-flash-message{% endif %}" role="alert">{{ message.text }}</div>
 {% endif %}
 
-<div class="form-card">
+<div class="form-card ajuste-form-card">
     <h2 class="section-title">Aplicar Ajuste</h2>
-    <form method="post">
+    <form method="post" id="ajusteForm"
+          data-marcas-url="{{ url_for('bodega.ajuste_marcas_sugeridas') }}"
+          data-consult-url="{{ url_for('bodega.ajuste') }}"
+          data-product-search-url="{{ url_for('ventas.api_productos_search') }}">
         <div class="form-grid">
             <div class="field">
                 <label for="codigo">Código del producto</label>
-                <input id="codigo" name="codigo" value="{{ form_data.codigo }}" placeholder="Ej: ABC123" required>
+                <div class="ajuste-codigo-wrap">
+                    <input id="codigo" name="codigo" value="{{ form_data.codigo }}" placeholder="Código, descripción u OEM" autocomplete="off" required>
+                    <button type="button" class="ajuste-codigo-search-btn" id="ajusteCodigoSearchBtn" title="Buscar producto (F2)" aria-label="Buscar producto">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    </button>
+                </div>
             </div>
-            <div class="field">
+            <div class="field {% if mostrar_ajuste_multi %}ajuste-single-hidden{% endif %}">
                 <label for="marca">Marca / Variante</label>
-                <input id="marca" name="marca" value="{{ form_data.marca }}" placeholder="Ej: BOSCH">
+                <datalist id="ajusteMarcaDl"></datalist>
+                <input id="marca" {% if not mostrar_ajuste_multi %}name="marca"{% endif %} value="{{ form_data.marca }}" list="ajusteMarcaDl" placeholder="Elegí sugerencia o escribí (ej. BOSCH, RCPS)" autocomplete="off">
+                <p class="ajuste-marca-hint">Sugerencias: marcas ya usadas en bodega, más referencias comunes. Podés escribir cualquier marca si no figura en la lista.</p>
             </div>
             <div class="field">
                 <label for="bodega">Bodega</label>
-                <input id="bodega" name="bodega" value="{{ form_data.bodega }}" placeholder="Ej: Bodega 1">
+                <select id="bodega" name="bodega" required>
+                    {% for b in bodegas_opciones %}
+                    <option value="{{ b }}" {% if form_data.bodega == b %}selected{% endif %}>{{ b }}</option>
+                    {% endfor %}
+                </select>
             </div>
-            <div class="field">
+            {% if producto and stock_contexto_actual is not none %}
+            <div class="field field-full" style="grid-column:1/-1;">
+                <div class="message success" style="margin:0;">
+                    <strong>Stock según esta consulta:</strong>
+                    {% if mostrar_ajuste_multi %}
+                    suma en <strong>{{ form_data.bodega }}</strong> (todas las marcas de esa bodega): <strong>{{ stock_contexto_actual }}</strong> unidades. Ajustá una o más variantes en la tabla siguiente.
+                    {% elif variantes and not form_data.marca %}
+                    suma en <strong>{{ form_data.bodega }}</strong> (todas las marcas de esa bodega): <strong>{{ stock_contexto_actual }}</strong> unidades.
+                    {% if stock_suma_variantes_total is not none and stock_suma_variantes_total != stock_contexto_actual %}
+                    Total en todas las bodegas: <strong>{{ stock_suma_variantes_total }}</strong>.
+                    {% endif %}
+                    Para ajustar una marca concreta, usá <strong>«Usar esta fila»</strong> en la tabla o escribí la marca arriba.
+                    {% else %}
+                    cantidad actual: <strong>{{ stock_contexto_actual }}</strong> unidades.
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% if mostrar_ajuste_multi %}
+            <input type="hidden" name="ajuste_multivariante" value="1">
+            <div class="field field-full ajuste-multi-wrap">
+                <p class="ajuste-multi-title">Ajuste por variante (misma bodega)</p>
+                <p class="ajuste-multi-hint">Editá el <strong>nuevo stock</strong> por cada marca; podés agregar filas para otras variantes. Se aplican todos los cambios en un solo guardado.</p>
+                <div class="ajuste-multi-table-wrap">
+                    <table class="ajuste-multi-table" id="ajusteVariantesTable">
+                        <thead>
+                            <tr>
+                                <th style="min-width:140px;">Marca / variante</th>
+                                <th style="width:100px;">Stock actual</th>
+                                <th style="min-width:90px;">Nuevo stock</th>
+                                <th style="width:44px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="ajusteVariantesBody">
+                            {% for line in ajuste_lineas_ui %}
+                            <tr class="ajuste-variante-row">
+                                <td>
+                                    <input type="text" name="linea_marca" value="{{ line.marca }}" list="ajusteMarcaDl" class="ajuste-marca-linea" placeholder="Marca" autocomplete="off" aria-label="Marca variante">
+                                </td>
+                                <td class="ajuste-stock-act">{% if line.stock_actual is not none %}{{ line.stock_actual | int }}{% else %}—{% endif %}</td>
+                                <td>
+                                    <input type="number" name="linea_nuevo_stock" min="0" step="1" value="{{ line.nuevo_stock }}" placeholder="0" aria-label="Nuevo stock">
+                                </td>
+                                <td>
+                                    <button type="button" class="btn-ajuste-remove-row" title="Quitar fila" aria-label="Quitar fila" style="border:none;background:transparent;color:#94a3b8;cursor:pointer;font-size:16px;line-height:1;padding:4px;">×</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="ajuste-multi-actions">
+                    <button type="button" class="btn-ghost" id="ajusteAddVarianteRow">+ Agregar variante</button>
+                </div>
+            </div>
+            {% endif %}
+            <div class="field {% if mostrar_ajuste_multi %}ajuste-single-hidden{% endif %}">
                 <label for="nuevo_stock">Nuevo stock en bodega</label>
-                <input id="nuevo_stock" name="nuevo_stock" type="number" min="0" step="1" value="{{ form_data.nuevo_stock }}" placeholder="Ej: 25" required>
+                <input id="nuevo_stock" {% if not mostrar_ajuste_multi %}name="nuevo_stock"{% endif %} type="number" min="0" step="1" value="{{ form_data.nuevo_stock }}" placeholder="Ej: 25">
             </div>
             <div class="field field-full">
-                <label for="observacion">Observación</label>
-                <textarea id="observacion" name="observacion" placeholder="Motivo del ajuste: conteo, diferencia, merma, corrección administrativa">{{ form_data.observacion }}</textarea>
+                <label for="observacion_motivo">Motivo del ajuste *</label>
+                <select id="observacion_motivo" name="observacion_motivo" required>
+                    <option value="">Selecciona un motivo</option>
+                    {% for motivo in (ajuste_observacion_opciones or []) %}
+                    <option value="{{ motivo }}" {% if form_data.observacion_motivo == motivo %}selected{% endif %}>{{ motivo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field field-full">
+                <label for="observacion_detalle">Detalle (opcional)</label>
+                <input id="observacion_detalle" name="observacion_detalle" maxlength="255"
+                       value="{{ form_data.observacion_detalle or '' }}"
+                       placeholder="Ej: conteo en pasillo A, diferencia detectada en revisión">
             </div>
         </div>
         <div class="actions">
+            <button class="btn" type="submit" formaction="{{ url_for('bodega.ajuste') }}" formmethod="get" formnovalidate style="background:#e2e8f0;color:#334155;font-weight:600;box-shadow:none;">Consultar stock</button>
             <button class="btn btn-primary" type="submit">Aplicar ajuste</button>
             <a class="link-btn" href="{{ url_for('bodega.ajuste') }}">Limpiar formulario</a>
+        </div>
+
+        <div class="ajuste-help-anchor">
+            <button type="button" class="ajuste-help-btn" id="ajusteHelpBtn" aria-expanded="false" aria-controls="ajusteHelpPanel" title="Ayuda del ajuste de stock" aria-label="Ayuda">
+                <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                    <path d="M32 8c-10.5 0-19 7.7-19 17.2 0 2.7 2.2 4.8 4.9 4.8 2.7 0 4.9-2.2 4.9-4.8 0-4.1 4.1-7.4 9.2-7.4 5.1 0 9.2 3.3 9.2 7.4 0 3.3-2.4 5.1-5.8 7.5-3.9 2.8-8.7 6.3-8.7 13.6 0 2.7 2.2 4.8 4.9 4.8s4.9-2.2 4.9-4.8c0-2 1.1-3 4.7-5.6 3.9-2.8 9.8-7 9.8-15.5C51 15.7 42.5 8 32 8z" fill="currentColor"/>
+                    <circle cx="32" cy="55" r="5.5" fill="currentColor"/>
+                </svg>
+            </button>
+            <div id="ajusteHelpPanel" class="ajuste-help-panel" role="region" aria-labelledby="ajusteHelpTitle" hidden>
+                <h3 id="ajusteHelpTitle" class="ajuste-help-title">Ayuda del ajuste de stock</h3>
+
+                <div class="ajuste-help-section">
+                    <h4 class="ajuste-help-section-title">Consulta</h4>
+                    <ul class="ajuste-help-list">
+                        <li>Tocá la <strong>lupa</strong> dentro del campo de código (o <strong>F2</strong>) para buscar como en Ingreso: código, descripción u OEM.</li>
+                        <li>Elegí la <strong>bodega</strong> e ingresá el <strong>código</strong>: al terminar de escribirlo (o al cambiar de bodega) se consulta el saldo automáticamente.</li>
+                        <li>Podés usar <strong>Consultar stock</strong> si preferís repetir la consulta.</li>
+                    </ul>
+                </div>
+
+                {% if mostrar_ajuste_multi %}
+                <div class="ajuste-help-section">
+                    <h4 class="ajuste-help-section-title">Varias variantes</h4>
+                    <ul class="ajuste-help-list">
+                        <li>En la tabla ajustá el <strong>nuevo stock</strong> por marca; <strong>+ Agregar variante</strong> suma filas para otras marcas.</li>
+                        <li>Pulsá <strong>Aplicar ajuste</strong> una sola vez: se guardan todos los cambios de la tabla en un solo movimiento.</li>
+                    </ul>
+                </div>
+                {% else %}
+                <div class="ajuste-help-section">
+                    <h4 class="ajuste-help-section-title">Aplicar</h4>
+                    <ul class="ajuste-help-list">
+                        <li>Revisá el <strong>nuevo stock</strong> en bodega y, si aplica, la <strong>observación</strong> (motivo del ajuste).</li>
+                        <li>Pulsá <strong>Aplicar ajuste</strong> para registrar el movimiento y el diferencial.</li>
+                    </ul>
+                </div>
+                {% endif %}
+
+                <button type="button" class="btn" id="ajusteHelpClose">Cerrar</button>
+            </div>
         </div>
     </form>
 </div>
 
+<div id="ajusteProductModal" class="ingreso-product-modal" aria-hidden="true">
+    <div class="ingreso-product-modal-card" role="dialog" aria-modal="true" aria-labelledby="ajusteProductModalTitle">
+        <div class="ingreso-product-modal-head">
+            <h3 id="ajusteProductModalTitle">Buscar producto</h3>
+            <button type="button" class="btn" id="ajusteProductModalClose">Cerrar</button>
+        </div>
+        <div class="ingreso-product-modal-body">
+            <div class="ingreso-product-search">
+                <input type="text" id="ajusteProductSearchInput" placeholder="Código, descripción u OEM (mín. 2 caracteres)" autocomplete="off">
+                <button type="button" class="btn btn-primary" id="ajusteProductSearchBtn">Buscar</button>
+            </div>
+            <div id="ajusteProductSearchStatus" class="muted" style="margin-bottom:8px;">Escribe para buscar productos.</div>
+            <div id="ajusteProductResults" class="ingreso-product-results"></div>
+        </div>
+    </div>
+</div>
+
 {% if producto %}
-<div class="panel" style="margin-top:18px;">
+<div class="panel ajuste-producto-panel">
     <h2 class="section-title">Producto Encontrado</h2>
     <div class="product-summary">
         <div class="summary-box">
@@ -67,16 +718,37 @@
             <p>{{ producto.marca or '—' }} / {{ producto.modelo or '—' }}</p>
         </div>
         <div class="summary-box">
+            {% if variantes %}
+            <h4 class="ajuste-stock-variantes-title">Stock variantes ({{ form_data.bodega }})</h4>
+            <ul class="ajuste-stock-desglose" aria-label="Desglose por marca en {{ form_data.bodega }}">
+                {% for variante in variantes %}
+                {% if (variante.bodega or '')|trim == (form_data.bodega or '')|trim %}
+                <li>
+                    <span class="marca">{{ variante.marca }}</span>
+                    <span class="qty">{{ variante.stock | int }}</span>
+                </li>
+                {% endif %}
+                {% endfor %}
+            </ul>
+            <p class="ajuste-stock-total-line">Total {{ form_data.bodega }}: {{ stock_suma_variantes_bodega | int }}</p>
+            {% if stock_suma_variantes_total is not none and stock_suma_variantes_bodega is not none and stock_suma_variantes_total != stock_suma_variantes_bodega %}
+            <div class="ajuste-stock-meta">
+                <span class="ajuste-stock-meta-line">Total en <strong>todas las bodegas</strong> (variantes): <strong>{{ stock_suma_variantes_total | int }}</strong></span>
+            </div>
+            {% endif %}
+            {% else %}
             <h4>Stock Bodega</h4>
-            <p>{{ producto.stock_actual }}</p>
+            <p>{{ (producto.stock_actual or 0) | int }}</p>
+            {% endif %}
         </div>
     </div>
 </div>
 {% endif %}
 
 {% if variantes %}
-<div class="panel" style="margin-top:18px;">
+<div class="panel ajuste-variantes-panel">
     <h2 class="section-title">Variantes Disponibles</h2>
+    <p class="page-subtitle" style="margin-top:0;">Cada fila es una combinación marca + bodega. <strong>Usar esta fila</strong> carga marca y bodega en el formulario para consultar o ajustar solo esa variante.</p>
     <div class="table-wrap">
         <table>
             <thead>
@@ -85,6 +757,7 @@
                     <th>Bodega</th>
                     <th>Proveedor</th>
                     <th>Stock</th>
+                    <th class="no-print"></th>
                 </tr>
             </thead>
             <tbody>
@@ -93,12 +766,33 @@
                     <td><strong>{{ variante.marca }}</strong></td>
                     <td>{{ variante.bodega }}</td>
                     <td>{{ variante.proveedor or '—' }}</td>
-                    <td>{{ variante.stock }}</td>
+                    <td>{{ variante.stock | int }}</td>
+                    <td class="no-print">
+                        <a class="btn sm outline" href="{{ url_for('bodega.ajuste', codigo=form_data.codigo, marca=variante.marca, bodega=variante.bodega) }}">Usar esta fila</a>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+{% endif %}
+{% if message and message.type == 'success' %}
+<script>
+(function () {
+    var el = document.querySelector('.ajuste-flash-message.message.success');
+    if (!el) return;
+    var remove = function () {
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+    };
+    var t = window.setTimeout(remove, 8000);
+    el.style.cursor = 'pointer';
+    el.setAttribute('title', 'Clic para cerrar');
+    el.addEventListener('click', function () {
+        window.clearTimeout(t);
+        remove();
+    });
+})();
+</script>
 {% endif %}
 {% endblock %}

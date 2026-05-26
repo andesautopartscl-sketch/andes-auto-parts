@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, render_template
 from datetime import datetime, timedelta
+from pathlib import Path
 from ..models import SessionDB, Producto
 from ..extensions import db
 from ..utils.decorators import admin_required
@@ -9,6 +10,10 @@ from app.import_excel import import_products_from_excel
 
 
 admin_bp = Blueprint("admin", __name__)
+
+ALLOWED_IMPORT_EXTENSIONS = {".xlsx", ".xls", ".csv"}
+# Alto para no romper flujos actuales; evita DoS por archivos enormes.
+MAX_IMPORT_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
 
 
 # ===============================
@@ -23,6 +28,14 @@ def importar_excel():
 
     if not archivo:
         return jsonify(success=False, message="No se seleccionó archivo")
+
+    if request.content_length and int(request.content_length) > MAX_IMPORT_UPLOAD_BYTES:
+        return jsonify(success=False, message="Archivo demasiado grande para importar"), 413
+
+    filename = (getattr(archivo, "filename", "") or "").strip()
+    ext = Path(filename).suffix.lower()
+    if ext and ext not in ALLOWED_IMPORT_EXTENSIONS:
+        return jsonify(success=False, message="Tipo de archivo no permitido para importar"), 400
 
     try:
         summary = import_products_from_excel(archivo, batch_size=2000)
@@ -162,7 +175,7 @@ def ver_producto(codigo):
 # ETIQUETAS DE PRODUCTO
 # ===============================
 
-@admin_bp.route("/producto/<codigo>/toggle_etiqueta/<int:etiqueta_id>")
+@admin_bp.route("/producto/<codigo>/toggle_etiqueta/<int:etiqueta_id>", methods=["POST"])
 @admin_required
 def toggle_etiqueta(codigo, etiqueta_id):
 
@@ -173,17 +186,19 @@ def toggle_etiqueta(codigo, etiqueta_id):
 
     if not producto or not etiqueta:
         db.close()
-        return "Error"
+        return jsonify(success=False, message="Producto o etiqueta no encontrados"), 404
 
     if etiqueta in producto.etiquetas:
         producto.etiquetas.remove(etiqueta)
+        attached = False
     else:
         producto.etiquetas.append(etiqueta)
+        attached = True
 
     db.commit()
     db.close()
 
-    return "OK"
+    return jsonify(success=True, attached=attached)
 
 # ===============================
 # GENERAR ETIQUETA IMPRIMIBLE

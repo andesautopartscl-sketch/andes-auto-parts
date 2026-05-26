@@ -40,6 +40,69 @@ body.dark .modal-box {
     border-color:#374151;
 }
 
+/* Resumen importación Excel (modal) */
+.import-result-wrap {
+    margin-top:14px;
+    padding:14px 16px;
+    border-radius:12px;
+    background:#f0fdf4;
+    border:1px solid #bbf7d0;
+    text-align:left;
+}
+.import-result-head {
+    font-size:15px;
+    font-weight:700;
+    color:#14532d;
+    margin:0 0 12px;
+}
+.import-result-stats {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px 14px;
+    margin:0 0 12px;
+    font-size:13px;
+}
+@media (max-width:520px) {
+    .import-result-stats { grid-template-columns:1fr; }
+}
+.import-result-stats dt {
+    margin:0;
+    font-weight:600;
+    color:#166534;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+}
+.import-result-stats dd {
+    margin:2px 0 0;
+    font-weight:700;
+    font-size:17px;
+    color:#15803d;
+}
+.import-result-notes {
+    margin:0;
+    padding:0 0 0 1.15rem;
+    color:#166534;
+    font-size:13px;
+    line-height:1.55;
+}
+.import-result-notes li { margin-bottom:7px; }
+.import-result-dismiss {
+    margin:12px 0 0;
+    font-size:12px;
+    color:#15803d;
+    font-weight:500;
+}
+body.dark .import-result-wrap {
+    background:#052e16;
+    border-color:#166534;
+}
+body.dark .import-result-head { color:#bbf7d0; }
+body.dark .import-result-stats dt { color:#86efac; }
+body.dark .import-result-stats dd { color:#4ade80; }
+body.dark .import-result-notes { color:#bbf7d0; }
+body.dark .import-result-dismiss { color:#86efac; }
+
 .toolbar-row {
     display:flex;
     gap:14px;
@@ -123,13 +186,14 @@ table.buscar-productos {
     width: 100%;
     table-layout: fixed;
     border-collapse: collapse;
-    font-size: 11px;
+    font-size: 10px;
+    letter-spacing: -0.01em;
 }
 
 .buscar-productos th,
 .buscar-productos td {
     min-width: 0;
-    padding: 6px 5px;
+    padding: 5px 4px;
     border-bottom: 1px solid #eee;
     vertical-align: top;
     white-space: normal;
@@ -137,6 +201,7 @@ table.buscar-productos {
     overflow-wrap: anywhere;
     hyphens: auto;
     cursor: pointer;
+    line-height: 1.22;
 }
 
 .buscar-productos th {
@@ -151,21 +216,37 @@ table.buscar-productos {
     box-shadow: 0 1px 0 rgba(255,255,255,0.12);
 }
 
-/* Números compactos en una línea */
+/* Marca / Precio / Stock: centrados y siempre arriba (misma fila que celdas multilínea) */
+.buscar-productos th.th-marca,
+.buscar-productos th.th-precio,
+.buscar-productos th.th-stock,
+.buscar-productos th.th-homologados {
+    text-align: center;
+    vertical-align: top;
+}
+.buscar-productos td.td-marca,
 .buscar-productos td.td-price,
-.buscar-productos td.td-price-mayor,
 .buscar-productos td.td-stock {
-    white-space: nowrap;
-    text-align: right;
+    text-align: center;
+    vertical-align: top;
     word-break: normal;
     overflow-wrap: normal;
 }
+.buscar-productos td.td-price,
+.buscar-productos td.td-stock {
+    white-space: nowrap;
+}
 
-.buscar-productos td:nth-child(11) {
+.buscar-productos td.td-homologados {
     text-align: center;
-    vertical-align: middle;
+    vertical-align: top;
     white-space: nowrap;
     overflow: visible;
+}
+.buscar-productos td.td-homologados .homologados-inline {
+    width: 100%;
+    justify-content: center;
+    align-items: flex-start;
 }
 
 td.td-code {
@@ -173,12 +254,13 @@ td.td-code {
 }
 
 td.td-code .code-inline span {
-    line-height: 1.35;
+    line-height: 1.22;
 }
 
 td.td-oem,
 td.td-alt {
     font-size: 10px;
+    line-height: 1.2;
 }
 
 .code-inline,
@@ -190,10 +272,10 @@ td.td-alt {
     max-width: 100%;
 }
 .row-icon {
-    font-size:12px;
-    line-height:1;
-    text-decoration:none;
-    opacity:.85;
+    font-size: 11px;
+    line-height: 1;
+    text-decoration: none;
+    opacity: .85;
 }
 .row-icon:hover { opacity:1; }
 
@@ -315,6 +397,7 @@ body.dark .pagination-info {
     <div class="topbar-actions">
         {% if search_lite|default(false) %}
         <form method="POST" action="{{ url_for('auth.logout') }}" style="margin:0;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="btn btn-secondary">Cerrar sesión</button>
         </form>
         {% else %}
@@ -343,15 +426,13 @@ body.dark .pagination-info {
 </div>
 
 <section class="search-card">
-    <form method="get" class="search-form">
+    <form method="get" class="search-form" id="buscarProductosForm" action="{{ url_for('productos.buscar') }}" data-buscar-base="{{ url_for('productos.buscar') }}">
         <div>
             <label for="q">Búsqueda general</label>
-            <input id="q" name="q" value="{{ q }}" placeholder="Código, OEM o descripción">
+            <input id="q" name="q" value="{{ q or '' }}" autocomplete="off" placeholder="Interno · OEM · descripción" spellcheck="false" title="Búsqueda por código interno, OEM o texto en descripción">
         </div>
-        <button class="btn btn-primary" type="submit">Buscar</button>
-        {% if q %}
-        <a class="btn btn-secondary" href="{{ url_for('productos.buscar') }}" data-module-url="{{ url_for('productos.buscar') }}">Limpiar</a>
-        {% endif %}
+        <button class="btn btn-primary" type="submit" id="btnBuscarProductosSubmit">Buscar</button>
+        <a class="btn btn-secondary" href="{{ url_for('productos.buscar') }}" id="btnLimpiarBuscarCatalogo" title="Quitar filtro y volver al listado general">Limpiar</a>
         <input type="hidden" name="page" value="1">
     </form>
 </section>
@@ -379,9 +460,6 @@ body.dark .pagination-info {
                 <col style="width:9%">
                 <col style="width:7%">
                 <col style="width:7%">
-                {% if can_view_precio_mayor %}
-                <col style="width:7%">
-                {% endif %}
                 <col style="width:6%">
                 <col style="width:9%">
                 <col style="width:9%">
@@ -392,15 +470,12 @@ body.dark .pagination-info {
                 <th>Descripción</th>
                 <th>Modelo</th>
                 <th>Motor</th>
-                <th>Marca</th>
-                <th>Precio</th>
-                {% if can_view_precio_mayor %}
-                <th>Mayor</th>
-                {% endif %}
-                <th>Stock</th>
+                <th class="th-marca">Marca</th>
+                <th class="th-precio" title="Precio al público con IVA (19 %)">Precio</th>
+                <th class="th-stock">Stock</th>
                 <th>OEM</th>
                 <th>Alternativo</th>
-                <th>Homologados</th>
+                <th class="th-homologados">Homologados</th>
             </tr>
             {% for p in productos %}
             <tr>
@@ -414,15 +489,12 @@ body.dark .pagination-info {
                 <td onclick="openDescModal(`{{ (p.descripcion or '')|replace('`','') }}`)">{{ highlight_match(p.descripcion, q) if q else p.descripcion }}</td>
                 <td>{{ p.modelo }}</td>
                 <td>{{ p.motor }}</td>
-                <td>{{ p.marca }}</td>
-                <td class="td-price">${{ p.p_publico or 0 }}</td>
-                {% if can_view_precio_mayor %}
-                <td class="td-price-mayor">${{ p.prec_mayor or 0 }}</td>
-                {% endif %}
+                <td class="td-marca">{{ p.marca }}</td>
+                <td class="td-price">{{ p.p_publico|format_precio_publico_con_iva }}</td>
                 <td class="td-stock">{{ stock_total(p) }}</td>
                 <td class="td-oem" title="Clic para ver OEM completo" onclick="event.stopPropagation(); openFieldModal('Código OEM', this.dataset.full);" data-full="{{ (p.codigo_oem or '')|e }}">{{ highlight_match(p.codigo_oem, q) if q else p.codigo_oem }}</td>
                 <td class="td-alt" title="Clic para ver alternativo completo" onclick="event.stopPropagation(); openFieldModal('Código alternativo', this.dataset.full);" data-full="{{ (p.codigo_alternativo or '')|e }}">{{ p.codigo_alternativo }}</td>
-                <td>
+                <td class="td-homologados">
                     <span class="homologados-inline">
                         <a class="row-icon" href="{{ url_for('productos.homologados_producto', codigo=p.codigo) }}" data-modal-url="{{ url_for('productos.homologados_producto', codigo=p.codigo) }}" title="Ver homologados">👁️</a>
                     </span>
@@ -590,11 +662,75 @@ window.enviarExportacion = function (){
 
 /* IMPORTAR */
 window.openImportModal = function (){
+    if (window.__importSuccessCloseTimer) {
+        clearTimeout(window.__importSuccessCloseTimer);
+        window.__importSuccessCloseTimer = null;
+    }
+    var msgEl = document.getElementById("importMessage");
+    if (msgEl) {
+        msgEl.innerHTML = "";
+        msgEl.style.color = "";
+    }
     document.getElementById("importModal").style.display="flex";
 };
 window.closeImportModal = function (){
+    if (window.__importSuccessCloseTimer) {
+        clearTimeout(window.__importSuccessCloseTimer);
+        window.__importSuccessCloseTimer = null;
+    }
     document.getElementById("importModal").style.display="none";
 };
+
+window._escapeHtmlBuscar = function (s) {
+    var d = document.createElement("div");
+    d.textContent = s == null ? "" : String(s);
+    return d.innerHTML;
+};
+
+window._formatImportSuccessHtml = function (data) {
+    var sum = data.summary || {};
+    var ins = data.inserted != null ? data.inserted : sum.inserted;
+    var sec = data.time_seconds != null ? data.time_seconds : sum.time_seconds;
+    var notes = [];
+    if (Array.isArray(sum.import_notes)) {
+        notes = sum.import_notes;
+    } else if (data.message) {
+        var m = String(data.message);
+        var sep = m.indexOf("—");
+        if (sep === -1) { sep = m.indexOf("-"); }
+        if (sep >= 0) {
+            var tail = m.slice(sep + 1).trim();
+            if (tail) { notes = [tail]; }
+        }
+    }
+    var esc = window._escapeHtmlBuscar;
+    var num = function (v) {
+        var n = Number(v);
+        return isFinite(n) ? n.toLocaleString("es-CL") : esc(v);
+    };
+    var html = [];
+    html.push('<div class="import-result-wrap">');
+    html.push('<div class="import-result-head">✅ Importación completada</div>');
+    html.push('<dl class="import-result-stats">');
+    if (ins != null) {
+        html.push("<div><dt>Productos en catálogo</dt><dd>" + num(ins) + "</dd></div>");
+    }
+    if (sec != null && sec !== "") {
+        html.push("<div><dt>Tiempo</dt><dd>" + esc(String(sec)) + " s</dd></div>");
+    }
+    html.push("</dl>");
+    if (notes.length) {
+        html.push('<ul class="import-result-notes">');
+        notes.forEach(function (line) {
+            html.push("<li>" + esc(line) + "</li>");
+        });
+        html.push("</ul>");
+    }
+    html.push('<p class="import-result-dismiss">Esta ventana se cerrará sola en 8 segundos y se actualizará la lista.</p>');
+    html.push("</div>");
+    return html.join("");
+};
+
 window.enviarImportacion = function (){
 
     let form = document.getElementById("importForm");
@@ -602,8 +738,14 @@ window.enviarImportacion = function (){
     let msg = document.getElementById("importMessage");
     let spinner = document.getElementById("spinner");
 
+    if (window.__importSuccessCloseTimer) {
+        clearTimeout(window.__importSuccessCloseTimer);
+        window.__importSuccessCloseTimer = null;
+    }
+
     spinner.style.display="block";
     msg.innerHTML="";
+    msg.style.color="";
 
     fetch("{{ url_for('productos.importar_excel_productos') }}",{
         method:"POST",
@@ -615,17 +757,25 @@ window.enviarImportacion = function (){
         spinner.style.display="none";
 
         if(data.success){
-            msg.style.color="green";
-            msg.innerHTML="✅ "+data.message;
+            msg.style.color="";
+            msg.innerHTML = window._formatImportSuccessHtml(data);
+            /* Quitar #importar-excel (o #exportar-excel) de la barra para que al recargar no se abra el modal otra vez */
+            try {
+                var basePath = window.location.pathname + window.location.search;
+                if (window.location.hash && window.history && window.history.replaceState) {
+                    window.history.replaceState(window.history.state, "", basePath);
+                }
+            } catch (eHash) {}
 
-            setTimeout(()=>{
+            window.__importSuccessCloseTimer = setTimeout(function () {
+                window.__importSuccessCloseTimer = null;
                 closeImportModal();
                 location.reload();
-            },1500);
+            }, 8000);
 
         }else{
             msg.style.color="red";
-            msg.innerHTML="❌ "+data.message;
+            msg.innerHTML="❌ "+window._escapeHtmlBuscar(data.message || "Error");
         }
     })
     .catch(error=>{
@@ -636,22 +786,156 @@ window.enviarImportacion = function (){
     });
 };
 
-document.addEventListener('DOMContentLoaded', function () {
-    if (window.location.hash === '#importar-excel') {
+/* Abrir import/export según hash: en carga SPA los scripts corren después de DOMContentLoaded,
+   así que hay que sincronizar al ejecutar el script y al evento app:module-loaded. */
+window._syncBuscarExcelHashModals = function (fromUrl) {
+    var h = '';
+    try {
+        if (fromUrl) {
+            var u = new URL(String(fromUrl), window.location.origin);
+            h = u.hash || '';
+        } else {
+            h = window.location.hash || '';
+        }
+    } catch (e) {
+        h = window.location.hash || '';
+    }
+    if (!document.getElementById('importModal')) {
+        return;
+    }
+    if (h === '#importar-excel') {
         openImportModal();
-    } else if (window.location.hash === '#exportar-excel') {
+    } else if (h === '#exportar-excel') {
         openExportModal();
     }
-});
-window.addEventListener('hashchange', function () {
-    if (window.location.hash === '#importar-excel') {
-        openImportModal();
-        history.replaceState(null, '', window.location.pathname);
-    } else if (window.location.hash === '#exportar-excel') {
-        openExportModal();
-        history.replaceState(null, '', window.location.pathname);
+};
+
+(function () {
+    if (window.__buscarExcelHashchangeHandler) {
+        window.removeEventListener('hashchange', window.__buscarExcelHashchangeHandler);
     }
-});
+    window.__buscarExcelHashchangeHandler = function () {
+        var h = window.location.hash || '';
+        if (h === '#importar-excel' || h === '#exportar-excel') {
+            window._syncBuscarExcelHashModals('');
+            try {
+                history.replaceState(null, '', window.location.pathname + window.location.search);
+            } catch (e) {}
+        }
+    };
+    window.addEventListener('hashchange', window.__buscarExcelHashchangeHandler);
+
+    if (window.__buscarExcelModuleLoadedHandler) {
+        document.removeEventListener('app:module-loaded', window.__buscarExcelModuleLoadedHandler);
+    }
+    window.__buscarExcelModuleLoadedHandler = function (ev) {
+        if (!document.getElementById('importModal')) {
+            return;
+        }
+        var url = (ev.detail && ev.detail.url) ? String(ev.detail.url) : '';
+        window._syncBuscarExcelHashModals(url);
+    };
+    document.addEventListener('app:module-loaded', window.__buscarExcelModuleLoadedHandler);
+
+    function runInitialHashSync() {
+        window._syncBuscarExcelHashModals('');
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', runInitialHashSync);
+    } else {
+        runInitialHashSync();
+    }
+})();
 {% endif %}
+
+/* Búsqueda en vivo: debounce + SPA _loadModule; vacío = catálogo general */
+(function () {
+    function debounce(fn, wait) {
+        var t;
+        return function () {
+            clearTimeout(t);
+            var a = arguments;
+            var ctx = this;
+            t = setTimeout(function () { fn.apply(ctx, a); }, wait);
+        };
+    }
+
+    function buildBuscarLiveUrl(qTrim) {
+        var form = document.getElementById('buscarProductosForm');
+        var base = (form && form.getAttribute('data-buscar-base')) || '/buscar';
+        var pp = null;
+        try {
+            pp = new URL(window.location.href).searchParams.get('per_page');
+        } catch (e) {}
+        if (!qTrim) {
+            if (pp) {
+                return base + '?page=1&per_page=' + encodeURIComponent(pp);
+            }
+            return base;
+        }
+        var params = new URLSearchParams();
+        params.set('q', qTrim);
+        params.set('page', '1');
+        if (pp) {
+            params.set('per_page', pp);
+        }
+        return base + '?' + params.toString();
+    }
+
+    function navigateBuscarModule(url) {
+        try {
+            var cur = new URL(window.location.href);
+            var next = new URL(url, window.location.origin);
+            if (cur.pathname === next.pathname && cur.search === next.search) {
+                return;
+            }
+        } catch (e) {}
+        if (typeof window._loadModule === 'function') {
+            window._loadModule(url, { softNav: true });
+        } else {
+            window.location.assign(url);
+        }
+    }
+
+    function initBuscarLiveSearch() {
+        var form = document.getElementById('buscarProductosForm');
+        if (!form || form.getAttribute('data-live-wired') === '1') {
+            return;
+        }
+        form.setAttribute('data-live-wired', '1');
+        var inp = document.getElementById('q');
+        if (!inp) {
+            return;
+        }
+
+        var debouncedNav = debounce(function () {
+            navigateBuscarModule(buildBuscarLiveUrl((inp.value || '').trim()));
+        }, 360);
+
+        inp.addEventListener('input', debouncedNav);
+        inp.addEventListener('paste', function () {
+            window.setTimeout(debouncedNav, 0);
+        });
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            navigateBuscarModule(buildBuscarLiveUrl((inp.value || '').trim()));
+        });
+
+        var lim = document.getElementById('btnLimpiarBuscarCatalogo');
+        if (lim) {
+            lim.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                inp.value = '';
+                navigateBuscarModule(buildBuscarLiveUrl(''));
+            }, true);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', initBuscarLiveSearch);
+    document.addEventListener('app:module-loaded', initBuscarLiveSearch);
+    initBuscarLiveSearch();
+})();
 </script>
 {% endblock %}

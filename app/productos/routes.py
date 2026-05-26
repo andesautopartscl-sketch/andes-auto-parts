@@ -26,12 +26,17 @@ import os
 import tempfile
 from ..extensions import db as security_db
 from app.seguridad.models import Usuario
-from app.bodega.models import ProductoVarianteStock
-from app.bodega.models import MovimientoStock
+from app.bodega.models import (
+    IngresoDocumento,
+    IngresoDocumentoItem,
+    MovimientoStock,
+    ProductoVarianteStock,
+)
 from ..utils.decorators import login_required, admin_required
 from app.utils.permissions import DEFAULT_PERMISSIONS, get_user_permissions
 from ..import_excel import import_products_from_excel
-from ..utils.product_audit import build_diffs, register_product_audit
+from ..utils.product_audit import build_diffs, register_product_audit, resolve_producto_audit_action_filter
+from ..utils.variante_comercial import merge_ingreso_ref_variante_overrides
 from ..utils.categoria_autodetect import (
     auto_asignar_categoria_si_vacio as _auto_asignar_categoria_si_vacio,
     bulk_auto_asignar_categorias_faltantes,
@@ -40,11 +45,36 @@ from ..utils.product_image_postprocess import process_uploaded_image
 
 
 productos_bp = Blueprint("productos", __name__)
+MAX_IMAGE_UPLOAD_BYTES = 8 * 1024 * 1024
+ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
+
+
+def _validate_image_upload(file_obj, allowed_exts: set[str] | None = None, max_bytes: int = MAX_IMAGE_UPLOAD_BYTES) -> str:
+    if not file_obj or not getattr(file_obj, "filename", None):
+        raise ValueError("Archivo inválido")
+    filename = secure_filename(file_obj.filename)
+    ext = (filename.rsplit(".", 1)[-1].lower() if "." in filename else "")
+    if not ext or ext not in (allowed_exts or ALLOWED_IMAGE_EXTENSIONS):
+        raise ValueError("Formato de imagen no permitido")
+    stream = getattr(file_obj, "stream", None)
+    if stream is not None:
+        current_pos = stream.tell()
+        stream.seek(0, os.SEEK_END)
+        size = stream.tell()
+        stream.seek(current_pos)
+        if size <= 0:
+            raise ValueError("Archivo vacío")
+        if size > max_bytes:
+            raise ValueError("La imagen excede el tamaño máximo permitido")
+    return ext
 
 
 def _wants_modal_fragment() -> bool:
     """True when UI requests a partial HTML fragment (e.g. app modal), not a full page."""
-    return request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return True
+    # Some embedded iframes request full HTML without XHR headers.
+    return (request.args.get("embed") or "").strip() == "1"
 
 
 def _actor_usuario() -> str:
@@ -64,23 +94,62 @@ def _synthetic_oem_norm_for_product_codigo(cod: str) -> str:
 
 
 def _find_oem_despiece_for_producto(db, producto: Producto) -> OemDespiece | None:
-    """Prioridad: fila por producto_codigo; si no, catálogo compartido por OEM normalizado."""
+    """Busca despiece por OEM compartido y mantiene fallback a fila por código interno."""
     cod = (getattr(producto, "codigo", None) or "").strip().upper()
     oem = _norm_oem_despiece(getattr(producto, "codigo_oem", None))
-    row = None
+    row_codigo = None
     if cod:
         try:
-            row = db.query(OemDespiece).filter(OemDespiece.producto_codigo == cod).first()
+            row_codigo = db.query(OemDespiece).filter(OemDespiece.producto_codigo == cod).first()
         except Exception:
-            row = None
-    if row:
-        return row
+            row_codigo = None
     if oem:
         try:
-            row = db.query(OemDespiece).filter(OemDespiece.oem_norm == oem).first()
+            row_oem = db.query(OemDespiece).filter(OemDespiece.oem_norm == oem).first()
+            if row_oem:
+                # Si existe catálogo OEM compartido, priorizarlo por encima de filas sintéticas antiguas (_INT_*).
+                if not row_codigo:
+                    return row_oem
+                codigo_norm = (row_codigo.oem_norm or "").strip().upper()
+                if codigo_norm.startswith("_INT_"):
+                    return row_oem
+                return row_codigo
         except Exception:
-            row = None
-    return row
+            pass
+    return row_codigo
+
+
+def _find_shared_despiece_image_fallback(db, producto: Producto) -> str | None:
+    """
+    Cuando el despiece OEM compartido no tiene imagen, intenta reutilizar una imagen
+    de un despiece legado por código interno (_INT_*) de cualquier producto con el mismo OEM.
+    """
+    oem = _norm_oem_despiece(getattr(producto, "codigo_oem", None))
+    if not oem:
+        return None
+    try:
+        siblings = (
+            db.query(Producto.codigo)
+            .filter(func.upper(func.trim(Producto.codigo_oem)) == oem)
+            .all()
+        )
+        sibling_codes = [((r[0] or "").strip().upper()) for r in siblings if (r and r[0])]
+        if not sibling_codes:
+            return None
+        legacy_row = (
+            db.query(OemDespiece)
+            .filter(
+                OemDespiece.producto_codigo.in_(sibling_codes),
+                OemDespiece.imagen_static.isnot(None),
+            )
+            .order_by(OemDespiece.updated_at.desc(), OemDespiece.id.desc())
+            .first()
+        )
+        if legacy_row and (legacy_row.imagen_static or "").strip():
+            return legacy_row.imagen_static.strip()
+    except Exception:
+        return None
+    return None
 
 
 def _find_epc_despiece_archivo_en_static(producto: Producto) -> str | None:
@@ -135,19 +204,32 @@ def _split_codigos_alternativos(raw: str | None) -> list[str]:
 
 def _nombre_archivo_coincide_imagen(nombre_archivo_lower: str, needle: str) -> bool:
     """
-    Coincidencia flexible: subcadena en minúsculas (incluye 2417_1.png para needle 2417);
-    si el código trae espacios, también compara versión compacta contra el nombre sin espacios.
+    Relaciona archivo de imagen con OEM / código interno / alternativo sin falsos positivos.
+
+    Problema evitado: código corto numérico «1000» no debe coincidir con «DF100K4DAA01000.png»
+    (subcadena «1000» al final del nombre de otro repuesto).
+
+    Reglas:
+    - Nombre sin extensión igual al needle (ej. 1000.jpg).
+    - O prefijo needle + '_' o '-' (ej. 2417_1.png, 3770100-e06_2.png).
+    - Subcadena (literal o compacta sin espacios / _ / -) solo si el needle medido en compacto
+      tiene longitud >= 8, típico de OEM o referencias largas.
     """
     n = (needle or "").strip().lower()
     if not n:
         return False
-    if n in nombre_archivo_lower:
+    stem = nombre_archivo_lower.rsplit(".", 1)[0] if "." in nombre_archivo_lower else nombre_archivo_lower
+    if stem == n:
         return True
-    compact_needle = "".join(n.split())
-    if len(compact_needle) < 3:
+    if stem.startswith(n + "_") or stem.startswith(n + "-"):
+        return True
+    compact_needle = n.replace(" ", "").replace("_", "").replace("-", "")
+    if len(compact_needle) < 8:
         return False
-    compact_name = nombre_archivo_lower.replace(" ", "").replace("_", "")
-    return compact_needle in compact_name
+    if n in stem:
+        return True
+    compact_stem = stem.replace(" ", "").replace("_", "").replace("-", "")
+    return compact_needle in compact_stem
 
 
 def _collect_imagenes_producto_carpeta(ruta_imagenes: str, producto: Producto) -> list[str]:
@@ -260,9 +342,9 @@ def _save_uploaded_images(codigo: str, files: list) -> list[str]:
     for idx, f in enumerate(files):
         if not f or not getattr(f, "filename", None):
             continue
-        filename = secure_filename(f.filename)
-        ext = (filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg")
-        if ext not in {"jpg", "jpeg", "png", "webp"}:
+        try:
+            ext = _validate_image_upload(f, allowed_exts={"jpg", "jpeg", "png", "webp"})
+        except ValueError:
             continue
         target_name = f"{codigo}.jpg" if idx == 0 else f"{codigo}_{idx + 1}.{ext}"
         target = static_dir / target_name
@@ -416,6 +498,29 @@ def _norm_busqueda_token(s: str) -> str:
     return _sin_tildes((s or "").strip())
 
 
+# Solo para ordenar resultados multi-palabra; el AND de búsqueda sigue usando todos los tokens.
+_ORDEN_BUSCAR_SKIP_TOKENS = frozenset(
+    {
+        "de",
+        "del",
+        "el",
+        "la",
+        "los",
+        "las",
+        "un",
+        "una",
+        "unos",
+        "unas",
+        "y",
+        "o",
+        "en",
+        "con",
+        "por",
+        "a",
+    }
+)
+
+
 def _sql_fold_busqueda(col):
     """
     Expresión SQL (SQLite) para comparar texto sin depender de tildes ni ü/ñ.
@@ -567,64 +672,163 @@ def buscar():
         query = sess.query(Producto).filter(Producto.activo.is_(True))
         productos = []
 
+        is_exact_codigo_search = False
         if q:
             termino = q.lower().strip()
             # Separar por espacios, comas o ; (p. ej. "sen, pos, cig vigu 2.4")
             palabras = [p for p in re.split(r"[\s,;]+", termino) if p]
 
-            # Cada palabra debe aparecer en al menos un campo (AND entre palabras, OR entre columnas).
-            # Comparación "plegada" (sin tildes / ü / ñ): "cigueñal" encuentra "CIGÜEÑAL"; "sen" encuentra "SENSOR".
-            def _token_match_any_column(palabra: str):
-                p_norm = _norm_busqueda_token(palabra)
-                if not p_norm:
-                    return literal(True)
-                return _fold_like_contains(_producto_busqueda_blob_expr(), p_norm)
+            qstrip = q.strip()
 
-            if len(palabras) == 1:
-                query = query.filter(_token_match_any_column(palabras[0]))
+            # Un solo término que coincide al 100 % con un código interno activo → solo ese ítem
+            # (evita ruido por OEM/descripciones que contienen la misma subcadena, p. ej. "2903").
+            exacto_codigo_interno = None
+            if len(palabras) == 1 and palabras[0].strip():
+                t0 = palabras[0].strip()
+                exacto_codigo_interno = (
+                    sess.query(Producto)
+                    .filter(Producto.activo.is_(True))
+                    .filter(func.upper(func.trim(Producto.codigo)) == t0.upper())
+                    .first()
+                )
+                is_exact_codigo_search = exacto_codigo_interno is not None
+
+            exacto_modelo = None
+            exacto_oem = None
+
+            if exacto_codigo_interno is not None:
+                # PK del modelo es CODIGO (no hay columna id).
+                query = (
+                    sess.query(Producto)
+                    .filter(Producto.activo.is_(True))
+                    .filter(Producto.codigo == exacto_codigo_interno.codigo)
+                    .order_by(Producto.codigo.asc())
+                )
             else:
-                query = query.filter(
-                    and_(*(_token_match_any_column(p) for p in palabras))
+                # Texto completo = modelo exacto (ej. "WINGLE 5 VGT 2.0 DIESEL GREAT WALL") →
+                # todos los repuestos de ese vehículo, ordenados por descripción.
+                if qstrip:
+                    exacto_modelo = (
+                        sess.query(Producto)
+                        .filter(Producto.activo.is_(True))
+                        .filter(Producto.modelo.isnot(None))
+                        .filter(func.trim(Producto.modelo) != "")
+                        .filter(func.upper(func.trim(Producto.modelo)) == qstrip.upper())
+                        .first()
+                    )
+            if exacto_modelo is not None:
+                _desc_orden = func.lower(
+                    func.coalesce(func.trim(Producto.descripcion), "")
                 )
+                query = (
+                    sess.query(Producto)
+                    .filter(Producto.activo.is_(True))
+                    .filter(func.upper(func.trim(Producto.modelo)) == qstrip.upper())
+                    .order_by(_desc_orden, Producto.codigo.asc())
+                )
+            elif exacto_codigo_interno is None:
+                # Texto completo = OEM exacto (ej. "T15-1109111") →
+                # todos los ítems con ese OEM, por modelo alfabético.
+                if qstrip:
+                    exacto_oem = (
+                        sess.query(Producto)
+                        .filter(Producto.activo.is_(True))
+                        .filter(Producto.codigo_oem.isnot(None))
+                        .filter(func.trim(Producto.codigo_oem) != "")
+                        .filter(func.upper(func.trim(Producto.codigo_oem)) == qstrip.upper())
+                        .first()
+                    )
+            if exacto_oem is not None:
+                _modelo_orden_oem = func.lower(
+                    func.coalesce(func.trim(Producto.modelo), "")
+                )
+                _desc_orden_oem = func.lower(
+                    func.coalesce(func.trim(Producto.descripcion), "")
+                )
+                query = (
+                    sess.query(Producto)
+                    .filter(Producto.activo.is_(True))
+                    .filter(func.upper(func.trim(Producto.codigo_oem)) == qstrip.upper())
+                    .order_by(_modelo_orden_oem, _desc_orden_oem, Producto.codigo.asc())
+                )
+            elif exacto_codigo_interno is None and exacto_modelo is None:
+                # Cada palabra debe aparecer en al menos un campo (AND entre palabras, OR entre columnas).
+                # Comparación "plegada" (sin tildes / ü / ñ): "cigueñal" encuentra "CIGÜEÑAL"; "sen" encuentra "SENSOR".
+                def _token_match_any_column(palabra: str):
+                    p_norm = _norm_busqueda_token(palabra)
+                    if not p_norm:
+                        return literal(True)
+                    return _fold_like_contains(_producto_busqueda_blob_expr(), p_norm)
 
-            compact_term = termino.replace(" ", "")
-            is_numeric = compact_term.isdigit()
+                if len(palabras) == 1:
+                    query = query.filter(_token_match_any_column(palabras[0]))
+                else:
+                    query = query.filter(
+                        and_(*(_token_match_any_column(p) for p in palabras))
+                    )
 
-            if len(palabras) > 1:
-                # Orden estable: priorizar coincidencias en descripción con el primer término (texto plegado)
-                p0 = _norm_busqueda_token(palabras[0])
-                priority = case(
-                    (_fold_like_contains(Producto.descripcion, p0), 0),
-                    else_=1,
-                )
-                query = query.order_by(priority.asc(), Producto.codigo.asc())
-            elif is_numeric:
-                priority = case(
-                    (Producto.codigo.ilike(f"{compact_term}%"), 0),
-                    (Producto.codigo_oem.ilike(f"{compact_term}%"), 1),
-                    (_fold_like_contains(Producto.descripcion, _norm_busqueda_token(termino)), 2),
-                    else_=3,
-                )
-                query = query.order_by(priority.asc(), Producto.codigo.asc())
-            else:
-                nt = _norm_busqueda_token(termino)
-                priority = case(
-                    (_fold_like_contains(Producto.descripcion, nt), 0),
-                    (_fold_like_contains(Producto.codigo_oem, nt), 1),
-                    (_fold_like_contains(Producto.codigo, nt), 2),
-                    else_=3,
-                )
-                query = query.order_by(priority.asc(), Producto.codigo.asc())
+                compact_term = termino.replace(" ", "")
+                is_numeric = compact_term.isdigit()
+
+                if len(palabras) > 1:
+                    # Relevancia: más palabras (útiles) en modelo/motor/descripción arriba; desempate código.
+                    modelo_pts = None
+                    motor_pts = None
+                    desc_pts = None
+                    for p in palabras:
+                        pn = _norm_busqueda_token(p)
+                        if not pn or pn in _ORDEN_BUSCAR_SKIP_TOKENS:
+                            continue
+                        cm = case((_fold_like_contains(Producto.modelo, pn), 1), else_=0)
+                        cmt = case((_fold_like_contains(Producto.motor, pn), 1), else_=0)
+                        cd = case((_fold_like_contains(Producto.descripcion, pn), 1), else_=0)
+                        modelo_pts = cm if modelo_pts is None else modelo_pts + cm
+                        motor_pts = cmt if motor_pts is None else motor_pts + cmt
+                        desc_pts = cd if desc_pts is None else desc_pts + cd
+                    if modelo_pts is None:
+                        modelo_pts = literal(0)
+                    if motor_pts is None:
+                        motor_pts = literal(0)
+                    if desc_pts is None:
+                        desc_pts = literal(0)
+                    query = query.order_by(
+                        modelo_pts.desc(),
+                        motor_pts.desc(),
+                        desc_pts.desc(),
+                        Producto.codigo.asc(),
+                    )
+                elif is_numeric:
+                    priority = case(
+                        (Producto.codigo.ilike(f"{compact_term}%"), 0),
+                        (Producto.codigo_oem.ilike(f"{compact_term}%"), 1),
+                        (_fold_like_contains(Producto.descripcion, _norm_busqueda_token(termino)), 2),
+                        else_=3,
+                    )
+                    query = query.order_by(priority.asc(), Producto.codigo.asc())
+                else:
+                    nt = _norm_busqueda_token(termino)
+                    priority = case(
+                        (_fold_like_contains(Producto.descripcion, nt), 0),
+                        (_fold_like_contains(Producto.codigo_oem, nt), 1),
+                        (_fold_like_contains(Producto.codigo, nt), 2),
+                        else_=3,
+                    )
+                    query = query.order_by(priority.asc(), Producto.codigo.asc())
         else:
             query = query.order_by(Producto.codigo.asc())
 
-        total_count = query.count()
-        total_pages = max(1, (total_count + per_page - 1) // per_page) if total_count else 1
-        page = max(1, min(page, total_pages))
-
-        productos = (
-            query.offset((page - 1) * per_page).limit(per_page).all()
-        )
+        if is_exact_codigo_search:
+            total_count = 1
+            total_pages = 1
+            page = 1
+            productos = query.limit(1).all()
+        else:
+            total_count = query.count()
+            total_pages = max(1, (total_count + per_page - 1) // per_page) if total_count else 1
+            page = max(1, min(page, total_pages))
+            productos = (
+                query.offset((page - 1) * per_page).limit(per_page).all()
+            )
 
         productos = [p for p in productos if p is not None]
         codigos = sorted({(p.codigo or "").strip().upper() for p in productos if (p.codigo or "").strip()})
@@ -694,7 +898,6 @@ def buscar():
             highlight_match=highlight_match,
             online_users=online_users,
             active_page="productos_buscar",
-            can_view_precio_mayor=bool(user_perms.get("ver_precio_mayor", True)),
         )
     except Exception as exc:
         print("ERROR EN BUSCAR:", exc)
@@ -712,7 +915,6 @@ def buscar():
             highlight_match=highlight_match,
             online_users=online_users,
             active_page="productos_buscar",
-            can_view_precio_mayor=bool(user_perms.get("ver_precio_mayor", True)),
         )
     finally:
         if sess is not None:
@@ -763,36 +965,164 @@ def api_taxonomia_productos():
         sess.close()
 
 
+def _ultimo_ingreso_ref_variante(codigo: str, marca: str | None, bodega: str | None) -> dict | None:
+    """
+    Costo neto promedio ponderado y precio público neto (última línea o derivado de margen)
+    para código + marca + bodega. Ignora ingresos anulados.
+    """
+    code = (codigo or "").strip().upper()
+    if not code:
+        return None
+    marca_n = (marca or "").strip().upper()
+    bodega_n = (bodega or "").strip() or "Bodega 1"
+
+    q = (
+        security_db.session.query(IngresoDocumentoItem)
+        .join(IngresoDocumento, IngresoDocumento.id == IngresoDocumentoItem.ingreso_documento_id)
+        .filter(or_(IngresoDocumento.anulado.is_(False), IngresoDocumento.anulado.is_(None)))
+        .filter(func.upper(IngresoDocumentoItem.codigo_producto) == code)
+        .filter(IngresoDocumentoItem.bodega == bodega_n)
+    )
+    if marca_n:
+        q = q.filter(func.upper(func.trim(IngresoDocumentoItem.marca)) == marca_n)
+    else:
+        q = q.filter(
+            or_(
+                IngresoDocumentoItem.marca.is_(None),
+                IngresoDocumentoItem.marca == "",
+                func.upper(func.trim(IngresoDocumentoItem.marca)) == "",
+            )
+        )
+
+    rows = q.all()
+    if not rows:
+        return None
+
+    total_qty = 0
+    total_vn = 0.0
+    for it in rows:
+        qty = int(it.cantidad or 0)
+        vn = float(it.valor_neto or 0)
+        if qty > 0 and vn > 0:
+            total_qty += qty
+            total_vn += vn
+    costo_u = (total_vn / total_qty) if total_qty > 0 and total_vn > 0 else None
+
+    item = q.order_by(IngresoDocumento.created_at.desc(), IngresoDocumentoItem.id.desc()).first()
+    pv = item.precio_venta_neto if item is not None else None
+    mg = item.margen_pct if item is not None else None
+    precio_sug: float | None = None
+    if pv is not None:
+        precio_sug = round(float(pv), 2)
+    elif costo_u is not None and mg is not None and float(mg) < 100:
+        denom = 1.0 - float(mg) / 100.0
+        if denom > 0:
+            precio_sug = round(costo_u / denom, 2)
+
+    return {
+        "costo_unitario_neto": round(costo_u, 2) if costo_u is not None else None,
+        "precio_sugerido_neto": precio_sug,
+        "margen_registrado_pct": float(mg) if mg is not None else None,
+    }
+
+
+def _resolver_producto_busqueda_edicion(sess, q_raw: str) -> Producto | None:
+    """
+    Orden: código interno exacto → OEM exacto → alternativo (contiene, min 2 chars) → descripción (contiene, min 2 chars).
+    Un solo carácter solo puede resolver por código u OEM exacto.
+    """
+    q = (q_raw or "").strip()
+    if not q:
+        return None
+    qu = q.upper()
+    opts = (
+        joinedload(Producto.categoria_rel),
+        joinedload(Producto.subcategoria_rel),
+    )
+    base = (
+        sess.query(Producto)
+        .options(*opts)
+        .filter(Producto.activo.is_(True))
+    )
+
+    p = base.filter(func.upper(func.trim(Producto.codigo)) == qu).first()
+    if p:
+        return p
+    p = base.filter(
+        Producto.codigo_oem.isnot(None),
+        func.upper(func.trim(Producto.codigo_oem)) == qu,
+    ).first()
+    if p:
+        return p
+    if len(q) >= 2:
+        p = (
+            base.filter(
+                Producto.codigo_alternativo.isnot(None),
+                Producto.codigo_alternativo != "",
+            )
+            .filter(func.instr(func.upper(Producto.codigo_alternativo), qu) > 0)
+            .order_by(Producto.codigo.asc())
+            .first()
+        )
+        if p:
+            return p
+        p = (
+            base.filter(Producto.descripcion.isnot(None))
+            .filter(func.instr(func.upper(Producto.descripcion), qu) > 0)
+            .order_by(Producto.codigo.asc())
+            .first()
+        )
+        if p:
+            return p
+    return None
+
+
 @productos_bp.route("/productos/buscar_para_editar", methods=["POST"])
 @admin_required
 def buscar_para_editar():
-    codigo = (request.form.get("codigo") or "").strip().upper()
-    if not codigo:
-        return jsonify({"success": False, "error": "Codigo invalido"}), 400
+    q_in = (request.form.get("q") or request.form.get("codigo") or "").strip()
+    if not q_in:
+        return jsonify({"success": False, "error": "Ingresa un termino de busqueda."}), 400
 
     sess = SessionDB()
     try:
-        producto = (
-            sess.query(Producto)
-            .options(
-                joinedload(Producto.categoria_rel),
-                joinedload(Producto.subcategoria_rel),
-            )
-            .filter_by(codigo=codigo)
-            .filter(Producto.activo.is_(True))
-            .first()
-        )
+        producto = _resolver_producto_busqueda_edicion(sess, q_in)
         if producto is None:
             return jsonify({"success": False, "error": "No encontrado"}), 404
 
-        stock = (
-            (producto.stock_10jul or 0) +
-            (producto.stock_brasil or 0) +
-            (producto.stock_g_avenida or 0) +
-            (producto.stock_orientales or 0) +
-            (producto.stock_b20_outlet or 0) +
-            (producto.stock_transito or 0)
+        codigo = (producto.codigo or "").strip().upper()
+
+        # Total alineado a bodega/ventas: variantes en productos_variantes_stock + tránsito; si no hay variantes, columnas legacy.
+        ficha_stock = _ficha_stock_repuestos(producto)
+        stock = int(ficha_stock.get("stotal") or 0)
+
+        variantes_rows = (
+            security_db.session.query(ProductoVarianteStock)
+            .filter(func.upper(ProductoVarianteStock.codigo_producto) == codigo)
+            .order_by(ProductoVarianteStock.bodega.asc(), ProductoVarianteStock.marca.asc())
+            .all()
         )
+        variantes_stock = []
+        for r in variantes_rows:
+            marca_v = (r.marca or "").strip() or "—"
+            bodega_v = (r.bodega or "").strip() or "Bodega 1"
+            ref_raw = _ultimo_ingreso_ref_variante(codigo, r.marca, r.bodega)
+            merged = merge_ingreso_ref_variante_overrides(
+                ref_raw,
+                r.margen_override_pct,
+                r.precio_publico_neto_override,
+            )
+            variantes_stock.append(
+                {
+                    "variante_id": r.id,
+                    "marca": marca_v,
+                    "bodega": bodega_v,
+                    "stock": int(r.stock or 0),
+                    "costo_ingreso_neto": merged.get("costo_unitario_neto"),
+                    "margen_pct": merged.get("margen_registrado_pct"),
+                    "precio_publico_neto": merged.get("precio_sugerido_neto"),
+                }
+            )
         categoria_nombre = ""
         subcategoria_nombre = ""
         try:
@@ -816,9 +1146,8 @@ def buscar_para_editar():
             "subcategoria": subcategoria_nombre,
             "categoria_id": producto.categoria_id,
             "subcategoria_id": producto.subcategoria_id,
-            "precio": producto.p_publico or 0,
-            "precio_mayor": producto.prec_mayor or 0,
             "stock": stock,
+            "variantes_stock": variantes_stock,
             "oem": producto.codigo_oem or "",
             "alternativo": producto.codigo_alternativo or "",
             "homologados": producto.homologados or "",
@@ -831,9 +1160,95 @@ def buscar_para_editar():
         sess.close()
 
 
+@productos_bp.route("/productos/guardar_variante_comercial", methods=["POST"])
+@admin_required
+def guardar_variante_comercial():
+    codigo = (request.form.get("codigo") or "").strip().upper()
+    vid_raw = (request.form.get("variante_id") or "").strip()
+    m_raw = request.form.get("margen_override", "")
+    p_raw = request.form.get("precio_publico_neto_override", "")
+    if not codigo or not vid_raw.isdigit():
+        return jsonify({"success": False, "error": "Datos invalidos"}), 400
+    vid = int(vid_raw)
+
+    def _opt_float(raw: str) -> float | None:
+        s = (raw or "").strip()
+        if s == "":
+            return None
+        try:
+            return float(s.replace(",", "."))
+        except ValueError:
+            raise ValueError("nan")
+
+    try:
+        om = _opt_float(m_raw)
+        op = _opt_float(p_raw)
+    except ValueError:
+        return jsonify({"success": False, "error": "Valores numericos invalidos"}), 400
+
+    if om is not None and (om < 0 or om >= 100):
+        return jsonify({"success": False, "error": "Margen debe estar entre 0 y 100"}), 400
+    if op is not None and op < 0:
+        return jsonify({"success": False, "error": "Precio no puede ser negativo"}), 400
+
+    v = security_db.session.query(ProductoVarianteStock).filter_by(id=vid).first()
+    if v is None:
+        return jsonify({"success": False, "error": "Variante no encontrada"}), 404
+    if (v.codigo_producto or "").strip().upper() != codigo:
+        return jsonify({"success": False, "error": "Codigo no coincide con la variante"}), 400
+
+    v.margen_override_pct = om
+    v.precio_publico_neto_override = op
+
+    ref_raw = _ultimo_ingreso_ref_variante(codigo, v.marca, v.bodega)
+    merged = merge_ingreso_ref_variante_overrides(
+        ref_raw,
+        v.margen_override_pct,
+        v.precio_publico_neto_override,
+    )
+    pv_cat = merged.get("precio_sugerido_neto")
+    if pv_cat is not None:
+        try:
+            pv_round = round(float(pv_cat), 2)
+        except (TypeError, ValueError):
+            pv_round = None
+        # Solo precios > 0: nunca pisar el catálogo con 0 (evita $0 al vaciar campos / margen que da 0).
+        if pv_round is not None and pv_round > 0:
+            security_db.session.execute(
+                text(
+                    """
+                    UPDATE productos
+                    SET P_PUBLICO = :pv
+                    WHERE UPPER(TRIM(CODIGO)) = UPPER(TRIM(:codigo))
+                      AND COALESCE(ACTIVO, 1) = 1
+                    """
+                ),
+                {"pv": pv_round, "codigo": codigo},
+            )
+
+    security_db.session.commit()
+
+    return jsonify(
+        {
+            "success": True,
+            "row": {
+                "variante_id": v.id,
+                "bodega": (v.bodega or "").strip() or "Bodega 1",
+                "marca": (v.marca or "").strip() or "—",
+                "stock": int(v.stock or 0),
+                "costo_ingreso_neto": merged.get("costo_unitario_neto"),
+                "margen_pct": merged.get("margen_registrado_pct"),
+                "precio_publico_neto": merged.get("precio_sugerido_neto"),
+            },
+        }
+    )
+
+
 @productos_bp.route("/productos/guardar_edicion", methods=["POST"])
 @admin_required
 def guardar_edicion():
+    if not get_user_permissions(session.get("user"), session.get("rol")).get("productos_crear_editar", False):
+        return jsonify({"success": False, "error": "Permiso denegado"}), 403
     codigo = (request.form.get("codigo") or "").strip().upper()
     if not codigo:
         return jsonify({"success": False, "error": "Codigo invalido"}), 400
@@ -846,7 +1261,6 @@ def guardar_edicion():
     version = (request.form.get("version") or "").strip()
     medidas = (request.form.get("medidas") or "").strip()
     precio_raw = (request.form.get("precio") or "").strip()
-    precio_mayor_raw = (request.form.get("precio_mayor") or "").strip()
     oem = (request.form.get("oem") or "").strip()
     alternativo = (request.form.get("alternativo") or "").strip()
     homologados = (request.form.get("homologados") or "").strip()
@@ -864,8 +1278,6 @@ def guardar_edicion():
     precio = _parse_float(precio_raw)
     if precio_raw and precio is None:
         return jsonify({"success": False, "error": "Precio invalido"}), 400
-    precio_mayor = _parse_float(precio_mayor_raw)
-
     sess = SessionDB()
     try:
         # Query by codigo only — activo state is being saved by this request
@@ -881,8 +1293,8 @@ def guardar_edicion():
         if anio:        producto.anio = anio
         if version:     producto.version = version
         if medidas:     producto.medidas = medidas
-        if precio is not None:        producto.p_publico = precio
-        if precio_mayor is not None:  producto.prec_mayor = precio_mayor
+        if precio is not None:
+            producto.p_publico = precio
         if oem:         producto.codigo_oem = oem
         if alternativo: producto.codigo_alternativo = alternativo
         producto.homologados = homologados if homologados else producto.homologados
@@ -944,6 +1356,8 @@ def guardar_edicion():
 @productos_bp.route("/productos/desactivar", methods=["POST"])
 @admin_required
 def desactivar_producto():
+    if not get_user_permissions(session.get("user"), session.get("rol")).get("productos_desactivar_reactivar", False):
+        return jsonify({"success": False, "error": "Permiso denegado"}), 403
     codigo = (request.form.get("codigo") or "").strip().upper()
     if not codigo:
         return jsonify({"success": False, "error": "Codigo invalido"}), 400
@@ -1009,6 +1423,8 @@ def ver_desactivados():
 @productos_bp.route("/productos/reactivar", methods=["POST"])
 @admin_required
 def reactivar_producto():
+    if not get_user_permissions(session.get("user"), session.get("rol")).get("productos_desactivar_reactivar", False):
+        return jsonify({"success": False, "error": "Permiso denegado"}), 403
     codigo = (request.form.get("codigo") or "").strip().upper()
     if not codigo:
         return jsonify({"success": False, "error": "Codigo invalido"}), 400
@@ -1044,6 +1460,8 @@ def reactivar_producto():
 @productos_bp.route("/productos/reactivar_todos", methods=["POST"])
 @admin_required
 def reactivar_todos():
+    if not get_user_permissions(session.get("user"), session.get("rol")).get("productos_desactivar_reactivar", False):
+        return jsonify({"success": False, "error": "Permiso denegado"}), 403
     sess = SessionDB()
     try:
         inactivos = sess.query(Producto).filter(Producto.activo.is_(False)).all()
@@ -1069,6 +1487,91 @@ def reactivar_todos():
         return jsonify({"success": False, "error": str(exc)}), 500
     finally:
         sess.close()
+
+
+def _ficha_stock_repuestos(producto: Producto) -> dict:
+    """Stock por bodega alineado a variantes ERP. Incluye marca por línea cuando hay productos_variantes_stock."""
+    codigo = (producto.codigo or "").strip().upper()
+    s6 = int(float(producto.stock_transito or 0))
+    marca_catalogo = (producto.marca or "").strip() or "—"
+
+    rows = (
+        security_db.session.query(ProductoVarianteStock)
+        .filter(func.upper(ProductoVarianteStock.codigo_producto) == codigo)
+        .all()
+    )
+
+    if not rows:
+        stocks = [
+            int(float(producto.stock_10jul or 0)),
+            int(float(producto.stock_brasil or 0)),
+            int(float(producto.stock_g_avenida or 0)),
+            int(float(producto.stock_orientales or 0)),
+            int(float(producto.stock_b20_outlet or 0)),
+        ]
+        bodegas = []
+        for idx, sn in enumerate(stocks, start=1):
+            lineas = [{"marca": marca_catalogo, "stock": sn}]
+            bodegas.append(
+                {
+                    "nombre": f"Bodega {idx}",
+                    "lineas": lineas,
+                    "subtotal": int(sn),
+                }
+            )
+        st = sum(stocks) + s6
+        return {
+            "bodegas": bodegas,
+            "otras_lineas": [],
+            "s6": s6,
+            "otras": 0,
+            "stotal": st,
+        }
+
+    bucket_marcas: dict[int, dict[str, int]] = {i: {} for i in range(1, 6)}
+    otras_acc: dict[tuple[str, str], int] = {}
+
+    for r in rows:
+        qty = int(r.stock or 0)
+        marca = (r.marca or "").strip() or "SIN MARCA"
+        b = (r.bodega or "").strip()
+        m = re.match(r"(?i)^Bodega\s+(\d+)$", b)
+        if m:
+            n = int(m.group(1))
+            if 1 <= n <= 5:
+                d = bucket_marcas[n]
+                d[marca] = d.get(marca, 0) + qty
+            else:
+                key = (b, marca)
+                otras_acc[key] = otras_acc.get(key, 0) + qty
+        else:
+            key = (b or "OTRAS", marca)
+            otras_acc[key] = otras_acc.get(key, 0) + qty
+
+    bodegas = []
+    for n in range(1, 6):
+        d = bucket_marcas[n]
+        if d:
+            lineas = [{"marca": k, "stock": v} for k, v in sorted(d.items(), key=lambda x: x[0])]
+        else:
+            lineas = [{"marca": "—", "stock": 0}]
+        subtotal = sum(int(x["stock"]) for x in lineas)
+        bodegas.append({"nombre": f"Bodega {n}", "lineas": lineas, "subtotal": subtotal})
+
+    otras_lineas = [
+        {"bodega": bk, "marca": mk, "stock": v}
+        for (bk, mk), v in sorted(otras_acc.items(), key=lambda x: (x[0][0], x[0][1]))
+    ]
+    otras = sum(otras_acc.values())
+    stotal = sum(int(r.stock or 0) for r in rows) + s6
+
+    return {
+        "bodegas": bodegas,
+        "otras_lineas": otras_lineas,
+        "s6": s6,
+        "otras": otras,
+        "stotal": stotal,
+    }
 
 
 # =========================================
@@ -1176,6 +1679,11 @@ def ver_producto(codigo):
                 img_rel = (despiece_row.imagen_static or "").strip()
                 if img_rel:
                     despiece_imagen_url = url_for("static", filename=img_rel)
+                else:
+                    # Si el registro OEM compartido aún no tiene imagen, usar respaldo legado.
+                    img_fallback_rel = _find_shared_despiece_image_fallback(db, producto)
+                    if img_fallback_rel:
+                        despiece_imagen_url = url_for("static", filename=img_fallback_rel)
                 if despiece_row.partes_json:
                     try:
                         parsed = json.loads(despiece_row.partes_json)
@@ -1209,9 +1717,12 @@ def ver_producto(codigo):
 
         es_admin = "admin" in (session.get("rol") or "").strip().lower()
 
+        ficha_stock = _ficha_stock_repuestos(producto)
+
         html = render_template(
             "modal_producto.html",
             producto=producto,
+            ficha_stock=ficha_stock,
             imagenes=imagenes,
             imagenes_360=imagenes_360,
             categoria_txt=categoria_txt,
@@ -1241,6 +1752,8 @@ def ver_producto(codigo):
 @productos_bp.route("/producto/<codigo>/despiece", methods=["POST"])
 @admin_required
 def guardar_despiece_producto(codigo):
+    if not get_user_permissions(session.get("user"), session.get("rol")).get("productos_crear_editar", False):
+        return jsonify(success=False, message="Permiso denegado"), 403
     """Crea o actualiza despiece ligado al código interno (admin). Imagen en static/epc_despiece/."""
     import uuid
 
@@ -1281,31 +1794,53 @@ def guardar_despiece_producto(codigo):
         if not producto:
             return jsonify(success=False, message="Producto no encontrado"), 404
 
-        row = db.query(OemDespiece).filter(OemDespiece.producto_codigo == normalized).first()
-        if not row:
-            synthetic = _synthetic_oem_norm_for_product_codigo(normalized)
-            if db.query(OemDespiece).filter(OemDespiece.oem_norm == synthetic).first():
-                synthetic = ("_INT_" + normalized + "_" + uuid.uuid4().hex[:8])[:64]
-            row = OemDespiece(
-                oem_norm=synthetic,
-                producto_codigo=normalized,
-                titulo=titulo,
-                notas=notas,
-                partes_json=partes_json_val,
-                updated_at=datetime.utcnow(),
-            )
-            db.add(row)
+        oem_norm = _norm_oem_despiece(getattr(producto, "codigo_oem", None))
+        if oem_norm:
+            # Si el producto tiene OEM, guardar en catálogo compartido por OEM.
+            row = db.query(OemDespiece).filter(OemDespiece.oem_norm == oem_norm).first()
+            if not row:
+                row = OemDespiece(
+                    oem_norm=oem_norm,
+                    producto_codigo=None,
+                    titulo=titulo,
+                    notas=notas,
+                    partes_json=partes_json_val,
+                    updated_at=datetime.utcnow(),
+                )
+                db.add(row)
+            else:
+                row.titulo = titulo
+                row.notas = notas
+                row.partes_json = partes_json_val
+                row.updated_at = datetime.utcnow()
         else:
-            row.titulo = titulo
-            row.notas = notas
-            row.partes_json = partes_json_val
-            row.updated_at = datetime.utcnow()
+            # Fallback histórico: productos sin OEM se ligan a su código interno.
+            row = db.query(OemDespiece).filter(OemDespiece.producto_codigo == normalized).first()
+            if not row:
+                synthetic = _synthetic_oem_norm_for_product_codigo(normalized)
+                if db.query(OemDespiece).filter(OemDespiece.oem_norm == synthetic).first():
+                    synthetic = ("_INT_" + normalized + "_" + uuid.uuid4().hex[:8])[:64]
+                row = OemDespiece(
+                    oem_norm=synthetic,
+                    producto_codigo=normalized,
+                    titulo=titulo,
+                    notas=notas,
+                    partes_json=partes_json_val,
+                    updated_at=datetime.utcnow(),
+                )
+                db.add(row)
+            else:
+                row.titulo = titulo
+                row.notas = notas
+                row.partes_json = partes_json_val
+                row.updated_at = datetime.utcnow()
 
         upload = request.files.get("imagen")
         if upload and upload.filename:
-            ext = Path(upload.filename).suffix.lower()
-            if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
-                return jsonify(success=False, message="Imagen: use PNG, JPG, WEBP o GIF"), 400
+            try:
+                ext = "." + _validate_image_upload(upload)
+            except ValueError as exc:
+                return jsonify(success=False, message=str(exc)), 400
             base_fn = secure_filename(normalized) or "codigo"
             fname = f"{base_fn}_{int(datetime.utcnow().timestamp())}{ext}"
             path = static_dir / fname
@@ -1345,26 +1880,126 @@ def guardar_despiece_producto(codigo):
 def historial_producto(codigo):
 
     normalized = (codigo or "").strip().upper()
+    embed_modal = (request.args.get("embed") or "").strip() == "1"
+    solo_mov = (request.args.get("solo_mov") or "").strip() == "1"
+    filtro = (request.args.get("filtro") or "todos").strip().lower()
+    if filtro not in {"todos", "boleta", "factura", "ingreso", "mov_stock", "ajuste", "salida"}:
+        filtro = "todos"
+
+    perms = get_user_permissions(session.get("user"), session.get("rol"))
+    can_open_ingreso = bool(perms.get("bodega_ingreso", False))
+    can_open_facturacion = bool(perms.get("mod_ventas", False))
+
+    def _extract_doc_ref(obs: str | None) -> tuple[str, str | None]:
+        text_obs = (obs or "").strip()
+        low = text_obs.lower()
+        if "boleta" in low:
+            m = re.search(r"\bboleta\s*(?:n[°ºo.]*)?\s*([a-z0-9\-\/]+)", text_obs, re.IGNORECASE)
+            return "boleta", (m.group(1).strip() if m else None)
+        if "factura" in low:
+            m = re.search(r"\bfactura\s*(?:n[°ºo.]*)?\s*([a-z0-9\-\/]+)", text_obs, re.IGNORECASE)
+            return "factura", (m.group(1).strip() if m else None)
+        if "doc " in low or low.startswith("doc"):
+            m = re.search(r"\bdoc\s*([0-9]+)\b", text_obs, re.IGNORECASE)
+            return "ingreso", (m.group(1).strip() if m else None)
+        return "otros", None
+
     sess = SessionDB()
     try:
         producto = sess.query(Producto).filter(Producto.codigo == normalized).first()
 
-        movimientos = (
+        movimientos_raw = (
             security_db.session.query(MovimientoStock)
             .filter(MovimientoStock.codigo_producto == normalized)
             .order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc())
             .limit(200)
             .all()
         )
+        movimientos = []
+        for m in movimientos_raw:
+            ref_type, ref_number = _extract_doc_ref(getattr(m, "observacion", None))
+            view_url = None
+            view_label = None
+            if ref_type == "ingreso":
+                ingreso_id = int(getattr(m, "ingreso_documento_id", 0) or 0)
+                if ingreso_id > 0 and can_open_ingreso:
+                    view_url = url_for("bodega.ingreso_editar", doc_id=ingreso_id)
+                    view_label = f"Ingreso #{ingreso_id}"
+            elif ref_type == "factura":
+                if ref_number and can_open_facturacion:
+                    view_url = url_for("ventas.facturacion", numero=ref_number, tipo_documento="factura")
+                    view_label = f"Factura {ref_number}"
+            elif ref_type == "boleta":
+                if ref_number and can_open_facturacion:
+                    view_url = url_for("ventas.facturacion", numero=ref_number, tipo_documento="boleta")
+                    view_label = f"Boleta {ref_number}"
+
+            mov_type = ((getattr(m, "tipo", None) or "").strip().lower())
+            if filtro == "mov_stock":
+                if mov_type not in {"ingreso", "salida"}:
+                    continue
+            elif filtro == "ajuste":
+                if mov_type != "ajuste":
+                    continue
+            elif filtro == "salida":
+                if mov_type != "salida":
+                    continue
+            elif filtro != "todos" and ref_type != filtro:
+                continue
+
+            movimientos.append(
+                {
+                    "row": m,
+                    "ref_type": ref_type,
+                    "ref_number": ref_number,
+                    "view_url": view_url,
+                    "view_label": view_label,
+                }
+            )
+
+        compras_rows = (
+            security_db.session.query(IngresoDocumentoItem, IngresoDocumento)
+            .join(IngresoDocumento, IngresoDocumento.id == IngresoDocumentoItem.ingreso_documento_id)
+            .filter(or_(IngresoDocumento.anulado.is_(False), IngresoDocumento.anulado.is_(None)))
+            .filter(func.upper(func.trim(IngresoDocumentoItem.codigo_producto)) == normalized)
+            .order_by(IngresoDocumento.created_at.desc(), IngresoDocumentoItem.id.desc())
+            .limit(200)
+            .all()
+        )
+        compras = []
+        for item, doc in compras_rows:
+            cantidad = int(getattr(item, "cantidad", 0) or 0)
+            costo_unit = float(getattr(item, "valor_neto", 0) or 0)
+            total_neto = costo_unit * cantidad
+            compras.append(
+                {
+                    "fecha": getattr(doc, "fecha_documento", None) or getattr(doc, "created_at", None),
+                    "proveedor": (getattr(doc, "proveedor_nombre", None) or "—").strip() or "—",
+                    "numero_documento": (getattr(doc, "numero_documento", None) or "").strip() or "—",
+                    "marca": (getattr(item, "marca", None) or "").strip() or "—",
+                    "bodega": (getattr(item, "bodega", None) or "").strip() or "—",
+                    "origen_compra": (getattr(item, "origen_compra", None) or "").strip() or "—",
+                    "cantidad": cantidad,
+                    "costo_unitario": costo_unit,
+                    "total_neto": total_neto,
+                    "precio_venta_neto": float(getattr(item, "precio_venta_neto", 0) or 0),
+                    "doc_id": int(getattr(doc, "id", 0) or 0),
+                    "doc_url": url_for("bodega.ingreso_editar", doc_id=doc.id) if int(getattr(doc, "id", 0) or 0) > 0 and can_open_ingreso else None,
+                }
+            )
 
         return render_template(
             "productos/historial_producto.html",
             producto=producto,
             codigo=normalized,
             movimientos=movimientos,
+            compras=compras,
+            filtro=filtro,
+            solo_mov=solo_mov,
             online_users=_online_users(),
             active_page="productos_buscar",
             _partial=_wants_modal_fragment(),
+            embed_modal=embed_modal,
         )
     finally:
         sess.close()
@@ -1395,6 +2030,8 @@ def homologados_producto(codigo):
 @productos_bp.route("/exportar")
 @login_required
 def exportar():
+    if not get_user_permissions(session.get("user"), session.get("rol")).get("productos_importar_exportar", False):
+        return redirect(url_for("productos.buscar"))
 
     db = SessionDB()
     productos = db.query(Producto).filter(Producto.activo.is_(True)).all()
@@ -1442,6 +2079,8 @@ def exportar():
 @productos_bp.route("/productos/importar_excel", methods=["POST"])
 @admin_required
 def importar_excel_productos():
+    if not get_user_permissions(session.get("user"), session.get("rol")).get("productos_importar_exportar", False):
+        return jsonify(success=False, message="Permiso denegado"), 403
 
     archivo = request.files.get("file")
     if not archivo:
@@ -1525,6 +2164,8 @@ def importar_excel_productos():
 @productos_bp.route("/productos/exportar_excel", methods=["GET"])
 @admin_required
 def exportar_excel_productos():
+    if not get_user_permissions(session.get("user"), session.get("rol")).get("productos_importar_exportar", False):
+        return redirect(url_for("productos.buscar"))
 
     filtro = request.args.get('filtro', 'activos')
     columnas_param = request.args.get('columnas', '')
@@ -1631,6 +2272,8 @@ def modal_crear_producto():
 @productos_bp.route("/productos/crear", methods=["POST"])
 @admin_required
 def crear_producto():
+    if not get_user_permissions(session.get("user"), session.get("rol")).get("productos_crear_editar", False):
+        return jsonify({"success": False, "error": "Permiso denegado"}), 403
     codigo = (request.form.get("codigo") or "").strip().upper()
     if not codigo:
         return jsonify({"success": False, "error": "Código interno es obligatorio"}), 400
@@ -1688,9 +2331,11 @@ def crear_producto():
 
         despiece = request.files.get("despiece_img")
         if despiece and getattr(despiece, "filename", None):
-            filename = secure_filename(despiece.filename)
-            ext = (filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg")
-            if ext in {"jpg", "jpeg", "png", "webp"}:
+            try:
+                ext = _validate_image_upload(despiece, allowed_exts={"jpg", "jpeg", "png", "webp"})
+            except ValueError:
+                ext = ""
+            if ext:
                 target_name = f"{codigo}_despiece.{ext}"
                 target = Path("app/static/productos_img") / target_name
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -1903,6 +2548,8 @@ def sugerencias_taxonomia():
 @productos_bp.route("/productos/draft", methods=["GET", "POST", "DELETE"])
 @admin_required
 def productos_draft():
+    if request.method in {"POST", "DELETE"} and not get_user_permissions(session.get("user"), session.get("rol")).get("productos_crear_editar", False):
+        return jsonify({"success": False, "error": "Permiso denegado"}), 403
     user = _actor_usuario()
     form_key = (request.values.get("form_key") or "").strip()
     if not form_key:
@@ -1981,7 +2628,9 @@ def productos_auditoria():
         if actor:
             query = query.filter(ProductoAuditEvent.actor.ilike(f"%{actor}%"))
         if action:
-            query = query.filter(ProductoAuditEvent.action == action)
+            acode = resolve_producto_audit_action_filter(action)
+            if acode:
+                query = query.filter(ProductoAuditEvent.action == acode)
         if codigo:
             query = query.filter(ProductoAuditEvent.producto_codigo == codigo)
         if fecha_desde:
@@ -2042,6 +2691,8 @@ def productos_auditoria():
 @productos_bp.route("/productos/auditoria/exportar", methods=["GET"])
 @admin_required
 def exportar_auditoria_productos():
+    if not get_user_permissions(session.get("user"), session.get("rol")).get("productos_importar_exportar", False):
+        return redirect(url_for("productos.productos_auditoria"))
     actor = (request.args.get("actor") or "").strip()
     action = (request.args.get("action") or "").strip()
     codigo = (request.args.get("codigo") or "").strip().upper()
@@ -2054,7 +2705,9 @@ def exportar_auditoria_productos():
         if actor:
             query = query.filter(ProductoAuditEvent.actor.ilike(f"%{actor}%"))
         if action:
-            query = query.filter(ProductoAuditEvent.action == action)
+            acode = resolve_producto_audit_action_filter(action)
+            if acode:
+                query = query.filter(ProductoAuditEvent.action == acode)
         if codigo:
             query = query.filter(ProductoAuditEvent.producto_codigo == codigo)
         if fecha_desde:

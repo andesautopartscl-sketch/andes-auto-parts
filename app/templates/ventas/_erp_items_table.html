@@ -1,3 +1,5 @@
+<div class="erp-table-panel">
+<div class="erp-table-scroll">
 <table class="erp-table">
     <thead>
         <tr>
@@ -6,8 +8,10 @@
             <th class="tc-desc">Descripción</th>
             <th class="tc-brand">Marca</th>
             <th class="tc-wh">Bodega</th>
+            <th class="tc-origin">Origen</th>
             <th class="tc-qty">Cant.</th>
             <th class="tc-price">P. Unitario</th>
+            <th class="tc-marg" title="Margen % sobre precio de venta neto. Mínimo recomendado 30% al guardar OV.">Margen %</th>
             <th class="tc-sub">Subtotal</th>
             <th class="tc-rm no-print"></th>
         </tr>
@@ -18,14 +22,17 @@
             <td class="tc-num"><span class="row-num">{{ loop.index }}</span></td>
             <td class="tc-code">
                 <div class="code-wrap">
+                    <button type="button" class="code-hist-btn no-print" title="Ver movimientos del código (historial)">&#8594;</button>
                     <input name="item_codigo[]" class="item-codigo" value="{{ item.codigo }}" autocomplete="off" placeholder="Código">
                     <button class="code-srch-btn no-print" type="button" title="Buscar producto (F2)">&#128269;</button>
                 </div>
-                <span class="item-meta-line"></span>
             </td>
             <td class="tc-desc">
-                <input name="item_descripcion[]" class="item-desc" value="{{ item.descripcion }}" placeholder="Descripción del producto">
-                <div class="item-stock-row"></div>
+                <div class="tc-desc-stack">
+                    <input name="item_descripcion[]" class="item-desc" value="{{ item.descripcion }}" placeholder="Descripción del producto" autocomplete="off" title="Podés editar la descripción libremente">
+                    <input name="item_modelo_linea[]" class="item-modelo-input" type="text" value="{{ item.modelo_linea|default('', true) }}" placeholder="Modelo / OEM (opcional)" autocomplete="off" title="Modelo o referencia — editable" aria-label="Modelo o referencia">
+                    <div class="item-stock-row"></div>
+                </div>
             </td>
             <td class="tc-brand">
                 <select name="item_marca[]" class="item-marca">
@@ -37,24 +44,42 @@
                     <option value="{{ item.bodega or 'Bodega 1' }}">{{ item.bodega or 'Bodega 1' }}</option>
                 </select>
             </td>
+            <td class="tc-origin">
+                <select name="item_origen_compra[]" class="item-origen-compra">
+                    {% set io = item.origen_compra or 'nacional' %}
+                    <option value="nacional" {% if io == 'nacional' %}selected{% endif %}>Nacional</option>
+                    <option value="importacion" {% if io == 'importacion' %}selected{% endif %}>Importación</option>
+                </select>
+            </td>
             <td class="tc-qty">
                 <input name="item_cantidad[]" class="item-qty" type="number" min="1" value="{{ item.cantidad }}">
             </td>
             <td class="tc-price">
-                <input name="item_precio[]" class="item-price" type="number" min="0" step="0.01" value="{{ item.precio }}">
+                <div class="price-cell-wrap">
+                    <div class="price-row-flex">
+                        <button type="button" class="item-costo-toggle no-print" hidden title="Ver costo neto del último ingreso" aria-expanded="false" aria-label="Mostrar u ocultar costo de ingreso">&#9654;</button>
+                        <input name="item_precio[]" class="item-price" type="number" min="0" step="0.01" value="{{ item.precio }}">
+                    </div>
+                    <div class="item-costo-banner no-print" hidden>Costo ingreso (neto u.): <strong class="item-costo-val">—</strong></div>
+                </div>
+            </td>
+            <td class="tc-marg">
+                <input name="item_margen[]" class="item-margen" type="number" min="0" max="999" step="0.01" value="{% if item.margen is not none %}{{ item.margen }}{% endif %}" placeholder="%" title="Margen % sobre P. unitario neto. Si es menor a 30%, al guardar OV se pedirá confirmación." aria-label="Margen porcentaje">
             </td>
             <td class="tc-sub">
                 <span class="item-subtotal">{{ '%.2f'|format(item.subtotal) }}</span>
             </td>
             <td class="tc-rm no-print">
-                <button class="btn sm danger remove-row-btn" type="button" title="Quitar fila">&#10005;</button>
+                <button class="remove-row-btn" type="button" title="Quitar fila">&#10005;</button>
             </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
 
 <div class="table-foot no-print">
     <button class="btn sm outline" type="button" id="addRow">+ Agregar fila</button>
     <span class="table-hint">Enter = autocompletar · F2 o 🔍 = buscar · Doble clic en resultado = insertar</span>
+</div>
 </div>

@@ -2,21 +2,99 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from difflib import SequenceMatcher
 from pathlib import Path
 from urllib.parse import quote
 import os
 import sys
 
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, send_file, session, url_for
-from sqlalchemy import func, text
+from sqlalchemy import func, or_, text
+from werkzeug.security import check_password_hash
 
 from app.extensions import db
+from app.seguridad.models import Usuario as UsuarioSistema
 from app.utils.decorators import login_required
+from app.utils.permissions import has_permission
 from app.utils.rut_utils import clean_rut, format_rut, is_valid_rut
-from app.bodega.models import MovimientoStock, ProductoVarianteStock
-from .models import Cliente, Proveedor, DocumentoVenta, DocumentoVentaItem, NotaCredito, NotaCreditoItem
+from app.utils.phone_format import format_phone_display, phone_to_compact_e164
+from app.utils.variante_comercial import find_variante_stock, merge_ingreso_ref_variante_overrides
+from app.bodega.models import (
+    IngresoDocumento,
+    IngresoDocumentoItem,
+    MovimientoStock,
+    PickingVenta,
+    PickingVentaLine,
+    ProductoVarianteStock,
+    ProveedorCodigoInterno,
+)
+from .models import (
+    Cliente,
+    ClienteSaldoFavorMovimiento,
+    Proveedor,
+    DocumentoVenta,
+    DocumentoVentaItem,
+    NotaCredito,
+    NotaCreditoItem,
+)
 
 ventas_bp = Blueprint("ventas", __name__, url_prefix="/ventas")
+
+
+@ventas_bp.before_request
+def _ventas_module_guard():
+    # login_required de cada vista sigue siendo la barrera principal para sesión.
+    if "user" not in session:
+        return None
+    if has_permission(session.get("user"), session.get("rol"), "mod_ventas"):
+        return None
+    is_ajax = request.is_json or (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
+    if is_ajax or request.path.startswith("/ventas/api/"):
+        return jsonify({"success": False, "message": "Permiso denegado para modulo Ventas"}), 403
+    flash("No tienes permisos para acceder al modulo Ventas.", "error")
+    return redirect(url_for("productos.buscar"))
+
+
+def _deny_perm_response(message: str):
+    is_ajax = request.is_json or (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
+    if is_ajax or request.path.startswith("/ventas/api/"):
+        return jsonify({"success": False, "message": message}), 403
+    flash(message, "error")
+    return redirect(url_for("productos.buscar"))
+
+
+def _ajax_doc_save_response(ctx: dict, *, default_ok_message: str):
+    """Respuesta JSON para guardar documento vía fetch (SPA); None si no aplica."""
+    is_ajax = (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
+    if request.method != "POST" or not is_ajax:
+        return None
+    if ctx.get("generated"):
+        return jsonify(
+            {
+                "success": True,
+                "message": default_ok_message,
+                "doc_number": (ctx.get("saved_number") or ctx.get("doc_number") or "").strip(),
+                "doc_id": int(ctx.get("loaded_document_id") or 0),
+            }
+        )
+    errs = list(ctx.get("validation_errors") or [])
+    save_err = (ctx.get("save_error") or "").strip()
+    if save_err:
+        return jsonify(
+            {
+                "success": False,
+                "message": save_err,
+                "validation_errors": errs,
+            }
+        ), 500
+    msg = errs[0] if errs else "No se pudo guardar el documento. Revisa los datos e inténtalo nuevamente."
+    return jsonify(
+        {
+            "success": False,
+            "message": msg,
+            "validation_errors": errs,
+        }
+    ), 400
 
 COMPANY_INFO = {
     "name": "ANDES AUTO PARTS LTDA",
@@ -29,6 +107,11 @@ STATUS_OPTIONS = ["pendiente", "aprobada", "entregada"]
 TIPO_DOCUMENTO_OPTIONS = ["factura", "boleta"]
 CHILE_COUNTRY_NAME = "Chile"
 CHILE_GEO_PATH = Path(__file__).resolve().parent / "data" / "chile_geo.json"
+ORIGEN_COMPRA_DEFAULT = "nacional"
+ORIGEN_COMPRA_OPCIONES = ("nacional", "importacion")
+
+# Lista de precios en ventas: P_PUBLICO si es distinto de 0; si no PREC_MAYOR; si no 0 (luego puede rellenarse desde ingreso).
+_SQL_PRECIO_LISTA = "COALESCE(NULLIF(P_PUBLICO, 0), NULLIF(PREC_MAYOR, 0), 0)"
 
 METODO_PAGO_OPTIONS = [
     "efectivo",
@@ -39,6 +122,7 @@ METODO_PAGO_OPTIONS = [
     "credito_60",
     "credito_90",
     "cheque",
+    "saldo_favor",
 ]
 METODO_PAGO_LABELS = {
     "efectivo": "Efectivo",
@@ -49,7 +133,99 @@ METODO_PAGO_LABELS = {
     "credito_60": "Crédito 60 días",
     "credito_90": "Crédito 90 días",
     "cheque": "Cheque",
+    "saldo_favor": "Saldo a favor (crédito del cliente)",
 }
+
+
+def _round_money_cl(x: float | None) -> float:
+    return round(float(x or 0), 2)
+
+
+def _cliente_saldo_favor_ledger(cliente_id: int) -> float:
+    if not cliente_id:
+        return 0.0
+    q = (
+        db.session.query(func.coalesce(func.sum(ClienteSaldoFavorMovimiento.monto), 0.0))
+        .filter(ClienteSaldoFavorMovimiento.cliente_id == int(cliente_id))
+        .scalar()
+    )
+    return float(q or 0)
+
+
+def _max_monto_saldo_usable_por_cliente(
+    cliente_id: int, documento: DocumentoVenta | None, prev_monto_en_doc: float
+) -> float:
+    base = _cliente_saldo_favor_ledger(cliente_id)
+    if documento and getattr(documento, "id", None) and (prev_monto_en_doc or 0) > 0:
+        return _round_money_cl(base + float(prev_monto_en_doc or 0))
+    return _round_money_cl(base)
+
+
+def _aplicar_pago_saldo_favor_en_documento(
+    documento: DocumentoVenta,
+    prev_monto: float,
+    new_monto: float,
+    metodo_resto: str,
+) -> str | None:
+    """Aplica abono con saldo a favor; registra movimiento y estado de pago. None = ok."""
+    new_monto = _round_money_cl(new_monto)
+    prev_monto = _round_money_cl(prev_monto)
+    if new_monto <= 0.001 and prev_monto <= 0.001:
+        documento.monto_saldo_favor = 0.0
+        return None
+    cid = int(documento.cliente_id or 0)
+    if not cid:
+        return "Se requiere cliente para usar saldo a favor en documentos con total."
+    total = _round_money_cl(documento.total or 0)
+    if new_monto < 0:
+        return "El monto a descontar del saldo no puede ser negativo."
+    if new_monto > total + 0.02:
+        return "No puedes aplicar un saldo mayor al total del documento."
+    cap = _max_monto_saldo_usable_por_cliente(cid, documento, prev_monto)
+    if new_monto > cap + 0.02:
+        return f"El cliente no tiene saldo a favor suficiente. Máximo aplicable: ${cap:,.0f}".replace(",", ".")
+    delta = _round_money_cl(float(prev_monto) - new_monto)
+    if abs(delta) > 0.001:
+        db.session.add(
+            ClienteSaldoFavorMovimiento(
+                cliente_id=cid,
+                monto=delta,
+                tipo="ajuste_documento",
+                documento_venta_id=documento.id,
+                ref_factura_numero=(documento.numero or "")[:100] if documento.numero else None,
+                razon="Uso de saldo a favor en factura o boleta",
+                usuario=session.get("user") or "sistema",
+            )
+        )
+    documento.monto_saldo_favor = new_monto
+    resto = _round_money_cl(total - new_monto)
+    met = (metodo_resto or "").strip().lower()
+    if resto <= 0.02:
+        documento.metodo_pago = "saldo_favor"
+        documento.estado_pago = "pagado"
+        documento.pago_referencia = f"Cubierto con saldo a favor (${_format_currency(new_monto)})"[:200]
+    else:
+        if met in METODO_PAGO_OPTIONS and met != "saldo_favor":
+            documento.metodo_pago = met
+            documento.estado_pago = "pagado"
+            documento.pago_referencia = (
+                f"Saldo a favor: ${_format_currency(new_monto)}; resto {METODO_PAGO_LABELS.get(met, met)}: "
+                f"${_format_currency(resto)}"
+            )[:200]
+        else:
+            documento.estado_pago = "pendiente"
+            documento.pago_referencia = (
+                f"Parcial con saldo: ${_format_currency(new_monto)}; pendiente resto ${_format_currency(resto)}. "
+                f"Elegí método de pago para el resto o registrá pago luego."
+            )[:200]
+    return None
+
+
+def _normalize_origen_compra(raw: str | None) -> str:
+    value = (raw or "").strip().lower()
+    if value in ORIGEN_COMPRA_OPCIONES:
+        return value
+    return ORIGEN_COMPRA_DEFAULT
 
 
 # ─────────────────────────────────────────────────────────────
@@ -75,6 +251,17 @@ def _safe_int(raw: str, default: int = 1) -> int:
 
 def _clean_text(raw: str) -> str:
     return (raw or "").strip()
+
+
+def _upper_text(raw: str | None) -> str:
+    """Strip and uppercase free-text party fields (names, addresses, giro)."""
+    return (raw or "").strip().upper()
+
+
+def _normalize_party_email(raw: str | None) -> str:
+    """Strip and lowercase email for stable storage and lookup."""
+    e = (raw or "").strip()
+    return e.lower() if e else ""
 
 
 def _normalize_country(raw: str, default: str = CHILE_COUNTRY_NAME) -> str:
@@ -126,6 +313,28 @@ def _extract_search_term() -> str:
     return _clean_text(request.args.get("q"))
 
 
+def _extract_pagos_filtro() -> str:
+    raw = (_clean_text(request.args.get("filtro")) or "pendientes").lower()
+    if raw in ("pendientes", "pagados", "todos"):
+        return raw
+    return "pendientes"
+
+
+def _find_factura_boleta_por_busqueda(term: str) -> DocumentoVenta | None:
+    t = (term or "").strip().upper()
+    if not t:
+        return None
+    base = DocumentoVenta.query.filter(DocumentoVenta.tipo.in_(["factura", "boleta"]))
+    exact = base.filter(func.upper(DocumentoVenta.numero) == t).order_by(DocumentoVenta.id.desc()).first()
+    if exact:
+        return exact
+    return (
+        base.filter(DocumentoVenta.numero.ilike(f"%{t}%"))
+        .order_by(DocumentoVenta.fecha_documento.desc(), DocumentoVenta.id.desc())
+        .first()
+    )
+
+
 def _apply_entity_search(query, model, search_term: str):
     if not search_term:
         return query
@@ -159,7 +368,7 @@ def _full_address(entity) -> str:
 
 def _extract_items_from_form(form) -> list[dict]:
     if form is None:
-        codigos = descripciones = cantidades = precios = marcas = bodegas = []
+        codigos = descripciones = cantidades = precios = marcas = bodegas = origenes = margenes = modelos_linea = []
     elif hasattr(form, "getlist"):
         codigos = form.getlist("item_codigo[]")
         descripciones = form.getlist("item_descripcion[]")
@@ -167,6 +376,9 @@ def _extract_items_from_form(form) -> list[dict]:
         precios = form.getlist("item_precio[]")
         marcas = form.getlist("item_marca[]")
         bodegas = form.getlist("item_bodega[]")
+        origenes = form.getlist("item_origen_compra[]")
+        margenes = form.getlist("item_margen[]")
+        modelos_linea = form.getlist("item_modelo_linea[]")
     else:
         codigos = form.get("item_codigo[]", []) or []
         descripciones = form.get("item_descripcion[]", []) or []
@@ -174,6 +386,9 @@ def _extract_items_from_form(form) -> list[dict]:
         precios = form.get("item_precio[]", []) or []
         marcas = form.get("item_marca[]", []) or []
         bodegas = form.get("item_bodega[]", []) or []
+        origenes = form.get("item_origen_compra[]", []) or []
+        margenes = form.get("item_margen[]", []) or []
+        modelos_linea = form.get("item_modelo_linea[]", []) or []
         if not isinstance(codigos, list):
             codigos = [codigos]
         if not isinstance(descripciones, list):
@@ -186,8 +401,25 @@ def _extract_items_from_form(form) -> list[dict]:
             marcas = [marcas]
         if not isinstance(bodegas, list):
             bodegas = [bodegas]
+        if not isinstance(origenes, list):
+            origenes = [origenes]
+        if not isinstance(margenes, list):
+            margenes = [margenes]
+        if not isinstance(modelos_linea, list):
+            modelos_linea = [modelos_linea]
 
-    max_len = max(len(codigos), len(descripciones), len(cantidades), len(precios), len(marcas), len(bodegas), 1)
+    max_len = max(
+        len(codigos),
+        len(descripciones),
+        len(cantidades),
+        len(precios),
+        len(marcas),
+        len(bodegas),
+        len(origenes),
+        len(margenes),
+        len(modelos_linea),
+        1,
+    )
     items = []
     for idx in range(max_len):
         codigo = (codigos[idx] if idx < len(codigos) else "").strip().upper()
@@ -196,6 +428,12 @@ def _extract_items_from_form(form) -> list[dict]:
         precio = _safe_float(precios[idx] if idx < len(precios) else "0")
         marca = (marcas[idx] if idx < len(marcas) else "").strip().upper()
         bodega = (bodegas[idx] if idx < len(bodegas) else "").strip() or "Bodega 1"
+        origen_compra = _normalize_origen_compra(origenes[idx] if idx < len(origenes) else "")
+        margen_raw = (margenes[idx] if idx < len(margenes) else "").strip()
+        margen_val = _safe_float(margen_raw) if margen_raw else None
+        if margen_val is not None and (margen_val < 0 or margen_val > 999.999):
+            margen_val = None
+        modelo_linea = (modelos_linea[idx] if idx < len(modelos_linea) else "").strip()[:255]
         if not codigo and not descripcion:
             continue
         items.append({
@@ -205,6 +443,9 @@ def _extract_items_from_form(form) -> list[dict]:
             "precio": precio,
             "marca": marca,
             "bodega": bodega,
+            "origen_compra": origen_compra,
+            "margen": margen_val,
+            "modelo_linea": modelo_linea,
             "subtotal": round(cantidad * precio, 2),
         })
 
@@ -216,16 +457,40 @@ def _extract_items_from_form(form) -> list[dict]:
             "precio": 0.0,
             "marca": "",
             "bodega": "Bodega 1",
+            "origen_compra": ORIGEN_COMPRA_DEFAULT,
+            "margen": None,
+            "modelo_linea": "",
             "subtotal": 0.0,
         })
     return items
 
 
-def _calculate_totals(items: list[dict]) -> dict:
-    subtotal = round(sum(i.get("subtotal", 0.0) for i in items), 2)
+def _wholesale_discount_pct(cliente: Cliente | None) -> float:
+    if cliente is None:
+        return 0.0
+    if not getattr(cliente, "cliente_mayorista", False):
+        return 0.0
+    try:
+        pct = float(getattr(cliente, "margen_descuento_pct", 0) or 0)
+    except (TypeError, ValueError):
+        pct = 0.0
+    return max(0.0, min(100.0, pct))
+
+
+def _calculate_totals(items: list[dict], cliente: Cliente | None = None) -> dict:
+    subtotal_bruto = round(sum(i.get("subtotal", 0.0) for i in items), 2)
+    pct = _wholesale_discount_pct(cliente)
+    descuento_monto = round(subtotal_bruto * (pct / 100.0), 2) if pct else 0.0
+    subtotal = round(subtotal_bruto - descuento_monto, 2)
     iva = round(subtotal * 0.19, 2)
     total = round(subtotal + iva, 2)
-    return {"subtotal": subtotal, "iva": iva, "total": total}
+    return {
+        "subtotal": subtotal,
+        "iva": iva,
+        "total": total,
+        "descuento_monto": descuento_monto,
+        "subtotal_bruto": subtotal_bruto,
+    }
 
 
 def _next_doc_number(prefix: str) -> str:
@@ -247,6 +512,103 @@ def _next_doc_number(prefix: str) -> str:
     return f"{safe_prefix}-{max_seq + 1:04d}"
 
 
+def _numero_es_siguiente_correlativo_libre(numero: str) -> bool:
+    """True si el número coincide con el siguiente correlativo libre para su prefijo (p. ej. CO-0002 cuando el máximo existente es CO-0001)."""
+    clean = (numero or "").strip().upper()
+    if not clean or "-" not in clean:
+        return False
+    prefix, _, suffix = clean.partition("-")
+    if not suffix.isdigit():
+        return False
+    siguiente = _next_doc_number(prefix)
+    return clean == siguiente
+
+
+def _mensaje_correlativo_invalido(numero: str) -> str:
+    clean = (numero or "").strip().upper()
+    if "-" in clean:
+        prefix = clean.split("-", 1)[0]
+        siguiente = _next_doc_number(prefix)
+        return (
+            f"No se puede abrir el documento {clean}. "
+            f"Use el siguiente correlativo disponible ({siguiente}) o busque un documento ya guardado."
+        )
+    return "Documento no encontrado."
+
+
+def _serialize_documento_borrador_siguiente(doc_type: str, numero: str) -> dict:
+    """Payload igual a un documento nuevo sin fila en BD (id=0), para el correlativo que sigue al máximo existente."""
+    today = datetime.now().date().strftime("%Y-%m-%d")
+    clean = (numero or "").strip().upper()
+    party_payload: dict = {
+        "id": 0,
+        "proveedor_id": 0,
+        "name": "",
+        "rut": "",
+        "address": "",
+        "telefono": "",
+        "email": "",
+        "region": "",
+        "ciudad": "",
+        "pais": CHILE_COUNTRY_NAME,
+    }
+    if doc_type not in {"orden_compra", "factura_proveedor"}:
+        party_payload["cliente_mayorista"] = False
+        party_payload["margen_descuento_pct"] = 0.0
+
+    if doc_type == "factura":
+        ext_kind = "boleta" if clean.startswith("BO-") else "factura"
+        tipo_documento = ext_kind
+        serialized_doc_type = "factura"
+    else:
+        tipo_documento = "factura"
+        serialized_doc_type = doc_type
+
+    zero = 0.0
+    totals = {
+        "subtotal": zero,
+        "iva": zero,
+        "total": zero,
+        "descuento": zero,
+        "subtotal_bruto": zero,
+        "subtotal_fmt": _format_currency(zero),
+        "iva_fmt": _format_currency(zero),
+        "total_fmt": _format_currency(zero),
+        "descuento_fmt": _format_currency(zero),
+        "subtotal_bruto_fmt": _format_currency(zero),
+    }
+    payload = {
+        "id": 0,
+        "doc_type": serialized_doc_type,
+        "tipo_documento": tipo_documento,
+        "source_id": None,
+        "source_type": "",
+        "root_id": None,
+        "numero": clean,
+        "fecha_documento": today,
+        "fecha_vencimiento": today,
+        "status": "pendiente",
+        "metodo_pago": "",
+        "estado_pago": "pendiente",
+        "pago_referencia": "",
+        "party": party_payload,
+        "items": [],
+        "totals": totals,
+        "notes": "",
+    }
+    payload.update(
+        {
+            "puede_convertir_a_orden_venta": True,
+            "puede_convertir_a_factura_boleta": True,
+            "documento_hijo_resumen": None,
+            "documento_hijo_tipo": None,
+            "picking_bloquea_facturacion": False,
+            "picking_status": None,
+        }
+    )
+    return payload
+
+
 def _doc_prefix(doc_type: str) -> str:
     mapping = {
         "cotizacion": "CO",
@@ -258,10 +620,31 @@ def _doc_prefix(doc_type: str) -> str:
     return mapping.get((doc_type or "").strip().lower(), "DOC")
 
 
+def _sales_doc_prefix(tipo_documento: str) -> str:
+    """Prefijo correlativo: factura → FA, boleta → BO (series independientes)."""
+    t = (tipo_documento or "factura").strip().lower()
+    if t == "boleta":
+        return "BO"
+    return "FA"
+
+
 def _doc_tipo_value(doc_type: str, tipo_documento: str) -> str:
     if doc_type == "factura":
         return (tipo_documento or "factura").strip().lower()
     return doc_type
+
+
+def _rol_autoriza_margen_bajo(rol_nombre: str | None) -> bool:
+    rol = (rol_nombre or "").strip().lower()
+    if not rol:
+        return False
+    return (
+        "superadmin" in rol
+        or "admin" in rol
+        or "encargado" in rol
+        or "subencargado" in rol
+        or "sub encargado" in rol
+    )
 
 
 def _save_or_update_document(
@@ -281,6 +664,8 @@ def _save_or_update_document(
     source_id: int | None = None,
     source_type: str = "",
     root_id: int | None = None,
+    pago_saldo_monto: float | None = None,
+    metodo_pago_resto: str = "",
 ) -> DocumentoVenta:
     tipo_value = _doc_tipo_value(doc_type, tipo_documento)
     numero = (doc_number or "").strip().upper()
@@ -294,13 +679,17 @@ def _save_or_update_document(
     if documento is None:
         documento = DocumentoVenta(tipo=tipo_value, numero=numero)
         db.session.add(documento)
+    try:
+        prev_monto_saldo_favor = float(getattr(documento, "monto_saldo_favor", 0) or 0) if not is_new else 0.0
+    except (TypeError, ValueError):
+        prev_monto_saldo_favor = 0.0
 
     party_name = (party.get("name") or "").strip()
     if not party_name and doc_type in {"orden_compra", "factura_proveedor"}:
         party_name = "Compra mostrador"
     party_rut = clean_rut(party.get("rut"))
     party_address = (party.get("address") or "").strip()
-    party_phone = (party.get("telefono") or "").strip()
+    party_phone_raw = (party.get("telefono") or "").strip()
     party_email = (party.get("email") or "").strip()
 
     region = ""
@@ -312,6 +701,8 @@ def _save_or_update_document(
         comuna = (getattr(selected_party, "comuna", "") or "").strip()
         ciudad = (getattr(selected_party, "ciudad", "") or "").strip()
         pais = (getattr(selected_party, "pais", CHILE_COUNTRY_NAME) or CHILE_COUNTRY_NAME).strip()
+
+    party_phone = phone_to_compact_e164(party_phone_raw, pais) if party_phone_raw else ""
 
     documento.fecha_documento = fecha_documento
     documento.fecha_vencimiento = fecha_vencimiento
@@ -327,6 +718,7 @@ def _save_or_update_document(
     documento.cliente_email = party_email
     documento.subtotal = float(totals.get("subtotal") or 0)
     documento.impuesto = float(totals.get("iva") or 0)
+    documento.descuento = float(totals.get("descuento_monto") or 0)
     documento.total = float(totals.get("total") or 0)
     documento.status = (status or "pendiente").strip().lower()
     if is_new and source_id:
@@ -347,20 +739,93 @@ def _save_or_update_document(
         cantidad = _safe_int(str(item.get("cantidad") or "1"), default=1)
         precio = _safe_float(str(item.get("precio") or "0"))
         subtotal = round(cantidad * precio, 2)
+        m = item.get("margen")
+        margen_db = float(m) if m is not None and m != "" else None
+        ml = (item.get("modelo_linea") or "").strip()[:255]
         documento.items.append(
             DocumentoVentaItem(
                 codigo_producto=codigo,
                 descripcion=descripcion,
+                modelo_linea=ml or None,
                 marca=(item.get("marca") or "").strip().upper(),
                 bodega=(item.get("bodega") or "").strip() or "Bodega 1",
+                origen_compra=_normalize_origen_compra(item.get("origen_compra") or ""),
                 cantidad=cantidad,
                 precio_unitario=precio,
+                margen_porcentaje=margen_db,
                 subtotal=subtotal,
             )
         )
 
     db.session.flush()
+    if doc_type == "factura" and tipo_value in ("factura", "boleta") and pago_saldo_monto is not None:
+        err = _aplicar_pago_saldo_favor_en_documento(
+            documento,
+            prev_monto_saldo_favor,
+            float(pago_saldo_monto or 0),
+            metodo_pago_resto or "",
+        )
+        if err:
+            raise ValueError(err)
+        db.session.flush()
     return documento
+
+
+def _documento_hijo_directo(source_id: int | None, tipos: set[str]) -> DocumentoVenta | None:
+    """Primer documento cuya trazabilidad apunta a `source_id` (evita conversiones duplicadas)."""
+    if not source_id:
+        return None
+    return (
+        DocumentoVenta.query.filter(DocumentoVenta.source_id == source_id)
+        .filter(DocumentoVenta.tipo.in_(list(tipos)))
+        .order_by(DocumentoVenta.id.asc())
+        .first()
+    )
+
+
+def _factura_boleta_hija_con_pago_caja(parent_id: int | None) -> DocumentoVenta | None:
+    """Factura/boleta emitida desde la OV y ya cobrada en caja (ahi la cadena queda cerrada para nuevas conversiones)."""
+    child = _documento_hijo_directo(parent_id, {"factura", "boleta"})
+    if child is None:
+        return None
+    if (child.estado_pago or "").strip().lower() != "pagado":
+        return None
+    return child
+
+
+def _conversion_flags_for_documento(documento: DocumentoVenta) -> dict:
+    """Bloqueo de conversion si hay factura/boleta hija ya cobrada en caja, o picking de bodega pendiente."""
+    tipo = (documento.tipo or "").strip().lower()
+    base = {
+        "puede_convertir_a_orden_venta": True,
+        "puede_convertir_a_factura_boleta": True,
+        "documento_hijo_resumen": None,
+        "documento_hijo_tipo": None,
+        "picking_bloquea_facturacion": False,
+        "picking_status": None,
+    }
+    if tipo == "cotizacion":
+        hijo_ov = _documento_hijo_directo(documento.id, {"orden_venta"})
+        pagado = _factura_boleta_hija_con_pago_caja(hijo_ov.id) if hijo_ov is not None else None
+        if pagado is not None:
+            base["puede_convertir_a_orden_venta"] = False
+            base["documento_hijo_resumen"] = (pagado.numero or str(pagado.id)).strip()
+            base["documento_hijo_tipo"] = (pagado.tipo or "").strip().lower()
+    elif tipo == "orden_venta":
+        pagado = _factura_boleta_hija_con_pago_caja(documento.id)
+        if pagado is not None:
+            base["puede_convertir_a_factura_boleta"] = False
+            base["documento_hijo_resumen"] = (pagado.numero or str(pagado.id)).strip()
+            base["documento_hijo_tipo"] = (pagado.tipo or "").strip().lower()
+        else:
+            pv = PickingVenta.query.filter_by(orden_venta_id=documento.id).first()
+            if pv is not None:
+                st = (pv.status or "").strip().lower()
+                base["picking_status"] = st
+                if st != "entregado":
+                    base["puede_convertir_a_factura_boleta"] = False
+                    base["picking_bloquea_facturacion"] = True
+    return base
 
 
 def _serialize_document(documento: DocumentoVenta) -> dict:
@@ -372,20 +837,23 @@ def _serialize_document(documento: DocumentoVenta) -> dict:
         doc_type = doc_kind
         tipo_documento = "factura"
 
-    party_id = documento.proveedor_id if doc_kind in {"orden_compra", "factura_proveedor"} else documento.cliente_id
-
     items = []
     for item in documento.items:
         cantidad = int(item.cantidad or 0)
         precio = float(item.precio_unitario or 0)
+        mp = getattr(item, "margen_porcentaje", None)
+        ml = getattr(item, "modelo_linea", None)
         items.append(
             {
                 "codigo": (item.codigo_producto or "").strip().upper(),
                 "descripcion": item.descripcion or "",
                 "marca": (item.marca or "").strip().upper(),
                 "bodega": (item.bodega or "").strip() or "Bodega 1",
+                "origen_compra": _normalize_origen_compra(getattr(item, "origen_compra", None)),
                 "cantidad": cantidad,
                 "precio": precio,
+                "margen": round(float(mp), 4) if mp is not None else None,
+                "modelo_linea": (ml or "").strip() if ml is not None else "",
                 "subtotal": round(float(item.subtotal or (cantidad * precio)), 2),
             }
         )
@@ -393,8 +861,32 @@ def _serialize_document(documento: DocumentoVenta) -> dict:
     subtotal = round(float(documento.subtotal or 0), 2)
     iva = round(float(documento.impuesto or 0), 2)
     total = round(float(documento.total or 0), 2)
+    descuento_amt = round(float(getattr(documento, "descuento", None) or 0), 2)
+    subtotal_bruto = round(subtotal + descuento_amt, 2)
 
-    return {
+    party_payload = {
+        "id": (documento.proveedor_id if doc_kind in {"orden_compra", "factura_proveedor"} else documento.cliente_id)
+        or 0,
+        "proveedor_id": 0
+        if doc_kind in {"orden_compra", "factura_proveedor"}
+        else int(documento.proveedor_id or 0),
+        "name": documento.cliente_nombre or "",
+        "rut": format_rut(documento.cliente_rut),
+        "address": documento.cliente_direccion or "",
+        "telefono": format_phone_display(documento.cliente_telefono or ""),
+        "email": documento.cliente_email or "",
+        "region": documento.cliente_region or "",
+        "ciudad": documento.cliente_ciudad or "",
+        "pais": documento.cliente_pais or CHILE_COUNTRY_NAME,
+    }
+    if doc_kind not in {"orden_compra", "factura_proveedor"} and documento.cliente_id:
+        cl = db.session.get(Cliente, documento.cliente_id)
+        if cl is not None:
+            party_payload["cliente_mayorista"] = bool(getattr(cl, "cliente_mayorista", False))
+            party_payload["margen_descuento_pct"] = round(float(getattr(cl, "margen_descuento_pct", 0) or 0), 4)
+
+    msf = _round_money_cl(getattr(documento, "monto_saldo_favor", None) or 0)
+    payload = {
         "id": documento.id,
         "doc_type": doc_type,
         "tipo_documento": tipo_documento,
@@ -407,28 +899,26 @@ def _serialize_document(documento: DocumentoVenta) -> dict:
         "status": (documento.status or "pendiente").strip().lower(),
         "metodo_pago": (documento.metodo_pago or "").strip(),
         "estado_pago": (documento.estado_pago or "pendiente").strip(),
-        "party": {
-            "id": party_id or 0,
-            "name": documento.cliente_nombre or "",
-            "rut": format_rut(documento.cliente_rut),
-            "address": documento.cliente_direccion or "",
-            "telefono": documento.cliente_telefono or "",
-            "email": documento.cliente_email or "",
-            "region": documento.cliente_region or "",
-            "ciudad": documento.cliente_ciudad or "",
-            "pais": documento.cliente_pais or CHILE_COUNTRY_NAME,
-        },
+        "monto_saldo_favor": msf,
+        "pago_referencia": (getattr(documento, "pago_referencia", None) or "").strip(),
+        "party": party_payload,
         "items": items,
         "totals": {
             "subtotal": subtotal,
             "iva": iva,
             "total": total,
+            "descuento": descuento_amt,
+            "subtotal_bruto": subtotal_bruto,
             "subtotal_fmt": _format_currency(subtotal),
             "iva_fmt": _format_currency(iva),
             "total_fmt": _format_currency(total),
+            "descuento_fmt": _format_currency(descuento_amt),
+            "subtotal_bruto_fmt": _format_currency(subtotal_bruto),
         },
         "notes": documento.observacion or "",
     }
+    payload.update(_conversion_flags_for_documento(documento))
+    return payload
 
 
 def _load_document_by_number(doc_type: str, numero: str) -> DocumentoVenta | None:
@@ -488,26 +978,92 @@ def _next_credit_note_number() -> str:
     return f"NC-{max_seq + 1:04d}"
 
 
-def _adjust_product_stock(codigo: str, marca: str, bodega: str, delta: int, reason: str) -> str | None:
+def _adjust_product_stock(
+    codigo: str,
+    marca: str,
+    bodega: str,
+    origen_compra: str,
+    delta: int,
+    reason: str,
+    resolved_ref: dict | None = None,
+) -> str | None:
     if not codigo or delta == 0:
         return None
 
     code = codigo.strip().upper()
+    orig_marca_empty = not (marca or "").strip()
+    orig_origen_empty = not (origen_compra or "").strip()
     brand = (marca or "").strip().upper()
     warehouse = (bodega or "").strip() or "Bodega 1"
+    origin = _normalize_origen_compra(origen_compra)
 
     variant = (
         db.session.query(ProductoVarianteStock)
-        .filter_by(codigo_producto=code, marca=brand, bodega=warehouse)
+        .filter_by(codigo_producto=code, marca=brand, bodega=warehouse, origen_compra=origin)
         .first()
     )
+    # Documento sin marca en linea (cotizacion/OV antigua) pero stock es por variante: resolver codigo+bodega.
+    if variant is None and delta < 0 and not brand:
+        need = abs(int(delta))
+        rows_wh = (
+            db.session.query(ProductoVarianteStock)
+            .filter_by(codigo_producto=code, bodega=warehouse)
+            .order_by(ProductoVarianteStock.stock.desc())
+            .all()
+        )
+        for row in rows_wh:
+            if int(row.stock or 0) >= need:
+                variant = row
+                brand = (row.marca or "").strip().upper()
+                origin = _normalize_origen_compra(getattr(row, "origen_compra", None))
+                break
+        if variant is None and rows_wh:
+            total_wh = sum(int(r.stock or 0) for r in rows_wh)
+            return (
+                f"Stock insuficiente para {code} en {warehouse} (marca no indicada en documento). "
+                f"Disponible total: {total_wh}, requerido: {need}."
+            )
+        if variant is None:
+            rows_any = (
+                db.session.query(ProductoVarianteStock)
+                .filter_by(codigo_producto=code)
+                .order_by(ProductoVarianteStock.stock.desc())
+                .all()
+            )
+            for row in rows_any:
+                if int(row.stock or 0) >= need:
+                    variant = row
+                    brand = (row.marca or "").strip().upper()
+                    warehouse = (row.bodega or "").strip() or warehouse
+                    origin = _normalize_origen_compra(getattr(row, "origen_compra", None))
+                    break
+            if variant is None and rows_any:
+                total_any = sum(int(r.stock or 0) for r in rows_any)
+                return (
+                    f"Stock insuficiente para {code} (marca no indicada; bodega del documento distinta al stock). "
+                    f"Disponible total en sistema: {total_any}, requerido: {need}."
+                )
+
     if variant is None:
+        if delta < 0 and orig_origen_empty:
+            by_any_origin = (
+                db.session.query(ProductoVarianteStock)
+                .filter_by(codigo_producto=code, marca=brand, bodega=warehouse)
+                .order_by(ProductoVarianteStock.stock.desc())
+                .all()
+            )
+            for row in by_any_origin:
+                if int(row.stock or 0) >= abs(int(delta)):
+                    variant = row
+                    origin = _normalize_origen_compra(getattr(row, "origen_compra", None))
+                    break
         if delta < 0:
-            return f"No existe variante {code}/{brand} en {warehouse}."
+            return f"No existe variante {code}/{brand} en {warehouse} ({origin})."
         variant = ProductoVarianteStock(
             codigo_producto=code,
             marca=brand,
             bodega=warehouse,
+            origen_compra=origin,
             stock=0,
         )
         db.session.add(variant)
@@ -516,7 +1072,7 @@ def _adjust_product_stock(codigo: str, marca: str, bodega: str, delta: int, reas
     current_stock = int(variant.stock or 0)
     next_stock = current_stock + int(delta)
     if next_stock < 0:
-        return f"Stock insuficiente para {code}/{brand} en {warehouse}. Disponible: {current_stock}."
+        return f"Stock insuficiente para {code}/{brand} en {warehouse} ({origin}). Disponible: {current_stock}."
 
     variant.stock = next_stock
     db.session.add(
@@ -527,9 +1083,15 @@ def _adjust_product_stock(codigo: str, marca: str, bodega: str, delta: int, reas
             usuario=session.get("user") or "sistema",
             marca=brand,
             bodega=warehouse,
+            origen_compra=origin,
             observacion=reason,
         )
     )
+
+    if resolved_ref is not None and (orig_marca_empty or orig_origen_empty) and brand:
+        resolved_ref["marca"] = brand
+        resolved_ref["bodega"] = warehouse
+        resolved_ref["origen_compra"] = origin
 
     total_variants = db.session.execute(
         text(
@@ -569,13 +1131,20 @@ def _apply_stock_for_document(documento: DocumentoVenta, direction: str, reason:
         qty = _safe_int(str(item.cantidad or 0), default=0)
         if qty <= 0:
             continue
+        resolved: dict = {}
         error = _adjust_product_stock(
             codigo=(item.codigo_producto or "").strip().upper(),
             marca=(item.marca or "").strip().upper(),
             bodega=(item.bodega or "").strip() or "Bodega 1",
+            origen_compra=(getattr(item, "origen_compra", None) or "").strip(),
             delta=delta_sign * qty,
             reason=reason,
+            resolved_ref=resolved,
         )
+        if not error and resolved.get("marca"):
+            item.marca = resolved["marca"]
+            item.bodega = resolved.get("bodega") or item.bodega
+            item.origen_compra = resolved.get("origen_compra") or getattr(item, "origen_compra", ORIGEN_COMPRA_DEFAULT)
         if error:
             errors.append(error)
 
@@ -587,9 +1156,13 @@ def _apply_stock_for_document(documento: DocumentoVenta, direction: str, reason:
 
 
 def _serialize_chain_node(doc: DocumentoVenta) -> dict:
+    tipo = (doc.tipo or "").strip().lower()
+    metodo = (doc.metodo_pago or "").strip().lower()
+    ep = (doc.estado_pago or "pendiente").strip().lower()
+    ref = (getattr(doc, "pago_referencia", None) or "").strip()
     return {
         "id": doc.id,
-        "type": (doc.tipo or "").strip().lower(),
+        "type": tipo,
         "number": (doc.numero or "").strip(),
         "status": (doc.status or "pendiente").strip().lower(),
         "total": round(float(doc.total or 0), 2),
@@ -597,6 +1170,10 @@ def _serialize_chain_node(doc: DocumentoVenta) -> dict:
         "source_id": doc.source_id,
         "source_type": (doc.source_type or "").strip().lower(),
         "root_id": doc.root_id,
+        "estado_pago": ep,
+        "metodo_pago": metodo,
+        "metodo_pago_label": METODO_PAGO_LABELS.get(metodo, metodo) if metodo else "",
+        "pago_referencia": ref,
     }
 
 
@@ -608,6 +1185,7 @@ def _history_doc_label(doc_type: str) -> str:
         "factura": "Factura",
         "boleta": "Boleta",
         "factura_proveedor": "Factura proveedor",
+        "ingreso": "Ingreso de stock",
         "nota_credito": "Nota de credito",
     }
     return labels.get((doc_type or "").strip().lower(), (doc_type or "Documento").replace("_", " ").title())
@@ -621,6 +1199,7 @@ def _history_doc_tone(doc_type: str) -> str:
         "factura": "green",
         "boleta": "green",
         "factura_proveedor": "green",
+        "ingreso": "orange",
         "nota_credito": "slate",
     }
     return tones.get((doc_type or "").strip().lower(), "slate")
@@ -637,6 +1216,7 @@ def _history_doc_url(doc_type: str, numero: str) -> str | None:
         "factura": "ventas.facturacion",
         "boleta": "ventas.facturacion",
         "orden_compra": "ventas.orden_compra",
+        "ingreso": "bodega.movimientos",
     }
     endpoint = endpoint_map.get((doc_type or "").strip().lower())
     if endpoint is None:
@@ -701,6 +1281,10 @@ def _trace_chain_from_document(root: DocumentoVenta) -> list[dict]:
                 "source_id": nota.source_id,
                 "source_type": (nota.source_type or "").strip().lower(),
                 "root_id": nota.root_id,
+                "estado_pago": "",
+                "metodo_pago": "",
+                "metodo_pago_label": "",
+                "pago_referencia": "",
             }
         )
 
@@ -746,8 +1330,48 @@ def _build_client_history_payload(client_id: int) -> tuple[Cliente | None, dict 
     documentos = [_history_row_from_node(node) for node in cotizaciones + ordenes_venta + facturas + notas_credito]
     timeline = sorted(documentos, key=lambda item: item.get("created_at") or "", reverse=False)
 
+    saldo_actual = _round_money_cl(_cliente_saldo_favor_ledger(int(cliente.id)))
+    movimientos_saldo = (
+        ClienteSaldoFavorMovimiento.query.filter_by(cliente_id=cliente.id)
+        .order_by(ClienteSaldoFavorMovimiento.created_at.desc(), ClienteSaldoFavorMovimiento.id.desc())
+        .limit(80)
+        .all()
+    )
+    saldo_movimientos = [
+        {
+            "id": m.id,
+            "monto": m.monto,
+            "tipo": m.tipo or "",
+            "ref_factura": m.ref_factura_numero or "",
+            "ref_nc": m.ref_nota_credito_numero or "",
+            "razon": (m.razon or "")[:500],
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        }
+        for m in movimientos_saldo
+    ]
+    facturas_pago = []
+    for d in docs:
+        if (d.tipo or "").strip().lower() not in ("factura", "boleta"):
+            continue
+        facturas_pago.append(
+            {
+                "id": d.id,
+                "tipo": d.tipo,
+                "numero": d.numero or f"#{d.id}",
+                "total": float(d.total or 0),
+                "estado_pago": (d.estado_pago or "pendiente").strip().lower(),
+                "metodo_pago": (d.metodo_pago or "").strip(),
+                "metodo_label": METODO_PAGO_LABELS.get((d.metodo_pago or "").strip().lower(), d.metodo_pago or "—"),
+                "monto_saldo_favor": _round_money_cl(getattr(d, "monto_saldo_favor", 0) or 0),
+                "fecha": d.fecha_documento.strftime("%d-%m-%Y") if d.fecha_documento else "—",
+            }
+        )
+
     payload = {
         "client": cliente.to_dict(),
+        "saldo_favor": saldo_actual,
+        "saldo_movimientos": saldo_movimientos,
+        "facturas_pago": facturas_pago,
         "cotizaciones": cotizaciones,
         "ordenes_venta": ordenes_venta,
         "facturas": facturas,
@@ -771,35 +1395,133 @@ def _build_supplier_history_payload(supplier_id: int) -> tuple[Proveedor | None,
     ordenes_compra = [_serialize_chain_node(doc) for doc in docs if (doc.tipo or "") == "orden_compra"]
     facturas_proveedor = [_serialize_chain_node(doc) for doc in docs if (doc.tipo or "") == "factura_proveedor"]
     documentos = [_history_row_from_node(node) for node in ordenes_compra + facturas_proveedor]
+    pagos = []
+    total_pagado = 0.0
+    total_pendiente = 0.0
+    for node in docs:
+        item = _serialize_chain_node(node)
+        estado_pago = (item.get("estado_pago") or "pendiente").strip().lower()
+        total_doc = round(float(item.get("total") or 0), 2)
+        pagos.append(
+            {
+                "id": item.get("id"),
+                "type": item.get("type"),
+                "label": _history_doc_label(item.get("type") or ""),
+                "number": item.get("number") or (f"#{item.get('id')}" if item.get("id") else ""),
+                "fecha": (item.get("created_at") or "")[:10] if item.get("created_at") else "-",
+                "estado_pago": estado_pago or "pendiente",
+                "metodo_pago": item.get("metodo_pago_label") or "",
+                "referencia": item.get("pago_referencia") or "",
+                "total": total_doc,
+            }
+        )
+        if estado_pago == "pagado":
+            total_pagado += total_doc
+        else:
+            total_pendiente += total_doc
+
+    # Ingresos de stock de bodega vinculados a este proveedor (por id o por RUT).
+    proveedor_rut_norm = clean_rut(proveedor.rut or "")
+    ingresos_query = db.session.query(IngresoDocumento).filter(
+        or_(
+            IngresoDocumento.proveedor_id == supplier_id,
+            IngresoDocumento.proveedor_rut == proveedor_rut_norm,
+        )
+    )
+    ingresos = ingresos_query.order_by(IngresoDocumento.created_at.desc(), IngresoDocumento.id.desc()).all()
+    for ing in ingresos:
+        created_iso = ing.created_at.isoformat() if ing.created_at else None
+        total_neto = (
+            db.session.query(func.sum(IngresoDocumentoItem.valor_neto))
+            .filter(IngresoDocumentoItem.ingreso_documento_id == ing.id)
+            .scalar()
+            or 0
+        )
+        numero = (ing.numero_documento or "").strip() or f"ING-{ing.id}"
+        documentos.append(
+            {
+                "id": ing.id,
+                "type": "ingreso",
+                "label": _history_doc_label("ingreso"),
+                "badge_tone": _history_doc_tone("ingreso"),
+                "number": numero,
+                "status": "registrado",
+                "total": round(float(total_neto or 0), 2),
+                "created_at": created_iso,
+                "fecha": created_iso[:10] if created_iso else "-",
+                "view_url": url_for("bodega.movimientos"),
+                "source_id": None,
+                "root_id": None,
+            }
+        )
+
+    homologaciones: list[dict] = []
+    if proveedor_rut_norm:
+        map_rows = (
+            ProveedorCodigoInterno.query.filter_by(proveedor_rut=proveedor_rut_norm)
+            .order_by(
+                ProveedorCodigoInterno.codigo_interno.asc(),
+                ProveedorCodigoInterno.codigo_proveedor.asc(),
+            )
+            .all()
+        )
+        for m in map_rows:
+            ci = (m.codigo_interno or "").strip().upper()
+            cp = (m.codigo_proveedor or "").strip()
+            upd = m.updated_at.isoformat() if m.updated_at else None
+            homologaciones.append(
+                {
+                    "codigo_proveedor": cp,
+                    "codigo_interno": ci,
+                    "updated_at": upd,
+                    "updated_at_label": upd[:10] if upd else "—",
+                    "producto_buscar_url": url_for("productos.buscar", q=ci) if ci else None,
+                }
+            )
+
     payload = {
         "supplier": proveedor.to_dict(),
         "ordenes_compra": ordenes_compra,
         "facturas_proveedor": facturas_proveedor,
+        "pagos": pagos,
+        "pagos_total_pagado": round(total_pagado, 2),
+        "pagos_total_pendiente": round(total_pendiente, 2),
         "documentos": sorted(documentos, key=lambda item: item.get("created_at") or "", reverse=True),
         "timeline": sorted(documentos, key=lambda item: item.get("created_at") or "", reverse=False),
+        "homologaciones": homologaciones,
     }
     return proveedor, payload
 
 
 def _copy_document_with_trace(source: DocumentoVenta, target_doc_type: str, target_tipo_documento: str = "factura") -> DocumentoVenta:
-    target_number = _next_doc_number(_doc_prefix(target_doc_type))
+    if target_doc_type == "factura":
+        target_number = _next_doc_number(_sales_doc_prefix(target_tipo_documento))
+    else:
+        target_number = _next_doc_number(_doc_prefix(target_doc_type))
     source_doc_type = (source.tipo or "").strip().lower()
 
     selected_client_id = int(source.cliente_id or 0)
     selected_proveedor_id = int(source.proveedor_id or 0)
 
+    # Venta: cliente y proveedor son excluyentes; venta a proveedor conserva proveedor_id.
     if target_doc_type in {"factura", "orden_venta", "cotizacion"}:
-        selected_proveedor_id = 0
+        if selected_client_id > 0:
+            selected_proveedor_id = 0
     if target_doc_type in {"orden_compra", "factura_proveedor"}:
-        selected_client_id = 0
+        if selected_proveedor_id > 0:
+            selected_client_id = 0
 
-    selected_party = _client_by_id(selected_client_id) if selected_client_id > 0 else _proveedor_by_id(selected_proveedor_id)
+    selected_party = (
+        _client_by_id(selected_client_id)
+        if selected_client_id > 0
+        else _proveedor_by_id(selected_proveedor_id)
+    )
 
     party = {
         "name": source.cliente_nombre or "",
         "rut": format_rut(source.cliente_rut),
         "address": source.cliente_direccion or "",
-        "telefono": source.cliente_telefono or "",
+        "telefono": format_phone_display(source.cliente_telefono or ""),
         "email": source.cliente_email or "",
     }
 
@@ -811,6 +1533,13 @@ def _copy_document_with_trace(source: DocumentoVenta, target_doc_type: str, targ
             "precio": float(item.precio_unitario or 0),
             "marca": (item.marca or "").strip().upper(),
             "bodega": (item.bodega or "").strip() or "Bodega 1",
+            "origen_compra": _normalize_origen_compra(getattr(item, "origen_compra", None)),
+            "margen": (
+                round(float(item.margen_porcentaje), 4)
+                if getattr(item, "margen_porcentaje", None) is not None
+                else None
+            ),
+            "modelo_linea": ((getattr(item, "modelo_linea", None) or "") or "").strip(),
             "subtotal": round(float(item.subtotal or 0), 2),
         }
         for item in source.items
@@ -819,6 +1548,10 @@ def _copy_document_with_trace(source: DocumentoVenta, target_doc_type: str, targ
         "subtotal": round(float(source.subtotal or 0), 2),
         "iva": round(float(source.impuesto or 0), 2),
         "total": round(float(source.total or 0), 2),
+        "descuento_monto": round(float(getattr(source, "descuento", None) or 0), 2),
+        "subtotal_bruto": round(
+            float(source.subtotal or 0) + float(getattr(source, "descuento", None) or 0), 2
+        ),
     }
 
     source_root_id = source.root_id or source.id
@@ -840,16 +1573,67 @@ def _copy_document_with_trace(source: DocumentoVenta, target_doc_type: str, targ
         source_type=source_doc_type,
         root_id=source_root_id,
     )
+    _mark_source_aprobada_after_conversion(source)
     return target
 
 
+def _mark_source_aprobada_after_conversion(source: DocumentoVenta | None) -> None:
+    """Al generar el siguiente documento (cotización→OV, OV→factura/boleta, etc.), el origen queda aprobado."""
+    if source is None:
+        return
+    st = (source.status or "pendiente").strip().lower()
+    if st in ("anulada", "entregada"):
+        return
+    source.status = "aprobada"
+    source.updated_at = datetime.utcnow()
+
+
+def _mark_documento_aprobada_por_cobro(doc: DocumentoVenta) -> None:
+    """Factura/boleta cobrada en caja: estado de documento aprobado si no está entregada o anulada."""
+    if (doc.tipo or "").strip().lower() not in {"factura", "boleta"}:
+        return
+    st = (doc.status or "pendiente").strip().lower()
+    if st in ("anulada", "entregada"):
+        return
+    doc.status = "aprobada"
+
+
+def _cascade_upstream_aprobada(doc: DocumentoVenta) -> None:
+    """Cotización y orden de venta anteriores quedan aprobados al cobrar la factura o boleta final."""
+    if (doc.tipo or "").strip().lower() not in {"factura", "boleta"}:
+        return
+    current_id = doc.source_id
+    seen: set[int] = set()
+    while current_id and current_id not in seen:
+        seen.add(current_id)
+        parent = db.session.get(DocumentoVenta, current_id)
+        if parent is None:
+            break
+        ptipo = (parent.tipo or "").strip().lower()
+        if ptipo in {"cotizacion", "orden_venta", "factura", "boleta"}:
+            pst = (parent.status or "pendiente").strip().lower()
+            if pst not in ("anulada", "entregada"):
+                parent.status = "aprobada"
+                parent.updated_at = datetime.utcnow()
+        current_id = parent.source_id
+
+
 def _product_by_code(codigo: str):
-    q = text("""
+    q = text(f"""
         SELECT CODIGO AS codigo, DESCRIPCION AS descripcion,
-               MODELO AS modelo, COALESCE(P_PUBLICO, 0) AS precio,
+               MODELO AS modelo, COALESCE([CODIGO OEM], '') AS codigo_oem,
+               {_SQL_PRECIO_LISTA} AS precio,
                COALESCE(STOCK_10JUL, 0) AS stock
         FROM productos
-        WHERE UPPER(CODIGO) = :codigo AND COALESCE(ACTIVO, 1) = 1
+        WHERE COALESCE(ACTIVO, 1) = 1
+          AND (
+            UPPER(CODIGO) = :codigo
+            OR UPPER(TRIM(COALESCE([CODIGO OEM], ''))) = :codigo
+          )
+        ORDER BY
+            CASE WHEN UPPER(CODIGO) = :codigo THEN 0 ELSE 1 END,
+            COALESCE(STOCK_10JUL, 0) DESC,
+            CODIGO ASC
         LIMIT 1
     """)
     return db.session.execute(q, {"codigo": (codigo or "").strip().upper()}).mappings().first()
@@ -862,7 +1646,11 @@ def _product_variants_by_code(codigo: str) -> list[dict]:
     rows = (
         db.session.query(ProductoVarianteStock)
         .filter_by(codigo_producto=code)
-        .order_by(ProductoVarianteStock.marca.asc(), ProductoVarianteStock.bodega.asc())
+        .order_by(
+            ProductoVarianteStock.marca.asc(),
+            ProductoVarianteStock.bodega.asc(),
+            ProductoVarianteStock.origen_compra.asc(),
+        )
         .all()
     )
     return [
@@ -870,6 +1658,7 @@ def _product_variants_by_code(codigo: str) -> list[dict]:
             "id": row.id,
             "marca": row.marca or "",
             "bodega": row.bodega or "",
+            "origen_compra": _normalize_origen_compra(getattr(row, "origen_compra", None)),
             "stock": int(row.stock or 0),
             "proveedor": row.proveedor or "",
         }
@@ -889,6 +1678,7 @@ def _product_variants_map(codigos: list[str]) -> dict[str, list[dict]]:
             ProductoVarianteStock.codigo_producto.asc(),
             ProductoVarianteStock.marca.asc(),
             ProductoVarianteStock.bodega.asc(),
+            ProductoVarianteStock.origen_compra.asc(),
         )
         .all()
     )
@@ -901,11 +1691,129 @@ def _product_variants_map(codigos: list[str]) -> dict[str, list[dict]]:
                 "id": row.id,
                 "marca": row.marca or "",
                 "bodega": row.bodega or "",
+                "origen_compra": _normalize_origen_compra(getattr(row, "origen_compra", None)),
                 "stock": int(row.stock or 0),
                 "proveedor": row.proveedor or "",
             }
         )
     return variant_map
+
+
+def _ultimo_ingreso_ref(codigo: str, marca: str | None, bodega: str | None, origen_compra: str | None = None) -> dict | None:
+    """
+    Referencia comercial para ventas basada en ingresos ERP.
+
+    - costo_unitario_neto: promedio ponderado por cantidad de todos los ingresos
+      que coinciden con código + marca + bodega.
+    - precio_sugerido_neto / margen_registrado_pct: se toma de la última línea
+      ingresada para esa combinación (si existe), y si no hay P. venta explícito,
+      se infiere desde costo promedio y margen.
+    """
+    code = (codigo or "").strip().upper()
+    if not code:
+        return None
+    marca_n = (marca or "").strip().upper()
+    bodega_n = (bodega or "").strip() or "Bodega 1"
+    origen_n = _normalize_origen_compra(origen_compra)
+
+    q = (
+        db.session.query(IngresoDocumentoItem)
+        .join(IngresoDocumento, IngresoDocumento.id == IngresoDocumentoItem.ingreso_documento_id)
+        .filter(func.upper(IngresoDocumentoItem.codigo_producto) == code)
+        .filter(IngresoDocumentoItem.bodega == bodega_n)
+        .filter(IngresoDocumentoItem.origen_compra == origen_n)
+    )
+    if marca_n:
+        q = q.filter(func.upper(func.trim(IngresoDocumentoItem.marca)) == marca_n)
+    else:
+        q = q.filter(
+            or_(
+                IngresoDocumentoItem.marca.is_(None),
+                IngresoDocumentoItem.marca == "",
+                func.upper(func.trim(IngresoDocumentoItem.marca)) == "",
+            )
+        )
+
+    rows = q.all()
+    if not rows:
+        v = (
+            db.session.query(ProductoVarianteStock)
+            .filter_by(
+                codigo_producto=code,
+                marca=marca_n,
+                bodega=bodega_n,
+                origen_compra=origen_n,
+            )
+            .first()
+        )
+        om = getattr(v, "margen_override_pct", None) if v else None
+        op = getattr(v, "precio_publico_neto_override", None) if v else None
+        if om is None and op is None:
+            return None
+        return merge_ingreso_ref_variante_overrides(None, om, op)
+
+    total_qty = 0
+    total_vn = 0.0
+    for it in rows:
+        qty = int(it.cantidad or 0)
+        vn = float(it.valor_neto or 0)
+        if qty > 0 and vn > 0:
+            total_qty += qty
+            total_vn += vn
+    costo_u = (total_vn / total_qty) if total_qty > 0 and total_vn > 0 else None
+
+    item = q.order_by(IngresoDocumento.created_at.desc(), IngresoDocumentoItem.id.desc()).first()
+    pv = item.precio_venta_neto if item is not None else None
+    mg = item.margen_pct if item is not None else None
+    precio_sug: float | None = None
+    if pv is not None:
+        precio_sug = round(float(pv), 2)
+    elif costo_u is not None and mg is not None and float(mg) < 100:
+        denom = 1.0 - float(mg) / 100.0
+        if denom > 0:
+            precio_sug = round(costo_u / denom, 2)
+
+    ref = {
+        "costo_unitario_neto": round(costo_u, 2) if costo_u is not None else None,
+        "precio_sugerido_neto": precio_sug,
+        "margen_registrado_pct": float(mg) if mg is not None else None,
+        "origen_compra": origen_n,
+    }
+    v = (
+        db.session.query(ProductoVarianteStock)
+        .filter_by(
+            codigo_producto=code,
+            marca=marca_n,
+            bodega=bodega_n,
+            origen_compra=origen_n,
+        )
+        .first()
+    )
+    om = getattr(v, "margen_override_pct", None) if v else None
+    op = getattr(v, "precio_publico_neto_override", None) if v else None
+    return merge_ingreso_ref_variante_overrides(ref, om, op)
+
+
+def _fill_precio_desde_ingreso_si_vacio(payload: dict) -> None:
+    """Si catálogo no tiene precio de lista, usar precio sugerido del último ingreso (misma variante)."""
+    try:
+        p = float(payload.get("precio") or 0)
+    except (TypeError, ValueError):
+        p = 0.0
+    if p > 0:
+        return
+    ref = payload.get("ingreso_ref")
+    if not isinstance(ref, dict):
+        return
+    psn = ref.get("precio_sugerido_neto")
+    if psn is None:
+        return
+    try:
+        v = float(psn)
+        if v > 0:
+            payload["precio"] = round(v, 2)
+    except (TypeError, ValueError):
+        pass
 
 
 def _serialize_product(producto, codigo: str | None = None, variantes: list[dict] | None = None) -> dict:
@@ -916,6 +1824,7 @@ def _serialize_product(producto, codigo: str | None = None, variantes: list[dict
         {
             "marca": (variant.get("marca") or "").strip().upper(),
             "bodega": (variant.get("bodega") or "").strip() or "Bodega 1",
+            "origen_compra": _normalize_origen_compra(variant.get("origen_compra")),
             "stock": int(variant.get("stock") or 0),
             "proveedor": variant.get("proveedor") or "",
         }
@@ -927,6 +1836,7 @@ def _serialize_product(producto, codigo: str | None = None, variantes: list[dict
             {
                 "marca": (producto.get("marca") or "").strip().upper(),
                 "bodega": "Bodega 1",
+                "origen_compra": ORIGEN_COMPRA_DEFAULT,
                 "stock": int(producto.get("stock") or 0),
                 "proveedor": "",
             }
@@ -953,6 +1863,7 @@ def _serialize_product(producto, codigo: str | None = None, variantes: list[dict
         "has_variantes": len(variant_rows) > 0,
         "default_marca": (default_entry.get("marca") or "").strip().upper(),
         "default_bodega": (default_entry.get("bodega") or "").strip() or "Bodega 1",
+        "default_origen_compra": _normalize_origen_compra(default_entry.get("origen_compra")),
         "default_stock": int(default_entry.get("stock") or 0),
     }
 
@@ -969,14 +1880,14 @@ def _search_products(term: str, limit: int = 60) -> list[dict]:
     safe_limit = max(1, min(limit, 100))
 
     query = text(
-        """
+        f"""
         SELECT
             CODIGO AS codigo,
             COALESCE(DESCRIPCION, '') AS descripcion,
             COALESCE(MODELO, '') AS modelo,
             COALESCE(MARCA, '') AS marca,
             COALESCE([CODIGO OEM], '') AS codigo_oem,
-            COALESCE(P_PUBLICO, 0) AS precio,
+            {_SQL_PRECIO_LISTA} AS precio,
             COALESCE(STOCK_10JUL, 0) AS stock
         FROM productos
         WHERE COALESCE(ACTIVO, 1) = 1
@@ -1011,6 +1922,114 @@ def _search_products(term: str, limit: int = 60) -> list[dict]:
         },
     ).mappings().all()
 
+    # Fallback "SAP-like": búsqueda por tokens + ranking flexible (tolerante a orden y variaciones).
+    if not rows:
+        tokens = [t.strip().upper() for t in search_term.split() if t.strip()]
+        if len(tokens) >= 1:
+            stop_tokens = {"DE", "DEL", "LA", "EL", "LOS", "LAS", "Y", "PARA", "CON", "SIN"}
+            sig_tokens = [t for t in tokens if t not in stop_tokens]
+            token_source = sig_tokens or tokens
+            params = {"limit": safe_limit * 12}
+            token_predicates_any = []
+            token_predicates_all = []
+            for idx, tok in enumerate(token_source):
+                key = f"tk{idx}"
+                params[key] = f"%{tok}%"
+                pred = (
+                    f"""(
+                        UPPER(CODIGO) LIKE UPPER(:{key})
+                        OR UPPER(COALESCE([CODIGO OEM], '')) LIKE UPPER(:{key})
+                        OR UPPER(COALESCE(DESCRIPCION, '')) LIKE UPPER(:{key})
+                        OR UPPER(COALESCE(MARCA, '')) LIKE UPPER(:{key})
+                        OR UPPER(COALESCE(MODELO, '')) LIKE UPPER(:{key})
+                    )"""
+                )
+                token_predicates_any.append(pred)
+                token_predicates_all.append(pred)
+
+            all_match = " AND ".join(token_predicates_all) if token_predicates_all else "1=1"
+            strict_query = text(
+                f"""
+                SELECT
+                    CODIGO AS codigo,
+                    COALESCE(DESCRIPCION, '') AS descripcion,
+                    COALESCE(MODELO, '') AS modelo,
+                    COALESCE(MARCA, '') AS marca,
+                    COALESCE([CODIGO OEM], '') AS codigo_oem,
+                    {_SQL_PRECIO_LISTA} AS precio,
+                    COALESCE(STOCK_10JUL, 0) AS stock
+                FROM productos
+                WHERE COALESCE(ACTIVO, 1) = 1
+                  AND ({all_match})
+                ORDER BY LENGTH(CODIGO) ASC, CODIGO ASC
+                LIMIT :limit
+                """
+            )
+            strict_rows = db.session.execute(strict_query, params).mappings().all()
+
+            if strict_rows:
+                candidate_rows = strict_rows
+            else:
+                any_match = " OR ".join(token_predicates_any) if token_predicates_any else "1=1"
+                fallback_query = text(
+                    f"""
+                    SELECT
+                        CODIGO AS codigo,
+                        COALESCE(DESCRIPCION, '') AS descripcion,
+                        COALESCE(MODELO, '') AS modelo,
+                        COALESCE(MARCA, '') AS marca,
+                        COALESCE([CODIGO OEM], '') AS codigo_oem,
+                        {_SQL_PRECIO_LISTA} AS precio,
+                        COALESCE(STOCK_10JUL, 0) AS stock
+                    FROM productos
+                    WHERE COALESCE(ACTIVO, 1) = 1
+                      AND ({any_match})
+                    ORDER BY LENGTH(CODIGO) ASC, CODIGO ASC
+                    LIMIT :limit
+                    """
+                )
+                candidate_rows = db.session.execute(fallback_query, params).mappings().all()
+            phrase = search_term.upper()
+
+            def _best_token_fuzzy(token: str, words: list[str]) -> float:
+                best = 0.0
+                for w in words:
+                    if not w:
+                        continue
+                    ratio = SequenceMatcher(None, token, w).ratio()
+                    if ratio > best:
+                        best = ratio
+                return best
+
+            def _score_candidate(r):
+                code = (r.get("codigo") or "").strip().upper()
+                oem = (r.get("codigo_oem") or "").strip().upper()
+                desc = (r.get("descripcion") or "").strip().upper()
+                marca = (r.get("marca") or "").strip().upper()
+                modelo = (r.get("modelo") or "").strip().upper()
+                blob = f"{code} {oem} {desc} {marca} {modelo}"
+                words = [w for w in blob.split() if w]
+                score = 0.0
+                if phrase and phrase in blob:
+                    score += 10.0
+                for tk in token_source:
+                    if tk in blob:
+                        score += 3.0
+                        if code.startswith(tk):
+                            score += 2.0
+                        if oem.startswith(tk):
+                            score += 2.0
+                    elif len(tk) >= 3:
+                        fuzzy = _best_token_fuzzy(tk, words)
+                        if fuzzy >= 0.84:
+                            score += 1.8
+                        elif fuzzy >= 0.74:
+                            score += 0.9
+                return (-score, len(code), code)
+
+            ranked = sorted(candidate_rows, key=_score_candidate)
+            rows = ranked[:safe_limit]
+
     codes = [(row.get("codigo") or "").strip().upper() for row in rows if row.get("codigo")]
     variant_map = _product_variants_map(codes)
 
@@ -1026,6 +2045,7 @@ def _search_products(term: str, limit: int = 60) -> list[dict]:
                         **payload,
                         "marca": entry.get("marca") or "",
                         "bodega": entry.get("bodega") or "Bodega 1",
+                        "origen_compra": _normalize_origen_compra(entry.get("origen_compra")),
                         "variant_stock": int(entry.get("stock") or 0),
                     }
                 )
@@ -1035,6 +2055,7 @@ def _search_products(term: str, limit: int = 60) -> list[dict]:
                     **payload,
                     "marca": "",
                     "bodega": "Bodega 1",
+                    "origen_compra": ORIGEN_COMPRA_DEFAULT,
                     "variant_stock": int(payload.get("stock") or 0),
                 }
             )
@@ -1051,6 +2072,8 @@ def _discount_stock_for_sale(items: list[dict], doc_number: str) -> list[str]:
         qty = _safe_int(str(item.get("cantidad") or "1"), default=1)
         marca = (item.get("marca") or "").strip().upper()
         bodega = (item.get("bodega") or "").strip() or "Bodega 1"
+        origen_raw = (item.get("origen_compra") or "").strip().lower()
+        origen_compra = _normalize_origen_compra(origen_raw)
 
         variants = _product_variants_by_code(codigo)
         if variants:
@@ -1058,13 +2081,38 @@ def _discount_stock_for_sale(items: list[dict], doc_number: str) -> list[str]:
                 errors.append(f"El item {codigo} requiere seleccionar marca/variante.")
                 continue
 
-            variante = (
+            same_variant_rows = (
                 db.session.query(ProductoVarianteStock)
                 .filter_by(codigo_producto=codigo, marca=marca, bodega=bodega)
+                .order_by(ProductoVarianteStock.origen_compra.asc())
+                .all()
+            )
+            origins_available = sorted({
+                _normalize_origen_compra(getattr(row, "origen_compra", None))
+                for row in same_variant_rows
+            })
+            if not origen_raw and len(origins_available) == 1:
+                origen_compra = origins_available[0]
+            if len(origins_available) > 1 and not origen_raw:
+                errors.append(
+                    f"El item {codigo} / {marca} en {bodega} requiere seleccionar origen de compra."
+                )
+                continue
+
+            variante = (
+                db.session.query(ProductoVarianteStock)
+                .filter_by(
+                    codigo_producto=codigo,
+                    marca=marca,
+                    bodega=bodega,
+                    origen_compra=origen_compra,
+                )
                 .first()
             )
             if variante is None:
-                errors.append(f"La variante {codigo} / {marca} en {bodega} no existe.")
+                errors.append(
+                    f"La variante {codigo} / {marca} en {bodega} ({origen_compra}) no existe."
+                )
                 continue
 
             disponible = int(variante.stock or 0)
@@ -1083,6 +2131,7 @@ def _discount_stock_for_sale(items: list[dict], doc_number: str) -> list[str]:
                     usuario=session.get("user") or "sistema",
                     marca=marca,
                     bodega=bodega,
+                    origen_compra=origen_compra,
                     observacion=f"Venta {doc_number}",
                 )
             )
@@ -1136,10 +2185,37 @@ def _discount_stock_for_sale(items: list[dict], doc_number: str) -> list[str]:
                 cantidad=-qty,
                 usuario=session.get("user") or "sistema",
                 bodega=bodega,
+                    origen_compra=origen_compra,
                 observacion=f"Venta {doc_number}",
             )
         )
 
+    return errors
+
+
+def _origin_selection_errors(items: list[dict]) -> list[str]:
+    errors: list[str] = []
+    for item in items:
+        codigo = (item.get("codigo") or "").strip().upper()
+        marca = (item.get("marca") or "").strip().upper()
+        bodega = (item.get("bodega") or "").strip() or "Bodega 1"
+        origen = (item.get("origen_compra") or "").strip().lower()
+        if not codigo or not marca:
+            continue
+        rows = (
+            db.session.query(ProductoVarianteStock.origen_compra)
+            .filter_by(codigo_producto=codigo, marca=marca, bodega=bodega)
+            .distinct()
+            .all()
+        )
+        origins = sorted({
+            _normalize_origen_compra(r[0])
+            for r in rows
+        })
+        if len(origins) > 1 and not origen:
+            errors.append(
+                f"Debes seleccionar origen para {codigo} / {marca} en {bodega}."
+            )
     return errors
 
 
@@ -1159,6 +2235,167 @@ def _base_ctx():
     }
 
 
+def _sii_contribuyente_user_can_lookup() -> bool:
+    """Quién puede consultar datos SII al crear/editar terceros en Ventas."""
+    user = session.get("user")
+    rol = session.get("rol")
+    return (
+        has_permission(user, rol, "sii_ver")
+        or has_permission(user, rol, "mod_ventas")
+        or has_permission(user, rol, "ventas_guardar_documento")
+    )
+
+
+def _sii_contribuyente_form_ctx() -> dict:
+    """Contexto base para autocompletar RUT desde SII."""
+    from app.sii_sync.sii_service import SIIService
+
+    svc = SIIService()
+    api_ready = svc.contribuyente_lookup_ready()
+    enabled = api_ready and _sii_contribuyente_user_can_lookup()
+    return {
+        "sii_contribuyente_lookup_available": api_ready,
+        "sii_contribuyente_enabled": enabled,
+        "sii_contribuyente_api_url": url_for("sii_sync.api_contribuyente"),
+    }
+
+
+def _recent_parties_sii_preload(party: str, limit: int = 20) -> list[dict]:
+    """Precarga datos locales (sin SII) para sessionStorage del autocompletado."""
+    from app.utils.rut_utils import clean_rut, format_rut
+
+    rows: list = []
+    if party == "proveedores":
+        rows = (
+            Proveedor.query.filter_by(activo=True)
+            .filter(Proveedor.rut != "", Proveedor.rut.isnot(None))
+            .order_by(Proveedor.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+    else:
+        rows = (
+            Cliente.query.filter_by(activo=True)
+            .filter(Cliente.rut != "", Cliente.rut.isnot(None))
+            .order_by(Cliente.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+    preload: list[dict] = []
+    for row in rows:
+        rut_raw = (row.rut or "").strip()
+        if len(clean_rut(rut_raw)) < 8:
+            continue
+        nombre = (
+            (getattr(row, "empresa", None) or "").strip()
+            or (row.nombre or "").strip()
+        )
+        preload.append(
+            {
+                "rut": format_rut(rut_raw) or rut_raw,
+                "razon_social": nombre,
+                "giro": (row.giro or "").strip(),
+                "direccion": (row.direccion or "").strip(),
+                "comuna": (row.comuna or "").strip(),
+                "region": (row.region or "").strip(),
+                "estado_sii": "REGISTRO LOCAL",
+            }
+        )
+    return preload
+
+
+def _sii_contribuyente_config_payload(
+    *profiles: dict, party_preload: str = "clientes"
+) -> dict:
+    """Añade sii_contribuyente_config con perfiles de campos (página o panel inline)."""
+    ctx = _sii_contribuyente_form_ctx()
+    config: dict = {
+        "enabled": ctx["sii_contribuyente_enabled"],
+        "apiUrl": ctx["sii_contribuyente_api_url"],
+        "profiles": list(profiles),
+    }
+    if party_preload in ("clientes", "proveedores"):
+        config["partiesPreload"] = _recent_parties_sii_preload(party_preload)
+    ctx["sii_contribuyente_config"] = config
+    return ctx
+
+
+def _sii_profile_cliente_form() -> dict:
+    return {
+        "rutInputId": "rut",
+        "nombreFieldId": "nombre",
+        "giroFieldId": "giro",
+        "direccionFieldId": "direccion",
+        "regionFieldId": "region",
+        "comunaFieldId": "comuna",
+        "ciudadFieldId": "ciudad",
+        "locationMode": "chile_geo",
+        "badgeId": "siiRutBadge",
+        "spinnerId": "siiRutSpinner",
+    }
+
+
+def _sii_profile_proveedor_form() -> dict:
+    return {
+        "rutInputId": "rut",
+        "nombreFieldId": "empresa",
+        "giroFieldId": "giro",
+        "direccionFieldId": "direccion",
+        "regionFieldId": "region",
+        "comunaFieldId": "comuna",
+        "ciudadFieldId": "ciudad",
+        "locationMode": "chile_geo",
+        "badgeId": "siiRutBadge",
+        "spinnerId": "siiRutSpinner",
+    }
+
+
+def _sii_profile_inline_party(is_supplier_doc: bool) -> dict:
+    """Panel «Crear nuevo cliente/proveedor» en cotización / OV / factura."""
+    profile = {
+        "rutInputId": "ic_rut",
+        "giroFieldId": "ic_giro",
+        "direccionFieldId": "ic_direccion",
+        "regionFieldId": "ic_region",
+        "comunaFieldId": "ic_ciudad",
+        "ciudadFieldId": "ic_ciudad",
+        "locationMode": "inline_city",
+        "badgeId": "siiIcRutBadge",
+        "spinnerId": "siiIcRutSpinner",
+    }
+    if is_supplier_doc:
+        profile["empresaFieldId"] = "ic_empresa"
+        profile["nombreFieldId"] = "ic_nombre"
+    else:
+        profile["nombreFieldId"] = "ic_nombre"
+    return profile
+
+
+def _parse_bool_flag(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    s = str(value).strip().lower()
+    return s in ("1", "true", "on", "yes", "si", "y")
+
+
+def _parse_margen_descuento_pct(value) -> float:
+    if value is None or value == "":
+        return 0.0
+    try:
+        x = float(str(value).replace(",", ".").strip())
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(100.0, x))
+
+
+def _is_metropolitana_region(region: str) -> bool:
+    r = (region or "").strip().lower()
+    return "metropolitana" in r
+
+
 def _cliente_form_data(source=None) -> dict:
     source = source or {}
     pais = _normalize_country(source.get("pais"), default=CHILE_COUNTRY_NAME)
@@ -1166,18 +2403,21 @@ def _cliente_form_data(source=None) -> dict:
     comuna = _clean_text(source.get("comuna") or source.get("comuna_text"))
     ciudad = _clean_text(source.get("ciudad"))
     if _is_chile_country(pais) and comuna and not ciudad:
-        ciudad = comuna
+        ciudad = "Santiago" if _is_metropolitana_region(region) else comuna
+    ciudad = _upper_text(ciudad)
     return {
-        "nombre": _clean_text(source.get("nombre")),
+        "nombre": _upper_text(source.get("nombre")),
         "rut": clean_rut(source.get("rut")),
-        "giro": _clean_text(source.get("giro")),
-        "direccion": _clean_text(source.get("direccion")),
+        "giro": _upper_text(source.get("giro")),
+        "direccion": _upper_text(source.get("direccion")),
         "region": region,
         "comuna": comuna,
         "ciudad": ciudad,
         "pais": pais,
-        "telefono": _clean_text(source.get("telefono")),
-        "email": _clean_text(source.get("email")),
+        "telefono": phone_to_compact_e164(_clean_text(source.get("telefono")), pais),
+        "email": _normalize_party_email(source.get("email")),
+        "cliente_mayorista": _parse_bool_flag(source.get("cliente_mayorista")),
+        "margen_descuento_pct": _parse_margen_descuento_pct(source.get("margen_descuento_pct")),
     }
 
 
@@ -1188,19 +2428,27 @@ def _proveedor_form_data(source=None) -> dict:
     comuna = _clean_text(source.get("comuna") or source.get("comuna_text"))
     ciudad = _clean_text(source.get("ciudad"))
     if _is_chile_country(pais) and comuna and not ciudad:
-        ciudad = comuna
+        ciudad = "Santiago" if _is_metropolitana_region(region) else comuna
+    ciudad = _upper_text(ciudad)
+    empresa = _upper_text(source.get("empresa"))
+    nombre = _upper_text(source.get("nombre"))
+    # Form/API may send only one of the two; listado usa "empresa" y la ficha tenia solo "nombre".
+    if not empresa and nombre:
+        empresa = nombre
+    if not nombre and empresa:
+        nombre = empresa
     return {
-        "nombre": _clean_text(source.get("nombre")),
-        "empresa": _clean_text(source.get("empresa")),
+        "nombre": nombre,
+        "empresa": empresa,
         "rut": clean_rut(source.get("rut")),
-        "giro": _clean_text(source.get("giro")),
-        "direccion": _clean_text(source.get("direccion")),
+        "giro": _upper_text(source.get("giro")),
+        "direccion": _upper_text(source.get("direccion")),
         "region": region,
         "comuna": comuna,
         "ciudad": ciudad,
         "pais": pais,
-        "telefono": _clean_text(source.get("telefono")),
-        "email": _clean_text(source.get("email")),
+        "telefono": phone_to_compact_e164(_clean_text(source.get("telefono")), pais),
+        "email": _normalize_party_email(source.get("email")),
     }
 
 
@@ -1226,8 +2474,8 @@ def _validate_cliente_data(data: dict, rut_required: bool = False) -> list[str]:
 
 def _validate_proveedor_data(data: dict, rut_required: bool = True) -> list[str]:
     errors = []
-    if not data["nombre"]:
-        errors.append("El nombre del proveedor es obligatorio.")
+    if not data["nombre"] and not data["empresa"]:
+        errors.append("La empresa / razon social o el nombre de contacto es obligatorio.")
     if not data["pais"]:
         errors.append("El pais del proveedor es obligatorio.")
     if _is_chile_country(data["pais"]):
@@ -1255,6 +2503,8 @@ def _hydrate_cliente(instance: Cliente, data: dict) -> Cliente:
     instance.pais = data["pais"]
     instance.telefono = data["telefono"]
     instance.email = data["email"]
+    instance.cliente_mayorista = bool(data.get("cliente_mayorista"))
+    instance.margen_descuento_pct = float(data.get("margen_descuento_pct") or 0)
     instance.activo = True
     return instance
 
@@ -1303,14 +2553,14 @@ def _entity_snapshot(entity, is_supplier_doc: bool) -> dict:
             "name": entity.empresa or entity.nombre or "",
             "rut": format_rut(entity.rut),
             "address": _full_address(entity),
-            "telefono": entity.telefono or "",
+            "telefono": format_phone_display(entity.telefono or ""),
             "email": entity.email or "",
         }
     return {
         "name": entity.nombre or "",
         "rut": format_rut(entity.rut),
         "address": _full_address(entity),
-        "telefono": entity.telefono or "",
+        "telefono": format_phone_display(entity.telefono or ""),
         "email": entity.email or "",
     }
 
@@ -1319,19 +2569,26 @@ def _merge_party(form, entity, is_supplier_doc: bool) -> dict:
     base = _entity_snapshot(entity, is_supplier_doc)
     if not form:
         return base
+    pais_ent = (getattr(entity, "pais", CHILE_COUNTRY_NAME) or CHILE_COUNTRY_NAME).strip() if entity else CHILE_COUNTRY_NAME
+    ph_form = _clean_text(form.get("party_telefono"))
+    if ph_form:
+        c = phone_to_compact_e164(ph_form, pais_ent)
+        tel_out = format_phone_display(c) if c else ""
+    else:
+        tel_out = base["telefono"]
     return {
         "name": _clean_text(form.get("party_name")) or base["name"],
         "rut": format_rut(_clean_text(form.get("party_rut")) or base["rut"]),
         "address": _clean_text(form.get("party_address")) or base["address"],
-        "telefono": _clean_text(form.get("party_telefono")) or base["telefono"],
+        "telefono": tel_out,
         "email": _clean_text(form.get("party_email")) or base["email"],
     }
 
 
 def _doc_validation_errors(doc_type: str, tipo_documento: str, selected_client, selected_proveedor, party: dict, items: list[dict]) -> list[str]:
     errors = []
-    if doc_type in {"cotizacion", "orden_venta", "factura"} and selected_client is None:
-        errors.append("Debe seleccionar un cliente.")
+    if doc_type in {"cotizacion", "orden_venta", "factura"} and selected_client is None and selected_proveedor is None:
+        errors.append("Debe seleccionar un cliente o un proveedor registrado (venta a proveedor).")
 
     if doc_type in {"orden_compra", "factura_proveedor"} and selected_proveedor is None:
         errors.append("Debe seleccionar un proveedor.")
@@ -1373,14 +2630,22 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
     now = datetime.now()
     chile_geo = _load_chile_geo()
     form = request.form if request.method == "POST" else None
+    tipo_documento = ((form.get("tipo_documento") if form else None) or "factura").strip().lower()
+
+    if request.method == "GET" and doc_type in {"factura", "orden_venta"}:
+        raw_tipo = _clean_text(request.args.get("tipo_documento") or request.args.get("tipo")).lower()
+        if raw_tipo in {"factura", "boleta"}:
+            tipo_documento = raw_tipo
+
     prefix = _doc_prefix(doc_type)
+    if doc_type == "factura":
+        prefix = _sales_doc_prefix(tipo_documento)
 
     doc_number = (form.get("doc_number") if form else None) or _next_doc_number(prefix)
     doc_date = (form.get("doc_date") if form else None) or now.strftime("%Y-%m-%d")
     doc_valid_until = (form.get("doc_valid_until") if form else None) or now.strftime("%Y-%m-%d")
     notes = ((form.get("notes") if form else None) or "").strip()
     status = ((form.get("status") if form else None) or "pendiente").strip().lower()
-    tipo_documento = ((form.get("tipo_documento") if form else None) or "factura").strip().lower()
 
     selected_client_id = _safe_int((form.get("client_id") if form else None) or "0", default=0)
     selected_proveedor_id = _safe_int((form.get("proveedor_id") if form else None) or "0", default=0)
@@ -1389,17 +2654,28 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
     proveedores = _all_proveedores() if is_supplier_doc else []
     selected_client = _client_by_id(selected_client_id)
     selected_proveedor = _proveedor_by_id(selected_proveedor_id)
-    selected_party = selected_proveedor if is_supplier_doc else selected_client
+    if is_supplier_doc:
+        selected_party = selected_proveedor
+    else:
+        selected_party = selected_client if selected_client_id else selected_proveedor
     party = _merge_party(form, selected_party, is_supplier_doc)
     loaded_document_id = _safe_int((form.get("loaded_document_id") if form else None) or "0", default=0)
 
     items = _extract_items_from_form(form)
-    totals = _calculate_totals(items)
+    cliente_totales = (
+        selected_client
+        if (not is_supplier_doc and selected_client_id and selected_client is not None)
+        else None
+    )
+    totals = _calculate_totals(items, cliente_totales)
     validation_errors = []
+    save_error = ""
     saved_successfully = False
     saved_number = ""
     estado_pago = "pendiente"
     metodo_pago = ""
+    monto_saldo_favor_val = 0.0
+    metodo_pago_resto = ""
 
     if request.method == "GET":
         requested_number = _clean_text(request.args.get("numero")).upper()
@@ -1418,7 +2694,10 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
                 selected_proveedor_id = int(loaded_document.proveedor_id or 0)
                 selected_client = _client_by_id(selected_client_id)
                 selected_proveedor = _proveedor_by_id(selected_proveedor_id)
-                selected_party = selected_proveedor if is_supplier_doc else selected_client
+                if is_supplier_doc:
+                    selected_party = selected_proveedor
+                else:
+                    selected_party = selected_client if selected_client_id else selected_proveedor
                 loaded_document_id = loaded_document.id
                 items = serialized["items"] or items
                 estado_pago = serialized.get("estado_pago", "pendiente")
@@ -1428,8 +2707,13 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
                     "iva": serialized["totals"].get("iva", totals["iva"]),
                     "total": serialized["totals"].get("total", totals["total"]),
                 }
+                if doc_type == "factura":
+                    monto_saldo_favor_val = float(serialized.get("monto_saldo_favor") or 0)
 
     if request.method == "POST":
+        if form and doc_type == "factura":
+            monto_saldo_favor_val = _safe_float((form.get("monto_saldo_favor") or "0").strip())
+            metodo_pago_resto = (form.get("metodo_pago_resto") or "").strip().lower()
         if doc_type in {"orden_venta", "factura"} and tipo_documento not in {"factura", "boleta"}:
             validation_errors.append("Selecciona un tipo de documento valido: factura o boleta.")
 
@@ -1441,13 +2725,20 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
             party,
             items,
         ) + validation_errors
+        if doc_type in {"orden_venta", "factura"}:
+            validation_errors.extend(_origin_selection_errors(items))
 
         for error in validation_errors:
             flash(error, "error")
 
         if not validation_errors:
             try:
-                print(f"Saving {doc_type}: {doc_number}")
+                pay_kw: dict = {}
+                if doc_type == "factura":
+                    pay_kw = {
+                        "pago_saldo_monto": monto_saldo_favor_val,
+                        "metodo_pago_resto": metodo_pago_resto,
+                    }
                 saved_document = _save_or_update_document(
                     doc_type=doc_type,
                     doc_number=doc_number,
@@ -1462,6 +2753,7 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
                     items=items,
                     totals=totals,
                     notes=notes,
+                    **pay_kw,
                 )
 
                 if doc_type == "factura" and not saved_document.stock_deducted:
@@ -1486,7 +2778,6 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
                     "factura_proveedor": "Documento de compra guardado",
                 }
                 flash(success_messages.get(doc_type, "Documento guardado"), "success")
-                print(f"saved successfully: {saved_number}")
 
                 serialized = _serialize_document(saved_document)
                 doc_date = serialized["fecha_documento"] or doc_date
@@ -1503,16 +2794,45 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
                     "iva": serialized["totals"].get("iva", totals["iva"]),
                     "total": serialized["totals"].get("total", totals["total"]),
                 }
+                if doc_type == "factura":
+                    monto_saldo_favor_val = float(serialized.get("monto_saldo_favor") or 0)
 
                 selected_client_id = int(saved_document.cliente_id or 0)
                 selected_proveedor_id = int(saved_document.proveedor_id or 0)
                 selected_client = _client_by_id(selected_client_id)
                 selected_proveedor = _proveedor_by_id(selected_proveedor_id)
-                selected_party = selected_proveedor if is_supplier_doc else selected_client
+                if is_supplier_doc:
+                    selected_party = selected_proveedor
+                else:
+                    selected_party = selected_client if selected_client_id else selected_proveedor
             except Exception as exc:
                 db.session.rollback()
-                print(f"Error saving {doc_type}: {exc}")
-                flash(f"No se pudo guardar el documento: {exc}", "error")
+                current_app.logger.exception(
+                    "Error guardando documento ventas tipo=%s numero=%s", doc_type, doc_number
+                )
+                save_error = f"No se pudo guardar el documento: {exc}"
+                flash(save_error, "error")
+
+    doc_for_conv = db.session.get(DocumentoVenta, loaded_document_id) if loaded_document_id else None
+    doc_conversion = (
+        _conversion_flags_for_documento(doc_for_conv)
+        if doc_for_conv is not None
+        else {
+            "puede_convertir_a_orden_venta": True,
+            "puede_convertir_a_factura_boleta": True,
+            "documento_hijo_resumen": None,
+            "documento_hijo_tipo": None,
+            "picking_bloquea_facturacion": False,
+            "picking_status": None,
+        }
+    )
+
+    cliente_saldo_favor_erp = 0.0
+    if not is_supplier_doc and int(selected_client_id or 0) > 0:
+        base_ldg = _cliente_saldo_favor_ledger(int(selected_client_id))
+        cliente_saldo_favor_erp = _round_money_cl(base_ldg)
+        if doc_type == "factura" and monto_saldo_favor_val > 0:
+            cliente_saldo_favor_erp = _round_money_cl(base_ldg + monto_saldo_favor_val)
 
     return {
         "active_page": doc_type,
@@ -1542,10 +2862,13 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
             "subtotal": _format_currency(totals["subtotal"]),
             "iva": _format_currency(totals["iva"]),
             "total": _format_currency(totals["total"]),
+            "descuento": _format_currency(totals.get("descuento_monto") or 0),
+            "subtotal_bruto": _format_currency(totals.get("subtotal_bruto") or totals["subtotal"]),
         },
         "notes": notes,
         "generated": saved_successfully,
         "saved_number": saved_number,
+        "save_error": save_error,
         "can_traceability": _is_admin_user(),
         "validation_errors": validation_errors,
         "document_summary": _document_summary(doc_type, tipo_documento),
@@ -1557,11 +2880,20 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
         "numero": doc_number,
         "estado_pago": estado_pago,
         "metodo_pago": metodo_pago,
+        "monto_saldo_favor": monto_saldo_favor_val,
+        "metodo_pago_resto": metodo_pago_resto,
+        "cliente_saldo_favor_erp": cliente_saldo_favor_erp,
+        "metodo_pago_resto_choices": [(k, METODO_PAGO_LABELS.get(k, k)) for k in METODO_PAGO_OPTIONS if k != "saldo_favor"],
         "party_email": (party or {}).get("email", ""),
         "party_phone": (party or {}).get("telefono", ""),
         "client_email": (party or {}).get("email", ""),
         "client_phone": (party or {}).get("telefono", ""),
+        "doc_conversion": doc_conversion,
         **_base_ctx(),
+        **_sii_contribuyente_config_payload(
+            _sii_profile_inline_party(is_supplier_doc),
+            party_preload="proveedores" if is_supplier_doc else "clientes",
+        ),
     }
 
 
@@ -1579,16 +2911,15 @@ def index():
 @ventas_bp.route("/cotizacion", methods=["GET", "POST"])
 @login_required
 def cotizacion():
+    if request.method == "POST" and not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return _deny_perm_response("No tienes permiso para guardar documentos de venta.")
     _partial = request.headers.get("X-Requested-With") == "XMLHttpRequest"
     ctx = _build_doc_context("cotizacion", "Cotización", "Cliente", False, False)
+    ajax_resp = _ajax_doc_save_response(ctx, default_ok_message="Cotización guardada correctamente")
+    if ajax_resp is not None:
+        return ajax_resp
     if request.method == "POST" and ctx.get("generated"):
         numero = (ctx.get("saved_number") or ctx.get("doc_number") or "").strip()
-        if _partial:
-            return jsonify({
-                "success": True,
-                "message": "Cotización guardada correctamente",
-                "doc_number": numero,
-            })
         flash("Cotización guardada correctamente", "success")
         if numero:
             return redirect(url_for("ventas.cotizacion", numero=numero))
@@ -1601,15 +2932,13 @@ def cotizacion():
 @ventas_bp.route("/orden_venta", methods=["GET", "POST"])
 @login_required
 def orden_venta():
+    if request.method == "POST" and not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return _deny_perm_response("No tienes permiso para guardar documentos de venta.")
     _partial = request.headers.get("X-Requested-With") == "XMLHttpRequest"
     ctx = _build_doc_context("orden_venta", "Orden de Venta", "Cliente", False, True)
-    if request.method == "POST" and ctx.get("generated") and _partial:
-        numero = (ctx.get("saved_number") or ctx.get("doc_number") or "").strip()
-        return jsonify({
-            "success": True,
-            "message": "Orden de venta guardada correctamente",
-            "doc_number": numero,
-        })
+    ajax_resp = _ajax_doc_save_response(ctx, default_ok_message="Orden de venta guardada correctamente")
+    if ajax_resp is not None:
+        return ajax_resp
     ctx["_partial"] = _partial
     return render_template("ventas/orden_venta.html", **ctx)
 
@@ -1618,15 +2947,13 @@ def orden_venta():
 @ventas_bp.route("/orden_compra", methods=["GET", "POST"])
 @login_required
 def orden_compra():
+    if request.method == "POST" and not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return _deny_perm_response("No tienes permiso para guardar documentos de venta.")
     _partial = request.headers.get("X-Requested-With") == "XMLHttpRequest"
     ctx = _build_doc_context("orden_compra", "Orden de Compra", "Proveedor", True, False)
-    if request.method == "POST" and ctx.get("generated") and _partial:
-        numero = (ctx.get("saved_number") or ctx.get("doc_number") or "").strip()
-        return jsonify({
-            "success": True,
-            "message": "Orden de compra guardada correctamente",
-            "doc_number": numero,
-        })
+    ajax_resp = _ajax_doc_save_response(ctx, default_ok_message="Orden de compra guardada correctamente")
+    if ajax_resp is not None:
+        return ajax_resp
     ctx["_partial"] = _partial
     return render_template("ventas/documento.html", **ctx)
 
@@ -1635,7 +2962,19 @@ def orden_compra():
 @ventas_bp.route("/factura", methods=["GET", "POST"])
 @login_required
 def facturacion():
+    if request.method == "POST" and not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return _deny_perm_response("No tienes permiso para guardar documentos de venta.")
+    _partial = request.headers.get("X-Requested-With") == "XMLHttpRequest"
     ctx = _build_doc_context("factura", "Facturación", "Cliente", False, True)
+    if (ctx.get("tipo_documento") or "").lower() == "boleta":
+        ctx["active_page"] = "boleta"
+        ctx["title"] = "Boleta"
+    tipo = (ctx.get("tipo_documento") or "factura").lower()
+    label = "Boleta" if tipo == "boleta" else "Factura"
+    ajax_resp = _ajax_doc_save_response(ctx, default_ok_message=f"{label} guardada correctamente")
+    if ajax_resp is not None:
+        return ajax_resp
+    ctx["_partial"] = _partial
     return render_template("ventas/factura.html", **ctx)
 
 
@@ -1661,6 +3000,8 @@ def clientes():
 @ventas_bp.route("/clientes/nuevo", methods=["GET", "POST"])
 @login_required
 def cliente_nuevo():
+    if request.method == "POST" and not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return _deny_perm_response("No tienes permiso para crear clientes.")
     chile_geo = _load_chile_geo()
     form_data = _cliente_form_data(request.form if request.method == "POST" else None)
     if request.method == "POST":
@@ -1682,12 +3023,15 @@ def cliente_nuevo():
         chile_regions=_chile_regions(chile_geo),
         active_page="clientes",
         **_base_ctx(),
+        **_sii_contribuyente_config_payload(_sii_profile_cliente_form()),
     )
 
 
 @ventas_bp.route("/clientes/<int:cid>/editar", methods=["GET", "POST"])
 @login_required
 def cliente_editar(cid: int):
+    if request.method == "POST" and not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return _deny_perm_response("No tienes permiso para editar clientes.")
     chile_geo = _load_chile_geo()
     c = db.session.get(Cliente, cid)
     if c is None or not c.activo:
@@ -1717,12 +3061,15 @@ def cliente_editar(cid: int):
         cliente_id=cid,
         active_page="clientes",
         **_base_ctx(),
+        **_sii_contribuyente_config_payload(_sii_profile_cliente_form()),
     )
 
 
 @ventas_bp.route("/clientes/<int:cid>/eliminar", methods=["POST"])
 @login_required
 def cliente_eliminar(cid: int):
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return _deny_perm_response("No tienes permiso para desactivar clientes.")
     c = db.session.get(Cliente, cid)
     if c and c.activo:
         c.activo = False
@@ -1745,6 +3092,57 @@ def cliente_historial(cid: int):
         active_page="clientes",
         **_base_ctx(),
     )
+
+
+@ventas_bp.route("/clientes/<int:cid>/saldo_favor", methods=["POST"])
+@login_required
+def cliente_saldo_favor_manual(cid: int):
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        flash("Sin permiso para registrar saldo a favor.", "error")
+        return redirect(url_for("ventas.cliente_historial", cid=cid))
+    c = db.session.get(Cliente, cid)
+    if c is None or not c.activo:
+        flash("Cliente no encontrado.", "error")
+        return redirect(url_for("ventas.clientes"))
+    monto = _round_money_cl(_safe_float((request.form.get("monto_saldo_agregar") or "0").strip()))
+    nfac = (request.form.get("ref_numero_factura") or "").strip()[:100]
+    nnc = (request.form.get("ref_numero_nota_credito") or "").strip()[:100]
+    razon = (request.form.get("ref_razon_saldo") or "").strip()
+    if monto <= 0:
+        flash("El monto a acreditar debe ser mayor a 0.", "error")
+        return redirect(url_for("ventas.cliente_historial", cid=cid))
+    if not nfac or not nnc or not razon:
+        flash("Completá número de factura, nota de crédito y la razón del crédito.", "error")
+        return redirect(url_for("ventas.cliente_historial", cid=cid))
+    try:
+        db.session.add(
+            ClienteSaldoFavorMovimiento(
+                cliente_id=c.id,
+                monto=monto,
+                tipo="manual_ingreso",
+                ref_factura_numero=nfac,
+                ref_nota_credito_numero=nnc,
+                razon=razon[:2000],
+                usuario=session.get("user") or "sistema",
+            )
+        )
+        db.session.commit()
+        flash("Saldo a favor registrado correctamente.", "success")
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("saldo_favor manual")
+        flash(f"No se pudo registrar el saldo: {exc}", "error")
+    return redirect(url_for("ventas.cliente_historial", cid=cid))
+
+
+@ventas_bp.route("/api/cliente/<int:cid>/saldo_favor", methods=["GET"])
+@login_required
+def api_cliente_saldo_favor(cid: int):
+    c = db.session.get(Cliente, cid)
+    if c is None or not c.activo:
+        return jsonify({"success": False, "message": "Cliente no encontrado"}), 404
+    sal = _round_money_cl(_cliente_saldo_favor_ledger(c.id))
+    return jsonify({"success": True, "cliente_id": c.id, "saldo_favor": sal})
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1783,6 +3181,8 @@ def proveedores():
 @ventas_bp.route("/proveedores/nuevo", methods=["GET", "POST"])
 @login_required
 def proveedor_nuevo():
+    if request.method == "POST" and not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return _deny_perm_response("No tienes permiso para crear proveedores.")
     chile_geo = _load_chile_geo()
     form_data = _proveedor_form_data(request.form if request.method == "POST" else None)
     if request.method == "POST":
@@ -1804,12 +3204,17 @@ def proveedor_nuevo():
         chile_regions=_chile_regions(chile_geo),
         active_page="proveedores",
         **_base_ctx(),
+        **_sii_contribuyente_config_payload(
+            _sii_profile_proveedor_form(), party_preload="proveedores"
+        ),
     )
 
 
 @ventas_bp.route("/proveedores/<int:pid>/editar", methods=["GET", "POST"])
 @login_required
 def proveedor_editar(pid: int):
+    if request.method == "POST" and not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return _deny_perm_response("No tienes permiso para editar proveedores.")
     chile_geo = _load_chile_geo()
     p = db.session.get(Proveedor, pid)
     if p is None or not p.activo:
@@ -1839,12 +3244,17 @@ def proveedor_editar(pid: int):
         proveedor_id=pid,
         active_page="proveedores",
         **_base_ctx(),
+        **_sii_contribuyente_config_payload(
+            _sii_profile_proveedor_form(), party_preload="proveedores"
+        ),
     )
 
 
 @ventas_bp.route("/proveedores/<int:pid>/eliminar", methods=["POST"])
 @login_required
 def proveedor_eliminar(pid: int):
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return _deny_perm_response("No tienes permiso para desactivar proveedores.")
     p = db.session.get(Proveedor, pid)
     if p and p.activo:
         p.activo = False
@@ -1869,6 +3279,85 @@ def proveedor_historial(pid: int):
     )
 
 
+@ventas_bp.route("/notas_credito")
+@login_required
+def notas_credito():
+    search_term = _extract_search_term()
+    query = NotaCredito.query.join(
+        DocumentoVenta, NotaCredito.documento_venta_id == DocumentoVenta.id
+    )
+    if search_term:
+        term = f"%{search_term}%"
+        query = query.filter(
+            NotaCredito.numero.ilike(term)
+            | NotaCredito.razon.ilike(term)
+            | DocumentoVenta.cliente_nombre.ilike(term)
+            | DocumentoVenta.numero.ilike(term)
+        )
+    lista = query.order_by(NotaCredito.fecha_documento.desc(), NotaCredito.id.desc()).all()
+    return render_template(
+        "ventas/notas_credito.html",
+        notas=lista,
+        search_term=search_term,
+        active_page="notas_credito",
+        **_base_ctx(),
+    )
+
+
+@ventas_bp.route("/notas_credito/<int:nid>")
+@login_required
+def nota_credito_detalle(nid: int):
+    nc = db.session.get(NotaCredito, nid)
+    if nc is None:
+        flash("Nota de credito no encontrada.", "error")
+        return redirect(url_for("ventas.notas_credito"))
+    doc = nc.documento_original
+    return render_template(
+        "ventas/nota_credito_detalle.html",
+        nota=nc,
+        documento_origen=doc,
+        active_page="notas_credito",
+        **_base_ctx(),
+    )
+
+
+@ventas_bp.route("/pagos", methods=["GET"])
+@login_required
+def pagos_caja():
+    if not has_permission(session.get("user"), session.get("rol"), "mod_finanzas"):
+        return _deny_perm_response("Sin permiso para acceder a Caja / Pagos.")
+    search_term = _extract_search_term()
+    filtro = _extract_pagos_filtro()
+    cliente_filtro = _clean_text(request.args.get("cliente"))
+    documento = _find_factura_boleta_por_busqueda(search_term) if search_term else None
+
+    lista_q = DocumentoVenta.query.filter(DocumentoVenta.tipo.in_(["factura", "boleta"]))
+    if cliente_filtro:
+        lista_q = lista_q.filter(DocumentoVenta.cliente_nombre.ilike(f"%{cliente_filtro}%"))
+    if filtro == "pendientes":
+        lista_q = lista_q.filter(or_(DocumentoVenta.estado_pago.is_(None), DocumentoVenta.estado_pago != "pagado"))
+    elif filtro == "pagados":
+        lista_q = lista_q.filter(DocumentoVenta.estado_pago == "pagado")
+
+    if filtro == "pagados":
+        lista_documentos = lista_q.order_by(DocumentoVenta.updated_at.desc(), DocumentoVenta.id.desc()).limit(25).all()
+    else:
+        lista_documentos = lista_q.order_by(DocumentoVenta.fecha_documento.desc(), DocumentoVenta.id.desc()).limit(25).all()
+
+    return render_template(
+        "ventas/pagos.html",
+        documento=documento,
+        search_term=search_term,
+        filtro=filtro,
+        cliente_filtro=cliente_filtro,
+        lista_documentos=lista_documentos,
+        metodo_labels=METODO_PAGO_LABELS,
+        metodo_options=METODO_PAGO_OPTIONS,
+        active_page="pagos",
+        **_base_ctx(),
+    )
+
+
 # ─────────────────────────────────────────────────────────────
 #  JSON API
 # ─────────────────────────────────────────────────────────────
@@ -1883,9 +3372,20 @@ def api_producto():
     if producto is None:
         return jsonify({"success": False, "message": "Producto no encontrado"}), 404
     variantes = _product_variants_by_code(codigo)
+    payload = _serialize_product(producto, codigo=codigo, variantes=variantes)
+    if "marca" in request.args or "bodega" in request.args or "origen_compra" in request.args:
+        ref_marca = request.args.get("marca", "")
+        ref_bodega = (request.args.get("bodega") or "").strip() or "Bodega 1"
+        ref_origen = _normalize_origen_compra(request.args.get("origen_compra") or "")
+    else:
+        ref_marca = payload.get("default_marca") or ""
+        ref_bodega = (payload.get("default_bodega") or "").strip() or "Bodega 1"
+        ref_origen = _normalize_origen_compra(payload.get("default_origen_compra") or "")
+    payload["ingreso_ref"] = _ultimo_ingreso_ref(codigo, ref_marca, ref_bodega, ref_origen)
+    _fill_precio_desde_ingreso_si_vacio(payload)
     return jsonify({
         "success": True,
-        "producto": _serialize_product(producto, codigo=codigo, variantes=variantes),
+        "producto": payload,
     })
 
 
@@ -1909,11 +3409,13 @@ def api_productos_search():
 @ventas_bp.route("/api/clientes", methods=["GET"])
 @login_required
 def api_clientes():
-    q = (request.args.get("q") or "").strip().lower()
+    """Clientes activos; si hay texto de búsqueda, incluye proveedores (misma búsqueda) para ventas a proveedor."""
+    q_raw = (request.args.get("q") or "").strip()
+    q = q_raw.lower()
     query = Cliente.query.filter_by(activo=True)
     if q:
         term = f"%{q}%"
-        normalized_term = clean_rut(q)
+        normalized_term = clean_rut(q_raw)
         query = query.filter(
             Cliente.nombre.ilike(term)
             | Cliente.rut.ilike(term)
@@ -1925,12 +3427,47 @@ def api_clientes():
             | (_normalized_rut_sql(Cliente.rut).ilike(f"%{normalized_term}%") if normalized_term else False)
         )
     lista = query.order_by(Cliente.nombre).limit(50).all()
-    return jsonify({"success": True, "clientes": [c.to_dict() for c in lista]})
+    cliente_ruts: set[str] = set()
+    out: list[dict] = []
+    for c in lista:
+        cr = clean_rut(c.rut or "")
+        if cr:
+            cliente_ruts.add(cr)
+        row = c.to_dict()
+        row["es_proveedor"] = False
+        out.append(row)
+
+    if q:
+        pq = Proveedor.query.filter_by(activo=True)
+        term = f"%{q}%"
+        normalized_term = clean_rut(q_raw)
+        pq = pq.filter(
+            Proveedor.nombre.ilike(term)
+            | Proveedor.empresa.ilike(term)
+            | Proveedor.rut.ilike(term)
+            | Proveedor.giro.ilike(term)
+            | Proveedor.comuna.ilike(term)
+            | Proveedor.ciudad.ilike(term)
+            | Proveedor.pais.ilike(term)
+            | Proveedor.email.ilike(term)
+            | (_normalized_rut_sql(Proveedor.rut).ilike(f"%{normalized_term}%") if normalized_term else False)
+        )
+        for p in pq.order_by(Proveedor.nombre).limit(50).all():
+            pr = clean_rut(p.rut or "")
+            if pr and pr in cliente_ruts:
+                continue
+            row = p.to_dict()
+            row["es_proveedor"] = True
+            out.append(row)
+
+    return jsonify({"success": True, "clientes": out})
 
 
 @ventas_bp.route("/api/clientes/create", methods=["POST"])
 @login_required
 def api_cliente_create():
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return jsonify({"success": False, "message": "Sin permiso para crear clientes."}), 403
     data = request.get_json(silent=True) or {}
     form_data = _cliente_form_data(data)
     errors = _validate_cliente_data(form_data)
@@ -1968,6 +3505,8 @@ def api_proveedores():
 @ventas_bp.route("/api/proveedores/create", methods=["POST"])
 @login_required
 def api_proveedor_create():
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return jsonify({"success": False, "message": "Sin permiso para crear proveedores."}), 403
     data = request.get_json(silent=True) or {}
     form_data = _proveedor_form_data(data)
     errors = _validate_proveedor_data(form_data)
@@ -1984,7 +3523,11 @@ def api_proveedor_create():
 def api_cotizacion_by_numero(numero: str):
     documento = _load_document_by_number("cotizacion", numero)
     if documento is None:
-        return jsonify({"success": False, "message": "Documento no encontrado"}), 404
+        if _numero_es_siguiente_correlativo_libre(numero):
+            return jsonify(
+                {"success": True, "documento": _serialize_documento_borrador_siguiente("cotizacion", numero)}
+            )
+        return jsonify({"success": False, "message": _mensaje_correlativo_invalido(numero)}), 404
     return jsonify({"success": True, "documento": _serialize_document(documento)})
 
 
@@ -1993,8 +3536,70 @@ def api_cotizacion_by_numero(numero: str):
 def api_orden_venta_by_numero(numero: str):
     documento = _load_document_by_number("orden_venta", numero)
     if documento is None:
-        return jsonify({"success": False, "message": "Documento no encontrado"}), 404
+        if _numero_es_siguiente_correlativo_libre(numero):
+            return jsonify(
+                {"success": True, "documento": _serialize_documento_borrador_siguiente("orden_venta", numero)}
+            )
+        return jsonify({"success": False, "message": _mensaje_correlativo_invalido(numero)}), 404
     return jsonify({"success": True, "documento": _serialize_document(documento)})
+
+
+@ventas_bp.route("/api/orden_venta/<string:numero>/picking", methods=["POST"])
+@login_required
+def api_orden_venta_solicitar_picking(numero: str):
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return jsonify({"success": False, "message": "Sin permiso para solicitar picking."}), 403
+    if not has_permission(session.get("user"), session.get("rol"), "bodega_picking"):
+        return jsonify({"success": False, "message": "Sin permiso de Bodega para gestionar picking."}), 403
+    """Crea o reutiliza el picking de bodega para esta orden de venta y devuelve URL al modulo bodega."""
+    safe = (numero or "").strip().upper()
+    doc = _load_document_by_numero_or_id("orden_venta", safe)
+    if doc is None or (doc.tipo or "").strip().lower() != "orden_venta":
+        return jsonify({"success": False, "message": "Orden de venta no encontrada"}), 404
+
+    line_items = [it for it in (doc.items or []) if (it.codigo_producto or "").strip() or (it.descripcion or "").strip()]
+    if not line_items:
+        return jsonify({"success": False, "message": "La orden no tiene lineas para pickear. Guarde la orden con productos primero."}), 400
+
+    existing = PickingVenta.query.filter_by(orden_venta_id=doc.id).first()
+    if existing is not None:
+        return jsonify(
+            {
+                "success": True,
+                "picking_id": existing.id,
+                "redirect_url": url_for("bodega.picking_venta_detalle", pid=existing.id),
+                "message": "Esta orden ya tiene picking en bodega.",
+            }
+        )
+
+    picking = PickingVenta(
+        orden_venta_id=doc.id,
+        status="pendiente",
+        usuario_creacion=(session.get("user") or "").strip() or None,
+    )
+    db.session.add(picking)
+    db.session.flush()
+    for idx, it in enumerate(line_items, start=1):
+        db.session.add(
+            PickingVentaLine(
+                picking_id=picking.id,
+                codigo_producto=(it.codigo_producto or "").strip().upper(),
+                descripcion=(it.descripcion or "").strip(),
+                marca=(it.marca or "").strip().upper(),
+                bodega=(it.bodega or "").strip() or "Bodega 1",
+                cantidad_pedida=max(0, int(it.cantidad or 0)),
+                cantidad_entregada=0,
+                orden_linea=idx,
+            )
+        )
+    db.session.commit()
+    return jsonify(
+        {
+            "success": True,
+            "picking_id": picking.id,
+            "redirect_url": url_for("bodega.picking_venta_detalle", pid=picking.id),
+        }
+    )
 
 
 @ventas_bp.route("/api/orden_compra/<string:numero>", methods=["GET"])
@@ -2002,7 +3607,11 @@ def api_orden_venta_by_numero(numero: str):
 def api_orden_compra_by_numero(numero: str):
     documento = _load_document_by_number("orden_compra", numero)
     if documento is None:
-        return jsonify({"success": False, "message": "Documento no encontrado"}), 404
+        if _numero_es_siguiente_correlativo_libre(numero):
+            return jsonify(
+                {"success": True, "documento": _serialize_documento_borrador_siguiente("orden_compra", numero)}
+            )
+        return jsonify({"success": False, "message": _mensaje_correlativo_invalido(numero)}), 404
     return jsonify({"success": True, "documento": _serialize_document(documento)})
 
 
@@ -2011,18 +3620,35 @@ def api_orden_compra_by_numero(numero: str):
 def api_factura_by_numero(numero: str):
     documento = _load_document_by_number("factura", numero)
     if documento is None:
-        return jsonify({"success": False, "message": "Documento no encontrado"}), 404
+        if _numero_es_siguiente_correlativo_libre(numero):
+            return jsonify(
+                {"success": True, "documento": _serialize_documento_borrador_siguiente("factura", numero)}
+            )
+        return jsonify({"success": False, "message": _mensaje_correlativo_invalido(numero)}), 404
     return jsonify({"success": True, "documento": _serialize_document(documento)})
 
 
 @ventas_bp.route("/api/convert/cotizacion/<string:numero>/orden_venta", methods=["POST"])
 @login_required
 def api_convert_cotizacion_orden_venta(numero: str):
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_convertir_documento"):
+        return jsonify({"success": False, "message": "Sin permiso para convertir documentos."}), 403
     safe_numero = (numero or "").strip().upper()
-    print(f"Buscando cotizacion: {safe_numero}")
     source = _load_document_by_numero_or_id("cotizacion", safe_numero)
     if source is None or (source.tipo or "").strip().lower() != "cotizacion":
         return jsonify({"success": False, "message": "Cotizacion no encontrada"}), 404
+
+    exist_ov = _documento_hijo_directo(source.id, {"orden_venta"})
+    pagado = _factura_boleta_hija_con_pago_caja(exist_ov.id) if exist_ov is not None else None
+    if pagado is not None:
+        t = (pagado.tipo or "documento").upper()
+        n = (pagado.numero or str(pagado.id)).strip()
+        return jsonify(
+            {
+                "success": False,
+                "message": f"La cadena ya tiene {t} {n} cobrado en caja. No se puede generar otra orden de venta.",
+            }
+        ), 400
 
     try:
         target = _copy_document_with_trace(source, "orden_venta")
@@ -2040,6 +3666,8 @@ def api_convert_cotizacion_orden_venta(numero: str):
 @ventas_bp.route("/api/convert/orden_venta/<string:numero>/factura", methods=["POST"])
 @login_required
 def api_convert_orden_venta_factura(numero: str):
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_convertir_documento"):
+        return jsonify({"success": False, "message": "Sin permiso para convertir documentos."}), 403
     safe_numero = (numero or "").strip().upper()
     source = _load_document_by_numero_or_id("orden_venta", safe_numero)
     if source is None or (source.tipo or "").strip().lower() != "orden_venta":
@@ -2049,6 +3677,26 @@ def api_convert_orden_venta_factura(numero: str):
     target_tipo_documento = (payload.get("tipo_documento") or "factura").strip().lower()
     if target_tipo_documento not in {"factura", "boleta"}:
         return jsonify({"success": False, "message": "Tipo de documento invalido. Usa factura o boleta."}), 400
+
+    pagado = _factura_boleta_hija_con_pago_caja(source.id)
+    if pagado is not None:
+        n = (pagado.numero or str(pagado.id)).strip()
+        t = (pagado.tipo or "documento").upper()
+        return jsonify(
+            {
+                "success": False,
+                "message": f"Esta orden de venta ya tiene {t} {n} cobrado en caja. No se puede emitir otra factura o boleta.",
+            }
+        ), 400
+
+    pv_ov = PickingVenta.query.filter_by(orden_venta_id=source.id).first()
+    if pv_ov is not None and (pv_ov.status or "").strip().lower() != "entregado":
+        return jsonify(
+            {
+                "success": False,
+                "message": "Hay un picking de bodega pendiente para esta orden. Espere a que bodega marque la entrega al vendedor antes de facturar o boletear.",
+            }
+        ), 400
 
     try:
         target = _copy_document_with_trace(source, "factura", target_tipo_documento=target_tipo_documento)
@@ -2063,7 +3711,11 @@ def api_convert_orden_venta_factura(numero: str):
         return jsonify({
             "success": True,
             "documento": _serialize_document(target),
-            "redirect_url": url_for("ventas.facturacion", numero=target.numero),
+            "redirect_url": url_for(
+                "ventas.facturacion",
+                numero=target.numero,
+                tipo_documento=target_tipo_documento,
+            ),
         })
     except Exception as exc:
         db.session.rollback()
@@ -2073,6 +3725,8 @@ def api_convert_orden_venta_factura(numero: str):
 @ventas_bp.route("/api/convert/orden_compra/<int:documento_id>/ingreso", methods=["POST"])
 @login_required
 def api_convert_orden_compra_ingreso(documento_id: int):
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_convertir_documento"):
+        return jsonify({"success": False, "message": "Sin permiso para convertir documentos."}), 403
     source = db.session.get(DocumentoVenta, documento_id)
     if source is None or (source.tipo or "").strip().lower() != "orden_compra":
         return jsonify({"success": False, "message": "Orden de compra no encontrada"}), 404
@@ -2096,18 +3750,28 @@ def api_convert_orden_compra_ingreso(documento_id: int):
 @ventas_bp.route("/api/convert/factura/<int:documento_id>/nota_credito", methods=["POST"])
 @login_required
 def api_convert_factura_nota_credito(documento_id: int):
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_convertir_documento"):
+        return jsonify({"success": False, "message": "Sin permiso para convertir documentos."}), 403
     source = db.session.get(DocumentoVenta, documento_id)
     if source is None or (source.tipo or "").strip().lower() not in {"factura", "boleta"}:
         return jsonify({"success": False, "message": "Factura no encontrada"}), 404
 
     payload = request.get_json(silent=True) or {}
     razon = (payload.get("razon") or "Devolucion total").strip()
+    raw_modo = (payload.get("modo_liquidacion") or payload.get("efecto_liquidacion") or "").strip().lower()
+    if raw_modo in ("devolucion", "devolucion_dinero", "reembolso", "efectivo", "transferencia"):
+        modo_liquidacion = "devolucion_dinero"
+    elif raw_modo in ("saldo", "saldo_favor", "credito", "crédito"):
+        modo_liquidacion = "saldo_favor"
+    else:
+        modo_liquidacion = "saldo_favor"
 
     try:
         nota = NotaCredito(
             documento_venta_id=source.id,
             numero=_next_credit_note_number(),
             razon=razon,
+            modo_liquidacion=modo_liquidacion,
             subtotal=float(source.subtotal or 0),
             impuesto=float(source.impuesto or 0),
             total=float(source.total or 0),
@@ -2123,6 +3787,7 @@ def api_convert_factura_nota_credito(documento_id: int):
                     descripcion=src_item.descripcion or "",
                     marca=(src_item.marca or "").strip().upper(),
                     bodega=(src_item.bodega or "").strip() or "Bodega 1",
+                    origen_compra=_normalize_origen_compra(getattr(src_item, "origen_compra", None)),
                     cantidad=int(src_item.cantidad or 0),
                     precio_unitario=float(src_item.precio_unitario or 0),
                     subtotal=float(src_item.subtotal or 0),
@@ -2140,6 +3805,7 @@ def api_convert_factura_nota_credito(documento_id: int):
                 codigo=(item.codigo_producto or "").strip().upper(),
                 marca=(item.marca or "").strip().upper(),
                 bodega=(item.bodega or "").strip() or "Bodega 1",
+                origen_compra=(getattr(item, "origen_compra", None) or "").strip(),
                 delta=qty,
                 reason=f"Nota de credito {nota.numero}",
             )
@@ -2147,6 +3813,23 @@ def api_convert_factura_nota_credito(documento_id: int):
                 raise ValueError(err)
 
         nota.stock_restored = True
+        nota.status = "aprobada"
+        if (
+            modo_liquidacion == "saldo_favor"
+            and int(source.cliente_id or 0) > 0
+            and float(nota.total or 0) > 0
+        ):
+            db.session.add(
+                ClienteSaldoFavorMovimiento(
+                    cliente_id=int(source.cliente_id),
+                    monto=float(nota.total or 0),
+                    tipo="nota_credito_credito",
+                    nota_credito_id=nota.id,
+                    ref_nota_credito_numero=(nota.numero or "")[:100] if nota.numero else None,
+                    razon=(razon or "")[:2000] if razon else None,
+                    usuario=session.get("user") or "sistema",
+                )
+            )
         db.session.commit()
 
         return jsonify(
@@ -2159,6 +3842,7 @@ def api_convert_factura_nota_credito(documento_id: int):
                     "root_id": nota.root_id,
                     "total": nota.total,
                     "status": nota.status,
+                    "modo_liquidacion": nota.modo_liquidacion or "saldo_favor",
                 },
             }
         )
@@ -2262,6 +3946,35 @@ def api_stock_check():
     })
 
 
+@ventas_bp.route("/api/orden_venta/autorizar_margen", methods=["POST"])
+@login_required
+def api_orden_venta_autorizar_margen():
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_autorizar_margen_bajo"):
+        return jsonify({"success": False, "message": "Sin permiso para autorizar margen bajo."}), 403
+    data = request.get_json(silent=True) or {}
+    usuario = (data.get("usuario") or "").strip()
+    password = data.get("password") or ""
+    if not usuario or not password:
+        return jsonify({"success": False, "message": "Debes indicar usuario y clave de autorización."}), 400
+
+    u = UsuarioSistema.query.filter_by(usuario=usuario).first()
+    if not u:
+        return jsonify({"success": False, "message": "Usuario autorizador no válido."}), 403
+    if not bool(u.activo):
+        return jsonify({"success": False, "message": "Usuario autorizador inactivo."}), 403
+    if not _rol_autoriza_margen_bajo(u.rol.nombre if u.rol else ""):
+        return jsonify({"success": False, "message": "El usuario no tiene permiso para autorizar margen bajo."}), 403
+
+    try:
+        ok = check_password_hash(u.password_hash or "", password)
+    except Exception:
+        ok = False
+    if not ok:
+        return jsonify({"success": False, "message": "Clave incorrecta para autorización."}), 403
+
+    return jsonify({"success": True, "message": f"Autorizado por {u.usuario}."})
+
+
 @ventas_bp.route("/api/stock/product/<codigo>", methods=["GET"])
 @login_required
 def api_product_stock(codigo: str):
@@ -2327,6 +4040,8 @@ def api_product_last_sale(codigo: str):
 @ventas_bp.route("/api/credit-note", methods=["POST"])
 @login_required
 def api_credit_note_create():
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_convertir_documento"):
+        return jsonify({"success": False, "message": "Sin permiso para emitir nota de crédito."}), 403
     """Create a credit note from an existing sales document."""
     from app.utils.stock_control import restore_stock_for_credit_note
     
@@ -2336,6 +4051,13 @@ def api_credit_note_create():
     documento_id = data.get("documento_id")
     items = data.get("items", [])
     razon = (data.get("razon") or "").strip()
+    raw_modo_api = (data.get("modo_liquidacion") or data.get("efecto_liquidacion") or "").strip().lower()
+    if raw_modo_api in ("devolucion", "devolucion_dinero", "reembolso", "efectivo", "transferencia"):
+        modo_liquidacion_api = "devolucion_dinero"
+    elif raw_modo_api in ("saldo", "saldo_favor", "credito", "crédito"):
+        modo_liquidacion_api = "saldo_favor"
+    else:
+        modo_liquidacion_api = "saldo_favor"
     
     if not documento_id:
         return jsonify({"success": False, "message": "Documento original requerido"}), 400
@@ -2361,6 +4083,7 @@ def api_credit_note_create():
             documento_venta_id=documento_id,
             numero=numero,
             razon=razon,
+            modo_liquidacion=modo_liquidacion_api,
             subtotal=subtotal,
             impuesto=impuesto,
             total=total,
@@ -2392,6 +4115,7 @@ def api_credit_note_create():
             db.session.rollback()
             return jsonify({"success": False, "message": msg}), 400
         
+        nota.status = "aprobada"
         db.session.commit()
         
         return jsonify({
@@ -2402,6 +4126,7 @@ def api_credit_note_create():
                 "documento_venta_id": documento_id,
                 "total": nota.total,
                 "status": nota.status,
+                "modo_liquidacion": nota.modo_liquidacion or "saldo_favor",
             },
             "message": "Nota de crédito creada exitosamente",
         })
@@ -2451,6 +4176,8 @@ def api_credit_notes_by_documento(documento_id: int):
 @ventas_bp.route("/api/documento/<int:doc_id>/pago", methods=["POST"])
 @login_required
 def api_registrar_pago(doc_id: int):
+    if not has_permission(session.get("user"), session.get("rol"), "mod_finanzas"):
+        return jsonify({"ok": False, "error": "Sin permiso para registrar pagos."}), 403
     """Register payment method and mark document as paid."""
     doc = db.session.get(DocumentoVenta, doc_id)
     if doc is None:
@@ -2463,7 +4190,11 @@ def api_registrar_pago(doc_id: int):
 
     doc.metodo_pago = metodo
     doc.estado_pago = "pagado"
+    if "pago_referencia" in data or "referencia_caja" in data:
+        doc.pago_referencia = (data.get("pago_referencia") or data.get("referencia_caja") or "").strip()[:200]
     doc.updated_at = datetime.utcnow()
+    _mark_documento_aprobada_por_cobro(doc)
+    _cascade_upstream_aprobada(doc)
     db.session.commit()
 
     return jsonify({
@@ -2471,6 +4202,7 @@ def api_registrar_pago(doc_id: int):
         "metodo_pago": doc.metodo_pago,
         "estado_pago": doc.estado_pago,
         "metodo_label": METODO_PAGO_LABELS.get(metodo, metodo),
+        "pago_referencia": (getattr(doc, "pago_referencia", None) or "").strip(),
     })
 
 
@@ -2487,6 +4219,7 @@ def api_get_pago(doc_id: int):
         "metodo_pago": doc.metodo_pago or "",
         "estado_pago": doc.estado_pago or "pendiente",
         "metodo_label": METODO_PAGO_LABELS.get(doc.metodo_pago or "", ""),
+        "pago_referencia": (getattr(doc, "pago_referencia", None) or "").strip(),
     })
 
 
@@ -2598,6 +4331,8 @@ def public_document_pdf(token: str):
 @ventas_bp.route("/api/documento/<int:doc_id>/enviar_email", methods=["POST"])
 @login_required
 def api_enviar_email_documento(doc_id: int):
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_enviar_documento"):
+        return jsonify({"success": False, "message": "Sin permiso para enviar documentos."}), 403
     """Send document summary by email to the client address."""
     from app.utils.email_utils import send_document_email, build_document_email_body
 
@@ -2640,14 +4375,16 @@ def api_enviar_email_documento(doc_id: int):
     return jsonify({"ok": False, "error": msg}), 500
 
 
-@ventas_bp.route("/api/enviar_email/<int:doc_id>", methods=["GET", "POST"])
+@ventas_bp.route("/api/enviar_email/<int:doc_id>", methods=["POST"])
 @login_required
 def api_enviar_email_por_id(doc_id: int):
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_enviar_documento"):
+        return jsonify({"success": False, "message": "Sin permiso para enviar documentos."}), 403
     """Compatibility endpoint: send document by id."""
     return api_enviar_email_documento(doc_id)
 
 
-@ventas_bp.route("/api/reenviar/<int:doc_id>", methods=["GET", "POST"])
+@ventas_bp.route("/api/reenviar/<int:doc_id>", methods=["POST"])
 @login_required
 def api_reenviar_documento(doc_id: int):
     """Re-send endpoint (same behavior as send email)."""
@@ -2657,6 +4394,8 @@ def api_reenviar_documento(doc_id: int):
 @ventas_bp.route("/api/whatsapp/<int:doc_id>", methods=["GET"])
 @login_required
 def api_whatsapp_por_id(doc_id: int):
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_enviar_documento"):
+        return jsonify({"success": False, "message": "Sin permiso para enviar documentos."}), 403
     """Compatibility endpoint: open WhatsApp by document id."""
     doc = db.session.get(DocumentoVenta, doc_id)
     if doc is None:
@@ -2704,6 +4443,8 @@ def api_metodo_pago_options():
 @ventas_bp.route("/api/enviar_email/<string:tipo>/<string:numero>", methods=["POST"])
 @login_required
 def api_enviar_email(tipo: str, numero: str):
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_enviar_documento"):
+        return jsonify({"success": False, "message": "Sin permiso para enviar documentos."}), 403
     """Send document by email using tipo and numero (alternative to doc_id endpoint)."""
     from app.utils.email_utils import send_document_email, build_document_email_body
 
@@ -2759,6 +4500,8 @@ def api_enviar_email(tipo: str, numero: str):
 @ventas_bp.route("/api/whatsapp/<string:tipo>/<string:numero>", methods=["GET"])
 @login_required
 def api_whatsapp(tipo: str, numero: str):
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_enviar_documento"):
+        return jsonify({"success": False, "message": "Sin permiso para enviar documentos."}), 403
     """Generate WhatsApp link for document using tipo and numero."""
     tipo = (tipo or "").strip().lower()
     numero = (numero or "").strip().upper()

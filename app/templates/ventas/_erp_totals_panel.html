@@ -1,16 +1,28 @@
-<aside class="cot-totals-zone">
-    <div class="cot-totals-lbl">Resumen</div>
-    <div class="tot-row">
-        <span>Subtotal neto</span>
+<aside class="cot-totals-zone doc-totals-box">
+    <div class="doc-totals-title only-print">Totales</div>
+    <div class="cot-totals-lbl no-print">Resumen</div>
+    <div class="tot-row" id="tSubtotalBrutoRow" hidden>
+        <span>Subtotal lineas</span>
+        <strong id="tSubtotalBruto">{{ money.subtotal_bruto }}</strong>
+    </div>
+    <div class="tot-row" id="tDescuentoMayoristaRow" hidden>
+        <span id="tDescuentoMayoristaLbl">Descuento mayorista</span>
+        <strong id="tDescuentoMayorista">—</strong>
+    </div>
+    <div class="tot-row tot-neto">
+        <span class="lbl-screen no-print">Subtotal neto</span>
+        <span class="lbl-print only-print">Monto neto</span>
         <strong id="tSubtotal">{{ money.subtotal }}</strong>
     </div>
-    <div class="tot-row">
-        <span>IVA 19%</span>
+    <div class="tot-row tot-iva">
+        <span class="lbl-screen no-print">IVA 19%</span>
+        <span class="lbl-print only-print">Monto IVA 19%</span>
         <strong id="tIva">{{ money.iva }}</strong>
     </div>
     <hr class="tot-sep">
     <div class="tot-grand">
-        <span class="lbl">Total</span>
+        <span class="lbl lbl-screen no-print">Total</span>
+        <span class="lbl lbl-print only-print">Monto total</span>
         <span class="val" id="tTotal">{{ money.total }}</span>
     </div>
 </aside>

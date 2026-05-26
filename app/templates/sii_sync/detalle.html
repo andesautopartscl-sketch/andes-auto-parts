@@ -1,0 +1,107 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}DTE {{ doc.tipo_dte }}-{{ doc.folio }} | SII Sync{% endblock %}
+
+{% block extra_head %}
+<style>
+.sii-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; font-size: 13px; }
+.sii-detail-grid dt { font-size: 10px; text-transform: uppercase; color: #64748b; margin: 0 0 4px; letter-spacing: .04em; }
+.sii-detail-grid dd { margin: 0; font-weight: 600; color: #0f172a; }
+.sii-badge {
+	display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 700;
+}
+.sii-badge--ok { background: #dcfce7; color: #166534; }
+.sii-badge--err { background: #fee2e2; color: #b91c1c; }
+.sii-badge--warn { background: #fef9c3; color: #a16207; }
+.sii-candidatos { margin-top: 16px; }
+.sii-candidatos table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sii-candidatos th, .sii-candidatos td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+.sii-candidatos th { background: #f8fafc; font-size: 10px; text-transform: uppercase; color: #475569; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="contab-compact">
+	<div class="topbar">
+		<div>
+			<h1 class="page-title">Detalle DTE SII</h1>
+			<p class="page-subtitle">{{ doc.tipo_dte_label }} · Folio {{ doc.folio }} · Periodo {{ doc.periodo or '—' }}</p>
+		</div>
+		<div class="topbar-actions">
+			<a class="link-btn" href="{{ url_for('sii_sync.documentos', mes=doc.periodo.split('-')[1] if doc.periodo and '-' in doc.periodo else '', anio=doc.periodo.split('-')[0] if doc.periodo and '-' in doc.periodo else '') }}">← Volver al listado</a>
+		</div>
+	</div>
+
+	<section class="panel" style="padding:16px;">
+		<dl class="sii-detail-grid">
+			<div><dt>Tipo DTE</dt><dd>{{ doc.tipo_dte }} — {{ doc.tipo_dte_label }}</dd></div>
+			<div><dt>Folio</dt><dd>{{ doc.folio }}</dd></div>
+			<div><dt>Fecha emisión</dt><dd>{{ doc.fecha_emision.strftime('%d/%m/%Y') if doc.fecha_emision else '—' }}</dd></div>
+			<div><dt>Estado SII</dt><dd><span class="{{ estado_badge_class(doc.estado_sii) }}">{{ doc.estado_sii }}</span></dd></div>
+			<div><dt>RUT receptor</dt><dd>{{ doc.rut_receptor|format_rut if doc.rut_receptor else '—' }}</dd></div>
+			<div><dt>Razón social</dt><dd>{{ doc.razon_social_receptor or '—' }}</dd></div>
+			<div><dt>Monto neto</dt><dd>${{ '{:,.0f}'.format(doc.monto_neto or 0).replace(',', '.') }}</dd></div>
+			<div><dt>IVA</dt><dd>${{ '{:,.0f}'.format(doc.monto_iva or 0).replace(',', '.') }}</dd></div>
+			<div><dt>Total</dt><dd>${{ '{:,.0f}'.format(doc.monto_total or 0).replace(',', '.') }}</dd></div>
+			<div><dt>Track ID</dt><dd>{{ doc.track_id or '—' }}</dd></div>
+			<div><dt>XML disponible</dt><dd>{{ 'Sí' if doc.xml_disponible else 'No' }}</dd></div>
+			<div><dt>Sincronizado</dt><dd>{{ doc.sincronizado_en|chile_datetime if doc.sincronizado_en else '—' }}</dd></div>
+			<div><dt>Periodo</dt><dd>{{ doc.periodo or '—' }}</dd></div>
+		</dl>
+		{% if doc.notas %}
+		<p style="margin:14px 0 0;font-size:12px;color:#475569;"><strong>Notas:</strong> {{ doc.notas }}</p>
+		{% endif %}
+	</section>
+
+	<section class="panel" style="padding:16px;margin-top:14px;">
+		<h3 style="margin:0 0 10px;font-size:15px;">Conciliación con ERP</h3>
+		{% if doc_interno %}
+		<p style="font-size:13px;margin:0 0 10px;">
+			Vinculado a documento interno:
+			<strong>{{ doc_interno.tipo|upper }} {{ doc_interno.numero or ('#' ~ doc_interno.id) }}</strong>
+			— {{ doc_interno.cliente_nombre or '—' }}
+		</p>
+		<a class="btn sm edit" href="{{ url_for('ventas.facturacion', numero=doc_interno.numero) if doc_interno.numero else url_for('ventas.facturacion') }}">Abrir en Ventas</a>
+		{% else %}
+		<p style="font-size:12px;color:#64748b;margin:0 0 12px;">Este DTE aún no está vinculado a un documento del módulo Ventas.</p>
+		{% if candidatos %}
+		<div class="sii-candidatos">
+			<p style="font-size:12px;font-weight:600;margin:0 0 8px;">Candidatos por RUT, fecha y monto (± tolerancia):</p>
+			<table>
+				<thead>
+					<tr>
+						<th>Tipo</th>
+						<th>Número</th>
+						<th>Fecha</th>
+						<th>Cliente</th>
+						<th>Total</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					{% for v in candidatos %}
+					<tr>
+						<td>{{ v.tipo }}</td>
+						<td>{{ v.numero or '—' }}</td>
+						<td>{{ v.fecha_documento.strftime('%d/%m/%Y') if v.fecha_documento else '—' }}</td>
+						<td>{{ v.cliente_nombre or '—' }}</td>
+						<td>${{ '{:,.0f}'.format(v.total or 0).replace(',', '.') }}</td>
+						<td>
+							<form method="post" action="{{ url_for('sii_sync.vincular_documento', doc_id=doc.id, venta_id=v.id) }}" style="display:inline;">
+								<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+								<button type="submit" class="btn sm outline">Vincular</button>
+							</form>
+							<a class="link-btn" href="{{ url_for('ventas.facturacion', numero=v.numero) if v.numero else url_for('ventas.facturacion') }}">Ver</a>
+						</td>
+					</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		</div>
+		{% else %}
+		<a class="btn sm outline" href="{{ url_for('ventas.facturacion') }}">Buscar en Ventas / Facturación</a>
+		<p style="font-size:11px;color:#94a3b8;margin-top:8px;">No se encontraron coincidencias automáticas por RUT, fecha y total.</p>
+		{% endif %}
+		{% endif %}
+	</section>
+</div>
+{% endblock %}

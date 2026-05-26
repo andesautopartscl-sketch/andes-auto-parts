@@ -1,0 +1,496 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+
+{% block title %}Bodegas | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+.bodegas-catalogo-page {
+    position: relative;
+    padding-bottom: 52px;
+    overflow: visible;
+}
+.bodegas-catalogo-topbar {
+    margin-bottom: 8px;
+    align-items: flex-start;
+}
+.bodegas-catalogo-topbar .page-title {
+    font-size: 1.35rem;
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+.bodegas-catalogo-topbar .page-subtitle {
+    font-size: 12px;
+    line-height: 1.35;
+    margin: 0;
+    color: #64748b;
+}
+.bodegas-catalogo-topbar .topbar-actions .link-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 8px;
+}
+.bodegas-panel-nueva.panel {
+    margin-bottom: 12px;
+    padding: 12px 14px;
+}
+.bodegas-panel-nueva .section-title {
+    font-size: 15px;
+    margin: 0 0 8px;
+}
+.bodega-nueva-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    align-items: flex-end;
+    max-width: 720px;
+}
+.bodega-nueva-form .field {
+    margin: 0;
+    min-width: 160px;
+    flex: 1;
+}
+.bodega-nueva-form .field label {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 3px;
+    color: #475569;
+}
+.bodega-nueva-form .field input {
+    min-height: 30px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+.bodega-nueva-form .actions {
+    margin: 0;
+}
+.bodega-nueva-form .actions .btn {
+    font-size: 12px;
+    padding: 6px 14px;
+    min-height: 32px;
+    border-radius: 8px;
+}
+.bodegas-table-card {
+    padding: 12px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+}
+.bodegas-table-card > .section-title {
+    font-size: 15px;
+    margin: 0 0 8px;
+}
+.bodegas-reg-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -4px;
+    padding: 0 4px;
+}
+.bodegas-reg-scroll-inner {
+    min-width: 560px;
+}
+.bodegas-reg-head {
+    display: grid;
+    grid-template-columns: minmax(120px, 2fr) 52px 44px 64px minmax(90px, 1.4fr) auto;
+    gap: 8px;
+    align-items: end;
+    padding: 0 8px 6px;
+    margin-bottom: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    border-bottom: 1px solid #e2e8f0;
+}
+.bodegas-reg-head span {
+    line-height: 1.2;
+}
+.bodegas-reg-head .col-activa {
+    text-align: center;
+}
+.bodega-fila-form {
+    margin-bottom: 6px;
+    padding: 6px 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fafafa;
+}
+.bodega-fila-grid {
+    display: grid;
+    grid-template-columns: minmax(120px, 2fr) 52px 44px 64px minmax(90px, 1.4fr) auto;
+    gap: 8px;
+    align-items: center;
+}
+.bodega-fila-grid input[type="text"],
+.bodega-fila-grid input[type="number"] {
+    width: 100%;
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: 12px;
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+.bodega-fila-grid input[readonly] {
+    background: #f1f5f9;
+    color: #475569;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.bodega-fila-grid .col-check {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 28px;
+}
+.bodega-fila-grid .col-check input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+.bodega-fila-grid .actions {
+    margin: 0;
+}
+.bodega-fila-grid .btn {
+    font-size: 11px;
+    padding: 5px 10px;
+    min-height: 28px;
+    border-radius: 6px;
+}
+.bodegas-catalogo-help-anchor {
+    position: absolute;
+    bottom: 14px;
+    left: 14px;
+    z-index: 6;
+}
+.bodegas-catalogo-help-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid #93c5fd;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    color: #1e3a8a;
+    font-weight: 800;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.14);
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .15s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+}
+.bodegas-catalogo-help-btn svg {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+.bodegas-catalogo-help-btn:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border-color: #60a5fa;
+    box-shadow: 0 12px 24px rgba(30, 64, 175, 0.2);
+}
+.bodegas-catalogo-help-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+/* Posición final: script (fixed) encima del ?, como ingreso/salida */
+.bodegas-catalogo-help-panel {
+    position: absolute;
+    bottom: 52px;
+    left: 0;
+    z-index: 1300;
+    width: min(460px, calc(100vw - 32px));
+    max-height: min(72vh, 460px);
+    overflow: auto;
+    padding: 14px 16px;
+    border: 1px solid #dbe4f0;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 16px 42px rgba(15, 23, 42, 0.16);
+}
+.bodegas-catalogo-help-panel[hidden] {
+    display: none !important;
+}
+.bodegas-catalogo-help-title {
+    margin: 0 0 10px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.bodegas-catalogo-help-section {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+.bodegas-catalogo-help-section-title {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+.bodegas-catalogo-help-text {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #334155;
+}
+.bodegas-catalogo-help-text strong {
+    color: #334155;
+}
+.bodegas-catalogo-help-panel > .btn {
+    font-size: 13px;
+    padding: 6px 14px;
+    min-height: 32px;
+    margin-top: 4px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bodegas-catalogo-page">
+<div class="topbar bodegas-catalogo-topbar">
+    <div>
+        <h1 class="page-title">Catálogo de bodegas</h1>
+        <p class="page-subtitle">Administrá nombres de bodega usados en el ERP. Más detalle en la ayuda (ícono abajo).</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="link-btn" href="{{ url_for('bodega.index') }}">🏠 Panel Bodega</a>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, text in messages %}
+      <div class="message {{ category }}">{{ text }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<div class="panel bodegas-panel-nueva" style="margin-bottom:12px;">
+    <h2 class="section-title">Nueva bodega</h2>
+    <form method="post" class="bodega-nueva-form">
+        <input type="hidden" name="action" value="add">
+        <div class="field">
+            <label for="nombre-nueva">Nombre</label>
+            <input id="nombre-nueva" name="nombre" required maxlength="120" placeholder="Ej: Outlet Norte">
+        </div>
+        <div class="field">
+            <label for="orden-nueva">Orden (opcional)</label>
+            <input id="orden-nueva" name="orden" type="number" step="1" placeholder="Al final">
+        </div>
+        <div class="actions">
+            <button class="btn btn-primary" type="submit">Crear</button>
+        </div>
+    </form>
+</div>
+
+{% if recien_agregadas and recien_agregadas|length > 0 %}
+<div class="message" style="background:#fffbeb;color:#92400e;border-color:#fcd34d;font-size:12px;padding:8px 10px;">
+    Había nombres con stock que no estaban en el catálogo; se agregaron al cargar esta página: {{ recien_agregadas | join(', ') }}.
+</div>
+{% endif %}
+
+<div class="bodegas-table-card">
+    <h2 class="section-title">Bodegas registradas</h2>
+    <div class="bodegas-reg-scroll">
+    <div class="bodegas-reg-scroll-inner">
+    {% if filas and filas|length > 0 %}
+    <div class="bodegas-reg-head" aria-hidden="true">
+        <span class="col-nombre">Nombre</span>
+        <span>Orden</span>
+        <span class="col-activa">Activa</span>
+        <span>Var.</span>
+        <span>Nota</span>
+        <span></span>
+    </div>
+    {% endif %}
+    {% for f in filas %}
+    <form method="post" class="bodega-fila-form">
+        <input type="hidden" name="action" value="update">
+        <input type="hidden" name="id" value="{{ f.id }}">
+        <div class="bodega-fila-grid">
+            <input name="nombre" value="{{ f.nombre }}" required maxlength="120" aria-label="Nombre de bodega">
+            <input name="orden" type="number" step="1" value="{{ f.orden }}" aria-label="Orden">
+            <div class="col-check">
+                <input type="checkbox" name="activo" value="1" {% if f.activo %}checked{% endif %} aria-label="Bodega activa">
+            </div>
+            <input type="text" readonly value="{{ conteos.get(f.nombre, 0) }}" aria-label="Cantidad de variantes" tabindex="-1">
+            <input name="nota" value="{{ f.nota or '' }}" maxlength="255" placeholder="Opcional" aria-label="Nota">
+            <div class="actions">
+                <button class="btn btn-primary" type="submit">Guardar</button>
+            </div>
+        </div>
+    </form>
+    {% else %}
+    <p style="margin:0;font-size:13px;color:#64748b;">No hay bodegas en el catálogo.</p>
+    {% endfor %}
+    </div>
+    </div>
+</div>
+
+<div class="bodegas-catalogo-help-anchor">
+    <button type="button" class="bodegas-catalogo-help-btn" id="bodegasCatalogoHelpBtn" aria-expanded="false" aria-controls="bodegasCatalogoHelpPanel" title="Ayuda del catálogo de bodegas" aria-label="Ayuda">
+        <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+            <path d="M32 8c-10.5 0-19 7.7-19 17.2 0 2.7 2.2 4.8 4.9 4.8 2.7 0 4.9-2.2 4.9-4.8 0-4.1 4.1-7.4 9.2-7.4 5.1 0 9.2 3.3 9.2 7.4 0 3.3-2.4 5.1-5.8 7.5-3.9 2.8-8.7 6.3-8.7 13.6 0 2.7 2.2 4.8 4.9 4.8s4.9-2.2 4.9-4.8c0-2 1.1-3 4.7-5.6 3.9-2.8 9.8-7 9.8-15.5C51 15.7 42.5 8 32 8z" fill="currentColor"/>
+            <circle cx="32" cy="55" r="5.5" fill="currentColor"/>
+        </svg>
+    </button>
+    <div id="bodegasCatalogoHelpPanel" class="bodegas-catalogo-help-panel" role="region" aria-labelledby="bodegasCatalogoHelpTitle" hidden>
+        <h3 id="bodegasCatalogoHelpTitle" class="bodegas-catalogo-help-title">Cómo usar el catálogo de bodegas</h3>
+
+        <div class="bodegas-catalogo-help-section">
+            <h4 class="bodegas-catalogo-help-section-title">1) General</h4>
+            <p class="bodegas-catalogo-help-text">Son los <strong>nombres</strong> que usa el ERP en variantes, movimientos, ventas y transferencias. <strong>Renombrar</strong> aquí actualiza el historial de forma consistente en las tablas vinculadas.</p>
+        </div>
+
+        <div class="bodegas-catalogo-help-section">
+            <h4 class="bodegas-catalogo-help-section-title">2) Nueva bodega</h4>
+            <p class="bodegas-catalogo-help-text">El nombre quedará disponible en <strong>ingresos</strong>, <strong>salidas</strong> y <strong>ajustes</strong>, aunque aún no tenga stock.</p>
+        </div>
+
+        <div class="bodegas-catalogo-help-section">
+            <h4 class="bodegas-catalogo-help-section-title">3) Bodegas registradas</h4>
+            <p class="bodegas-catalogo-help-text"><strong>Desactivar</strong> oculta la bodega en los listados; si aún tiene stock o movimientos, el nombre puede seguir apareciendo donde corresponda por <strong>trazabilidad</strong>. La columna <strong>Var.</strong> muestra cuántas variantes de stock usan ese nombre.</p>
+        </div>
+
+        <button type="button" class="btn" id="bodegasCatalogoHelpClose">Cerrar</button>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<script>
+(function () {
+    var catalogoHelpGlobalBound = false;
+
+    function placeCatalogoHelpPanel(btn, panel) {
+        if (!btn || !panel || panel.hidden) {
+            return;
+        }
+        var w = Math.min(460, window.innerWidth - 32);
+        var maxH = Math.min(window.innerHeight * 0.72, 460);
+        panel.style.position = "fixed";
+        panel.style.width = w + "px";
+        panel.style.maxHeight = maxH + "px";
+        panel.style.right = "auto";
+        panel.style.bottom = "auto";
+        var br = btn.getBoundingClientRect();
+        var left = br.left;
+        if (left + w > window.innerWidth - 8) {
+            left = window.innerWidth - w - 8;
+        }
+        if (left < 8) {
+            left = 8;
+        }
+        panel.style.left = left + "px";
+        var gap = 8;
+        var h = Math.min(panel.offsetHeight, maxH);
+        var top = br.top - gap - h;
+        if (top < 8) {
+            top = br.bottom + gap;
+            if (top + h > window.innerHeight - 8) {
+                top = Math.max(8, window.innerHeight - h - 8);
+            }
+        }
+        panel.style.top = top + "px";
+    }
+
+    function bindBodegasCatalogoHelp() {
+        var btn = document.getElementById("bodegasCatalogoHelpBtn");
+        var panel = document.getElementById("bodegasCatalogoHelpPanel");
+        var closeBtn = document.getElementById("bodegasCatalogoHelpClose");
+        if (!btn || !panel || btn.dataset.bodegasCatalogoHelpBound === "1") {
+            return;
+        }
+        btn.dataset.bodegasCatalogoHelpBound = "1";
+
+        function clearPanelGeom() {
+            panel.style.position = "";
+            panel.style.left = "";
+            panel.style.top = "";
+            panel.style.right = "";
+            panel.style.bottom = "";
+            panel.style.width = "";
+            panel.style.maxHeight = "";
+        }
+
+        function closeHelp() {
+            panel.setAttribute("hidden", "");
+            panel.hidden = true;
+            btn.setAttribute("aria-expanded", "false");
+            clearPanelGeom();
+        }
+
+        function openHelp() {
+            panel.removeAttribute("hidden");
+            panel.hidden = false;
+            btn.setAttribute("aria-expanded", "true");
+            requestAnimationFrame(function () {
+                requestAnimationFrame(function () {
+                    placeCatalogoHelpPanel(btn, panel);
+                });
+            });
+        }
+
+        function toggleHelp() {
+            if (panel.hasAttribute("hidden") || panel.hidden) {
+                openHelp();
+            } else {
+                closeHelp();
+            }
+        }
+
+        btn.addEventListener("click", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleHelp();
+        });
+        if (closeBtn) {
+            closeBtn.addEventListener("click", closeHelp);
+        }
+        document.addEventListener("click", function (ev) {
+            if (panel.hidden) {
+                return;
+            }
+            var t = ev.target;
+            if (btn.contains(t) || panel.contains(t)) {
+                return;
+            }
+            closeHelp();
+        });
+        document.addEventListener("keydown", function (ev) {
+            if (ev.key === "Escape") {
+                closeHelp();
+            }
+        });
+
+        if (!catalogoHelpGlobalBound) {
+            catalogoHelpGlobalBound = true;
+            function onScrollOrResize() {
+                var b = document.getElementById("bodegasCatalogoHelpBtn");
+                var p = document.getElementById("bodegasCatalogoHelpPanel");
+                placeCatalogoHelpPanel(b, p);
+            }
+            window.addEventListener("resize", onScrollOrResize);
+            var scrollRoot = document.getElementById("appMainContent");
+            if (scrollRoot) {
+                scrollRoot.addEventListener("scroll", onScrollOrResize, { passive: true });
+            }
+        }
+    }
+    bindBodegasCatalogoHelp();
+    document.addEventListener("app:module-loaded", bindBodegasCatalogoHelp);
+})();
+</script>
+{% endblock %}

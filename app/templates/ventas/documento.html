@@ -7,9 +7,15 @@
 {% endblock %}
 
 {% block content %}
-{% set selected_party_id = selected_proveedor_id if is_supplier_doc else selected_client_id %}
+{% set selected_party_id = selected_proveedor_id if is_supplier_doc else (selected_client_id or selected_proveedor_id) %}
 <form method="post" id="erpDocForm" autocomplete="off" novalidate data-doc-type="{{ doc_type }}" data-stock-direction="{{ 'in' if is_supplier_doc else ('out' if doc_type == 'orden_venta' else 'none') }}">
-    <input type="hidden" name="{{ 'proveedor_id' if is_supplier_doc else 'client_id' }}" id="hiddenPartyId" value="{{ selected_party_id or 0 }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if is_supplier_doc %}
+    <input type="hidden" name="proveedor_id" id="hiddenPartyId" value="{{ selected_proveedor_id or 0 }}">
+    {% else %}
+    <input type="hidden" name="client_id" id="hiddenPartyId" value="{{ selected_client_id or 0 }}">
+    <input type="hidden" name="proveedor_id" id="hiddenProveedorId" value="{{ selected_proveedor_id or 0 }}">
+    {% endif %}
     <input type="hidden" name="party_rut" id="partyRutHidden" value="{{ party.rut }}">
     <input type="hidden" name="loaded_document_id" id="loaded_document_id" value="{{ loaded_document_id or 0 }}">
 
@@ -22,6 +28,7 @@
                 {% include 'ventas/_erp_items_table.html' %}
             </div>
             {% include 'ventas/_erp_totals_panel.html' %}
+            {% include 'ventas/_erp_saldo_favor_panel.html' %}
         </div>
 
         {% include 'ventas/_erp_doc_actions.html' %}
@@ -30,9 +37,13 @@
 </form>
 
 <script id="chileGeoData" type="application/json">{{ chile_geo | tojson }}</script>
+<script type="application/json" id="erp-doc-conversion">{{ doc_conversion | tojson }}</script>
 {% include 'ventas/_erp_product_modal.html' %}
+{% include 'ventas/_erp_traceability_modal.html' %}
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ url_for('static', filename='stock_control.js') }}"></script>
+{% include 'ventas/_sii_contribuyente_assets.html' %}
 {% include 'ventas/_erp_scripts.html' %}
 {% endblock %}

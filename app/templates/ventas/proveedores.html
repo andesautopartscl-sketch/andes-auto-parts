@@ -6,120 +6,201 @@
 <style>
 .page-stack {
     display: grid;
-    gap: 14px;
+    gap: 10px;
 }
 .hero-card,
 .table-card {
-    padding: 18px;
+    padding: 12px 14px;
 }
 .hero-card {
     display: flex;
     justify-content: space-between;
-    gap: 16px;
-    align-items: center;
+    gap: 12px;
+    align-items: flex-start;
 }
 .hero-copy h2 {
-    font-size: 24px;
-    margin: 0 0 6px;
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    letter-spacing: -0.02em;
+    color: #0f172a;
 }
 .hero-copy p {
-    color: #475569;
-    max-width: 760px;
+    color: #64748b;
+    max-width: 720px;
+    font-size: 12px;
+    line-height: 1.45;
+    margin: 0;
 }
 .stats {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
-    margin-top: 10px;
+    margin-top: 8px;
 }
 .stat {
     background: #f8fafc;
-    border: 1px solid #dbe3ef;
-    border-radius: 12px;
-    padding: 10px 12px;
-    min-width: 110px;
+    border: 1px solid #e8eef5;
+    border-radius: 8px;
+    padding: 6px 10px;
+    min-width: 92px;
 }
 .stat strong {
     display: block;
-    font-size: 20px;
+    font-size: 15px;
+    font-weight: 700;
     color: #0f172a;
+    line-height: 1.2;
 }
 .stat span {
-    font-size: 12px;
+    font-size: 10px;
     color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.page-stack .hero-card .btn.primary {
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 8px;
+    box-shadow: none;
+}
+.page-stack .hero-card .btn.primary:hover {
+    transform: none;
+    box-shadow: 0 1px 4px rgba(29, 78, 216, 0.2);
 }
 .toolbar {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
+    gap: 10px;
     align-items: center;
-    margin-bottom: 14px;
+    margin-bottom: 10px;
 }
 .search-form {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
     width: 100%;
 }
 .search-form input {
-    flex: 1 1 280px;
+    flex: 1 1 260px;
     border: 1px solid #dbe3ef;
-    border-radius: 10px;
-    padding: 10px 12px;
-    font-size: 13px;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 12px;
+}
+.search-form .btn.outline,
+.search-form .btn:not(.primary) {
+    padding: 7px 12px;
+    font-size: 12px;
+    border-radius: 8px;
+    font-weight: 600;
 }
 .table-wrap {
     overflow-x: auto;
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
+    border: 1px solid #e8edf2;
+    border-radius: 10px;
 }
 table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 980px;
+    min-width: 920px;
 }
 th,
 td {
-    padding: 12px 14px;
-    border-bottom: 1px solid #eef2f7;
+    padding: 7px 10px;
+    border-bottom: 1px solid #f1f5f9;
     text-align: left;
     vertical-align: middle;
 }
 th {
     background: #f8fafc;
-    font-size: 12px;
-    letter-spacing: 0.04em;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #475569;
+    color: #64748b;
 }
 td {
-    font-size: 13px;
-    color: #0f172a;
+    font-size: 12px;
+    color: #1e293b;
 }
 .supplier-block {
     display: grid;
-    gap: 3px;
+    gap: 2px;
+}
+.supplier-block strong {
+    font-size: 12px;
+    font-weight: 600;
 }
 .supplier-block span {
-    color: #475569;
+    color: #64748b;
+    font-size: 11px;
 }
 .contact-lines {
     display: grid;
-    gap: 3px;
-    color: #475569;
+    gap: 2px;
+    color: #64748b;
+    font-size: 11px;
 }
 .actions {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
+    align-items: center;
 }
 .inline-form {
     margin: 0;
 }
+/* Acciones: aspecto ligero (no botón rojo sólido) */
+.page-stack .actions .btn.sm {
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 6px;
+    transform: none;
+    box-shadow: none;
+}
+.page-stack .actions .btn.sm:hover {
+    transform: none;
+    box-shadow: none;
+}
+.page-stack .actions .btn.sm.outline {
+    background: #fff;
+    border-color: #e2e8f0;
+    color: #64748b;
+}
+.page-stack .actions .btn.sm.outline:hover {
+    border-color: #cbd5e1;
+    color: #334155;
+    background: #f8fafc;
+}
+.page-stack .actions a.btn.sm:not(.outline):not(.danger) {
+    background: transparent;
+    border-color: transparent;
+    color: #64748b;
+}
+.page-stack .actions a.btn.sm:not(.outline):not(.danger):hover {
+    color: #1d4ed8;
+    background: #eff6ff;
+    border-color: #dbeafe;
+}
+.page-stack .actions .btn.sm.danger {
+    background: #fff;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    font-weight: 500;
+}
+.page-stack .actions .btn.sm.danger:hover {
+    background: #fef2f2;
+    border-color: #f87171;
+    color: #991b1b;
+}
 .empty {
-    padding: 28px;
+    padding: 18px 14px;
     text-align: center;
     color: #64748b;
+    font-size: 13px;
 }
 @media (max-width: 960px) {
     .hero-card,
@@ -169,8 +250,8 @@ td {
             <table>
                 <thead>
                     <tr>
-                        <th>Proveedor</th>
                         <th>Empresa</th>
+                        <th>Nombre de contacto</th>
                         <th>RUT</th>
                         <th>Direccion</th>
                         <th>Contacto</th>
@@ -180,18 +261,18 @@ td {
                 <tbody>
                     {% for proveedor in proveedores %}
                     <tr>
+                        <td>{{ proveedor.empresa or proveedor.nombre or 'Sin empresa' }}</td>
                         <td>
                             <div class="supplier-block">
-                                <strong>{{ proveedor.nombre }}</strong>
+                                <strong>{% if proveedor.empresa and proveedor.nombre != proveedor.empresa %}{{ proveedor.nombre }}{% else %}{{ proveedor.empresa or proveedor.nombre }}{% endif %}</strong>
                                 <span>{{ proveedor.email or 'Sin email' }}</span>
                             </div>
                         </td>
-                        <td>{{ proveedor.empresa or 'Sin empresa' }}</td>
                         <td>{{ proveedor.rut|format_rut if proveedor.rut else 'Sin RUT' }}</td>
                         <td>{{ proveedor.direccion or 'Sin direccion' }}</td>
                         <td>
                             <div class="contact-lines">
-                                <span>{{ proveedor.telefono or 'Sin telefono' }}</span>
+                                <span>{% if proveedor.telefono %}{{ proveedor.telefono|format_telefono }}{% else %}Sin telefono{% endif %}</span>
                                 <span>{{ proveedor.email or 'Sin email' }}</span>
                             </div>
                         </td>

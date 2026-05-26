@@ -1,4 +1,4 @@
-{% set selected_party_id = selected_proveedor_id if is_supplier_doc else selected_client_id %}
+{% set selected_party_id = selected_proveedor_id if is_supplier_doc else (selected_client_id or selected_proveedor_id) %}
 <div class="cot-section">
     <div class="cot-section-header">
         <div>
@@ -13,16 +13,16 @@
         </div>
         <div class="cot-client-actions no-print" style="display:flex;gap:8px;">
             {% if is_supplier_doc %}
-            <a class="btn sm" href="{{ url_for('ventas.proveedores') }}" target="_blank">Gestionar proveedores</a>
+            <a class="btn sm" href="{{ url_for('ventas.proveedores') }}" data-module-url="{{ url_for('ventas.proveedores') }}">Gestionar proveedores</a>
             {% else %}
-            <a class="btn sm" href="{{ url_for('ventas.clientes') }}" target="_blank">Gestionar clientes</a>
+            <a class="btn sm" href="{{ url_for('ventas.clientes') }}" data-module-url="{{ url_for('ventas.clientes') }}">Gestionar clientes</a>
             {% endif %}
         </div>
     </div>
 
     <div class="cot-rut-bar">
         <div class="cot-rut-field">
-            <label for="rutLookup">RUT {{ party_label|lower }}</label>
+            <label for="rutLookup">RUT {% if is_supplier_doc %}{{ party_label|lower }}{% else %}cliente o proveedor{% endif %}</label>
             <input id="rutLookup" type="text" placeholder="12.345.678-9" maxlength="13" autocomplete="off" data-rut-bound="1" value="{{ party.rut|format_rut if party.rut else '' }}">
         </div>
         <button class="btn sm outline no-print" type="button" id="btnSearchParty">Buscar</button>
@@ -34,10 +34,32 @@
         </span>
     </div>
 
+    <div class="doc-party-box only-print" aria-hidden="true">
+        <div class="doc-party-grid">
+            <div class="doc-party-main">
+                <div class="doc-party-line"><span class="k">{% if is_supplier_doc %}PROVEEDOR{% else %}SEÑORES{% endif %}</span><span class="v" data-pf="name">{{ party.name or '—' }}</span></div>
+                <div class="doc-party-line"><span class="k">DIRECCIÓN</span><span class="v" data-pf="address">{{ party.address or '—' }}</span></div>
+                <div class="doc-party-line"><span class="k">R.U.T.</span><span class="v" data-pf="rut">{{ party.rut|format_rut if party.rut else '—' }}</span></div>
+                <div class="doc-party-line"><span class="k">TELÉFONO</span><span class="v" data-pf="phone">{{ party.telefono or '—' }}</span></div>
+                <div class="doc-party-line"><span class="k">EMAIL</span><span class="v" data-pf="email">{{ party.email or '—' }}</span></div>
+            </div>
+            <div class="doc-party-side">
+                <div class="doc-party-line"><span class="k">FECHA EMISIÓN</span><span class="v" id="printDocDate">{{ doc_date }}</span></div>
+                <div class="doc-party-line"><span class="k">FECHA VENC.</span><span class="v" id="printDocValid">{{ doc_valid_until or doc_date }}</span></div>
+                <div class="doc-party-line"><span class="k">DOCUMENTO</span><span class="v" id="printDocType">{{ title|upper }}</span></div>
+                <div class="doc-party-line"><span class="k">Nº FOLIO</span><span class="v" id="printDocFolio">{{ doc_number }}</span></div>
+                <div class="doc-party-line"><span class="k">TIPO</span><span class="v">{{ party_label|upper }}</span></div>
+            </div>
+        </div>
+    </div>
+
+
+    {# Snapshot para el POST: siempre oculto; se rellena al elegir cliente/proveedor desde la API. Alta nueva solo vía formulario «Crear nuevo…». #}
+    <div id="partyFieldsWrap" class="cot-party-fields-wrap" hidden>
     <div class="cot-client-grid">
         <div class="cot-cf">
             <span class="cot-cf-label">{{ party_label }}</span>
-            <input id="party_name" name="party_name" value="{{ party.name }}" required placeholder="{% if is_supplier_doc %}Empresa o proveedor{% else %}Nombre o empresa{% endif %}">
+            <input id="party_name" name="party_name" value="{{ party.name }}" placeholder="{% if is_supplier_doc %}Empresa o proveedor{% else %}Nombre o empresa{% endif %}">
         </div>
         <div class="cot-cf">
             <span class="cot-cf-label">Dirección</span>
@@ -51,6 +73,7 @@
             <span class="cot-cf-label">Email</span>
             <input id="party_email" name="party_email" type="email" value="{{ party.email }}" placeholder="correo@empresa.cl">
         </div>
+    </div>
     </div>
 
     <div id="inlineCreateParty" class="cot-inline-create" hidden>
@@ -67,8 +90,12 @@
                 <input id="ic_nombre" placeholder="{% if is_supplier_doc %}Nombre de contacto{% else %}Nombre o razón social{% endif %}">
             </div>
             <div class="ic-f">
-                <label>RUT</label>
-                <input id="ic_rut" data-rut-input placeholder="12.345.678-9">
+                <div class="sii-rut-label-row">
+                    <label for="ic_rut">RUT</label>
+                    <span id="siiIcRutBadge" class="sii-rut-badge" hidden></span>
+                    <span id="siiIcRutSpinner" class="sii-rut-spinner" hidden aria-hidden="true"></span>
+                </div>
+                <input id="ic_rut" name="ic_rut" data-rut-input data-sii-contribuyente-rut placeholder="12.345.678-9">
             </div>
             <div class="ic-f">
                 <label>Giro / Rubro</label>
@@ -104,6 +131,7 @@
         </div>
         <div class="ic-actions">
             <button class="btn sm primary" type="button" id="btnSaveNewParty">Guardar {{ party_label|lower }}</button>
+            <button class="btn sm outline" type="button" id="btnClearInlineParty" title="Vaciar los campos del formulario">Limpiar</button>
             <button class="btn sm" type="button" id="btnCancelNewParty">Cancelar</button>
         </div>
     </div>

@@ -4,29 +4,28 @@
 
 {% block extra_head %}
 <style>
+.desactivados-page .topbar { margin-bottom: 8px; }
+.desactivados-page .page-title { font-size: 20px; margin: 0; line-height: 1.2; }
+.desactivados-page .page-subtitle { margin: 4px 0 0; font-size: 12px; line-height: 1.35; }
+.desactivados-page .topbar-actions .btn { padding: 6px 10px; font-size: 12px; }
+
 .toolbar {
     display:flex;
-    gap:10px;
+    gap:8px;
     align-items:center;
     flex-wrap:wrap;
-    margin-bottom:18px;
-}
-
-.sub-title {
-    font-size:13px;
-    color:#64748b;
-    margin:0 0 18px;
+    margin-bottom:10px;
 }
 
 .counter-badge {
     display:inline-flex;
     align-items:center;
-    gap:6px;
+    gap:4px;
     border-radius:999px;
-    padding:6px 12px;
+    padding:4px 10px;
     background:#fee2e2;
     color:#991b1b;
-    font-size:12px;
+    font-size:11px;
     font-weight:700;
 }
 
@@ -36,36 +35,38 @@
 .msg-banner {
     background:#fff;
     border:1px solid #e2e8f0;
-    border-radius:16px;
-    box-shadow:0 10px 25px rgba(0,0,0,0.05);
+    border-radius:12px;
+    box-shadow:0 6px 16px rgba(0,0,0,0.04);
 }
 
 .search-card,
 .table-card {
-    padding:18px;
+    padding:12px 14px;
 }
 
 .search-form {
     display:grid;
     grid-template-columns:minmax(0, 1fr) auto auto;
-    gap:10px;
+    gap:8px;
     align-items:end;
 }
 
 .search-form label {
     display:block;
-    margin-bottom:6px;
-    font-size:13px;
+    margin-bottom:4px;
+    font-size:11px;
     font-weight:600;
     color:#334155;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
 }
 
 .search-form input {
     width:100%;
-    padding:11px 12px;
+    padding:7px 10px;
     border:1px solid #cbd5e1;
-    border-radius:10px;
-    font-size:14px;
+    border-radius:8px;
+    font-size:13px;
 }
 
 .table-wrap {
@@ -81,13 +82,15 @@
 .table-card th {
     background:#1e3c72;
     color:white;
-    padding:10px 8px;
-    font-size:12px;
+    padding:6px 6px;
+    font-size:10px;
     text-align:left;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
 }
 
 .table-card td {
-    padding:9px 8px;
+    padding:5px 6px;
     font-size:12px;
     border-bottom:1px solid #e5e7eb;
     color:#0f172a;
@@ -97,23 +100,28 @@
     text-overflow:ellipsis;
 }
 
+.table-card .btn { padding: 4px 8px; font-size: 11px; }
+
 .empty-state {
-    padding:30px;
+    padding:16px 12px;
     text-align:center;
     color:#64748b;
+    font-size:13px;
 }
 
 .empty-state .icon {
-    font-size:28px;
-    margin-bottom:8px;
+    font-size:22px;
+    margin-bottom:6px;
+    line-height:1;
 }
 
 .msg-banner {
     display:none;
-    padding:12px 14px;
-    margin-bottom:16px;
-    font-size:14px;
+    padding:8px 12px;
+    margin-bottom:10px;
+    font-size:13px;
     font-weight:600;
+    border-radius:10px;
 }
 
 .msg-ok {
@@ -137,9 +145,8 @@ body.dark .msg-banner {
 }
 
 body.dark .table-card td,
-body.dark .sub-title,
-body.dark .page-title,
-body.dark .page-subtitle {
+body.dark .desactivados-page .page-title,
+body.dark .desactivados-page .page-subtitle {
     color:#e5e7eb;
 }
 
@@ -156,10 +163,11 @@ body.dark .table-card th {
 {% endblock %}
 
 {% block content %}
+<div class="desactivados-page">
 <div class="topbar">
     <div>
         <h1 class="page-title">📦 Productos desactivados</h1>
-        <p class="page-subtitle">Gestiona la papelera de productos y reactiva registros sin salir del layout principal.</p>
+        <p class="page-subtitle">Papelera: revisa inactivos y reactiva sin salir del layout.</p>
     </div>
     <div class="topbar-actions">
         <a class="btn" href="{{ url_for('productos.buscar') }}" data-module-url="{{ url_for('productos.buscar') }}">🔍 Volver a búsqueda</a>
@@ -168,7 +176,6 @@ body.dark .table-card th {
     </div>
 </div>
 
-<p class="sub-title">Usa este panel para revisar productos inactivos y restaurarlos rápidamente.</p>
 <div id="msgBanner" class="msg-banner"></div>
 
 <div class="toolbar">
@@ -236,6 +243,7 @@ body.dark .table-card th {
     </div>
     {% endif %}
 </section>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}

@@ -28,6 +28,29 @@
     margin: 0;
     color: rgba(255, 255, 255, 0.82);
 }
+.history-hero-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+}
+.history-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.26);
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+.history-back-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.4);
+}
 .history-stats {
     display: flex;
     gap: 10px;
@@ -194,6 +217,12 @@
     font-size: 13px;
     color: #475569;
 }
+.history-cell-sub {
+    display: block;
+    margin-top: 2px;
+    color: #64748b;
+    font-size: 12px;
+}
 .history-timeline {
     display: grid;
     gap: 0;
@@ -262,8 +291,11 @@
 <div class="history-shell">
     <section class="history-hero">
         <div>
+            <div class="history-hero-actions">
+                <a class="history-back-btn" href="{{ url_for('ventas.proveedores') }}">← Volver</a>
+            </div>
             <h2>{{ proveedor.empresa or proveedor.nombre }}</h2>
-            <p>RUT: {{ proveedor.rut|format_rut if proveedor.rut else 'Sin RUT' }} | Email: {{ proveedor.email or 'Sin email' }} | Telefono: {{ proveedor.telefono or 'Sin telefono' }}</p>
+            <p>RUT: {{ proveedor.rut|format_rut if proveedor.rut else 'Sin RUT' }} | Email: {{ proveedor.email or 'Sin email' }} | Telefono: {% if proveedor.telefono %}{{ proveedor.telefono|format_telefono }}{% else %}Sin telefono{% endif %}</p>
         </div>
         <div class="history-stats">
             <div class="history-stat">
@@ -278,6 +310,10 @@
                 <strong>{{ data.facturas_proveedor|length }}</strong>
                 <span>Facturas proveedor</span>
             </div>
+            <div class="history-stat">
+                <strong>{{ (data.homologaciones or [])|length }}</strong>
+                <span>Homologaciones código</span>
+            </div>
         </div>
     </section>
 
@@ -285,11 +321,12 @@
         <div class="history-card-head">
             <div>
                 <h3>Panel de historial de compras</h3>
-                <p>Seguimiento operativo del proveedor con documentos y trazabilidad de recepcion.</p>
+                <p>Seguimiento operativo del proveedor con documentos, equivalencias de codigos y trazabilidad.</p>
             </div>
             <div class="history-tabs" id="tabsProveedorHistorial">
                 <button class="tab-btn active" type="button" data-tab="proveedor-documentos">Documentos</button>
                 <button class="tab-btn" type="button" data-tab="proveedor-pagos">Pagos</button>
+                <button class="tab-btn" type="button" data-tab="proveedor-homologacion">Homologación</button>
                 <button class="tab-btn" type="button" data-tab="proveedor-trazabilidad">Trazabilidad</button>
             </div>
         </div>
@@ -326,16 +363,100 @@
         </section>
 
         <section class="history-pane" id="proveedor-pagos">
-            <div class="history-note-grid">
+            {% if data.pagos %}
+            <div class="history-note-grid" style="margin-bottom:12px;">
                 <div class="history-note-card">
-                    <h4>Modulo futuro</h4>
-                    <p>Este espacio queda preparado para pagos a proveedores, vencimientos y control de obligaciones.</p>
+                    <h4>Total pagado</h4>
+                    <p>${{ '{:,.0f}'.format(data.pagos_total_pagado or 0).replace(',', '.') }}</p>
                 </div>
                 <div class="history-note-card">
-                    <h4>Integracion sugerida</h4>
-                    <p>Se puede enlazar con cuentas por pagar para mostrar facturas pendientes, abonos y fechas compromiso.</p>
+                    <h4>Total pendiente</h4>
+                    <p>${{ '{:,.0f}'.format(data.pagos_total_pendiente or 0).replace(',', '.') }}</p>
                 </div>
             </div>
+            <div class="history-table-wrap">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Documento</th>
+                            <th>Fecha</th>
+                            <th>Estado pago</th>
+                            <th>Método / referencia</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in data.pagos %}
+                        <tr>
+                            <td>
+                                <strong>{{ p.label }}</strong>
+                                <span class="history-cell-sub">{{ p.number }}</span>
+                            </td>
+                            <td>{{ p.fecha }}</td>
+                            <td><span class="status-pill">{{ p.estado_pago or 'pendiente' }}</span></td>
+                            <td>
+                                {{ p.metodo_pago or '—' }}
+                                {% if p.referencia %}
+                                <span class="history-cell-sub">Ref: {{ p.referencia }}</span>
+                                {% endif %}
+                            </td>
+                            <td>${{ '{:,.0f}'.format(p.total or 0).replace(',', '.') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="history-empty">No hay pagos registrados para este proveedor.</div>
+            {% endif %}
+        </section>
+
+        <section class="history-pane" id="proveedor-homologacion">
+            <p style="margin:0 0 12px;color:#64748b;font-size:13px;max-width:720px;">
+                Equivalencias guardadas al ingresar stock (código del proveedor &rarr; código interno).
+                Varias referencias del proveedor pueden apuntar al mismo código nuestro (ej. 123 y 234 &rarr; 2417).
+                Útil para homologación y revisión de precios con ellos.
+            </p>
+            {% if not proveedor.rut %}
+            <div class="history-empty">Este proveedor no tiene RUT registrado; no se listan equivalencias (se indexan por RUT).</div>
+            {% elif (data.homologaciones|default([]))|length > 0 %}
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+                <label for="homologFilter" class="muted" style="font-size:12px;font-weight:600;">Filtrar</label>
+                <input type="search" id="homologFilter" placeholder="Código proveedor o interno (ej. 2417)" autocomplete="off"
+                       style="flex:1;min-width:200px;max-width:360px;padding:8px 10px;border:1px solid #dbe3ef;border-radius:8px;font-size:13px;">
+                <span class="muted" id="homologCount" style="font-size:12px;"></span>
+            </div>
+            <div class="history-table-wrap">
+                <table class="history-table" id="homologTable">
+                    <thead>
+                        <tr>
+                            <th>Código proveedor</th>
+                            <th>Código interno</th>
+                            <th>Actualizado</th>
+                            <th>Producto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for h in data.homologaciones %}
+                        <tr class="homolog-row" data-haystack="{{ (h.codigo_proveedor ~ ' ' ~ h.codigo_interno)|e }}">
+                            <td><strong>{{ h.codigo_proveedor or '—' }}</strong></td>
+                            <td><strong>{{ h.codigo_interno or '—' }}</strong></td>
+                            <td>{{ h.updated_at_label }}</td>
+                            <td>
+                                {% if h.producto_buscar_url %}
+                                <a href="{{ h.producto_buscar_url }}">Buscar en catálogo</a>
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="history-empty">Aun no hay equivalencias registradas para este RUT. Se crean al confirmar ingresos de bodega con codigo proveedor.</div>
+            {% endif %}
         </section>
 
         <section class="history-pane" id="proveedor-trazabilidad">
@@ -388,6 +509,27 @@
             if (href) window.location.href = href;
         });
     });
+
+    var homologFilter = document.getElementById('homologFilter');
+    var homologCount = document.getElementById('homologCount');
+    if (homologFilter) {
+        function applyHomologFilter() {
+            var q = (homologFilter.value || '').trim().toLowerCase();
+            var rows = document.querySelectorAll('#homologTable tbody tr.homolog-row');
+            var n = 0;
+            rows.forEach(function (tr) {
+                var hay = (tr.getAttribute('data-haystack') || '').toLowerCase();
+                var show = !q || hay.indexOf(q) !== -1;
+                tr.style.display = show ? '' : 'none';
+                if (show) n += 1;
+            });
+            if (homologCount) {
+                homologCount.textContent = n + ' de ' + rows.length + ' filas';
+            }
+        }
+        homologFilter.addEventListener('input', applyHomologFilter);
+        applyHomologFilter();
+    }
 })();
 </script>
 {% endblock %}

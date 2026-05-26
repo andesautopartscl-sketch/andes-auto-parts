@@ -2,8 +2,113 @@
 
 {% block title %}Movimientos de Stock | Andes Auto Parts{% endblock %}
 
+{% block extra_head %}
+{{ super() }}
+<style>
+.movimientos-topbar {
+    margin-bottom: 8px;
+    align-items: flex-start;
+}
+.movimientos-topbar .page-title {
+    font-size: 1.35rem;
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+.movimientos-topbar .page-subtitle {
+    font-size: 12px;
+    line-height: 1.35;
+    margin: 0;
+    color: #64748b;
+}
+.movimientos-topbar .topbar-actions {
+    flex-wrap: wrap;
+}
+.movimientos-topbar .topbar-actions .link-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 8px;
+}
+.movimientos-filters-card.table-card {
+    padding: 12px 14px;
+}
+.movimientos-filters-card .section-title {
+    font-size: 15px;
+    margin: 0 0 10px;
+}
+.movimientos-filters-card .filters {
+    gap: 8px 10px;
+}
+.movimientos-filters-card .field label {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 3px;
+    color: #475569;
+}
+.movimientos-filters-card .field input,
+.movimientos-filters-card .field select {
+    min-height: 30px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+.movimientos-filters-card .actions {
+    margin-top: 0 !important;
+    gap: 8px;
+}
+.movimientos-filters-card .actions .btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    min-height: 32px;
+    border-radius: 8px;
+}
+.movimientos-filters-card .actions .link-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+}
+.movimientos-historial-card.table-card {
+    margin-top: 12px !important;
+    padding: 12px 14px;
+}
+.movimientos-historial-card .section-title {
+    font-size: 15px;
+    margin: 0 0 8px;
+}
+.movimientos-historial-card .table-wrap {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+.movimientos-data-table thead th {
+    padding: 6px 8px !important;
+    font-size: 10px !important;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+.movimientos-data-table tbody td {
+    padding: 5px 8px !important;
+    font-size: 12px !important;
+    line-height: 1.35;
+    vertical-align: middle;
+}
+.movimientos-data-table tbody tr:hover td {
+    background: #fafbfc;
+}
+.movimientos-historial-card .badge {
+    padding: 2px 7px !important;
+    font-size: 10px !important;
+    font-weight: 700;
+    line-height: 1.2;
+}
+.movimientos-historial-card .empty-state {
+    padding: 14px 16px !important;
+    font-size: 12px !important;
+    line-height: 1.45;
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="topbar">
+<div class="topbar movimientos-topbar">
     <div>
         <h1 class="page-title">Movimientos de Stock</h1>
         <p class="page-subtitle">Historial consolidado de ingresos, salidas y ajustes con filtros operativos.</p>
@@ -15,12 +120,16 @@
     </div>
 </div>
 
-<div class="table-card">
+<div class="table-card movimientos-filters-card">
     <h2 class="section-title">Filtros</h2>
     <form method="get" class="filters">
         <div class="field">
-            <label for="codigo">Código</label>
-            <input id="codigo" name="codigo" value="{{ filtros.codigo }}" placeholder="Buscar por código">
+            <label for="codigo">Código interno</label>
+            <input id="codigo" name="codigo" value="{{ filtros.codigo }}" placeholder="Código propio">
+        </div>
+        <div class="field">
+            <label for="codigo_proveedor">Cód. proveedor</label>
+            <input id="codigo_proveedor" name="codigo_proveedor" value="{{ filtros.codigo_proveedor }}" placeholder="Ref. proveedor → tus códigos">
         </div>
         <div class="field">
             <label for="marca">Marca</label>
@@ -29,6 +138,14 @@
         <div class="field">
             <label for="bodega">Bodega</label>
             <input id="bodega" name="bodega" value="{{ filtros.bodega }}" placeholder="Ej: Bodega 1">
+        </div>
+        <div class="field">
+            <label for="origen_compra">Origen</label>
+            <select id="origen_compra" name="origen_compra">
+                <option value="" {% if not filtros.origen_compra %}selected{% endif %}>Todos</option>
+                <option value="nacional" {% if filtros.origen_compra == 'nacional' %}selected{% endif %}>Nacional</option>
+                <option value="importacion" {% if filtros.origen_compra == 'importacion' %}selected{% endif %}>Importación</option>
+            </select>
         </div>
         <div class="field">
             <label for="fecha_desde">Desde</label>
@@ -54,19 +171,22 @@
     </form>
 </div>
 
-<div class="table-card" style="margin-top:18px;">
+<div class="table-card movimientos-historial-card">
     <h2 class="section-title">Historial</h2>
     {% if movimientos %}
     <div class="table-wrap">
-        <table>
+        <table class="movimientos-data-table">
             <thead>
                 <tr>
                     <th>Fecha</th>
                     <th>Código</th>
+                    <th>Cód. prov</th>
                     <th>Marca</th>
                     <th>Bodega</th>
+                    <th>Origen</th>
                     <th>Tipo</th>
                     <th>Cantidad</th>
+                    <th>V. neto u.</th>
                     <th>Proveedor</th>
                     <th>Usuario</th>
                     <th>Observación</th>
@@ -75,12 +195,21 @@
             <tbody>
                 {% for movimiento in movimientos %}
                 <tr>
-                    <td>{{ movimiento.fecha.strftime('%d/%m/%Y %H:%M') if movimiento.fecha else '' }}</td>
+                    <td>{{ movimiento.fecha|chile_datetime if movimiento.fecha else '' }}</td>
                     <td><strong>{{ movimiento.codigo_producto }}</strong></td>
+                    <td>{{ movimiento.codigo_proveedor_ref or '—' }}</td>
                     <td>{{ movimiento.marca or '—' }}</td>
                     <td>{{ movimiento.bodega or '—' }}</td>
+                    <td>{{ (movimiento.origen_compra or 'nacional')|capitalize }}</td>
                     <td><span class="badge {{ movimiento.tipo }}">{{ movimiento.tipo|upper }}</span></td>
                     <td>{{ movimiento.cantidad }}</td>
+                    <td>
+                        {% if movimiento.valor_neto_ref is not none %}
+                        ${{ '{:,.0f}'.format(movimiento.valor_neto_ref).replace(',', '.') }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
                     <td>{{ movimiento.proveedor or '—' }}</td>
                     <td>{{ movimiento.usuario or 'sistema' }}</td>
                     <td>{{ movimiento.observacion or 'Sin observación' }}</td>

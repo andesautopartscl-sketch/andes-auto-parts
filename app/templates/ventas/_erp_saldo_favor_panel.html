@@ -1,0 +1,65 @@
+{% if doc_type == 'factura' %}
+<div class="cot-saldo-favor-panel" style="margin-top:12px;padding:14px 16px;border:1px solid #c7d2fe;border-radius:12px;background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 100%);">
+    <div style="font-weight:700;font-size:13px;color:#1e3a8a;margin-bottom:10px;">Pago con saldo a favor del cliente</div>
+    <p style="margin:0 0 12px;font-size:12px;color:#64748b;line-height:1.45;">
+        Podés descontar hasta el total del documento el crédito disponible. Si queda diferencia, elegí el medio con el que se paga el resto.
+    </p>
+    <div id="erpSaldoFavorData" data-max-saldo="{{ cliente_saldo_favor_erp|default(0) }}" data-total-raw="{{ totals.total|default(0) }}"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end;">
+        <div>
+            <label for="monto_saldo_favor" style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#334155;">Monto a descontar del saldo (máx. <span id="saldoMaxHint">${{ '{:,.0f}'.format(cliente_saldo_favor_erp|default(0)|float).replace(',','.') }}</span> · total doc. <span id="docTotalRef">${{ money.total|default('0')|replace(' ','') }}</span>)</label>
+            <input type="text" inputmode="decimal" name="monto_saldo_favor" id="monto_saldo_favor" value="{% if monto_saldo_favor is not none and monto_saldo_favor|float > 0 %}{{ (monto_saldo_favor|float)|round(0, 'common')|int }}{% else %}0{% endif %}" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;" placeholder="0" autocomplete="off">
+        </div>
+        <div>
+            <label for="metodo_pago_resto" style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#334155;">Medio de pago del <strong>resto</strong> (si aplica)</label>
+            <select name="metodo_pago_resto" id="metodo_pago_resto" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;">
+                <option value="">— Diferencia pendiente o solo saldo —</option>
+                {% for key, label in (metodo_pago_resto_choices or []) %}
+                <option value="{{ key }}" {% if metodo_pago_resto == key %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <p id="saldoRestoLine" style="margin:10px 0 0;font-size:12px;color:#0f172a;font-weight:600;"></p>
+</div>
+<script>
+(function () {
+    var dataEl = document.getElementById('erpSaldoFavorData');
+    var maxSaldo = dataEl && dataEl.getAttribute('data-max-saldo') ? parseFloat(dataEl.getAttribute('data-max-saldo')) : 0;
+    var totalRaw = dataEl && dataEl.getAttribute('data-total-raw') ? parseFloat(dataEl.getAttribute('data-total-raw')) : 0;
+    var inp = document.getElementById('monto_saldo_favor');
+    var met = document.getElementById('metodo_pago_resto');
+    var out = document.getElementById('saldoRestoLine');
+    var tEl = document.getElementById('tTotal');
+    function parseChile(s) {
+        s = (s || '').toString().trim().replace(/\s/g, '');
+        if (!s) return 0;
+        if (s.indexOf(',') !== -1) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+        return parseFloat(s.replace(/\./g, '')) || 0;
+    }
+    function sync() {
+        if (!inp || !out) return;
+        var total = totalRaw > 0 ? totalRaw : (tEl ? parseChile(tEl.textContent) : 0);
+        var use = Math.max(0, parseChile(inp.value));
+        if (use > maxSaldo + 0.01) use = maxSaldo;
+        if (use > total + 0.01) use = total;
+        var resto = Math.max(0, total - use);
+        if (resto > 0.01 && (!met || !String(met.value || '').trim())) {
+            out.textContent = 'Resta por pagar: $' + resto.toLocaleString('es-CL', { maximumFractionDigits: 0 }) + ' (elegí un medio de pago arriba o dejá pendiente).';
+        } else if (resto > 0.01 && met && met.value) {
+            out.textContent = 'Resto a cobrar con el medio indicado: $' + resto.toLocaleString('es-CL', { maximumFractionDigits: 0 });
+        } else {
+            out.textContent = 'Documento cubierto con el saldo indicado, sin resto a cobrar con otro medio.';
+        }
+    }
+    if (inp) inp.addEventListener('input', sync);
+    if (inp) inp.addEventListener('change', sync);
+    if (met) met.addEventListener('change', sync);
+    if (tEl) {
+        var obs = new MutationObserver(sync);
+        obs.observe(tEl, { childList: true, characterData: true, subtree: true });
+    }
+    sync();
+})();
+</script>
+{% endif %}

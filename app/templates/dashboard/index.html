@@ -1,9 +1,16 @@
-{% extends 'base_content.html' if _partial else 'erp_shell.html' %}
+{% extends 'base_content.html' if _partial else 'base.html' %}
 {% block title %}Dashboard | Andes Auto Parts{% endblock %}
-{% block header_subtitle %}Dashboard &mdash; Inteligencia de negocios{% endblock %}
 
 {% block content %}
-<div style="display:grid;gap:18px;">
+<div class="dashboard-page">
+  <div class="topbar dashboard-page-topbar">
+    <div>
+      <h1 class="page-title dashboard-page-title">Dashboard</h1>
+      <p class="page-subtitle">Inteligencia de negocios</p>
+    </div>
+  </div>
+
+<div class="dashboard-compact">
 
   <!-- KPI cards -->
   <div class="card-grid">
@@ -30,21 +37,21 @@
   </div>
 
   <!-- Charts row -->
-  <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;">
+  <div class="dashboard-compact-charts">
     <!-- Sales chart -->
-    <div class="panel" style="padding:20px;">
-      <h3 style="margin-bottom:14px;font-size:15px;">Ventas últimos 30 días</h3>
-      <canvas id="chartVentas" height="90"></canvas>
+    <div class="panel dashboard-compact-panel">
+      <h3 class="dashboard-compact-panel-title">Ventas últimos 30 días</h3>
+      <canvas id="chartVentas" height="56"></canvas>
     </div>
     <!-- Top clientes -->
-    <div class="panel" style="padding:20px;overflow:hidden;">
-      <h3 style="margin-bottom:12px;font-size:15px;">Top 10 clientes</h3>
+    <div class="panel dashboard-compact-panel" style="overflow:hidden;">
+      <h3 class="dashboard-compact-panel-title">Top 10 clientes</h3>
       {% if top_clientes %}
-      <div style="display:grid;gap:8px;">
+      <div class="dashboard-compact-list">
         {% for c in top_clientes %}
-        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:6px 0;border-bottom:1px solid #f1f5f9;">
-          <span style="font-weight:600;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.nombre }}</span>
-          <span style="color:var(--primary);font-weight:700;margin-left:10px;white-space:nowrap;">${{ '{:,.0f}'.format(c.total).replace(',', '.') }}</span>
+        <div class="dashboard-compact-list-row">
+          <span class="dashboard-compact-list-name">{{ c.nombre }}</span>
+          <span class="dashboard-compact-list-amt">${{ '{:,.0f}'.format(c.total).replace(',', '.') }}</span>
         </div>
         {% endfor %}
       </div>
@@ -55,10 +62,10 @@
   </div>
 
   <!-- Bottom row -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+  <div class="dashboard-compact-bottom">
     <!-- Top productos -->
-    <div class="panel" style="padding:20px;overflow:hidden;">
-      <h3 style="margin-bottom:14px;font-size:15px;">Top 10 productos vendidos</h3>
+    <div class="panel dashboard-compact-panel" style="overflow:hidden;">
+      <h3 class="dashboard-compact-panel-title">Top 10 productos vendidos</h3>
       {% if top_productos %}
       <div style="overflow-x:auto;">
         <table class="erp-table">
@@ -88,8 +95,8 @@
     </div>
 
     <!-- Stock crítico -->
-    <div class="panel" style="padding:20px;overflow:hidden;">
-      <h3 style="margin-bottom:14px;font-size:15px;">Stock crítico (≤ 3 unidades)</h3>
+    <div class="panel dashboard-compact-panel" style="overflow:hidden;">
+      <h3 class="dashboard-compact-panel-title">Stock crítico (≤ 3 unidades)</h3>
       {% if stock_critico %}
       <div style="overflow-x:auto;">
         <table class="erp-table">
@@ -120,13 +127,14 @@
         </table>
       </div>
       {% else %}
-      <div style="padding:20px;text-align:center;color:#16a34a;font-weight:600;">
+      <div class="dashboard-compact-empty-ok">
         Sin problemas de stock crítico.
       </div>
       {% endif %}
     </div>
   </div>
 
+</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>

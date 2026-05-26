@@ -1,0 +1,177 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block content %}
+<style>
+  .exp-wrap {
+    width: 100%; max-width: min(1180px, 100%); margin: 0 auto; padding: 0 12px 20px; box-sizing: border-box;
+    font-family: "Segoe UI", system-ui, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .exp-wrap input,
+  .exp-wrap select,
+  .exp-wrap textarea,
+  .exp-wrap button {
+    font-family: inherit;
+  }
+  .exp-wrap input::placeholder,
+  .exp-wrap textarea::placeholder {
+    font-family: inherit;
+    color: #94a3b8;
+  }
+  .exp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #e8edf3; }
+  .exp-head h1 { margin: 0; font-size: 17px; font-weight: 600; color: #0f172a; letter-spacing: -0.02em; }
+  .exp-head .meta { font-size: 11px; color: #94a3b8; margin-top: 3px; }
+  .exp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; align-items: start; }
+  @media (max-width: 920px) { .exp-grid { grid-template-columns: 1fr; } }
+  .exp-section {
+    border: 1px solid #e8edf3;
+    border-radius: 10px;
+    background: #fff;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  .exp-section h2 {
+    margin: 0;
+    padding: 8px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #64748b;
+    background: #fafbfc;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .exp-section .body { padding: 10px 12px; font-size: 13px; color: #334155; }
+  .exp-muted { color: #94a3b8; font-size: 12px; line-height: 1.45; margin: 0 0 8px; }
+  .exp-kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; align-items: baseline; }
+  .exp-kv dt { color: #94a3b8; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin: 0; }
+  .exp-kv dd { margin: 0; color: #0f172a; }
+  .exp-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+  .exp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .exp-table th, .exp-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  .exp-table th { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; background: #fafbfc; }
+  .exp-table tr:last-child td { border-bottom: none; }
+  .exp-badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 600; }
+  .exp-badge.pendiente { background: #fef3c7; color: #92400e; }
+  .exp-badge.aceptado { background: #dcfce7; color: #166534; }
+  .exp-pill {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+    background: #fafbfc;
+  }
+  .exp-pill:last-child { margin-bottom: 0; }
+  .exp-pill strong { display: block; font-size: 13px; color: #0f172a; margin-bottom: 4px; }
+  .exp-pill .msg { font-size: 12px; color: #475569; white-space: pre-wrap; margin: 0 0 8px; }
+  .exp-check { display: flex; gap: 8px; align-items: flex-start; font-size: 11px; color: #475569; margin: 8px 0; }
+  .exp-check input { margin-top: 2px; }
+</style>
+
+<div class="exp-wrap">
+  <div class="exp-head">
+    <div>
+      <h1>Mi expediente laboral</h1>
+      <div class="meta">{{ u.nombre or u.usuario }} · @{{ u.usuario }}</div>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for cat, msg in messages %}
+      <div style="margin-bottom:8px; padding:8px 10px; border-radius:8px; font-size:12px;
+        {% if cat == 'error' %}background:#fef2f2; color:#991b1b; border:1px solid #fecaca;
+        {% else %}background:#ecfdf3; color:#166534; border:1px solid #86efac;{% endif %}">{{ msg }}</div>
+    {% endfor %}
+  {% endif %}
+  {% endwith %}
+
+  <div class="exp-grid">
+    <section class="exp-section">
+      <h2>Contrato de trabajo</h2>
+      <div class="body">
+        <p class="exp-muted">Documento cargado por RRHH. Solo visualización; no podés modificar ni eliminar el archivo.</p>
+        <dl class="exp-kv">
+          <dt>Vigencia desde</dt>
+          <dd>{{ perfil.contrato_vigencia_desde.strftime('%d/%m/%Y') if perfil.contrato_vigencia_desde else '—' }}</dd>
+          <dt>Notas</dt>
+          <dd style="white-space:pre-wrap;">{{ perfil.contrato_notas or '—' }}</dd>
+        </dl>
+        <div class="exp-actions">
+          {% if perfil.contrato_pdf_relpath %}
+          <a class="btn primary sm" href="{{ url_for('rrhh.rrhh_archivo_contrato', uid=u.id) }}" target="_blank" rel="noopener">Ver contrato (PDF)</a>
+          {% else %}
+          <span class="exp-muted" style="margin:0;">Aún no hay contrato PDF disponible.</span>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <section class="exp-section">
+      <h2>Anexos pendientes de aceptación</h2>
+      <div class="body">
+        {% if anexos_pendientes %}
+          {% for a in anexos_pendientes %}
+          <div class="exp-pill">
+            <strong>{{ a.titulo }}</strong>
+            <div class="exp-muted" style="font-size:11px; margin:0 0 6px;">
+              Recibido {{ a.creado_at.strftime('%d/%m/%Y %H:%M') if a.creado_at else '—' }} ·
+              <span class="exp-badge pendiente">Pendiente</span>
+            </div>
+            {% if a.mensaje %}
+            <p class="msg">{{ a.mensaje }}</p>
+            {% endif %}
+            <div class="exp-actions">
+              <a class="btn outline sm" href="{{ url_for('rrhh.rrhh_archivo_anexo', aid=a.id) }}" target="_blank" rel="noopener">Abrir PDF</a>
+            </div>
+            <form method="post" action="{{ url_for('rrhh.mi_expediente') }}" style="margin-top:10px;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="action" value="aceptar_anexo">
+              <input type="hidden" name="anexo_id" value="{{ a.id }}">
+              <label class="exp-check">
+                <input type="checkbox" name="declaracion" value="1" required>
+                <span>Declaro haber leído el documento y acepto su contenido mediante esta manifestación electrónica (registro de auditoría interna).</span>
+              </label>
+              <button type="submit" class="btn primary sm">Aceptar anexo</button>
+            </form>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="exp-muted" style="margin:0;">No tenés anexos pendientes.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <section class="exp-section" style="margin-top:10px;">
+    <h2>Anexos aceptados</h2>
+    <div class="body" style="padding:0;">
+      {% if anexos_aceptados %}
+      <table class="exp-table">
+        <thead>
+          <tr>
+            <th>Título</th>
+            <th>Estado</th>
+            <th>Aceptado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in anexos_aceptados %}
+          <tr>
+            <td><strong>{{ a.titulo }}</strong></td>
+            <td><span class="exp-badge aceptado">Aceptado</span></td>
+            <td style="font-size:11px; color:#64748b;">{{ a.aceptado_at.strftime('%d/%m/%Y %H:%M') if a.aceptado_at else '—' }}</td>
+            <td><a href="{{ url_for('rrhh.rrhh_archivo_anexo', aid=a.id) }}" target="_blank" rel="noopener">Ver PDF</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="exp-muted" style="margin:0; padding:10px 12px;">Aún no registramos anexos aceptados.</p>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}

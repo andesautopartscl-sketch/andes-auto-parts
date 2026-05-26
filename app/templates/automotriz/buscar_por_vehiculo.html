@@ -1,6 +1,7 @@
 <h2>Buscar Repuestos por Vehículo</h2>
 
 <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
     <label>Marca:</label>
     <select name="marca">

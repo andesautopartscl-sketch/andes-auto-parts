@@ -2,11 +2,358 @@
 
 {% block title %}Guía de Recepción Proveedor | Andes Auto Parts{% endblock %}
 
+{% block extra_head %}
+{{ super() }}
+<style>
+#recepcionForm .form-grid {
+    align-items: start;
+}
+.recepcion-view-topbar {
+    margin-bottom: 8px;
+    align-items: flex-start;
+}
+.recepcion-view-topbar .page-title {
+    font-size: 1.35rem;
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+.recepcion-view-topbar .page-subtitle {
+    font-size: 12px;
+    line-height: 1.35;
+    margin: 0;
+}
+.recepcion-view-topbar .topbar-actions .link-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 8px;
+}
+.recepcion-form-card.form-card {
+    position: relative;
+    padding: 14px 16px 40px;
+}
+.recepcion-form-card > .section-title {
+    font-size: 15px;
+    margin: 0 0 10px;
+}
+.recepcion-form-card .form-grid {
+    gap: 8px 12px;
+}
+.recepcion-form-card .field label {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 3px;
+    color: #475569;
+}
+.recepcion-form-card .form-grid .field input#marca {
+    width: 100%;
+}
+.recepcion-form-card .form-grid .field input:not([type="hidden"]),
+.recepcion-form-card .form-grid .field select,
+.recepcion-form-card .form-grid .field textarea {
+    min-height: 30px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+.recepcion-form-card .form-grid .field textarea#observacion {
+    min-height: 58px;
+    line-height: 1.35;
+    resize: vertical;
+}
+.recepcion-form-card .actions {
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
+    flex-wrap: wrap;
+}
+.recepcion-form-card .actions .btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    min-height: 32px;
+    border-radius: 8px;
+}
+.recepcion-form-card .actions .link-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+}
+.recepcion-producto-panel.panel {
+    margin-top: 10px;
+    padding: 12px 14px;
+}
+.recepcion-producto-panel .section-title {
+    margin-bottom: 6px;
+    font-size: 15px;
+}
+.recepcion-producto-panel .product-summary {
+    gap: 6px;
+}
+.recepcion-producto-panel .summary-box {
+    padding: 6px 8px;
+    border-radius: 8px;
+}
+.recepcion-producto-panel .summary-box h4 {
+    margin: 0 0 3px;
+    font-size: 10px;
+}
+.recepcion-producto-panel .summary-box > p {
+    font-size: 13px;
+    line-height: 1.3;
+}
+.recepcion-variantes-panel.panel {
+    margin-top: 12px !important;
+    padding: 12px 14px;
+}
+.recepcion-variantes-panel .section-title {
+    font-size: 15px;
+    margin-bottom: 8px;
+}
+.recepcion-variantes-panel .table-wrap table {
+    font-size: 12px;
+}
+.recepcion-variantes-panel .table-wrap th,
+.recepcion-variantes-panel .table-wrap td {
+    padding: 6px 8px;
+}
+.recepcion-help-anchor {
+    position: absolute;
+    bottom: 10px;
+    left: 12px;
+    z-index: 6;
+}
+.recepcion-help-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    border: 1px solid #93c5fd;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    color: #1e3a8a;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.12);
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .15s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+}
+.recepcion-help-btn svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+.recepcion-help-btn:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border-color: #60a5fa;
+    box-shadow: 0 12px 24px rgba(30, 64, 175, 0.24);
+}
+.recepcion-help-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+.recepcion-help-panel {
+    position: absolute;
+    bottom: 46px;
+    left: 0;
+    width: min(440px, calc(100vw - 28px));
+    max-height: min(70vh, 440px);
+    overflow: auto;
+    padding: 12px 14px;
+    border: 1px solid #dbe4f0;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 16px 42px rgba(15, 23, 42, 0.16);
+}
+.recepcion-help-panel[hidden] {
+    display: none !important;
+}
+.recepcion-help-title {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.recepcion-help-section {
+    margin: 0 0 8px;
+    padding: 8px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+.recepcion-help-section-title {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+.recepcion-help-list {
+    margin: 0;
+    padding-left: 16px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #475569;
+}
+.recepcion-help-list li + li {
+    margin-top: 6px;
+}
+.recepcion-help-list strong {
+    color: #334155;
+}
+.recepcion-help-panel > .btn {
+    font-size: 12px;
+    padding: 5px 12px;
+    min-height: 30px;
+    margin-top: 2px;
+}
+.recepcion-codigo-wrap {
+    position: relative;
+    display: block;
+    width: 100%;
+}
+.recepcion-codigo-wrap input#codigo_producto {
+    width: 100%;
+    min-width: 0;
+    padding-right: 36px;
+    box-sizing: border-box;
+}
+.recepcion-codigo-wrap .recepcion-codigo-search-btn {
+    position: absolute;
+    z-index: 1;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 24px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.12s ease, color 0.12s ease;
+    box-shadow: none;
+    font: inherit;
+}
+.recepcion-codigo-wrap .recepcion-codigo-search-btn:hover {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+.recepcion-codigo-wrap .recepcion-codigo-search-btn:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 1px;
+}
+.recepcion-codigo-wrap .recepcion-codigo-search-btn svg {
+    display: block;
+    flex-shrink: 0;
+}
+.ingreso-product-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 1200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.ingreso-product-modal.open {
+    display: flex;
+}
+.ingreso-product-modal-card {
+    width: min(880px, 100%);
+    max-height: min(82vh, 700px);
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #dbe4f0;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.ingreso-product-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.ingreso-product-modal-head h3 {
+    margin: 0;
+    font-size: 15px;
+    color: #0f172a;
+}
+.ingreso-product-modal-body {
+    padding: 10px 12px;
+    overflow: auto;
+}
+.ingreso-product-search {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.ingreso-product-results {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: auto;
+    max-height: 48vh;
+}
+.ingreso-product-item {
+    display: grid;
+    grid-template-columns: 120px 1fr 130px 90px auto;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 8px;
+    border-bottom: 1px solid #eef2f7;
+    font-size: 12px;
+}
+.ingreso-product-item:last-child {
+    border-bottom: none;
+}
+.ingreso-product-item:hover {
+    background: #f8fbff;
+}
+.ingreso-product-meta {
+    font-size: 10px;
+    color: #64748b;
+}
+.ingreso-product-item strong {
+    font-size: 11px;
+    font-weight: 700;
+}
+.ingreso-product-item .btn.btn-primary.btn-sm {
+    padding: 5px 10px;
+    font-size: 11px;
+    border-radius: 8px;
+    min-height: 28px;
+}
+#recepcionProductSearchInput {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+#recepcionProductSearchBtn {
+    min-height: 34px;
+    padding: 6px 12px;
+    font-size: 12px;
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="topbar">
+<div class="topbar recepcion-view-topbar">
     <div>
         <h1 class="page-title">Guía de Recepción Proveedor</h1>
-        <p class="page-subtitle">Registra recepciones desde proveedor, incrementa stock y deja trazabilidad operativa completa.</p>
+        <p class="page-subtitle">Recepción rápida de mercadería con movimiento tipo ingreso. Detalles y diferencias con el módulo ERP en la ayuda (ícono abajo).</p>
     </div>
     <div class="topbar-actions">
         <a class="link-btn" href="{{ url_for('bodega.movimientos') }}">📊 Ver movimientos</a>
@@ -18,9 +365,12 @@
 <div class="message {{ message.type }}">{{ message.text }}</div>
 {% endif %}
 
-<div class="form-card form-shell-full">
+<div class="form-card form-shell-full recepcion-form-card">
     <h2 class="section-title">Registrar Recepción</h2>
-    <form method="post">
+    <form method="post" id="recepcionForm"
+          data-marcas-url="{{ url_for('bodega.ajuste_marcas_sugeridas') }}"
+          data-consult-url="{{ url_for('bodega.recepcion') }}"
+          data-product-search-url="{{ url_for('ventas.api_productos_search') }}">
         <div class="form-grid">
             <div class="field">
                 <label for="proveedor">Proveedor</label>
@@ -28,7 +378,12 @@
             </div>
             <div class="field">
                 <label for="codigo_producto">Código del producto</label>
-                <input id="codigo_producto" name="codigo_producto" value="{{ form_data.codigo }}" placeholder="Ej: ABC123" required>
+                <div class="recepcion-codigo-wrap">
+                    <input id="codigo_producto" name="codigo_producto" value="{{ form_data.codigo }}" placeholder="Código, descripción u OEM" autocomplete="off" required>
+                    <button type="button" class="recepcion-codigo-search-btn" id="recepcionCodigoSearchBtn" title="Buscar producto (F2)" aria-label="Buscar producto">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    </button>
+                </div>
             </div>
             <div class="field">
                 <label for="cantidad">Cantidad recibida</label>
@@ -36,11 +391,16 @@
             </div>
             <div class="field">
                 <label for="marca">Marca / Variante</label>
-                <input id="marca" name="marca" value="{{ form_data.marca }}" placeholder="Ej: BOSCH">
+                <datalist id="recepcionMarcaDl"></datalist>
+                <input id="marca" name="marca" value="{{ form_data.marca }}" list="recepcionMarcaDl" placeholder="Elegí sugerencia o escribí (ej. BOSCH)" autocomplete="off">
             </div>
             <div class="field">
                 <label for="bodega">Bodega</label>
-                <input id="bodega" name="bodega" value="{{ form_data.bodega }}" placeholder="Ej: Bodega 1">
+                <select id="bodega" name="bodega" required aria-label="Bodega">
+                    {% for b in bodegas_opciones %}
+                    <option value="{{ b }}" {% if form_data.bodega == b or (not form_data.bodega and b == default_bodega) %}selected{% endif %}>{{ b }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="field field-full">
                 <label for="observacion">Observación</label>
@@ -48,14 +408,72 @@
             </div>
         </div>
         <div class="actions">
-            <button class="btn btn-success" type="submit">Guardar recepción</button>
+            <button class="btn" type="submit" formaction="{{ url_for('bodega.recepcion') }}" formmethod="get" formnovalidate style="background:#e2e8f0;color:#334155;font-weight:600;box-shadow:none;">Consultar producto</button>
+            <button class="btn btn-success" type="submit" formmethod="post">Guardar recepción</button>
             <a class="link-btn" href="{{ url_for('bodega.recepcion') }}">Limpiar formulario</a>
+        </div>
+
+        <div class="recepcion-help-anchor">
+            <button type="button" class="recepcion-help-btn" id="recepcionHelpBtn" aria-expanded="false" aria-controls="recepcionHelpPanel" title="Ayuda de recepción" aria-label="Ayuda">
+                <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                    <path d="M32 8c-10.5 0-19 7.7-19 17.2 0 2.7 2.2 4.8 4.9 4.8 2.7 0 4.9-2.2 4.9-4.8 0-4.1 4.1-7.4 9.2-7.4 5.1 0 9.2 3.3 9.2 7.4 0 3.3-2.4 5.1-5.8 7.5-3.9 2.8-8.7 6.3-8.7 13.6 0 2.7 2.2 4.8 4.9 4.8s4.9-2.2 4.9-4.8c0-2 1.1-3 4.7-5.6 3.9-2.8 9.8-7 9.8-15.5C51 15.7 42.5 8 32 8z" fill="currentColor"/>
+                    <circle cx="32" cy="55" r="5.5" fill="currentColor"/>
+                </svg>
+            </button>
+            <div id="recepcionHelpPanel" class="recepcion-help-panel" role="region" aria-labelledby="recepcionHelpTitle" hidden>
+                <h3 id="recepcionHelpTitle" class="recepcion-help-title">Ayuda — recepción proveedor</h3>
+
+                <div class="recepcion-help-section">
+                    <h4 class="recepcion-help-section-title">Qué es esta pantalla</h4>
+                    <ul class="recepcion-help-list">
+                        <li>Registro <strong>rápido</strong> de mercadería recibida: incrementa stock con movimiento tipo <strong>ingreso</strong> y deja observación con nombre de proveedor.</li>
+                        <li><strong>No reemplaza</strong> el módulo <strong>Ingreso de productos</strong> (documento ERP con RUT, líneas y trazabilidad completa). Usá recepción cuando no necesitás ese nivel de detalle.</li>
+                    </ul>
+                </div>
+
+                <div class="recepcion-help-section">
+                    <h4 class="recepcion-help-section-title">Consulta automática</h4>
+                    <ul class="recepcion-help-list">
+                        <li>La <strong>lupa</strong> dentro del código (o <strong>F2</strong>) abre el buscador igual que en Ajuste/Salida.</li>
+                        <li>Al ingresar el <strong>código</strong> (y al cambiar <strong>bodega</strong> o <strong>marca</strong>) se consulta el producto y el stock sin pulsar el botón.</li>
+                        <li><strong>Consultar producto</strong> repite la consulta manualmente.</li>
+                    </ul>
+                </div>
+
+                <div class="recepcion-help-section">
+                    <h4 class="recepcion-help-section-title">Marca y cantidad</h4>
+                    <ul class="recepcion-help-list">
+                        <li>Las sugerencias de <strong>marca</strong> dependen del código y del stock en bodega.</li>
+                        <li>Si el producto trabaja por <strong>variantes</strong>, la marca es obligatoria para registrar el ingreso correctamente.</li>
+                        <li>Indicá <strong>cantidad recibida</strong> y pulsá <strong>Guardar recepción</strong>.</li>
+                    </ul>
+                </div>
+
+                <button type="button" class="btn" id="recepcionHelpClose">Cerrar</button>
+            </div>
         </div>
     </form>
 </div>
 
+<div id="recepcionProductModal" class="ingreso-product-modal" aria-hidden="true">
+    <div class="ingreso-product-modal-card" role="dialog" aria-modal="true" aria-labelledby="recepcionProductModalTitle">
+        <div class="ingreso-product-modal-head">
+            <h3 id="recepcionProductModalTitle">Buscar producto</h3>
+            <button type="button" class="btn" id="recepcionProductModalClose">Cerrar</button>
+        </div>
+        <div class="ingreso-product-modal-body">
+            <div class="ingreso-product-search">
+                <input type="text" id="recepcionProductSearchInput" placeholder="Código, descripción u OEM (mín. 2 caracteres)" autocomplete="off">
+                <button type="button" class="btn btn-primary" id="recepcionProductSearchBtn">Buscar</button>
+            </div>
+            <div id="recepcionProductSearchStatus" class="muted" style="margin-bottom:8px;">Escribe para buscar productos.</div>
+            <div id="recepcionProductResults" class="ingreso-product-results"></div>
+        </div>
+    </div>
+</div>
+
 {% if producto %}
-<div class="panel panel-spaced form-shell-full">
+<div class="panel panel-spaced form-shell-full recepcion-producto-panel">
     <h2 class="section-title">Producto Procesado</h2>
     <div class="product-summary">
         <div class="summary-box">
@@ -68,18 +486,18 @@
         </div>
         <div class="summary-box">
             <h4>Proveedor</h4>
-            <p>{{ form_data.proveedor }}</p>
+            <p>{{ form_data.proveedor or '—' }}</p>
         </div>
         <div class="summary-box">
             <h4>Stock Bodega</h4>
-            <p>{{ producto.stock_actual }}</p>
+            <p>{{ producto.stock_actual | int }}</p>
         </div>
     </div>
 </div>
 {% endif %}
 
 {% if variantes %}
-<div class="panel panel-spaced form-shell-full">
+<div class="panel panel-spaced form-shell-full recepcion-variantes-panel">
     <h2 class="section-title">Variantes Disponibles</h2>
     <div class="table-wrap">
         <table>
@@ -97,7 +515,7 @@
                     <td><strong>{{ variante.marca }}</strong></td>
                     <td>{{ variante.bodega }}</td>
                     <td>{{ variante.proveedor or '—' }}</td>
-                    <td>{{ variante.stock }}</td>
+                    <td>{{ variante.stock | int }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

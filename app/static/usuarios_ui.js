@@ -36,10 +36,87 @@
         var usersListCache = [];
         var passwordResetCache = [];
         var chileGeoCache = [];
+        var permissionsCatalogCache = [];
 
         var optionsUsersLoaded = false;
         var isBusy = false;
         var usuariosGlobal = [];
+
+        var userConfirmModal = document.getElementById("optionsUserConfirmModal");
+        var userConfirmTitle = document.getElementById("userConfirmTitle");
+        var userConfirmBody = document.getElementById("userConfirmBody");
+        var userConfirmPrimary = document.getElementById("userConfirmPrimaryBtn");
+        var pendingUserConfirm = null;
+
+        function openUserActionConfirm(cfg) {
+            if (!userConfirmModal || !userConfirmTitle || !userConfirmBody || !userConfirmPrimary) {
+                if (window.confirm((cfg && cfg.fallbackMessage) || "¿Confirmar?")) {
+                    if (cfg && typeof cfg.onConfirm === "function") {
+                        cfg.onConfirm();
+                    }
+                }
+                return;
+            }
+            userConfirmTitle.textContent = (cfg && cfg.title) ? cfg.title : "Confirmar";
+            userConfirmBody.textContent = (cfg && cfg.body) ? cfg.body : "";
+            userConfirmPrimary.textContent = (cfg && cfg.primaryLabel) ? cfg.primaryLabel : "Aceptar";
+            userConfirmPrimary.className = "action-btn " + ((cfg && cfg.primaryClass) ? cfg.primaryClass : "edit");
+            pendingUserConfirm = (cfg && typeof cfg.onConfirm === "function") ? cfg.onConfirm : null;
+            userConfirmModal.classList.add("is-open");
+            userConfirmModal.setAttribute("aria-hidden", "false");
+            setTimeout(function () {
+                try {
+                    userConfirmPrimary.focus();
+                } catch (e2) {
+                    /* ignore */
+                }
+            }, 30);
+        }
+
+        function closeUserActionConfirm() {
+            if (!userConfirmModal) {
+                return;
+            }
+            userConfirmModal.classList.remove("is-open");
+            userConfirmModal.setAttribute("aria-hidden", "true");
+            pendingUserConfirm = null;
+        }
+
+        (function bindUserConfirmModal() {
+            if (!userConfirmModal || userConfirmModal.dataset.userConfirmBound === "1") {
+                return;
+            }
+            userConfirmModal.dataset.userConfirmBound = "1";
+            userConfirmModal.addEventListener("click", function (ev) {
+                if (ev.target === userConfirmModal) {
+                    closeUserActionConfirm();
+                }
+            });
+            userConfirmModal.querySelectorAll("[data-user-confirm-dismiss]").forEach(function (btn) {
+                btn.addEventListener("click", function (ev) {
+                    ev.preventDefault();
+                    closeUserActionConfirm();
+                });
+            });
+            if (userConfirmPrimary) {
+                userConfirmPrimary.addEventListener("click", function () {
+                    var fn = pendingUserConfirm;
+                    closeUserActionConfirm();
+                    if (typeof fn === "function") {
+                        fn();
+                    }
+                });
+            }
+            document.addEventListener("keydown", function (ev) {
+                if (ev.key !== "Escape") {
+                    return;
+                }
+                if (!userConfirmModal.classList.contains("is-open")) {
+                    return;
+                }
+                closeUserActionConfirm();
+            });
+        }());
 
         function updateStatus(message, isError) {
             if (!statusNode) return;
@@ -49,7 +126,226 @@
 
         function fillUrlTemplate(template, id) {
             if (!template) return "";
-            return template.replace(/\/0\/?$/, "/" + id);
+            var sid = String(id);
+            if (template.indexOf("/0/") >= 0) {
+                return template.replace("/0/", "/" + sid + "/");
+            }
+            return template.replace(/\/0\/?$/, "/" + sid);
+        }
+
+        var apiFotoUrlTemplate = modal.getAttribute("data-usuarios-foto-url-template") || "";
+        var defaultAvatarUrl = modal.getAttribute("data-default-avatar-url") || "/static/icons/user.png";
+        var sessionUsuarioId = parseInt(modal.getAttribute("data-session-usuario-id") || "0", 10) || 0;
+
+        function maybeReloadForOwnPhoto(userId) {
+            if (sessionUsuarioId && userId === sessionUsuarioId) {
+                window.setTimeout(function () { window.location.reload(); }, 700);
+            }
+        }
+
+        function setPhotoFileLabel(prefix, text, state) {
+            var label = document.getElementById(prefix + "PhotoLabel");
+            if (!label) return;
+            label.textContent = text || "";
+            label.classList.remove("is-pending-remove", "is-selected");
+            if (state === "pending-remove") label.classList.add("is-pending-remove");
+            if (state === "selected") label.classList.add("is-selected");
+        }
+
+        function updatePhotoActionButtons(prefix) {
+            var preview = document.getElementById(prefix + "PhotoPreview");
+            var clearBtn = document.getElementById(prefix + "PhotoClear");
+            var undoBtn = document.getElementById(prefix + "PhotoUndo");
+            if (!preview) return;
+            var pendingRemove = preview.dataset.removePending === "1";
+            var hadPhoto = preview.dataset.hadPhotoAtLoad === "1";
+            var hasNewFile = preview.dataset.hasNewFile === "1";
+            if (clearBtn) {
+                clearBtn.hidden = pendingRemove || (!hadPhoto && !hasNewFile && preview.dataset.hasPhoto !== "1");
+            }
+            if (undoBtn) {
+                undoBtn.hidden = !pendingRemove;
+            }
+        }
+
+        function renderPhotoPreviewImage(preview, src, isPlaceholder) {
+            if (!preview) return;
+            if (isPlaceholder) {
+                preview.innerHTML = '<img class="user-photo-preview__img is-placeholder" src="' + defaultAvatarUrl + '" alt="">';
+            } else {
+                preview.innerHTML = '<img class="user-photo-preview__img" src="' + src + '" alt="">';
+            }
+        }
+
+        function resetUserPhotoUI(prefix) {
+            var fileInput = document.getElementById(prefix + "PhotoFile");
+            var preview = document.getElementById(prefix + "PhotoPreview");
+            if (fileInput) fileInput.value = "";
+            if (preview) {
+                preview.classList.remove("is-pending-remove");
+                preview.dataset.removePending = "0";
+                preview.dataset.hasPhoto = "0";
+                preview.dataset.hasNewFile = "0";
+                preview.dataset.hadPhotoAtLoad = "0";
+                preview.dataset.storedFotoUrl = "";
+                renderPhotoPreviewImage(preview, defaultAvatarUrl, true);
+            }
+            setPhotoFileLabel(prefix, prefix === "optionsCreate" ? "Sin imagen" : "Sin cambios", null);
+            updatePhotoActionButtons(prefix);
+        }
+
+        function setUserPhotoPreview(prefix, fotoUrl, hasPhoto) {
+            var preview = document.getElementById(prefix + "PhotoPreview");
+            var fileInput = document.getElementById(prefix + "PhotoFile");
+            if (fileInput) fileInput.value = "";
+            if (!preview) return;
+            preview.classList.remove("is-pending-remove");
+            preview.dataset.removePending = "0";
+            preview.dataset.hasPhoto = hasPhoto ? "1" : "0";
+            preview.dataset.hasNewFile = "0";
+            preview.dataset.hadPhotoAtLoad = hasPhoto ? "1" : "0";
+            preview.dataset.storedFotoUrl = hasPhoto && fotoUrl ? fotoUrl : "";
+            if (hasPhoto && fotoUrl) {
+                renderPhotoPreviewImage(preview, fotoUrl + "?v=" + Date.now(), false);
+                setPhotoFileLabel(prefix, "Foto actual", null);
+            } else {
+                renderPhotoPreviewImage(preview, defaultAvatarUrl, true);
+                setPhotoFileLabel(prefix, "Sin foto", null);
+            }
+            updatePhotoActionButtons(prefix);
+        }
+
+        function markUserPhotoForRemoval(prefix) {
+            var preview = document.getElementById(prefix + "PhotoPreview");
+            var fileInput = document.getElementById(prefix + "PhotoFile");
+            if (fileInput) fileInput.value = "";
+            if (!preview) return;
+            preview.dataset.removePending = "1";
+            preview.dataset.hasNewFile = "0";
+            preview.dataset.hasPhoto = "0";
+            preview.classList.add("is-pending-remove");
+            renderPhotoPreviewImage(preview, defaultAvatarUrl, true);
+            setPhotoFileLabel(prefix, "Se quitará al guardar", "pending-remove");
+            updatePhotoActionButtons(prefix);
+        }
+
+        function undoUserPhotoRemoval(prefix) {
+            var preview = document.getElementById(prefix + "PhotoPreview");
+            var fileInput = document.getElementById(prefix + "PhotoFile");
+            if (!preview) return;
+            if (fileInput) fileInput.value = "";
+            preview.dataset.removePending = "0";
+            preview.dataset.hasNewFile = "0";
+            preview.classList.remove("is-pending-remove");
+            if (preview.dataset.hadPhotoAtLoad === "1" && preview.dataset.storedFotoUrl) {
+                preview.dataset.hasPhoto = "1";
+                renderPhotoPreviewImage(preview, preview.dataset.storedFotoUrl + "?v=" + Date.now(), false);
+                setPhotoFileLabel(prefix, "Foto actual", null);
+            } else {
+                preview.dataset.hasPhoto = "0";
+                renderPhotoPreviewImage(preview, defaultAvatarUrl, true);
+                setPhotoFileLabel(prefix, "Sin cambios", null);
+            }
+            updatePhotoActionButtons(prefix);
+        }
+
+        function bindUserPhotoFileInput(prefix) {
+            var fileInput = document.getElementById(prefix + "PhotoFile");
+            var preview = document.getElementById(prefix + "PhotoPreview");
+            var clearBtn = document.getElementById(prefix + "PhotoClear");
+            var undoBtn = document.getElementById(prefix + "PhotoUndo");
+            if (!fileInput || fileInput.dataset.photoBound === "1") return;
+            fileInput.dataset.photoBound = "1";
+
+            document.querySelectorAll('[data-photo-trigger="' + prefix + 'PhotoFile"]').forEach(function (btn) {
+                if (btn.dataset.photoTriggerBound === "1") return;
+                btn.dataset.photoTriggerBound = "1";
+                btn.addEventListener("click", function () {
+                    fileInput.click();
+                });
+            });
+
+            fileInput.addEventListener("change", function () {
+                var file = fileInput.files && fileInput.files[0];
+                if (!file || !preview) return;
+                preview.dataset.removePending = "0";
+                preview.dataset.hasNewFile = "1";
+                preview.dataset.hasPhoto = "1";
+                preview.classList.remove("is-pending-remove");
+                var reader = new FileReader();
+                reader.onload = function (ev) {
+                    renderPhotoPreviewImage(preview, String(ev.target.result || ""), false);
+                };
+                reader.readAsDataURL(file);
+                setPhotoFileLabel(prefix, file.name, "selected");
+                updatePhotoActionButtons(prefix);
+            });
+
+            if (clearBtn && clearBtn.dataset.photoBound !== "1") {
+                clearBtn.dataset.photoBound = "1";
+                clearBtn.addEventListener("click", function () {
+                    markUserPhotoForRemoval(prefix);
+                });
+            }
+            if (undoBtn && undoBtn.dataset.photoBound !== "1") {
+                undoBtn.dataset.photoBound = "1";
+                undoBtn.addEventListener("click", function () {
+                    undoUserPhotoRemoval(prefix);
+                });
+            }
+        }
+
+        async function uploadUserPhoto(userId, prefix) {
+            var fileInput = document.getElementById(prefix + "PhotoFile");
+            if (!fileInput || !fileInput.files || !fileInput.files[0]) {
+                return { ok: true };
+            }
+            var url = fillUrlTemplate(apiFotoUrlTemplate, userId);
+            if (!url) {
+                return { ok: false, error: "No hay endpoint para subir foto." };
+            }
+            var fd = new FormData();
+            fd.append("foto", fileInput.files[0]);
+            var res = await fetch(url, {
+                method: "POST",
+                body: fd,
+                credentials: "same-origin",
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            var json = await res.json().catch(function () { return null; });
+            if (!res.ok || !json || json.success !== true) {
+                return { ok: false, error: (json && json.error) ? json.error : "No se pudo subir la foto." };
+            }
+            return { ok: true, foto_url: json.foto_url };
+        }
+
+        async function removeUserPhoto(userId) {
+            var url = fillUrlTemplate(apiFotoUrlTemplate, userId);
+            if (!url) return { ok: false, error: "No hay endpoint para quitar foto." };
+            var res = await fetch(url, {
+                method: "DELETE",
+                credentials: "same-origin",
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            var json = await res.json().catch(function () { return null; });
+            if (!res.ok || !json || json.success !== true) {
+                return { ok: false, error: (json && json.error) ? json.error : "No se pudo quitar la foto." };
+            }
+            return { ok: true };
+        }
+
+        async function syncUserPhotoAfterSave(userId, prefix) {
+            var preview = document.getElementById(prefix + "PhotoPreview");
+            if (preview && preview.dataset && preview.dataset.removePending === "1") {
+                var removed = await removeUserPhoto(userId);
+                if (removed.ok && preview) {
+                    preview.dataset.hadPhotoAtLoad = "0";
+                    preview.dataset.storedFotoUrl = "";
+                    preview.dataset.hasPhoto = "0";
+                }
+                return removed;
+            }
+            return uploadUserPhoto(userId, prefix);
         }
 
         function setCreateMsg(message, kind) {
@@ -246,6 +542,7 @@
             sub.setAttribute("aria-hidden", "false");
             setCreateMsg("", null);
             form.reset();
+            resetUserPhotoUI("optionsCreate");
             loadRolesIntoCreateSelect();
             loadCreateGeoSelectors();
             var first = form.querySelector("input[name='nombre']");
@@ -265,6 +562,48 @@
             if (!msg) return;
             msg.className = "submodal-msg" + (kind === "error" ? " is-error" : kind === "success" ? " is-success" : "");
             msg.textContent = message || "";
+        }
+
+        function renderPermissionEditor(catalog, selectedPerms) {
+            var container = document.getElementById("optionsEditPermissionsContainer");
+            if (!container) return;
+            var sections = Array.isArray(catalog) ? catalog : [];
+            var selected = selectedPerms || {};
+            if (!sections.length) {
+                container.innerHTML = "<div style='font-size:13px;color:#64748b;'>Sin catálogo de permisos.</div>";
+                return;
+            }
+            container.innerHTML = sections.map(function (section, idx) {
+                var title = escapeHtml(String((section && section.section) || ("Seccion " + (idx + 1))));
+                var items = Array.isArray(section && section.items) ? section.items : [];
+                var itemHtml = items.map(function (item) {
+                    var key = String((item && item.key) || "").trim();
+                    if (!key) return "";
+                    var label = escapeHtml(String((item && item.label) || key));
+                    var checked = selected[key] === true ? " checked" : "";
+                    return ""
+                        + "<label style='display:flex;align-items:center;gap:8px;font-size:13px;text-transform:none;letter-spacing:0;font-weight:600;color:#334155;'>"
+                        + "<input type='checkbox' class='options-perm-checkbox' data-perm-key='" + escapeHtml(key) + "' style='width:auto;height:auto;'" + checked + ">"
+                        + "<span>" + label + "</span>"
+                        + "</label>";
+                }).join("");
+                return ""
+                    + "<div style='border:1px solid #e2e8f0;border-radius:10px;padding:10px;background:#fff;'>"
+                    + "<div style='font-size:12px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;'>" + title + "</div>"
+                    + "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:6px 12px;'>" + itemHtml + "</div>"
+                    + "</div>";
+            }).join("");
+        }
+
+        function getPermissionPayloadFromForm() {
+            var out = {};
+            var checks = document.querySelectorAll("#optionsEditPermissionsContainer .options-perm-checkbox");
+            checks.forEach(function (checkbox) {
+                var key = String(checkbox.getAttribute("data-perm-key") || "").trim();
+                if (!key) return;
+                out[key] = !!checkbox.checked;
+            });
+            return out;
         }
 
         async function loadRolesIntoEditSelect(selectedId) {
@@ -391,6 +730,12 @@
                 var deleteDisabledAttr = canDelete ? "" : " disabled";
                 var deleteReason = user.delete_reason ? escapeHtml(user.delete_reason) : "";
                 var deleteTitle = deleteReason ? (' title="' + deleteReason + '"') : "";
+                var canToggle = user.can_toggle !== false;
+                var toggleDisabledAttr = canToggle ? "" : " disabled";
+                var toggleReason = user.toggle_reason ? escapeHtml(user.toggle_reason) : "";
+                var toggleTitle = toggleReason
+                    ? (' title="' + toggleReason + '"')
+                    : (' title="' + (user.activo ? "Desactivar usuario" : "Activar usuario") + '"');
 
                 var tr = document.createElement("tr");
                 tr.dataset.userId = String(id);
@@ -408,7 +753,10 @@
                     + "<td>" + escapeHtml(String(actividad || "—")) + "</td>"
                     + "<td class=\"acciones\">"
                     + "<button type=\"button\" class=\"action-btn icon edit\" title=\"Editar usuario\" aria-label=\"Editar usuario\" onclick=\"editarUsuario(" + id + "); event.stopPropagation()\">✏️</button>"
-                    + "<button type=\"button\" class=\"action-btn icon toggle\" title=\"" + (user.activo ? "Desactivar usuario" : "Activar usuario") + "\" aria-label=\"" + (user.activo ? "Desactivar usuario" : "Activar usuario") + "\" onclick=\"toggleUsuario(" + id + "); event.stopPropagation()\">"
+                    + "<button type=\"button\" class=\"action-btn icon toggle\" aria-label=\"" + (user.activo ? "Desactivar usuario" : "Activar usuario") + "\" onclick=\"toggleUsuario(" + id + "); event.stopPropagation()\""
+                    + toggleDisabledAttr
+                    + toggleTitle
+                    + ">"
                     + (user.activo ? "🔒" : "🔓")
                     + "</button>"
                     + "<button type=\"button\" class=\"action-btn icon edit\" title=\"Desbloquear usuario\" aria-label=\"Desbloquear usuario\""
@@ -740,11 +1088,46 @@
                     document.getElementById("optionsEditFechaNac").value = data.fecha_nacimiento || "";
                     document.getElementById("optionsEditRut").value = data.rut || "";
                     document.getElementById("optionsEditActivo").checked = !!data.activo;
+                    var rrhh = data.rrhh || {};
+                    var saludTipo = document.getElementById("optionsEditSaludTipo");
+                    if (saludTipo) saludTipo.value = rrhh.salud_tipo || "";
+                    var saludEntidad = document.getElementById("optionsEditSaludEntidad");
+                    if (saludEntidad) saludEntidad.value = rrhh.salud_entidad || "";
+                    if (saludTipo && saludEntidad) {
+                        var vSal = String(saludTipo.value || "").toUpperCase();
+                        var enableIsapre = (vSal === "ISAPRE");
+                        saludEntidad.disabled = !enableIsapre;
+                        if (!enableIsapre) saludEntidad.value = "";
+                        if (saludTipo.dataset.bound !== "1") {
+                            saludTipo.dataset.bound = "1";
+                            saludTipo.addEventListener("change", function () {
+                                var v2 = String(saludTipo.value || "").toUpperCase();
+                                var en2 = (v2 === "ISAPRE");
+                                saludEntidad.disabled = !en2;
+                                if (!en2) saludEntidad.value = "";
+                            });
+                        }
+                    }
+                    var saludNumero = document.getElementById("optionsEditSaludNumero");
+                    if (saludNumero) saludNumero.value = rrhh.salud_numero || "";
+                    var afpNombre = document.getElementById("optionsEditAfpNombre");
+                    if (afpNombre) afpNombre.value = rrhh.afp_nombre || "";
+                    var bancoNombre = document.getElementById("optionsEditBancoNombre");
+                    if (bancoNombre) bancoNombre.value = rrhh.banco_nombre || "";
+                    var bancoTipo = document.getElementById("optionsEditBancoTipoCuenta");
+                    if (bancoTipo) bancoTipo.value = rrhh.banco_tipo_cuenta || "";
+                    var bancoNum = document.getElementById("optionsEditBancoNumeroCuenta");
+                    if (bancoNum) bancoNum.value = rrhh.banco_numero_cuenta || "";
+                    var afc = document.getElementById("optionsEditAfcAfiliado");
+                    if (afc) afc.checked = rrhh.afc_afiliado !== false;
+                    var cp = document.getElementById("optionsEditComisionPct");
+                    if (cp) cp.value = (rrhh.comision_pct != null ? String(rrhh.comision_pct) : "");
                     var perms = data.permisos || {};
-                    document.getElementById("optionsEditPermFinanzas").checked = perms.ver_finanzas !== false;
-                    document.getElementById("optionsEditPermPrecioMayor").checked = perms.ver_precio_mayor !== false;
+                    permissionsCatalogCache = Array.isArray(data.permisos_catalogo) ? data.permisos_catalogo : permissionsCatalogCache;
+                    renderPermissionEditor(permissionsCatalogCache, perms);
                     await loadEditGeoSelectors(parsedAddress.region, parsedAddress.comuna);
                     await loadRolesIntoEditSelect(data.rol_id);
+                    setUserPhotoPreview("optionsEdit", data.foto_url || "", !!data.has_foto);
                     updateStatus("Listo para editar.", false);
                     setEditMsg("", null);
                 } catch (e) {
@@ -759,12 +1142,54 @@
             dispatchRowAction("toggle", id);
         };
         window.eliminarUsuario = function eliminarUsuario(id) {
-            if (!window.confirm("¿Eliminar usuario?")) return;
-            dispatchRowAction("delete", id);
+            var uid = parseInt(id, 10);
+            if (Number.isNaN(uid)) {
+                return;
+            }
+            var target = usersListCache.find(function (x) { return x.id === uid; });
+            if (target && target.can_delete === false) {
+                updateStatus(target.delete_reason || "No se puede eliminar este usuario.", true);
+                return;
+            }
+            var displayName = target && target.nombre ? String(target.nombre).trim() : "";
+            var displayUser = target && target.usuario ? String(target.usuario).trim() : "";
+            var label = displayName || displayUser || "este usuario";
+            var body = "Se eliminará permanentemente a " + label
+                + (displayUser ? " (@" + displayUser + ")" : "")
+                + ". Esta acción no se puede deshacer.";
+            openUserActionConfirm({
+                title: "¿Eliminar usuario?",
+                body: body,
+                primaryLabel: "Eliminar",
+                primaryClass: "delete",
+                fallbackMessage: "¿Eliminar usuario?",
+                onConfirm: function () {
+                    dispatchRowAction("delete", uid);
+                }
+            });
         };
         window.desbloquearUsuario = function desbloquearUsuario(id) {
-            if (!window.confirm("¿Desbloquear este usuario?")) return;
-            dispatchRowAction("unlock", id);
+            var uid = parseInt(id, 10);
+            if (Number.isNaN(uid)) {
+                return;
+            }
+            var target = usersListCache.find(function (x) { return x.id === uid; });
+            var displayName = target && target.nombre ? String(target.nombre).trim() : "";
+            var displayUser = target && target.usuario ? String(target.usuario).trim() : "";
+            var label = displayName || displayUser || "este usuario";
+            var body = "Se desbloqueará la cuenta de " + label
+                + (displayUser ? " (@" + displayUser + ")" : "")
+                + " y se restablecerán los intentos fallidos.";
+            openUserActionConfirm({
+                title: "¿Desbloquear usuario?",
+                body: body,
+                primaryLabel: "Desbloquear",
+                primaryClass: "edit",
+                fallbackMessage: "¿Desbloquear este usuario?",
+                onConfirm: function () {
+                    dispatchRowAction("unlock", uid);
+                }
+            });
         };
         window.atenderSolicitudClave = function atenderSolicitudClave(id) {
             var reqId = parseInt(id, 10);
@@ -805,6 +1230,8 @@
             var sub = document.getElementById("optionsUserCreateModal");
             var form = document.getElementById("optionsUserCreateForm");
             if (!sub || !form) return;
+            var saludSelect = document.getElementById("optionsCreateSaludTipo");
+            var isapreInput = document.getElementById("optionsCreateSaludEntidad");
 
             sub.querySelectorAll("[data-options-create-close]").forEach(function (btn) {
                 if (btn.dataset.optionsCreateCloseBound === "1") return;
@@ -817,6 +1244,22 @@
             sub.addEventListener("click", function (e) {
                 if (e.target === sub) closeCreateUserModal();
             });
+
+            function syncCreateSalud() {
+                if (!saludSelect || !isapreInput) return;
+                var v = String(saludSelect.value || "").toUpperCase();
+                var enable = (v === "ISAPRE");
+                isapreInput.disabled = !enable;
+                if (!enable) isapreInput.value = "";
+            }
+            if (saludSelect && saludSelect.dataset.bound !== "1") {
+                saludSelect.dataset.bound = "1";
+                saludSelect.addEventListener("change", syncCreateSalud);
+            }
+            // ensure correct state on open/reset
+            setTimeout(syncCreateSalud, 0);
+            bindUserPhotoFileInput("optionsCreate");
+            bindUserPhotoFileInput("optionsEdit");
 
             if (form.dataset.optionsCreateBound !== "1") {
                 form.dataset.optionsCreateBound = "1";
@@ -850,8 +1293,16 @@
                         if (!res.ok || !json || json.success !== true) {
                             throw new Error((json && json.error) ? json.error : "No se pudo crear el usuario");
                         }
+                        var newId = json.id ? parseInt(json.id, 10) : 0;
+                        if (newId) {
+                            var photoRes = await syncUserPhotoAfterSave(newId, "optionsCreate");
+                            if (!photoRes.ok) {
+                                throw new Error(photoRes.error || "Usuario creado, pero falló la foto.");
+                            }
+                        }
                         setCreateMsg("Usuario creado correctamente.", "success");
                         await loadOptionsUsers(true);
+                        if (newId) maybeReloadForOwnPhoto(newId);
                         setTimeout(function () {
                             closeCreateUserModal();
                         }, 600);
@@ -868,6 +1319,8 @@
             var sub = document.getElementById("optionsUserEditModal");
             var form = document.getElementById("optionsUserEditForm");
             if (!sub || !form) return;
+            var btnPermAll = document.getElementById("optionsPermSelectAll");
+            var btnPermNone = document.getElementById("optionsPermClearAll");
 
             sub.querySelectorAll("[data-options-edit-close]").forEach(function (btn) {
                 if (btn.dataset.optionsEditCloseBound === "1") return;
@@ -880,6 +1333,22 @@
             sub.addEventListener("click", function (e) {
                 if (e.target === sub) closeEditUserModal();
             });
+            if (btnPermAll && btnPermAll.dataset.bound !== "1") {
+                btnPermAll.dataset.bound = "1";
+                btnPermAll.addEventListener("click", function () {
+                    document.querySelectorAll("#optionsEditPermissionsContainer .options-perm-checkbox").forEach(function (cb) {
+                        cb.checked = true;
+                    });
+                });
+            }
+            if (btnPermNone && btnPermNone.dataset.bound !== "1") {
+                btnPermNone.dataset.bound = "1";
+                btnPermNone.addEventListener("click", function () {
+                    document.querySelectorAll("#optionsEditPermissionsContainer .options-perm-checkbox").forEach(function (cb) {
+                        cb.checked = false;
+                    });
+                });
+            }
 
             if (form.dataset.optionsEditBound !== "1") {
                 form.dataset.optionsEditBound = "1";
@@ -917,10 +1386,16 @@
                             genero: (document.getElementById("optionsEditGenero").value || "").trim(),
                             fecha_nacimiento: (document.getElementById("optionsEditFechaNac").value || "").trim(),
                             rut: (document.getElementById("optionsEditRut").value || "").trim(),
-                            permisos: {
-                                ver_finanzas: !!document.getElementById("optionsEditPermFinanzas").checked,
-                                ver_precio_mayor: !!document.getElementById("optionsEditPermPrecioMayor").checked
-                            }
+                            rrhh_salud_tipo: (document.getElementById("optionsEditSaludTipo") && document.getElementById("optionsEditSaludTipo").value || "").trim(),
+                            rrhh_salud_entidad: (document.getElementById("optionsEditSaludEntidad") && document.getElementById("optionsEditSaludEntidad").value || "").trim(),
+                            rrhh_salud_numero: (document.getElementById("optionsEditSaludNumero") && document.getElementById("optionsEditSaludNumero").value || "").trim(),
+                            rrhh_afp_nombre: (document.getElementById("optionsEditAfpNombre") && document.getElementById("optionsEditAfpNombre").value || "").trim(),
+                            rrhh_banco_nombre: (document.getElementById("optionsEditBancoNombre") && document.getElementById("optionsEditBancoNombre").value || "").trim(),
+                            rrhh_banco_tipo_cuenta: (document.getElementById("optionsEditBancoTipoCuenta") && document.getElementById("optionsEditBancoTipoCuenta").value || "").trim(),
+                            rrhh_banco_numero_cuenta: (document.getElementById("optionsEditBancoNumeroCuenta") && document.getElementById("optionsEditBancoNumeroCuenta").value || "").trim(),
+                            rrhh_afc_afiliado: !!(document.getElementById("optionsEditAfcAfiliado") && document.getElementById("optionsEditAfcAfiliado").checked),
+                            rrhh_comision_pct: (document.getElementById("optionsEditComisionPct") && document.getElementById("optionsEditComisionPct").value || "").trim(),
+                            permisos: getPermissionPayloadFromForm()
                         };
                         var password = (document.getElementById("optionsEditPassword").value || "").trim();
                         if (password) payload.password = password;
@@ -939,8 +1414,13 @@
                         if (!res.ok || !json || json.success !== true) {
                             throw new Error((json && json.error) ? json.error : "No se pudo actualizar el usuario");
                         }
+                        var photoRes = await syncUserPhotoAfterSave(userId, "optionsEdit");
+                        if (!photoRes.ok) {
+                            throw new Error(photoRes.error || "Datos guardados, pero falló la foto.");
+                        }
                         setEditMsg("Cambios guardados.", "success");
                         await loadOptionsUsers(true);
+                        maybeReloadForOwnPhoto(userId);
                         setTimeout(function () {
                             closeEditUserModal();
                         }, 600);
@@ -1037,6 +1517,15 @@
             if (event.target === modal) {
                 closeOptionsModal();
             }
+        });
+
+        // Si navega a otro módulo desde el modal (data-module-url), cerrarlo para no bloquear clicks.
+        modal.querySelectorAll("a[data-module-url]").forEach(function (a) {
+            if (a.dataset.usuariosUiNavBound === "1") return;
+            a.dataset.usuariosUiNavBound = "1";
+            a.addEventListener("click", function () {
+                closeOptionsModal();
+            });
         });
 
         // ESC para cerrar el modal de opciones

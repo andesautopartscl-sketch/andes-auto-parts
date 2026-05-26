@@ -7,6 +7,7 @@ from sqlalchemy import func, text
 
 from app.extensions import db
 from app.utils.decorators import login_required
+from app.utils.permissions import has_permission
 from app.bodega.models import MovimientoStock, ProductoVarianteStock
 from .models import LabelPrintHistory, TransferenciaStock
 
@@ -15,20 +16,38 @@ inventario_bp = Blueprint(
     template_folder="../../templates"
 )
 
+@inventario_bp.before_request
+def _inventario_module_guard():
+    # login_required de cada vista sigue siendo la barrera principal de sesión.
+    if "user" not in session:
+        return None
+    if has_permission(session.get("user"), session.get("rol"), "mod_inventario"):
+        return None
+    is_ajax = request.is_json or (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
+    if is_ajax or request.path.startswith("/inventario/api/"):
+        return jsonify({"ok": False, "error": "Permiso denegado para módulo Inventario"}), 403
+    flash("No tienes permisos para acceder al módulo Inventario.", "error")
+    return redirect(url_for("productos.buscar"))
+
 
 def _current_user() -> str:
     return session.get("user") or "sistema"
 
 
 def _get_bodegas() -> list[str]:
-    """Return all distinct warehouses that have stock."""
-    rows = (
-        db.session.query(ProductoVarianteStock.bodega)
-        .distinct()
-        .order_by(ProductoVarianteStock.bodega)
-        .all()
-    )
-    return [r[0] for r in rows if r[0]]
+    """Listas de bodega alineadas al catálogo del módulo Bodega (con respaldo si falla)."""
+    try:
+        from app.bodega import catalogo as bc
+
+        return bc.list_bodegas_operativas()
+    except Exception:
+        rows = (
+            db.session.query(ProductoVarianteStock.bodega)
+            .distinct()
+            .order_by(ProductoVarianteStock.bodega)
+            .all()
+        )
+        return [r[0] for r in rows if r[0]]
 
 
 def _stock_for_product(codigo: str, marca: str, bodega: str) -> int:
@@ -41,10 +60,11 @@ def _stock_for_product(codigo: str, marca: str, bodega: str) -> int:
 
 
 def _resolve_product_by_code(codigo: str) -> tuple[int | None, str]:
+    # productos no tiene columna id; en SQLite rowid es estable para correlación con historial de etiquetas.
     row = db.session.execute(
         text(
             """
-            SELECT id, COALESCE(DESCRIPCION, '') AS descripcion
+            SELECT rowid AS row_id, COALESCE(DESCRIPCION, '') AS descripcion
             FROM productos
             WHERE UPPER(CODIGO) = :codigo
             LIMIT 1
@@ -54,7 +74,7 @@ def _resolve_product_by_code(codigo: str) -> tuple[int | None, str]:
     ).mappings().first()
     if not row:
         return None, ""
-    pid = int(row.get("id") or 0)
+    pid = int(row.get("row_id") or 0)
     pname = (row.get("descripcion") or "").strip()
     return (pid if pid > 0 else None), pname
 
@@ -80,6 +100,9 @@ def transferencias():
 @inventario_bp.route("/api/transferencia", methods=["POST"])
 @login_required
 def api_transferencia():
+    # Transferir stock es una operación transaccional: requiere permiso de ajuste de stock.
+    if not has_permission(session.get("user"), session.get("rol"), "bodega_ajuste"):
+        return jsonify({"ok": False, "error": "Sin permiso para transferir stock."}), 403
     data = request.get_json(force=True) or {}
     codigo = (data.get("codigo") or "").strip().upper()
     marca = (data.get("marca") or "").strip().upper()

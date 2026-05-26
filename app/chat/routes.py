@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import mimetypes
 from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -12,6 +13,7 @@ from werkzeug.utils import secure_filename
 from app.extensions import db
 from app.seguridad.models import Usuario
 from app.utils.decorators import login_required
+from app.utils.permissions import has_permission
 from .models import ChatMessage
 
 chat_bp = Blueprint("chat", __name__, url_prefix="/chat")
@@ -19,10 +21,21 @@ ONLINE_WINDOW_SECONDS = 120
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 UPLOAD_ROOT = Path(__file__).resolve().parents[2] / "data" / "chat_uploads"
 ALLOWED_EXTENSIONS = {
-    "pdf", "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg",
+    "pdf", "png", "jpg", "jpeg", "gif", "webp", "bmp",
     "doc", "docx", "xls", "xlsx", "csv", "txt", "rtf", "odt", "ods", "ppt", "pptx",
     "mp3", "wav", "ogg", "m4a", "aac", "webm", "mp4",
 }
+
+@chat_bp.before_request
+def _chat_module_guard():
+    if "user" not in session:
+        return None
+    if has_permission(session.get("user"), session.get("rol"), "mod_chat"):
+        return None
+    is_ajax = request.is_json or (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
+    if is_ajax or request.path.startswith("/chat/api/"):
+        return jsonify(ok=False, message="Permiso denegado para módulo Chat"), 403
+    return jsonify(ok=False, message="Permiso denegado para módulo Chat"), 403
 
 
 def _current_user() -> Usuario | None:
@@ -57,6 +70,23 @@ def _message_type_for_upload(mime: str, force_audio: bool = False) -> str:
     if mime.startswith("image/"):
         return "image"
     return "file"
+
+
+def _safe_mime_for_extension(filename: str) -> str:
+    guessed, _ = mimetypes.guess_type(filename)
+    mime = _clean_text(guessed).lower() or "application/octet-stream"
+    if mime == "image/svg+xml":
+        return "application/octet-stream"
+    return mime
+
+
+def _inline_media_allowed(mime: str) -> bool:
+    kind = _clean_text(mime).lower()
+    return (
+        kind.startswith("image/")
+        or kind.startswith("audio/")
+        or kind in {"application/pdf", "text/plain"}
+    )
 
 
 def _ensure_upload_root() -> None:
@@ -96,7 +126,7 @@ def _save_upload(file_obj: FileStorage, force_audio: bool = False) -> dict:
             pass
         raise ValueError("Archivo excede el tamano maximo")
 
-    mime = _clean_text(file_obj.mimetype) or "application/octet-stream"
+    mime = _safe_mime_for_extension(original_name)
     message_type = _message_type_for_upload(mime, force_audio=force_audio)
     relative_path = (shard_dir / stored_name).as_posix()
 
@@ -232,7 +262,7 @@ def chat_users():
     unread_by_sender = {sender_id: count for sender_id, count in unread_rows}
 
     users = (
-        Usuario.query.filter(Usuario.activo.is_(True), Usuario.id != current_user.id)
+        Usuario.query.filter(Usuario.activo.is_(True))
         .order_by(Usuario.nombre.asc(), Usuario.usuario.asc())
         .all()
     )
@@ -242,7 +272,13 @@ def chat_users():
         for user in users
     ]
 
-    payload.sort(key=lambda item: (0 if item["unread"] > 0 else 1, item["name"].lower()))
+    payload.sort(
+        key=lambda item: (
+            0 if item["id"] == current_user.id else 1,
+            0 if item["unread"] > 0 else 1,
+            item["name"].lower(),
+        )
+    )
     db.session.commit()
     return jsonify(ok=True, users=payload)
 
@@ -460,7 +496,15 @@ def chat_media_view(message_id: int):
 
     _touch_presence(current_user)
     db.session.commit()
-    return send_file(path, mimetype=message.media_mime or None, as_attachment=False, download_name=message.media_name or path.name)
+    mime = _safe_mime_for_extension(message.media_name or path.name)
+    response = send_file(
+        path,
+        mimetype=mime,
+        as_attachment=not _inline_media_allowed(mime),
+        download_name=message.media_name or path.name,
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @chat_bp.get("/api/messages/media/<int:message_id>/download")
@@ -482,7 +526,10 @@ def chat_media_download(message_id: int):
 
     _touch_presence(current_user)
     db.session.commit()
-    return send_file(path, mimetype=message.media_mime or None, as_attachment=True, download_name=message.media_name or path.name)
+    mime = _safe_mime_for_extension(message.media_name or path.name)
+    response = send_file(path, mimetype=mime, as_attachment=True, download_name=message.media_name or path.name)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @chat_bp.put("/api/messages/<int:message_id>")

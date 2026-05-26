@@ -18,6 +18,7 @@
 
 <h3>Crear Vehículo</h3>
 <form method="POST" action="{{ url_for('automotriz.crear_vehiculo') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     Marca: <input name="marca"><br>
     Modelo: <input name="modelo"><br>
     Año Desde: <input name="anio_desde"><br>
@@ -29,6 +30,7 @@
 
 <h3>Crear OEM</h3>
 <form method="POST" action="{{ url_for('automotriz.crear_oem') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     Código OEM: <input name="codigo_oem"><br>
     Descripción: <input name="descripcion"><br>
     <button type="submit">Guardar</button>
@@ -40,6 +42,7 @@
 <h3>Asignar OEM a Vehículo</h3>
 
 <form method="POST" action="{{ url_for('automotriz.asignar_oem_vehiculo') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
     <label>OEM:</label>
     <select name="oem_id" required>
@@ -68,6 +71,7 @@
 
 <h3>Crear Bodega</h3>
 <form method="POST" action="{{ url_for('automotriz.crear_bodega') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="text" name="nombre" placeholder="Nombre Bodega" required>
     <button type="submit">Crear</button>
 </form>
@@ -146,6 +150,7 @@
 <h2>Agregar Producto Comercial a OEM</h2>
 
 <form method="POST" action="{{ url_for('automotriz.crear_producto_comercial') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     
     <label>OEM:</label>
     <select name="oem_id">
@@ -169,6 +174,7 @@
 <h2>Ingresar Stock</h2>
 
 <form method="POST" action="{{ url_for('automotriz.ingresar_stock') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
     <select name="producto_id" required>
         <option value="">Seleccionar Producto</option>
@@ -199,6 +205,7 @@
 <h2>Vender Producto</h2>
 
 <form method="POST" action="{{ url_for('automotriz.vender_producto') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
     <select name="producto_id" required>
         <option value="">Seleccionar Producto</option>

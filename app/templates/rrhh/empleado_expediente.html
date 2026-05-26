@@ -1,0 +1,372 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block content %}
+<style>
+  /* Misma pila que el chat (widget.html) / módulos ERP */
+  .exp-wrap {
+    width: 100%; max-width: min(1280px, 100%); margin: 0 auto; padding: 0 12px 20px; box-sizing: border-box;
+    font-family: "Segoe UI", system-ui, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .exp-wrap input,
+  .exp-wrap select,
+  .exp-wrap textarea,
+  .exp-wrap button {
+    font-family: inherit;
+  }
+  .exp-wrap input::placeholder,
+  .exp-wrap textarea::placeholder {
+    font-family: inherit;
+    color: #94a3b8;
+  }
+  .exp-wrap input[type="date"],
+  .exp-wrap input[type="file"] {
+    font-family: inherit;
+  }
+  .exp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #e8edf3; }
+  .exp-head h1 { margin: 0; font-size: 17px; font-weight: 600; color: #0f172a; letter-spacing: -0.02em; }
+  .exp-head .meta { font-size: 11px; color: #94a3b8; margin-top: 3px; }
+  .exp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; align-items: start; }
+  @media (max-width: 1024px) { .exp-grid { grid-template-columns: 1fr; } }
+  .exp-section {
+    border: 1px solid #e8edf3;
+    border-radius: 10px;
+    background: #fff;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  .exp-section h2 {
+    margin: 0;
+    padding: 8px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #64748b;
+    background: #fafbfc;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .exp-section .body { padding: 10px 12px; }
+  .exp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .exp-table th, .exp-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  .exp-table th { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; background: #fafbfc; }
+  .exp-table tr:last-child td { border-bottom: none; }
+  .exp-table tr:hover td { background: #fafbff; }
+  .exp-muted { color: #94a3b8; font-size: 11px; line-height: 1.45; margin: 0 0 8px; }
+  .exp-form-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); align-items: end; }
+  .exp-form-grid label { display: flex; flex-direction: column; gap: 3px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; }
+  .exp-form-grid input, .exp-form-grid select, .exp-form-grid textarea {
+    height: 32px; border-radius: 7px; border: 1px solid #e2e8f0; padding: 0 9px; font-size: 12px; background: #fff; font-family: inherit;
+  }
+  .exp-form-grid textarea { min-height: 52px; height: auto; padding: 6px 9px; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+  .exp-badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 600; }
+  .exp-badge.borrador { background: #fef9c3; color: #854d0e; }
+  .exp-badge.cerrada { background: #e0f2fe; color: #075985; }
+  .exp-badge.pagada { background: #dcfce7; color: #166534; }
+  .exp-badge.pendiente { background: #fef3c7; color: #92400e; }
+  .exp-badge.aprobada { background: #dcfce7; color: #166534; }
+  .exp-badge.rechazada { background: #fee2e2; color: #991b1b; }
+  .exp-badge.aceptado { background: #dcfce7; color: #166534; }
+  .exp-inline-form { display: inline; }
+  .exp-file-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; }
+  .exp-file-row input[type=file] { font-size: 11px; max-width: 100%; }
+  .exp-contract-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 0 0; border-top: 1px solid #f1f5f9; margin-top: 8px; }
+</style>
+
+<div class="exp-wrap">
+  <div class="exp-head">
+    <div>
+      <h1>Expediente · {{ u.nombre or u.usuario }}</h1>
+      <div class="meta">@{{ u.usuario }} · {{ u.rol.nombre if u.rol else 'Sin rol' }}</div>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <a class="btn outline sm" href="{{ url_for('rrhh.organigrama') }}">Organigrama</a>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for cat, msg in messages %}
+      <div style="margin-bottom:8px; padding:8px 10px; border-radius:8px; font-size:12px;
+        {% if cat == 'error' %}background:#fef2f2; color:#991b1b; border:1px solid #fecaca;
+        {% else %}background:#ecfdf3; color:#166534; border:1px solid #86efac;{% endif %}">{{ msg }}</div>
+    {% endfor %}
+  {% endif %}
+  {% endwith %}
+
+  <div class="exp-grid">
+    <section class="exp-section">
+      <h2>Liquidaciones de nómina</h2>
+      <div class="body">
+        {% if liquidaciones %}
+        <table class="exp-table">
+          <thead>
+            <tr>
+              <th>Período</th>
+              <th>Estado</th>
+              <th>Líquido</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for liq in liquidaciones %}
+            <tr>
+              <td><strong>{{ liq.periodo }}</strong></td>
+              <td>
+                {% set est = (liq.estado or '')|lower %}
+                <span class="exp-badge {{ est }}">{{ liq.estado }}</span>
+              </td>
+              <td>${{ (liq.total_liquido or 0)|int }}</td>
+              <td><a href="{{ url_for('rrhh.liquidacion_detalle', lid=liq.id) }}">Ver</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="exp-muted">Aún no hay liquidaciones para esta persona.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="exp-section">
+      <h2>Contrato de trabajo</h2>
+      <div class="body">
+        <p class="exp-muted">Vigencia y observaciones internas. El PDF lo ve el trabajador en «Mi expediente laboral» (solo lectura).</p>
+        {% if puede_editar %}
+        <form method="post" action="{{ url_for('rrhh.empleado_expediente', uid=u.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="save_contrato">
+          <div class="exp-form-grid">
+            <label>Vigencia desde <input name="contrato_vigencia_desde" type="date" value="{{ perfil.contrato_vigencia_desde.strftime('%Y-%m-%d') if perfil.contrato_vigencia_desde else '' }}"></label>
+          </div>
+          <label style="display:flex; flex-direction:column; gap:4px; margin-top:8px; font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:#94a3b8;">
+            Notas (tipo, jornada, observaciones)
+            <textarea name="contrato_notas" rows="3" placeholder="Ej: Indefinido, 45h semanales…">{{ perfil.contrato_notas or '' }}</textarea>
+          </label>
+          <div class="btn-row">
+            <button type="submit" class="btn primary sm">Guardar texto</button>
+          </div>
+        </form>
+        <div class="exp-contract-toolbar">
+          {% if perfil.contrato_pdf_relpath %}
+          <a class="btn outline sm" href="{{ url_for('rrhh.rrhh_archivo_contrato', uid=u.id) }}" target="_blank" rel="noopener">Ver PDF actual</a>
+          <span class="exp-muted" style="margin:0;">{{ perfil.contrato_pdf_original or 'contrato.pdf' }}</span>
+          <form method="post" action="{{ url_for('rrhh.empleado_expediente', uid=u.id) }}" class="exp-inline-form" onsubmit="return confirm('¿Eliminar el PDF del contrato?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="action" value="remove_contrato_pdf">
+            <button type="submit" class="btn outline sm" style="color:#b91c1c; border-color:#fecaca;">Quitar PDF</button>
+          </form>
+          {% endif %}
+        </div>
+        <form method="post" action="{{ url_for('rrhh.empleado_expediente', uid=u.id) }}" enctype="multipart/form-data" style="margin-top:10px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="upload_contrato_pdf">
+          <label style="font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:#94a3b8;">Reemplazar / subir contrato (PDF, máx. 6 MB)</label>
+          <div class="exp-file-row" style="margin-top:6px;">
+            <input type="file" name="contrato_pdf" accept="application/pdf,.pdf" required>
+            <button type="submit" class="btn primary sm">Subir PDF</button>
+          </div>
+        </form>
+        {% else %}
+        <p style="margin:0; font-size:12px;"><strong>Vigencia:</strong> {{ perfil.contrato_vigencia_desde.strftime('%d/%m/%Y') if perfil.contrato_vigencia_desde else '—' }}</p>
+        <p style="font-size:12px; color:#475569; white-space:pre-wrap; margin:8px 0 0;">{{ perfil.contrato_notas or 'Sin notas.' }}</p>
+        {% if perfil.contrato_pdf_relpath %}
+        <div class="btn-row" style="margin-top:10px;">
+          <a class="btn outline sm" href="{{ url_for('rrhh.rrhh_archivo_contrato', uid=u.id) }}" target="_blank" rel="noopener">Ver PDF</a>
+        </div>
+        {% endif %}
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <section class="exp-section" style="margin-top:10px;">
+    <h2>Anexos al contrato</h2>
+    <div class="body">
+      <p class="exp-muted">PDF con mensaje al trabajador. Aparece como pendiente en su expediente hasta que lo acepte con manifestación electrónica.</p>
+      {% if anexos %}
+      <table class="exp-table">
+        <thead>
+          <tr>
+            <th>Título</th>
+            <th>Estado</th>
+            <th>Fecha</th>
+            <th></th>
+            {% if puede_editar %}<th></th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for an in anexos %}
+          <tr>
+            <td><strong>{{ an.titulo }}</strong><br><span style="font-size:11px; color:#64748b;">{{ an.nombre_original }}</span></td>
+            <td>
+              {% set aest = (an.estado or 'pendiente')|lower %}
+              <span class="exp-badge {{ aest }}">{{ an.estado or 'pendiente' }}</span>
+            </td>
+            <td style="font-size:11px; color:#64748b;">{{ an.creado_at.strftime('%d/%m/%Y') if an.creado_at else '—' }}</td>
+            <td><a href="{{ url_for('rrhh.rrhh_archivo_anexo', aid=an.id) }}" target="_blank" rel="noopener">Ver PDF</a></td>
+            {% if puede_editar %}
+            <td>
+              <form class="exp-inline-form" method="post" action="{{ url_for('rrhh.empleado_expediente', uid=u.id) }}" onsubmit="return confirm('¿Eliminar este anexo?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="action" value="delete_anexo">
+                <input type="hidden" name="anexo_id" value="{{ an.id }}">
+                <button type="submit" class="btn outline sm" style="font-size:10px; padding:3px 7px;">Eliminar</button>
+              </form>
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="exp-muted">Sin anexos registrados.</p>
+      {% endif %}
+
+      {% if puede_editar %}
+      <form method="post" action="{{ url_for('rrhh.empleado_expediente', uid=u.id) }}" enctype="multipart/form-data" style="margin-top:12px; padding-top:10px; border-top:1px solid #f1f5f9;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="action" value="add_anexo">
+        <div class="exp-form-grid">
+          <label style="grid-column: 1 / -1;">Título <input name="anexo_titulo" maxlength="200" placeholder="Ej: Anexo horario / teletrabajo" required></label>
+          <label style="grid-column: 1 / -1;">Mensaje al trabajador <textarea name="anexo_mensaje" maxlength="500" placeholder="Breve explicación o instrucción"></textarea></label>
+          <label style="grid-column: 1 / -1;">Archivo PDF <input name="anexo_pdf" type="file" accept="application/pdf,.pdf" required></label>
+        </div>
+        <div class="btn-row">
+          <button type="submit" class="btn primary sm">Registrar anexo</button>
+        </div>
+      </form>
+      {% endif %}
+    </div>
+  </section>
+
+  <div class="exp-grid" style="margin-top:10px;">
+    <section class="exp-section">
+      <h2>Solicitudes de vacaciones</h2>
+      <div class="body">
+        {% if solicitudes %}
+        <table class="exp-table">
+          <thead>
+            <tr>
+              <th>Desde</th>
+              <th>Hasta</th>
+              <th>Días</th>
+              <th>Estado</th>
+              <th>Notas</th>
+              {% if puede_editar %}<th></th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in solicitudes %}
+            <tr>
+              <td>{{ v.fecha_inicio.strftime('%d/%m/%Y') }}</td>
+              <td>{{ v.fecha_fin.strftime('%d/%m/%Y') if v.fecha_fin else '—' }}</td>
+              <td>{{ v.dias if v.dias is not none else '—' }}</td>
+              <td><span class="exp-badge {{ (v.estado or 'pendiente')|lower }}">{{ v.estado or 'pendiente' }}</span></td>
+              <td style="max-width:160px; font-size:11px; color:#64748b;">{{ v.notas or '—' }}</td>
+              {% if puede_editar %}
+              <td>
+                <form class="exp-inline-form" method="post" action="{{ url_for('rrhh.empleado_expediente', uid=u.id) }}" onsubmit="return confirm('¿Eliminar este registro?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="action" value="delete_vacacion">
+                  <input type="hidden" name="vac_id" value="{{ v.id }}">
+                  <button type="submit" class="btn outline sm" style="font-size:10px; padding:3px 7px;">Quitar</button>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="exp-muted">No hay solicitudes registradas.</p>
+        {% endif %}
+
+        {% if puede_editar %}
+        <form method="post" action="{{ url_for('rrhh.empleado_expediente', uid=u.id) }}" style="margin-top:10px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="add_vacacion">
+          <input type="hidden" name="vac_tipo" value="solicitud">
+          <div class="exp-form-grid">
+            <label>Inicio <input name="vac_fecha_inicio" type="date" required></label>
+            <label>Fin <input name="vac_fecha_fin" type="date"></label>
+            <label>Días <input name="vac_dias" type="number" min="1" step="1" placeholder="Opc."></label>
+            <label>Estado
+              <select name="vac_estado">
+                <option value="pendiente">Pendiente</option>
+                <option value="aprobada">Aprobada</option>
+                <option value="rechazada">Rechazada</option>
+              </select>
+            </label>
+            <label style="grid-column: 1 / -1;">Notas <textarea name="vac_notas" placeholder="Motivo u observación"></textarea></label>
+          </div>
+          <div class="btn-row">
+            <button type="submit" class="btn primary sm">Registrar solicitud</button>
+          </div>
+        </form>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="exp-section">
+      <h2>Vacaciones tomadas</h2>
+      <div class="body">
+        {% if tomadas %}
+        <table class="exp-table">
+          <thead>
+            <tr>
+              <th>Desde</th>
+              <th>Hasta</th>
+              <th>Días</th>
+              <th>Notas</th>
+              {% if puede_editar %}<th></th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in tomadas %}
+            <tr>
+              <td>{{ v.fecha_inicio.strftime('%d/%m/%Y') }}</td>
+              <td>{{ v.fecha_fin.strftime('%d/%m/%Y') if v.fecha_fin else '—' }}</td>
+              <td>{{ v.dias if v.dias is not none else '—' }}</td>
+              <td style="max-width:180px; font-size:11px; color:#64748b;">{{ v.notas or '—' }}</td>
+              {% if puede_editar %}
+              <td>
+                <form class="exp-inline-form" method="post" action="{{ url_for('rrhh.empleado_expediente', uid=u.id) }}" onsubmit="return confirm('¿Eliminar este registro?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="action" value="delete_vacacion">
+                  <input type="hidden" name="vac_id" value="{{ v.id }}">
+                  <button type="submit" class="btn outline sm" style="font-size:10px; padding:3px 7px;">Quitar</button>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="exp-muted">No hay períodos tomados registrados.</p>
+        {% endif %}
+
+        {% if puede_editar %}
+        <form method="post" action="{{ url_for('rrhh.empleado_expediente', uid=u.id) }}" style="margin-top:10px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="add_vacacion">
+          <input type="hidden" name="vac_tipo" value="tomada">
+          <div class="exp-form-grid">
+            <label>Inicio <input name="vac_fecha_inicio" type="date" required></label>
+            <label>Fin <input name="vac_fecha_fin" type="date"></label>
+            <label>Días <input name="vac_dias" type="number" min="1" step="1" placeholder="Opc."></label>
+            <label style="grid-column: 1 / -1;">Notas <textarea name="vac_notas" placeholder="Ej: feriado legal"></textarea></label>
+          </div>
+          <div class="btn-row">
+            <button type="submit" class="btn primary sm">Registrar período tomado</button>
+          </div>
+        </form>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

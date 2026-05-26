@@ -1,0 +1,138 @@
+{% extends 'base_content.html' if _partial else 'ventas/base.html' %}
+
+{% block title %}Nota {{ nota.numero or nota.id }} | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.detail-shell { max-width: 920px; margin: 0 auto; display: grid; gap: 16px; }
+.panel-card { padding: 20px; border-radius: 14px; }
+.meta-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; font-size: 13px; }
+.meta-grid dt { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+.meta-grid dd { margin: 0; font-weight: 600; color: #0f172a; }
+.table-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 12px; }
+table { width: 100%; border-collapse: collapse; min-width: 720px; }
+th, td { padding: 10px 12px; border-bottom: 1px solid #eef2f7; text-align: left; font-size: 13px; }
+th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #475569; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 700; }
+.badge-ok { background: #dcfce7; color: #166534; }
+.badge-warn { background: #fef3c7; color: #92400e; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="detail-shell">
+    <section class="panel panel-card">
+        <h2 style="margin:0 0 8px;">Nota de crédito {{ nota.numero or ('#' ~ nota.id) }}</h2>
+        <p style="margin:0;color:#64748b;font-size:14px;">Devolución de mercadería asociada a una venta tributaria.</p>
+        <div class="actions">
+            <a class="btn" href="{{ url_for('ventas.notas_credito') }}">Volver al listado</a>
+            {% if documento_origen and documento_origen.numero %}
+            <a class="btn primary" href="{{ url_for('ventas.facturacion', numero=documento_origen.numero, tipo_documento=documento_origen.tipo if documento_origen.tipo in ['factura','boleta'] else 'factura') }}">Abrir factura / boleta origen</a>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="panel panel-card">
+        <h3 style="margin:0 0 14px;font-size:16px;">Resumen</h3>
+        <dl class="meta-grid">
+            <div>
+                <dt>Fecha</dt>
+                <dd>{{ nota.fecha_documento.strftime('%d-%m-%Y %H:%M') if nota.fecha_documento else '—' }}</dd>
+            </div>
+            <div>
+                <dt>Estado</dt>
+                <dd>{{ nota.status or 'pendiente' }}</dd>
+            </div>
+            <div>
+                <dt>Stock</dt>
+                <dd>
+                    {% if nota.stock_restored %}
+                    <span class="badge badge-ok">Restaurado en bodega</span>
+                    {% else %}
+                    <span class="badge badge-warn">Sin restaurar</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div>
+                <dt>Usuario</dt>
+                <dd>{{ nota.usuario or '—' }}</dd>
+            </div>
+            {% if documento_origen %}
+            <div>
+                <dt>Documento origen</dt>
+                <dd>{{ (documento_origen.tipo or '')|upper }} {{ documento_origen.numero }}</dd>
+            </div>
+            <div>
+                <dt>Cliente</dt>
+                <dd>{{ documento_origen.cliente_nombre }}</dd>
+            </div>
+            {% endif %}
+            <div>
+                <dt>Razón</dt>
+                <dd>{{ nota.razon or '—' }}</dd>
+            </div>
+            <div>
+                <dt>Liquidación al cliente</dt>
+                <dd>
+                    {% if (nota.modo_liquidacion or '') == 'devolucion_dinero' %}
+                    <span class="badge" style="background:#fef3c7;color:#92400e;">Devolución de dinero</span>
+                    {% elif (nota.modo_liquidacion or '') == 'saldo_favor' or not nota.modo_liquidacion %}
+                    <span class="badge" style="background:#dbeafe;color:#1e40af;">Saldo a favor</span>
+                    {% else %}
+                    {{ nota.modo_liquidacion or '—' }}
+                    {% endif %}
+                </dd>
+            </div>
+            <div>
+                <dt>Subtotal neto</dt>
+                <dd>${{ '{:,.0f}'.format(nota.subtotal or 0).replace(',', '.') }}</dd>
+            </div>
+            <div>
+                <dt>IVA</dt>
+                <dd>${{ '{:,.0f}'.format(nota.impuesto or 0).replace(',', '.') }}</dd>
+            </div>
+            <div>
+                <dt>Total NC</dt>
+                <dd><strong>${{ '{:,.0f}'.format(nota.total or 0).replace(',', '.') }}</strong></dd>
+            </div>
+        </dl>
+    </section>
+
+    <section class="panel panel-card">
+        <h3 style="margin:0 0 14px;font-size:16px;">Líneas</h3>
+        {% if nota.items %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Descripción</th>
+                        <th>Marca</th>
+                        <th>Bodega</th>
+                        <th>Cant.</th>
+                        <th>P. unit.</th>
+                        <th>Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for linea in nota.items %}
+                    <tr>
+                        <td>{{ linea.codigo_producto }}</td>
+                        <td>{{ linea.descripcion or '—' }}</td>
+                        <td>{{ linea.marca or '—' }}</td>
+                        <td>{{ linea.bodega or '—' }}</td>
+                        <td>{{ linea.cantidad }}</td>
+                        <td>${{ '{:,.0f}'.format(linea.precio_unitario or 0).replace(',', '.') }}</td>
+                        <td>${{ '{:,.0f}'.format(linea.subtotal or 0).replace(',', '.') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p style="color:#64748b;">Sin líneas de detalle.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

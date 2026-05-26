@@ -57,8 +57,12 @@ a.btn.full{grid-column:1 / -1}
         <div class="grid">
             <a class="btn primary" href="{{ url_for('productos.buscar') }}">Ir a Buscar Productos</a>
             <a class="btn" href="{{ url_for('dashboard.index') }}">Ir a Dashboard</a>
-            <a class="btn full" href="{{ url_for('auth.logout') }}">Cerrar sesión</a>
+            <form method="POST" action="{{ url_for('auth.logout') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="btn full" type="submit">Cerrar sesión</button>
+            </form>
         </div>
     </main>
+{% include 'partials/idle_session_warning.html' %}
 </body>
 </html>

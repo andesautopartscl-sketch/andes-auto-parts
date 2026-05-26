@@ -1,0 +1,239 @@
+# Stock Control System - Quick Reference Guide
+
+## 🚀 Get Started in 5 Minutes
+
+### Step 1: Run Migration (First Time Only)
+```bash
+python migrate_stock_control.py
+```
+Expected output: ✓ All tables created successfully!
+
+### Step 2: Restart App
+```bash
+python run.py
+```
+
+### Step 3: You're Ready!
+Navigate to any of these sections:
+
+---
+
+## 🎯 Common Tasks
+
+### View Product Traceability (See Full History)
+
+**Where:** Productos > Buscar  
+**How:**
+1. Search for a product code
+2. Click **↗ arrow icon** next to the code
+3. View complete history in modal:
+   - 📥 **Stock Ingresos** - when received from supplier
+   - 📤 **Ventas** - when sold to customer  
+   - ↩️ **Devoluciones** - when returned/refunded
+   - **Stock Summary** - current inventory by warehouse
+
+---
+
+### Create a Sales Order (Orden de Venta)
+
+**Where:** Ventas > Orden de Venta  
+**How:**
+1. Select customer
+2. Add items with quantities
+3. System checks: "Validando stock..." ✓
+4. If error → increase stock in Bodega module
+5. Set Status to "entregada"
+6. Click "Generar documento"
+7. Stock automatically deducted ✓
+
+**What happens:**
+- Stock immediately decreases
+- Movement record created for audit
+- Order saved for future reference
+
+---
+
+### Create Credit Note (Process Return)
+
+**Where:** From saved Orden de Venta > Click "Nota de Crédito"  
+**How:**
+1. Select items customer is returning
+2. Enter reason: "Defective", "Wrong size", etc.
+3. Click "Crear Nota de Crédito"
+4. Stock automatically restored ✓
+
+**What happens:**
+- Stock returned to same warehouse/variant
+- Return linked to original sale
+- Complete audit trail maintained
+
+---
+
+### Check Stock Before Selling
+
+**Automatic:** System validates when you confirm ("entregada") sales order  
+**Manual:** Use Bodega > Editar stock section
+
+**Error Messages:**
+- "Stock insuficiente para PRD001" → Not enough in inventory
+- "Validando stock..." → System is checking availability
+- ✓ Green checkmark → Ready to sell!
+
+---
+
+## 📊 One-Page Warehouse Status
+
+Check **Bodega > Movimientos de stock** to see:
+
+| Type | Icon | Meaning | Example |
+|------|------|---------|---------|
+| ingreso | 📥 | Stock received | Supplier delivery +50 units |
+| salida | 📤 | Stock sold | Customer order -20 units |
+| ingreso | (credit note) | Return processed | Customer refund +5 units |
+
+---
+
+## 🔧 Troubleshooting
+
+### "Stock validation failed"
+**Step 1:** Check available stock
+- Go to Productos > Buscar
+- Click ↗ on product  
+- Look at "Stock Actual" section
+- Compare with order quantity
+
+**Step 2:** If insufficient:
+- Go to Bodega > Ingreso de productos
+- Receive more stock from supplier
+- Return to sales order
+
+### "Product not found in history"
+- Check product code spelling
+- Ensure product exists in master list
+- Wait a moment - might be refreshing
+
+### "Credit note created but stock didn't restore"
+- Check Bodega > Movimientos de stock
+- Look for return entry with product code
+- Stock should increase by return quantity
+
+---
+
+## 💡 Pro Tips
+
+**Tip 1:** Hover over ↗ icon to see "Ver trazabilidad del producto"
+
+**Tip 2:** Use traceability modal to verify:
+- ✓ Supplier actually sent this batch
+- ✓ Customer bought correct quantity
+- ✓ All returns processed
+
+**Tip 3:** Stock deduction is AUTOMATIC
+- No need to manually update inventory
+- No double-deductions possible (prevents errors)
+
+**Tip 4:** Credit notes are LINKED to original sales
+- Can always see which sale a return relates to
+- Perfect for customer dispute resolution
+
+**Tip 5:** Multiple products in one credit note
+- Add 5 defective items in single return
+- System processes all at once
+- One traceability record per product
+
+---
+
+## 📋 Daily Checklist
+
+- [ ] Check low stock alerts (future feature)
+- [ ] Process all pending returns via Credit Notes
+- [ ] Review movement history in Bodega
+- [ ] Verify sales orders show correct stock deduction
+- [ ] Cross-check physical inventory with system
+
+---
+
+## 🎓 Example Scenarios
+
+### Scenario 1: Normal Sale
+```
+Customer: A Corp wants 10x PRD-001
+1. Create Orden de Venta
+2. Add PRD-001, qty=10
+3. Status='entregada' → SUBMIT
+4. ✓ Success! Stock updated
+5. View history: Sale logged with timestamp
+
+Stock: 50 → 40 units remaining ✓
+```
+
+### Scenario 2: Damaged Return
+```
+Customer: A Corp returns 2x defective PRD-001
+1. Open original Orden de Venta (from Step 1)
+2. Create Nota de Crédito
+3. Select PRD-001 qty=2
+4. Reason: "Defective"
+5. ✓ Success! Stock updated
+
+Stock: 40 → 42 units with return ✓
+Traceability: Shows sale + return linked
+```
+
+### Scenario 3: Check Supplier History
+```
+Manager: "Where did we get PRD-001?"
+1. Go Productos > Buscar > PRD-001
+2. Click ↗ Traceability
+3. Go to "Ingresos" tab
+4. See: Supplier XYZ, Invoice #12345, Date: 2026-01-15, Qty: 100
+
+Complete audit trail ✓
+```
+
+---
+
+## 🔐 What's Protected
+
+- ✅ No overselling (stock validated before confirmation)
+- ✅ No double-deduction (tracked in session + DB)
+- ✅ Complete audit trail (every movement logged)
+- ✅ Linked returns (credit notes link to original sales)
+- ✅ Instant accuracy (real-time stock updates)
+
+---
+
+## ⚡ Keyboard Shortcuts (Coming Soon)
+
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+K | Quick product search |
+| Ctrl+N | New sales order |
+| Ctrl+R | View returns |
+
+*Will be available in v2.0*
+
+---
+
+## 📞 Need Help?
+
+**For System Issues:**
+- Check STOCK_CONTROL_DOCUMENTATION.md
+
+**For Training:**
+- Review the video tutorials (in docs folder)
+
+**For Feature Requests:**
+- Contact dev team
+
+---
+
+## 🏆 Summary
+
+Your stock control system is now:
+- ✅ Real-time validated
+- ✅ Automatically tracked  
+- ✅ Fully traceable
+- ✅ Ready for professional use
+
+**Happy selling!** 🎯

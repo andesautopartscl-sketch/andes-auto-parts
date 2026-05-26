@@ -34,6 +34,9 @@ class MovimientoContable(db.Model):
     monto = db.Column(db.Float, nullable=False)
     descripcion = db.Column(db.String(300), default="")
     documento_ref = db.Column(db.String(60), default="", index=True)  # document number
+    # Emisor de la factura/boleta asociada al movimiento (gastos, compras de servicio, etc.)
+    emisor_nombre = db.Column(db.String(200), default="", nullable=True)
+    emisor_rut = db.Column(db.String(24), default="", nullable=True, index=True)
     usuario = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 

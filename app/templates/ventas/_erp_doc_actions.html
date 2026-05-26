@@ -1,4 +1,4 @@
-<div class="doc-actions no-print"
+<div class="doc-actions no-print is-soft-hidden"
      data-doc-id="{{ doc_id or '' }}"
      data-doc-type="{{ doc_type or tipo or '' }}"
      data-doc-number="{{ doc_number or numero or '' }}"
@@ -25,5 +25,23 @@
             <span class="icon" aria-hidden="true">&#8635;</span>
             <span class="txt">Reenviar documento</span>
         </button>
+    </div>
+</div>
+
+<div id="docActionModal" class="psmodal" aria-hidden="true">
+    <div class="psbox doc-action-modal-box" role="dialog" aria-modal="true" aria-labelledby="docActionModalTitle">
+        <div class="pshead">
+            <h3 id="docActionModalTitle">Notificación</h3>
+            <button class="ps-closex" type="button" id="docActionModalClose" aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="doc-action-modal-body">
+            <p id="docActionModalMessage">—</p>
+        </div>
+        <div class="psfoot">
+            <span></span>
+            <div class="ps-btns">
+                <button class="btn primary" type="button" id="docActionModalOk">Aceptar</button>
+            </div>
+        </div>
     </div>
 </div>

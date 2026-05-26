@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import csv
+import io
+from collections import defaultdict
 from datetime import date, datetime
+from types import SimpleNamespace
 
-from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for
-from sqlalchemy import and_
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for, Response
+from sqlalchemy import and_, func, or_
 
+from app.bodega.models import IngresoDocumento, IngresoDocumentoItem
 from app.extensions import db
 from app.utils.decorators import login_required, permission_required
+from app.utils.permissions import has_permission
 from .models import CuentaContable, MovimientoContable, TIPOS_CUENTA
 from app.ventas.models import DocumentoVenta
 
@@ -23,6 +29,32 @@ finanzas_bp = Blueprint(
 
 def _current_user() -> str:
     return session.get("user") or "sistema"
+
+
+def _origenes_a_etiqueta(origins: set[str]) -> str:
+    """Etiqueta de compra por líneas de ingreso (nacional / importación)."""
+    nat = "nacional" in origins
+    imp = "importacion" in origins
+    if nat and imp:
+        return "Mixto"
+    if imp:
+        return "Importación"
+    return "Nacional"
+
+
+def _totales_libro_compra_ingreso(doc: IngresoDocumento, neto_sum: float) -> tuple[float, float, float]:
+    """Neto desde líneas; total/IVA desde factura física si existe, si no IVA 19 % sobre neto."""
+    neto = float(neto_sum or 0)
+    if doc.total_factura is not None:
+        total = float(doc.total_factura)
+        if doc.iva_factura is not None:
+            iva = float(doc.iva_factura)
+        else:
+            iva = round(total - neto, 2)
+    else:
+        iva = round(neto * 0.19, 2)
+        total = round(neto + iva, 2)
+    return neto, iva, total
 
 
 @contabilidad_bp.route("/")
@@ -44,6 +76,9 @@ def index():
 @login_required
 @permission_required("ver_finanzas")
 def cuenta_nueva():
+    if not has_permission(session.get("user"), session.get("rol"), "finanzas_gestion_cuentas"):
+        flash("No tienes permiso para crear cuentas contables.", "error")
+        return redirect(url_for("contabilidad.index"))
     codigo = request.form.get("codigo", "").strip().upper()
     nombre = request.form.get("nombre", "").strip()
     tipo = request.form.get("tipo", "").strip()
@@ -73,10 +108,56 @@ def cuenta_nueva():
 @login_required
 @permission_required("ver_finanzas")
 def cuenta_toggle(cid: int):
+    if not has_permission(session.get("user"), session.get("rol"), "finanzas_gestion_cuentas"):
+        flash("No tienes permiso para activar/inactivar cuentas.", "error")
+        return redirect(url_for("contabilidad.index"))
     cuenta = db.session.get(CuentaContable, cid)
     if cuenta:
         cuenta.activo = not cuenta.activo
         db.session.commit()
+    return redirect(url_for("contabilidad.index"))
+
+
+@contabilidad_bp.route("/cuentas/<int:cid>/editar", methods=["POST"])
+@login_required
+@permission_required("ver_finanzas")
+def cuenta_editar(cid: int):
+    if not has_permission(session.get("user"), session.get("rol"), "finanzas_gestion_cuentas"):
+        flash("No tienes permiso para editar cuentas contables.", "error")
+        return redirect(url_for("contabilidad.index"))
+
+    cuenta = db.session.get(CuentaContable, cid)
+    if cuenta is None:
+        flash("Cuenta contable no encontrada.", "error")
+        return redirect(url_for("contabilidad.index"))
+
+    codigo = request.form.get("codigo", "").strip().upper()
+    nombre = request.form.get("nombre", "").strip()
+    tipo = request.form.get("tipo", "").strip()
+    descripcion = request.form.get("descripcion", "").strip()
+
+    if not codigo or not nombre:
+        flash("Código y nombre son obligatorios.", "error")
+        return redirect(url_for("contabilidad.index"))
+    if tipo not in TIPOS_CUENTA:
+        flash("Tipo de cuenta inválido.", "error")
+        return redirect(url_for("contabilidad.index"))
+
+    duplicate = (
+        CuentaContable.query
+        .filter(CuentaContable.codigo == codigo, CuentaContable.id != cuenta.id)
+        .first()
+    )
+    if duplicate:
+        flash(f"Ya existe otra cuenta con el código {codigo}.", "error")
+        return redirect(url_for("contabilidad.index"))
+
+    cuenta.codigo = codigo
+    cuenta.nombre = nombre
+    cuenta.tipo = tipo
+    cuenta.descripcion = descripcion
+    db.session.commit()
+    flash(f"Cuenta {codigo} actualizada correctamente.", "success")
     return redirect(url_for("contabilidad.index"))
 
 
@@ -103,11 +184,16 @@ def movimientos():
 @login_required
 @permission_required("ver_finanzas")
 def movimiento_nuevo():
+    if not has_permission(session.get("user"), session.get("rol"), "finanzas_registrar_movimientos"):
+        flash("No tienes permiso para registrar movimientos contables.", "error")
+        return redirect(url_for("contabilidad.movimientos"))
     cuenta_id = request.form.get("cuenta_id", "").strip()
     tipo = request.form.get("tipo", "").strip().lower()
     monto_raw = request.form.get("monto", "0").strip().replace(",", ".")
     descripcion = request.form.get("descripcion", "").strip()
     documento_ref = request.form.get("documento_ref", "").strip()
+    emisor_nombre = (request.form.get("emisor_nombre") or "").strip()[:200]
+    emisor_rut = (request.form.get("emisor_rut") or "").strip()[:24]
     fecha_str = request.form.get("fecha", "").strip()
 
     if not cuenta_id or not cuenta_id.isdigit():
@@ -143,6 +229,8 @@ def movimiento_nuevo():
         monto=monto,
         descripcion=descripcion,
         documento_ref=documento_ref,
+        emisor_nombre=emisor_nombre,
+        emisor_rut=emisor_rut,
         usuario=_current_user(),
     )
     db.session.add(mov)
@@ -178,6 +266,8 @@ def api_libro_diario():
         "monto": m.monto,
         "descripcion": m.descripcion,
         "documento_ref": m.documento_ref,
+        "emisor_nombre": m.emisor_nombre or "",
+        "emisor_rut": m.emisor_rut or "",
         "usuario": m.usuario,
     } for m in movs])
 
@@ -312,16 +402,188 @@ def libro_ventas():
 @login_required
 @permission_required("ver_finanzas")
 def libro_compras():
-    docs = (
-        DocumentoVenta.query
-        .filter(DocumentoVenta.tipo.in_(["orden_compra", "factura"]))
-        .order_by(DocumentoVenta.fecha_documento.desc(), DocumentoVenta.id.desc())
-        .limit(300)
+    """
+    Libro de compras: solo documentos de **ingreso de bodega** (compra a proveedor con stock).
+    No incluye facturas de venta (FA-… en ventas); el número mostrado es el N° de factura/guía del proveedor.
+    """
+    rut_q = request.args.get("rut", "").strip()
+    proveedor_q = request.args.get("proveedor", "").strip()
+    numero_q = request.args.get("numero", "").strip()
+    tipo_q = request.args.get("tipo", "").strip().lower()
+    estado_pago_q = request.args.get("estado_pago", "").strip().lower()
+    desde_str = request.args.get("desde", "").strip()
+    hasta_str = request.args.get("hasta", "").strip()
+    limit_str = request.args.get("limit", "300").strip()
+
+    q = IngresoDocumento.query.filter(or_(IngresoDocumento.anulado.is_(False), IngresoDocumento.anulado.is_(None)))
+
+    if rut_q:
+        q = q.filter(IngresoDocumento.proveedor_rut.ilike(f"%{rut_q}%"))
+    if proveedor_q:
+        q = q.filter(IngresoDocumento.proveedor_nombre.ilike(f"%{proveedor_q}%"))
+    if numero_q:
+        q = q.filter(IngresoDocumento.numero_documento.ilike(f"%{numero_q}%"))
+
+    if tipo_q in {"nacional", "importacion"}:
+        q = q.filter(
+            IngresoDocumento.id.in_(
+                db.session.query(IngresoDocumentoItem.ingreso_documento_id).filter(
+                    IngresoDocumentoItem.origen_compra == tipo_q
+                )
+            )
+        )
+
+    if estado_pago_q == "pagado":
+        q = q.filter(
+            and_(IngresoDocumento.metodo_pago.isnot(None), func.trim(IngresoDocumento.metodo_pago) != "")
+        )
+    elif estado_pago_q == "pendiente":
+        q = q.filter(
+            or_(IngresoDocumento.metodo_pago.is_(None), func.trim(IngresoDocumento.metodo_pago) == "")
+        )
+
+    if desde_str:
+        try:
+            d0 = date.fromisoformat(desde_str[:10])
+            q = q.filter(IngresoDocumento.fecha_documento >= d0)
+        except ValueError:
+            pass
+    if hasta_str:
+        try:
+            d1 = date.fromisoformat(hasta_str[:10])
+            q = q.filter(IngresoDocumento.fecha_documento <= d1)
+        except ValueError:
+            pass
+
+    try:
+        limit = max(50, min(2000, int(limit_str or "300")))
+    except ValueError:
+        limit = 300
+    export = request.args.get("export", "").strip().lower()
+
+    raw_docs = (
+        q.order_by(IngresoDocumento.fecha_documento.desc(), IngresoDocumento.id.desc())
+        .limit(limit)
         .all()
     )
+
+    doc_ids = [d.id for d in raw_docs]
+    neto_por_doc: dict[int, float] = {}
+    origenes_por_doc: dict[int, set[str]] = defaultdict(set)
+    if doc_ids:
+        for rid, neto_sum in (
+            db.session.query(
+                IngresoDocumentoItem.ingreso_documento_id,
+                func.coalesce(func.sum(IngresoDocumentoItem.valor_neto), 0.0),
+            )
+            .filter(IngresoDocumentoItem.ingreso_documento_id.in_(doc_ids))
+            .group_by(IngresoDocumentoItem.ingreso_documento_id)
+            .all()
+        ):
+            neto_por_doc[int(rid)] = float(neto_sum or 0)
+        for rid, orig in (
+            db.session.query(IngresoDocumentoItem.ingreso_documento_id, IngresoDocumentoItem.origen_compra)
+            .filter(IngresoDocumentoItem.ingreso_documento_id.in_(doc_ids))
+            .all()
+        ):
+            origenes_por_doc[int(rid)].add((orig or "nacional").strip().lower() or "nacional")
+
+    def _fila_namespace(doc: IngresoDocumento) -> SimpleNamespace:
+        neto = neto_por_doc.get(doc.id, 0.0)
+        neto_v, iva_v, total_v = _totales_libro_compra_ingreso(doc, neto)
+        lbl = _origenes_a_etiqueta(origenes_por_doc.get(doc.id, {"nacional"}))
+        mp = (doc.metodo_pago or "").strip()
+        ep = "pagado" if mp else "pendiente"
+        return SimpleNamespace(
+            fecha_documento=doc.fecha_documento,
+            tipo=lbl,
+            tipo_origen=lbl,
+            numero=doc.numero_documento,
+            cliente_nombre=doc.proveedor_nombre,
+            estado_pago=ep,
+            subtotal=neto_v,
+            impuesto=iva_v,
+            total=total_v,
+            metodo_pago=mp or "—",
+        )
+
+    docs = [_fila_namespace(d) for d in raw_docs]
+
+    if export in {"csv", "excel"}:
+        if export == "csv":
+            sio = io.StringIO()
+            writer = csv.writer(sio)
+            writer.writerow(
+                ["Fecha", "Origen (compra)", "N° documento proveedor", "Proveedor", "Estado pago", "Neto", "IVA", "Total"]
+            )
+            for d in docs:
+                writer.writerow(
+                    [
+                        d.fecha_documento.strftime("%d/%m/%Y") if d.fecha_documento else "",
+                        d.tipo_origen or "",
+                        d.numero or "",
+                        d.cliente_nombre or "",
+                        (d.estado_pago or "pendiente"),
+                        float(d.subtotal or 0),
+                        float(d.impuesto or 0),
+                        float(d.total or 0),
+                    ]
+                )
+            content = sio.getvalue()
+            filename = f"libro_compras_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            return Response(
+                content,
+                mimetype="text/csv; charset=utf-8",
+                headers={"Content-Disposition": f"attachment; filename={filename}"},
+            )
+
+        lines = ["Fecha\tOrigen (compra)\tN° documento proveedor\tProveedor\tEstado pago\tNeto\tIVA\tTotal"]
+        for d in docs:
+            lines.append(
+                "\t".join(
+                    [
+                        d.fecha_documento.strftime("%d/%m/%Y") if d.fecha_documento else "",
+                        str(d.tipo_origen or ""),
+                        str(d.numero or ""),
+                        str(d.cliente_nombre or ""),
+                        str(d.estado_pago or "pendiente"),
+                        str(float(d.subtotal or 0)),
+                        str(float(d.impuesto or 0)),
+                        str(float(d.total or 0)),
+                    ]
+                )
+            )
+        content = "\n".join(lines)
+        filename = f"libro_compras_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xls"
+        return Response(
+            content,
+            mimetype="application/vnd.ms-excel; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+    resumen = {
+        "cantidad": len(docs),
+        "neto": sum(float(d.subtotal or 0) for d in docs),
+        "iva": sum(float(d.impuesto or 0) for d in docs),
+        "total": sum(float(d.total or 0) for d in docs),
+        "pendientes": sum(1 for d in docs if (d.estado_pago or "").lower() != "pagado"),
+        "pagadas": sum(1 for d in docs if (d.estado_pago or "").lower() == "pagado"),
+    }
+
     return render_template(
         "contabilidad/libro_compras.html",
         documentos=docs,
+        resumen=resumen,
+        filtros={
+            "rut": rut_q,
+            "proveedor": proveedor_q,
+            "numero": numero_q,
+            "tipo": tipo_q,
+            "estado_pago": estado_pago_q,
+            "desde": desde_str,
+            "hasta": hasta_str,
+            "limit": limit,
+        },
         active_page="contabilidad_libro_compras",
     )
 

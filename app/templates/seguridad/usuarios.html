@@ -39,16 +39,21 @@
                 <td>
                     <a href="/usuarios/editar/{{u.id}}">✏</a>
 
-                    <a href="/usuarios/toggle/{{u.id}}">
-                        {% if u.activo %}
-                        🔒
-                        {% else %}
-                        🔓
-                        {% endif %}
-                    </a>
+                    <form method="POST" action="/usuarios/toggle/{{u.id}}" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" style="background:none;border:none;cursor:pointer;padding:0;">
+                            {% if u.activo %}
+                            🔒
+                            {% else %}
+                            🔓
+                            {% endif %}
+                        </button>
+                    </form>
 
-                    <a href="/usuarios/eliminar/{{u.id}}"
-                       onclick="return confirm('¿Eliminar este usuario?')">🗑</a>
+                    <form method="POST" action="/usuarios/eliminar/{{u.id}}" style="display:inline;" onsubmit="return confirm('¿Eliminar este usuario?')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" style="background:none;border:none;cursor:pointer;padding:0;">🗑</button>
+                    </form>
                 </td>
             </tr>
             {% endfor %}

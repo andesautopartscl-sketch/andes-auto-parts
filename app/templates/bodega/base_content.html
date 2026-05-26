@@ -1,7 +1,8 @@
 {% block extra_head %}
-<style>
-@import url("{{ url_for('static', filename='bodega.css') }}");
-</style>
+{# <link> en lugar de <style>@import: al salir del módulo por SPA, el navegador
+   retira la hoja y no quedan reglas globales (th/td 13px) pisando otras vistas
+   como Buscar productos. #}
+<link rel="stylesheet" href="{{ url_for('static', filename='bodega.css') }}">
 {% endblock %}
 
 {% block content %}{% endblock %}

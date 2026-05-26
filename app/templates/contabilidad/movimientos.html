@@ -1,210 +1,160 @@
 {% extends 'base_content.html' if _partial else 'base.html' %}
 {% block title %}Libro Diario | Finanzas | Andes Auto Parts{% endblock %}
 
-{% block extra_head %}
-<style>
-.conta-wrap { display:grid; gap:18px; }
-.conta-head {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  flex-wrap:wrap;
-  gap:10px;
-}
-.conta-panel {
-  background:#fff;
-  border:1px solid #e2e8f0;
-  border-radius:16px;
-  box-shadow:0 10px 20px rgba(15,23,42,0.05);
-  overflow:hidden;
-}
-.conta-table-wrap { overflow-x:auto; }
-table.conta-table {
-  width:100%;
-  border-collapse:collapse;
-}
-table.conta-table th,
-table.conta-table td {
-  padding:11px 13px;
-  text-align:left;
-  font-size:13px;
-  border-bottom:1px solid #eef2f7;
-}
-table.conta-table th {
-  background:#f8fafc;
-  color:#64748b;
-  text-transform:uppercase;
-  letter-spacing:.05em;
-  font-size:11px;
-}
-table.conta-table tr:hover td { background:#f8fbff; }
-.badge {
-  display:inline-flex;
-  align-items:center;
-  padding:3px 9px;
-  border-radius:999px;
-  font-size:11px;
-  font-weight:700;
-  text-transform:uppercase;
-  letter-spacing:.04em;
-  border:1px solid transparent;
-}
-.badge.blue { background:#dbeafe; color:#1d4ed8; border-color:#93c5fd; }
-.badge.orange { background:#ffedd5; color:#c2410c; border-color:#fdba74; }
-.modal-overlay {
-  display:none;
-  position:fixed;
-  inset:0;
-  background:rgba(15,23,42,.45);
-  z-index:1000;
-  align-items:center;
-  justify-content:center;
-}
-.modal-card {
-  background:#fff;
-  border-radius:18px;
-  padding:28px;
-  max-width:500px;
-  width:95%;
-  box-shadow:0 24px 60px rgba(15,23,42,.22);
-}
-.form-group { display:flex; flex-direction:column; gap:5px; }
-.form-group label { font-size:12px; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.04em; }
-.form-group input,
-.form-group select {
-  width:100%;
-  border:1px solid #dbe3ef;
-  border-radius:8px;
-  padding:9px 11px;
-  font-size:13px;
-}
-</style>
-{% endblock %}
-
 {% block content %}
-<div class="topbar">
-  <div>
-    <h1 class="page-title">Finanzas</h1>
-    <p class="page-subtitle">Libro diario</p>
-  </div>
-  <div class="topbar-actions">
-    <a class="link-btn" href="{{ url_for('contabilidad.index') }}">📒 Plan de cuentas</a>
-    <button class="btn btn-primary" id="btnNuevoMov" type="button">+ Registrar movimiento</button>
-  </div>
-</div>
-
-<div class="conta-wrap">
-
-  <div class="conta-head">
+<div class="contab-compact">
+  <div class="topbar">
     <div>
-      <h2 style="font-size:20px;">Libro diario</h2>
-      <p style="color:var(--muted);font-size:13px;margin-top:3px;">Registro cronológico de movimientos contables</p>
+      <h1 class="page-title">Finanzas</h1>
+      <p class="page-subtitle">Libro diario</p>
+    </div>
+    <div class="topbar-actions">
+      <a class="link-btn" href="{{ url_for('contabilidad.index') }}">📒 Plan de cuentas</a>
+      <button class="btn btn-primary" id="btnNuevoMov" type="button">+ Registrar movimiento</button>
     </div>
   </div>
 
-  <!-- Filters -->
-  <form method="get" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
-    <div class="form-group" style="flex:0 0 auto;">
-      <label>Cuenta</label>
-      <select name="cuenta_id" style="min-width:200px;">
-        <option value="">Todas las cuentas</option>
-        {% for c in cuentas %}
-        <option value="{{ c.id }}" {% if cuenta_id_filter == c.id|string %}selected{% endif %}>{{ c.codigo }} — {{ c.nombre }}</option>
-        {% endfor %}
-      </select>
+  <div class="conta-wrap">
+    <div class="conta-head">
+      <div>
+        <h2>Libro diario</h2>
+        <p>Registro cronológico de movimientos contables. Cada fila es un movimiento; para partida doble podés completar el contrapartido con otro registro.</p>
+      </div>
     </div>
-    <button class="btn btn-secondary" type="submit">Filtrar</button>
-    <a href="{{ url_for('contabilidad.movimientos') }}" class="btn btn-secondary">Limpiar</a>
-  </form>
 
-  <section class="conta-panel">
-    {% if movimientos %}
-    <div class="conta-table-wrap">
-      <table class="conta-table">
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Cuenta</th>
-            <th>Tipo</th>
-            <th>Monto</th>
-            <th>Descripción</th>
-            <th>Ref. documento</th>
-            <th>Usuario</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for m in movimientos %}
-          <tr>
-            <td>{{ m.fecha.strftime('%d/%m/%Y') }}</td>
-            <td><strong>{{ m.cuenta.codigo if m.cuenta else '?' }}</strong> — {{ m.cuenta.nombre if m.cuenta else '—' }}</td>
-            <td>
-              {% if m.tipo == 'debe' %}<span class="badge blue">Debe</span>
-              {% else %}<span class="badge orange">Haber</span>{% endif %}
-            </td>
-            <td style="font-weight:700;color:var(--primary);">${{ '{:,.0f}'.format(m.monto).replace(',', '.') }}</td>
-            <td>{{ m.descripcion or '—' }}</td>
-            <td>{{ m.documento_ref or '—' }}</td>
-            <td>{{ m.usuario or '—' }}</td>
-          </tr>
+    <form class="contab-filter-bar" method="get">
+      <div class="form-group">
+        <label>Cuenta</label>
+        <select name="cuenta_id">
+          <option value="">Todas las cuentas</option>
+          {% for c in cuentas %}
+          <option value="{{ c.id }}" {% if cuenta_id_filter == c.id|string %}selected{% endif %}>{{ c.codigo }} — {{ c.nombre }}</option>
           {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <div style="padding:40px;text-align:center;color:#64748b;">No hay movimientos contables registrados.</div>
-    {% endif %}
-  </section>
+        </select>
+      </div>
+      <button class="btn btn-secondary" type="submit">Filtrar</button>
+      <a href="{{ url_for('contabilidad.movimientos') }}" class="btn btn-secondary">Limpiar</a>
+    </form>
 
-</div>
-
-<!-- Modal: Nuevo movimiento -->
-<div id="modalNuevoMov" class="modal-overlay">
-  <div class="modal-card">
-    <h3 style="margin:0 0 18px;font-size:18px;">Registrar movimiento contable</h3>
-    <form method="post" action="{{ url_for('contabilidad.movimiento_nuevo') }}">
-      <div style="display:grid;gap:12px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <div class="form-group">
-            <label>Fecha</label>
-            <input type="date" name="fecha" required>
-          </div>
-          <div class="form-group">
-            <label>Referencia</label>
-            <input type="text" name="documento_ref" placeholder="Ej: FA-0001">
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Cuenta contable</label>
-          <select name="cuenta_id" required>
-            <option value="">-- Seleccionar cuenta --</option>
-            {% for c in cuentas %}
-            <option value="{{ c.id }}">{{ c.codigo }} — {{ c.nombre }} ({{ c.tipo }})</option>
+    <section class="conta-panel">
+      {% if movimientos %}
+      <div class="conta-table-wrap">
+        <table class="lv-table lv-money-col4">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Cuenta</th>
+              <th>Tipo</th>
+              <th>Monto</th>
+              <th>Descripción</th>
+              <th>Emisor (factura)</th>
+              <th>RUT emisor</th>
+              <th>Ref. documento</th>
+              <th>Usuario</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in movimientos %}
+            <tr>
+              <td>{{ m.fecha.strftime('%d/%m/%Y') }}</td>
+              <td><strong>{{ m.cuenta.codigo if m.cuenta else '?' }}</strong> — {{ m.cuenta.nombre if m.cuenta else '—' }}</td>
+              <td>
+                {% if m.tipo == 'debe' %}<span class="badge blue">Debe</span>
+                {% else %}<span class="badge orange">Haber</span>{% endif %}
+              </td>
+              <td>${{ '{:,.0f}'.format(m.monto).replace(',', '.') }}</td>
+              <td>{{ m.descripcion or '—' }}</td>
+              <td>{{ m.emisor_nombre or '—' }}</td>
+              <td>{{ m.emisor_rut or '—' }}</td>
+              <td>{{ m.documento_ref or '—' }}</td>
+              <td>{{ m.usuario or '—' }}</td>
+            </tr>
             {% endfor %}
-          </select>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="conta-panel-inner-empty">No hay movimientos contables registrados.</div>
+      {% endif %}
+    </section>
+  </div>
+
+  <div id="modalNuevoMov" class="modal-overlay">
+    <div class="modal-card contab-modal-mov">
+      <h3>Registrar movimiento contable</h3>
+      <p class="contab-modal-hint">Si aplica, completá al <strong>emisor de la factura</strong> (razón social y RUT) y el <strong>N° de documento</strong> en Referencia, así el registro queda trazable. Elegí cuenta, monto y <strong>Debe</strong>/<strong>Haber</strong> (el <strong>?</strong> al lado de Tipo explica la diferencia).</p>
+      <form method="post" action="{{ url_for('contabilidad.movimiento_nuevo') }}">
+        <div class="contab-modal-grid">
+          <div class="contab-modal-row-equal">
+            <div class="form-group">
+              <label>Fecha</label>
+              <input type="date" name="fecha" required>
+            </div>
+            <div class="form-group">
+              <label>Referencia</label>
+              <input type="text" name="documento_ref" placeholder="N° factura, boleta o interno" maxlength="60">
+            </div>
+          </div>
+          <div class="contab-modal-row-equal">
+            <div class="form-group">
+              <label for="emisorNombre">Razón social (emisor de la factura)</label>
+              <input type="text" id="emisorNombre" name="emisor_nombre" maxlength="200" placeholder="Empresa o proveedor que emite el documento" autocomplete="organization">
+            </div>
+            <div class="form-group">
+              <label for="emisorRut">RUT emisor</label>
+              <input type="text" id="emisorRut" name="emisor_rut" maxlength="24" placeholder="12.345.678-9" inputmode="text" spellcheck="false">
+            </div>
+          </div>
           <div class="form-group">
-            <label>Tipo</label>
-            <select name="tipo" required>
-              <option value="debe">Debe</option>
-              <option value="haber">Haber</option>
+            <label for="selectCuentaMov">Cuenta contable</label>
+            <span class="contab-modal-cuenta-hint">Indica <strong>en qué rubro contable</strong> entra el movimiento según tu plan de cuentas (por ejemplo un gasto de envío, luz, banco, caja). No es el nombre del proveedor: eso va arriba en emisor y RUT.</span>
+            {% if not cuentas %}
+            <div class="contab-modal-warning" role="alert">
+              <strong>Aún no hay cuentas creadas.</strong> Ese desplegable se llena con el <strong>Plan de cuentas</strong>. Andá a
+              <a href="{{ url_for('contabilidad.index') }}" data-module-url="{{ url_for('contabilidad.index') }}">Contabilidad → Plan de cuentas</a>,
+              creá al menos una (por ej. tipo <em>Egreso</em>, nombre <em>Envío / flete</em>) y luego abrí de nuevo «Registrar movimiento».
+            </div>
+            {% endif %}
+            <select id="selectCuentaMov" name="cuenta_id" required {% if not cuentas %}disabled{% endif %}>
+              <option value="">-- Seleccionar cuenta --</option>
+              {% for c in cuentas %}
+              <option value="{{ c.id }}">{{ c.codigo }} — {{ c.nombre }} ({{ c.tipo }})</option>
+              {% endfor %}
             </select>
           </div>
+          <div class="contab-modal-row-equal">
+            <div class="form-group contab-tipo-field">
+              <div class="contab-label-with-help">
+                <label for="selectTipoMov">Tipo</label>
+                <button type="button" class="contab-help-btn" id="btnAyudaDebeHaber" title="Qué es Debe y Haber" aria-label="Ayuda: Debe y Haber" aria-expanded="false" aria-controls="panelAyudaDebeHaber">?</button>
+              </div>
+              <div id="panelAyudaDebeHaber" class="contab-help-panel" role="region" aria-live="polite">
+                <p><strong>Debe</strong> y <strong>Haber</strong> son los dos lados de la contabilidad. En este formulario registrás <strong>un</strong> movimiento a la vez.</p>
+                <p><strong>Debe</strong> (cargo): en cuentas de <strong>gastos, costos o muchos activos</strong>, lo habitual es cargar el movimiento al Debe (reconoce el gasto o el bien).</p>
+                <p><strong>Haber</strong> (abono): en <strong>banco, caja o proveedores</strong> suele usarse el Haber para registrar <strong>salida de dinero</strong> o disminución del activo; en pasivos/ingresos el criterio se invierte según la naturaleza de la cuenta.</p>
+                <p><strong>Gasto con factura (ej. envío):</strong> normalmente el gasto va al <strong>Debe</strong> de una cuenta de egreso/costo. Si además registrás el pago desde banco, ese segundo movimiento en la cuenta de banco iría al <strong>Haber</strong>.</p>
+              </div>
+              <select id="selectTipoMov" name="tipo" required>
+                <option value="debe">Debe</option>
+                <option value="haber">Haber</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Monto ($)</label>
+              <input type="number" name="monto" min="0.01" step="0.01" required>
+            </div>
+          </div>
           <div class="form-group">
-            <label>Monto ($)</label>
-            <input type="number" name="monto" min="0.01" step="0.01" required>
+            <label>Descripción</label>
+            <input type="text" name="descripcion" placeholder="Ej: Envío courier, luz bodega">
+          </div>
+          <div class="contab-modal-actions">
+            <button type="button" class="btn btn-secondary" id="btnCancelarMov">Cancelar</button>
+            <button type="submit" class="btn btn-primary" {% if not cuentas %}disabled title="Crear cuentas en Plan de cuentas primero"{% endif %}>Registrar</button>
           </div>
         </div>
-        <div class="form-group">
-          <label>Descripción</label>
-          <input type="text" name="descripcion" placeholder="Detalle del movimiento">
-        </div>
-        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">
-          <button type="button" class="btn btn-secondary" id="btnCancelarMov">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Registrar</button>
-        </div>
-      </div>
-    </form>
+      </form>
+    </div>
   </div>
 </div>
 
@@ -212,10 +162,63 @@ table.conta-table tr:hover td { background:#f8fbff; }
 (function () {
   'use strict';
   const modal = document.getElementById('modalNuevoMov');
-  document.getElementById('btnNuevoMov').addEventListener('click', () => { modal.style.display = 'flex'; });
-  document.getElementById('btnCancelarMov').addEventListener('click', () => { modal.style.display = 'none'; });
-  modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
-  // default fecha to today
+  if (!modal) return;
+  const btnNuevo = document.getElementById('btnNuevoMov');
+  const btnCancel = document.getElementById('btnCancelarMov');
+  const btnAyuda = document.getElementById('btnAyudaDebeHaber');
+  const panelAyuda = document.getElementById('panelAyudaDebeHaber');
+
+  function closeAyuda() {
+    if (!panelAyuda || !btnAyuda) return;
+    panelAyuda.classList.remove('is-open');
+    btnAyuda.setAttribute('aria-expanded', 'false');
+  }
+
+  function openAyuda() {
+    if (!panelAyuda || !btnAyuda) return;
+    panelAyuda.classList.add('is-open');
+    btnAyuda.setAttribute('aria-expanded', 'true');
+  }
+
+  function toggleAyuda() {
+    if (!panelAyuda || !btnAyuda) return;
+    if (panelAyuda.classList.contains('is-open')) closeAyuda();
+    else openAyuda();
+  }
+
+  btnNuevo.addEventListener('click', function () {
+    modal.style.display = 'flex';
+    closeAyuda();
+    const fechaInput = modal.querySelector('[name="fecha"]');
+    if (fechaInput) fechaInput.value = new Date().toISOString().slice(0, 10);
+  });
+  btnCancel.addEventListener('click', function () {
+    modal.style.display = 'none';
+    closeAyuda();
+  });
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) {
+      modal.style.display = 'none';
+      closeAyuda();
+    }
+  });
+  if (btnAyuda && panelAyuda) {
+    btnAyuda.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleAyuda();
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal.style.display === 'flex') {
+      if (panelAyuda && panelAyuda.classList.contains('is-open')) {
+        closeAyuda();
+        e.preventDefault();
+        return;
+      }
+      modal.style.display = 'none';
+    }
+  });
   const fechaInput = modal.querySelector('[name="fecha"]');
   if (fechaInput) fechaInput.value = new Date().toISOString().slice(0, 10);
 })();

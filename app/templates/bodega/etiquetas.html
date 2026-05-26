@@ -278,8 +278,9 @@
 }
 
 .inputs-card {
-    max-width: 1080px;
-    margin: 0 auto 18px;
+    width: 100%;
+    max-width: none;
+    margin: 0 0 18px;
 }
 
 .form-wide {
@@ -289,23 +290,239 @@
     align-items: end;
 }
 
-.print-mode-wrap {
-    max-width: 1080px;
-    margin: 0 auto 10px;
+/* Fila códigos + F° P + botones: más baja y fina, mismo ancho total (grid 2fr 1fr auto). */
+#labelsForm .form-wide {
+    gap: 8px;
+    align-items: end;
+}
+#labelsForm .form-wide .field {
+    gap: 4px;
+}
+#labelsForm .form-wide .field label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    margin: 0;
+}
+#labelsForm .form-wide .field input[type="text"] {
+    height: 34px;
+    padding: 0 10px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 8px;
+    border: 1px solid #dbe3ef;
+    box-sizing: border-box;
+}
+#labelsForm .form-wide .field input[type="text"]:focus {
+    outline: none;
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+#labelsForm .form-wide .actions {
+    margin: 0;
     display: flex;
-    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    align-self: end;
+}
+#labelsForm .form-wide .actions .btn {
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    min-height: 34px;
+    line-height: 1.2;
+    box-sizing: border-box;
+}
+
+.fp-ingreso-row {
+    margin-top: 8px;
+    max-width: none;
+}
+/* Multi-código: selects acotados; el recuadro gris no ocupa todo el ancho vacío. */
+.fp-ingreso-multi {
+    width: fit-content;
+    max-width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #e8edf5;
+    border-radius: 10px;
+    background: #fafbfd;
+}
+.fp-ingreso-multi-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.fp-ingreso-multi-title {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+    line-height: 1.35;
+}
+.fp-ingreso-multi-expand-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin: -2px 0 0 0;
+    padding: 0;
+    border: 1px solid #dbe3ef;
+    border-radius: 8px;
+    background: #fff;
+    color: #475569;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.fp-ingreso-multi-expand-btn:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #0f172a;
+}
+.fp-ingreso-multi-expand-btn:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 1px;
+}
+.fp-ingreso-multi-expand-btn.is-on {
+    background: #eff6ff;
+    border-color: #93c5fd;
+    color: #1d4ed8;
+}
+.fp-ingreso-multi-expand-btn svg {
+    display: block;
+}
+.fp-ingreso-multi-row {
+    display: grid;
+    grid-template-columns: max-content minmax(11rem, min(22rem, 100%));
+    gap: 6px 10px;
+    align-items: center;
+    justify-content: start;
+    margin-bottom: 5px;
+}
+.fp-ingreso-multi-row:last-child {
+    margin-bottom: 0;
+}
+.fp-ingreso-multi-code {
+    font-weight: 700;
+    font-size: 11px;
+    color: #0f172a;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+    white-space: nowrap;
+    word-break: normal;
+    max-width: min(14rem, 100vw);
+    overflow-x: auto;
+}
+.fp-ingreso-multi-body .fp-ingreso-multi-select {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    height: 30px;
+    padding: 0 8px 0 9px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 7px;
+    border-color: #d8e0ec;
+}
+.fp-ingreso-multi-body .fp-ingreso-multi-select:focus {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+
+/* Un solo código: combo acotado (misma lógica que factura por código). */
+.fp-ingreso-single {
+    width: fit-content;
+    max-width: 100%;
+}
+.fp-ingreso-row .fp-ingreso-single select {
+    display: block;
+    width: 100%;
+    max-width: min(22rem, 100%);
+    min-width: 11rem;
+    height: 30px;
+    padding: 0 9px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 7px;
+    border-color: #d8e0ec;
+}
+.fp-ingreso-row .fp-ingreso-single select:focus {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+
+.fp-ingreso-row label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+.fp-ingreso-row select,
+.fp-ingreso-multi-select {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    height: 40px;
+    border: 1px solid #dbe3ef;
+    border-radius: 11px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #fff;
+    color: #0f172a;
+}
+.fp-ingreso-row select:focus,
+.fp-ingreso-multi-select:focus {
+    outline: none;
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+}
+.fp-ingreso-hint {
+    margin-top: 5px;
+    font-size: 11px;
+    color: #64748b;
+    line-height: 1.35;
+}
+.fp-ingreso-row:has(.fp-ingreso-multi:not([hidden])) .fp-ingreso-hint {
+    font-size: 10px;
+    margin-top: 6px;
+    max-width: none;
+}
+
+/* Dentro de la tarjeta: compacto, el select no ocupa todo el ancho. */
+.print-mode-wrap {
+    display: inline-flex;
     align-items: center;
     gap: 8px;
+    margin: 0 0 12px;
+    flex-wrap: wrap;
 }
 
 .print-mode-wrap label {
-    font-size: 12px;
+    font-size: 11px;
     color: #334155;
     font-weight: 600;
+    white-space: nowrap;
 }
 
 .search-assist {
     margin-top: 12px;
+    max-width: 100%;
     border: 1px solid #dbe3ef;
     border-radius: 12px;
     background: #f8fbff;
@@ -420,9 +637,13 @@
 }
 
 #printMode {
+    width: auto;
+    min-width: 6.75rem;
+    max-width: 9rem;
+    flex-shrink: 0;
     border: 1px solid #dbe3ef;
     border-radius: 8px;
-    padding: 6px 10px;
+    padding: 5px 8px;
     font-size: 12px;
     color: #0f172a;
     background: #fff;
@@ -499,8 +720,9 @@ html[data-print-mode="thermal"] .barcode img {
 }
 
 @media print {
+    /* Carta (Letter): coincide con la impresora en "Carta" / 60% en muchos equipos. */
     @page {
-        size: A4;
+        size: letter;
         margin: 5mm;
     }
 
@@ -515,20 +737,125 @@ html[data-print-mode="thermal"] .barcode img {
     }
 
     .label {
-        width: 280px;
-        min-height: 220px;
+        width: var(--print-label-width, 280px);
+        max-width: 100%;
+        min-height: 0;
+        max-height: var(--print-label-max-height, none);
         box-shadow: none;
         border: 1px solid #333;
         page-break-inside: avoid;
         background: #fff;
+        overflow: hidden;
     }
 
-    .label-header {
-        padding-bottom: 6px;
+    /* Carta 4×5 @ 100%: compactar contenido; min+max = cupo para ocupar todo el alto de página */
+    html:not([data-print-mode="thermal"]) .label {
+        padding: 5px 6px;
+        gap: 3px;
+        border-radius: 8px;
+        min-height: var(--print-label-max-height);
+        max-height: var(--print-label-max-height);
+        justify-content: flex-start;
     }
 
-    .logo-wrap {
-        width: 32px;
+    html:not([data-print-mode="thermal"]) .label-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        justify-content: center;
+    }
+
+    html:not([data-print-mode="thermal"]) .label-header {
+        padding-bottom: 3px;
+    }
+
+    html:not([data-print-mode="thermal"]) .brand-row {
+        margin-bottom: 1px;
+        gap: 4px;
+    }
+
+    html:not([data-print-mode="thermal"]) .logo-wrap {
+        width: 18px;
+        height: 18px;
+    }
+
+    html:not([data-print-mode="thermal"]) .empresa {
+        font-size: 8px;
+        letter-spacing: 0.08em;
+    }
+
+    html:not([data-print-mode="thermal"]) .contacto,
+    html:not([data-print-mode="thermal"]) .correo {
+        font-size: 7px;
+        line-height: 1.15;
+    }
+
+    html:not([data-print-mode="thermal"]) .label-body {
+        gap: 3px;
+    }
+
+    html:not([data-print-mode="thermal"]) .codigo {
+        font-size: 15px;
+        margin-top: 0;
+    }
+
+    html:not([data-print-mode="thermal"]) .descripcion {
+        font-size: 10px;
+        line-height: 1.2;
+        min-height: 0;
+    }
+
+    html:not([data-print-mode="thermal"]) .descripcion.name-sm,
+    html:not([data-print-mode="thermal"]) .descripcion.name-xs {
+        font-size: 9px;
+    }
+
+    html:not([data-print-mode="thermal"]) .modelo {
+        font-size: 9px;
+        min-height: 0;
+    }
+
+    html:not([data-print-mode="thermal"]) .label-footer {
+        gap: 3px;
+        margin-top: auto;
+        flex-shrink: 0;
+    }
+
+    html:not([data-print-mode="thermal"]) .meta-row {
+        grid-template-columns: minmax(0, 1fr) 50px;
+        gap: 4px;
+        align-items: center;
+    }
+
+    html:not([data-print-mode="thermal"]) .fp-card {
+        padding: 3px 5px;
+        border-radius: 6px;
+    }
+
+    html:not([data-print-mode="thermal"]) .fp-label {
+        font-size: 6px;
+    }
+
+    html:not([data-print-mode="thermal"]) .fp-value {
+        font-size: 11px;
+    }
+
+    html:not([data-print-mode="thermal"]) .qr {
+        width: 50px;
+        height: 50px;
+        border-radius: 8px;
+    }
+
+    html:not([data-print-mode="thermal"]) .qr img {
+        width: 48px;
+        height: 48px;
+    }
+
+    html:not([data-print-mode="thermal"]) .barcode {
+        min-height: 34px;
+        padding-top: 2px;
+    }
+
+    html:not([data-print-mode="thermal"]) .barcode img {
         height: 32px;
     }
 
@@ -536,6 +863,7 @@ html[data-print-mode="thermal"] .barcode img {
     .print-mode-wrap,
     .no-print,
     .sidebar,
+    #apchat-root,
     .topbar,
     .message {
         display: none !important;
@@ -544,11 +872,6 @@ html[data-print-mode="thermal"] .barcode img {
     .label .label-display-only,
     .label .fp-value {
         display: block !important;
-    }
-
-    .logo-wrap {
-        width: 24px;
-        height: 24px;
     }
 
     .layout,
@@ -677,17 +1000,19 @@ html[data-print-mode="thermal"] .barcode img {
 <div id="etiquetasServerMessage" class="message {{ message.type }} no-print">{{ message.text }}</div>
 {% endif %}
 
-<div class="print-mode-wrap no-print">
-    <label for="printMode">Modo impresión</label>
-    <select id="printMode" aria-label="Modo de impresion">
-        <option value="a4">A4</option>
-        <option value="thermal">Térmica</option>
-    </select>
-</div>
-
 <div class="form-card inputs-card no-print">
     <h2 class="section-title">Generador de Etiquetas</h2>
+    <div class="print-mode-wrap no-print">
+        <label for="printMode">Modo impresión</label>
+        <select id="printMode" aria-label="Modo de impresion">
+            <option value="a4">A4</option>
+            <option value="thermal">Térmica</option>
+        </select>
+    </div>
     <form id="labelsForm" method="get" novalidate>
+        <input type="hidden" id="fp_por_codigo_json" name="fp_por_codigo_json" value="{{ (fp_por_codigo_json|default(''))|e }}">
+        <input type="hidden" id="etiquetasIngresoDocId" name="etiquetas_ingreso_doc_id" value="{{ (etiquetas_ingreso_doc_id|default(''))|e }}">
+        <input type="hidden" id="etiquetasIngresoCodigosJson" name="etiquetas_ingreso_codigos_json" value="{{ (etiquetas_ingreso_codigos_json|default(''))|e }}">
         <div class="form-wide">
             <div class="field">
                 <label for="codigos">Códigos (ej: 2417 x2, 5433 x5, F204)</label>
@@ -697,11 +1022,30 @@ html[data-print-mode="thermal"] .barcode img {
                 <label for="fp">F° P</label>
                 <input id="fp" name="fp" value="{{ fp or '' }}" placeholder="F° Proveedor">
             </div>
-            <div class="actions" style="margin:0;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+            <div class="actions">
                 <button type="button" class="btn btn-outline" id="btnPreviewLabels" title="Actualiza la vista previa sin recargar la página">Vista previa</button>
                 <button class="btn btn-primary" type="submit">Generar</button>
             </div>
             <p id="previewAjaxHint" class="search-help no-print" style="color:#b91c1c;display:none;margin-top:8px;" role="alert"></p>
+        </div>
+
+        <div class="fp-ingreso-row no-print" id="fpIngresoSuggestWrap" hidden>
+            <div id="fpIngresoSingleWrap" class="fp-ingreso-single">
+                <label for="fpIngresoSelect">Factura proveedor desde ingreso</label>
+                <select id="fpIngresoSelect" aria-describedby="fpIngresoHint">
+                    <option value="">— Manual / sin dato en ingresos —</option>
+                </select>
+            </div>
+            <div id="fpIngresoMultiWrap" class="fp-ingreso-multi" hidden>
+                <div class="fp-ingreso-multi-head">
+                    <span class="fp-ingreso-multi-title" id="fpIngresoMultiTitle">Factura proveedor por código</span>
+                    <button type="button" id="fpIngresoMultiExpandBtn" class="fp-ingreso-multi-expand-btn" hidden aria-pressed="false" title="Ver factura de cada código del ingreso" aria-label="Ver factura de cada código del ingreso">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    </button>
+                </div>
+                <div id="fpIngresoMultiBody" class="fp-ingreso-multi-body" role="group" aria-label="Factura por código"></div>
+            </div>
+            <div class="fp-ingreso-hint" id="fpIngresoHint"></div>
         </div>
 
         <div class="search-assist">
@@ -718,7 +1062,7 @@ html[data-print-mode="thermal"] .barcode img {
 <section id="sheet" class="sheet">
     {% if labels and labels|length > 0 %}
     {% for label in labels %}
-    <article class="label">
+    <article class="label" data-anchor-code="{{ label.codigo|e }}">
 
         <div class="label-header">
             <div class="brand-row">
@@ -796,8 +1140,476 @@ html[data-print-mode="thermal"] .barcode img {
     const printModeSelect = document.getElementById('printMode');
     const btnPrintLabels = document.getElementById('btnPrintLabels');
     const URL_LABEL_PRINT_HISTORY = '{{ url_for("bodega.etiquetas_historial_register") }}';
+    const URL_FACTURAS_INGRESO = '{{ url_for("bodega.etiquetas_ultimas_facturas_ingreso") }}';
     const THERMAL_PAGE_STYLE_ID = 'thermal-page-size-style';
     let lastPrintRegistrationAt = 0;
+
+    const fpIngresoSuggestWrap = document.getElementById('fpIngresoSuggestWrap');
+    const fpIngresoSingleWrap = document.getElementById('fpIngresoSingleWrap');
+    const fpIngresoMultiWrap = document.getElementById('fpIngresoMultiWrap');
+    const fpIngresoMultiBody = document.getElementById('fpIngresoMultiBody');
+    const fpIngresoMultiTitle = document.getElementById('fpIngresoMultiTitle');
+    const fpIngresoMultiExpandBtn = document.getElementById('fpIngresoMultiExpandBtn');
+    const fpIngresoSelect = document.getElementById('fpIngresoSelect');
+    const fpIngresoHint = document.getElementById('fpIngresoHint');
+    const FP_MULTI_TITLE_DEFAULT = 'Factura proveedor por código';
+    let fpSyncToken = 0;
+    let fpMultiSuggestToken = 0;
+    let fpMultiRowsCache = null;
+    let fpMultiRowsCacheSnap = '';
+    let lastSingleSuggestCode = null;
+    let fpManualTyped = false;
+    let fpMultiExpandedShowAll = false;
+
+    /** Mapa código→true si viene del ingreso del historial; null si no aplica candado. */
+    function getIngresoBundleCodeMap() {
+        var docEl = document.getElementById('etiquetasIngresoDocId');
+        if (!docEl || !(docEl.value || '').trim()) return null;
+        var raw = (document.getElementById('etiquetasIngresoCodigosJson') && document.getElementById('etiquetasIngresoCodigosJson').value || '').trim();
+        if (!raw) return null;
+        var bundle = Object.create(null);
+        try {
+            var arr = JSON.parse(raw);
+            if (!Array.isArray(arr) || !arr.length) return null;
+            arr.forEach(function (c) {
+                var k = String(c || '').trim().toUpperCase();
+                if (k) bundle[k] = true;
+            });
+        } catch (e) {
+            return null;
+        }
+        return Object.keys(bundle).length ? bundle : null;
+    }
+
+    function allCodesBelongToIngresoBundle(keys) {
+        var b = getIngresoBundleCodeMap();
+        if (!b || !keys.length) return false;
+        for (var i = 0; i < keys.length; i++) {
+            if (!b[keys[i]]) return false;
+        }
+        return true;
+    }
+
+    function fpMultiSnap(keys, bundleMap) {
+        return keys.slice().sort().map(function (c) {
+            return c + (bundleMap && bundleMap[c] ? 'B' : 'F');
+        }).join('\n');
+    }
+
+    function fetchAndRenderMultiIngreso(keysOrdered) {
+        if (!fpIngresoMultiBody || !keysOrdered.length) return;
+        var bundleMap = getIngresoBundleCodeMap();
+        var snap = fpMultiSnap(keysOrdered, bundleMap);
+        if (fpMultiRowsCacheSnap === snap && fpMultiRowsCache && fpMultiRowsCache.length) {
+            var byC = Object.create(null);
+            fpMultiRowsCache.forEach(function (r) { byC[r.code] = r; });
+            var ordered = keysOrdered.map(function (c) { return byC[c]; });
+            if (ordered.length === keysOrdered.length && ordered.every(Boolean)) {
+                renderMultiIngresoRows(ordered);
+                return;
+            }
+        }
+        fpMultiExpandedShowAll = false;
+        var token = ++fpMultiSuggestToken;
+        fpIngresoMultiBody.innerHTML = '<div class="search-help" style="margin:0;">Cargando facturas de ingreso…</div>';
+        var toFetch = keysOrdered.filter(function (c) {
+            return !bundleMap || !bundleMap[c];
+        });
+        function finishMerge(fetchedList) {
+            if (token !== fpMultiSuggestToken) return;
+            var entries = parseCodigosField(codigosInput.value || '');
+            var uniq = Object.create(null);
+            entries.forEach(function (e) { uniq[e.code] = true; });
+            var cur = Object.keys(uniq);
+            if (cur.length <= 1) {
+                runFacturaSuggest();
+                return;
+            }
+            if (fpMultiSnap(cur, bundleMap) !== snap) {
+                runFacturaSuggest();
+                return;
+            }
+            var dataByCode = Object.create(null);
+            (fetchedList || []).forEach(function (r) {
+                dataByCode[r.code] = r.data;
+            });
+            var merged = cur.map(function (c) {
+                if (bundleMap && bundleMap[c]) {
+                    return { code: c, data: null, bundleOnly: true };
+                }
+                return { code: c, data: dataByCode[c], bundleOnly: false };
+            });
+            fpMultiRowsCacheSnap = snap;
+            fpMultiRowsCache = merged;
+            renderMultiIngresoRows(merged);
+        }
+        if (!toFetch.length) {
+            finishMerge([]);
+            return;
+        }
+        Promise.all(toFetch.map(function (code) {
+            return fetch(URL_FACTURAS_INGRESO + '?codigo=' + encodeURIComponent(code), {
+                method: 'GET',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (data) { return { code: code, data: data }; })
+                .catch(function () { return { code: code, data: null }; });
+        })).then(function (rows) {
+            finishMerge(rows);
+        });
+    }
+
+    function appendFpMultiSelectRow(r, map) {
+        var code = r.code;
+        var data = r.data;
+        var items = (data && data.success && Array.isArray(data.items)) ? data.items : [];
+        var rowEl = document.createElement('div');
+        rowEl.className = 'fp-ingreso-multi-row';
+
+        var codeSpan = document.createElement('span');
+        codeSpan.className = 'fp-ingreso-multi-code';
+        codeSpan.textContent = code;
+        rowEl.appendChild(codeSpan);
+
+        var sel = document.createElement('select');
+        sel.className = 'fp-ingreso-multi-select';
+        sel.setAttribute('data-code', code);
+        sel.setAttribute('aria-label', 'Factura proveedor ' + code);
+
+        var optManual = document.createElement('option');
+        optManual.value = '';
+        optManual.textContent = '— Manual / vacío —';
+        sel.appendChild(optManual);
+
+        items.forEach(function (it, idx) {
+            var opt = document.createElement('option');
+            opt.value = String(it.ingreso_id || '');
+            var num = String(it.numero_documento || '').trim();
+            opt.setAttribute('data-numero', num);
+            var fd = it.fecha_documento || '';
+            var prov = it.proveedor_nombre || '';
+            var rest = (num || '—') + ' — ' + prov + (fd ? ' (' + fd + ')' : '');
+            opt.textContent = (idx === 0 ? 'Última: ' : 'Anterior: ') + rest;
+            sel.appendChild(opt);
+        });
+
+        var target = String(map[code] || '').trim();
+        var matched = false;
+        if (target) {
+            for (var i = 1; i < sel.options.length; i++) {
+                var o = sel.options[i];
+                if (String(o.getAttribute('data-numero') || '').trim() === target) {
+                    sel.selectedIndex = i;
+                    matched = true;
+                    break;
+                }
+            }
+        }
+        if (!matched) {
+            sel.selectedIndex = items.length ? 1 : 0;
+        }
+
+        rowEl.appendChild(sel);
+        fpIngresoMultiBody.appendChild(rowEl);
+    }
+
+    function updateFpMultiExpandButton(showMixCompact) {
+        if (!fpIngresoMultiExpandBtn) return;
+        if (!showMixCompact) {
+            fpIngresoMultiExpandBtn.hidden = true;
+            fpIngresoMultiExpandBtn.classList.remove('is-on');
+            return;
+        }
+        fpIngresoMultiExpandBtn.hidden = false;
+        fpIngresoMultiExpandBtn.setAttribute('aria-pressed', fpMultiExpandedShowAll ? 'true' : 'false');
+        var t = fpMultiExpandedShowAll ? 'Mostrar solo códigos agregados' : 'Ver factura de cada código del ingreso';
+        fpIngresoMultiExpandBtn.title = t;
+        fpIngresoMultiExpandBtn.setAttribute('aria-label', t);
+        if (fpMultiExpandedShowAll) fpIngresoMultiExpandBtn.classList.add('is-on');
+        else fpIngresoMultiExpandBtn.classList.remove('is-on');
+    }
+
+    function renderMultiIngresoRows(rows) {
+        if (!fpIngresoMultiBody) return;
+        var map = getFpMap();
+        var bmap = getIngresoBundleCodeMap();
+        var hadBundleInList = rows.some(function (r) { return r.bundleOnly; });
+        var extras = rows.filter(function (r) { return !r.bundleOnly; });
+        var showMixCompact = !!(bmap && hadBundleInList && extras.length);
+        var wantAll = fpMultiExpandedShowAll && showMixCompact;
+
+        if (wantAll) {
+            var needFetch = rows.filter(function (r) {
+                return r.bundleOnly && (!r.data || !r.data.success || !Array.isArray(r.data.items));
+            });
+            if (needFetch.length) {
+                fpIngresoMultiBody.innerHTML = '<div class="search-help" style="margin:0;">Cargando facturas del ingreso…</div>';
+                updateFpMultiExpandButton(showMixCompact);
+                Promise.all(needFetch.map(function (r) {
+                    return fetch(URL_FACTURAS_INGRESO + '?codigo=' + encodeURIComponent(r.code), {
+                        method: 'GET',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    })
+                        .then(function (res) { return res.json(); })
+                        .then(function (data) { return { code: r.code, data: data }; })
+                        .catch(function () { return { code: r.code, data: null }; });
+                })).then(function (list) {
+                    var byC = Object.create(null);
+                    list.forEach(function (x) { byC[x.code] = x.data; });
+                    if (fpMultiRowsCache) {
+                        fpMultiRowsCache.forEach(function (row) {
+                            if (byC[row.code] !== undefined) row.data = byC[row.code];
+                        });
+                    }
+                    renderMultiIngresoRows(fpMultiRowsCache || rows);
+                });
+                return;
+            }
+        }
+
+        fpIngresoMultiBody.innerHTML = '';
+        var effectiveRows = wantAll ? rows : extras;
+
+        if (fpIngresoMultiTitle) {
+            if (wantAll && showMixCompact) {
+                fpIngresoMultiTitle.textContent = 'Factura proveedor — todos los códigos';
+            } else if (showMixCompact) {
+                fpIngresoMultiTitle.textContent = extras.length === 1
+                    ? 'Factura proveedor — código agregado'
+                    : 'Factura proveedor — códigos agregados';
+            } else {
+                fpIngresoMultiTitle.textContent = FP_MULTI_TITLE_DEFAULT;
+            }
+        }
+
+        effectiveRows.forEach(function (r) {
+            appendFpMultiSelectRow(r, map);
+        });
+        updateFpMultiExpandButton(showMixCompact);
+    }
+
+    if (fpIngresoMultiBody) {
+        fpIngresoMultiBody.addEventListener('change', function (ev) {
+            var t = ev.target;
+            if (!t || !t.classList || !t.classList.contains('fp-ingreso-multi-select')) return;
+            var code = (t.getAttribute('data-code') || '').trim().toUpperCase();
+            var opt = t.options[t.selectedIndex];
+            if (!opt || !opt.value) {
+                var mm = getFpMap();
+                delete mm[code];
+                setFpMap(mm);
+            } else {
+                applyNumeroToFp(code, opt.getAttribute('data-numero') || '');
+            }
+            refreshPreview();
+        });
+    }
+
+    if (fpIngresoMultiExpandBtn) {
+        fpIngresoMultiExpandBtn.addEventListener('click', function () {
+            if (!fpMultiRowsCache || !fpMultiRowsCache.length) return;
+            fpMultiExpandedShowAll = !fpMultiExpandedShowAll;
+            renderMultiIngresoRows(fpMultiRowsCache);
+        });
+    }
+
+    function getFpMap() {
+        var el = document.getElementById('fp_por_codigo_json');
+        if (!el || !(el.value || '').trim()) return {};
+        try {
+            var raw = JSON.parse(el.value);
+            return raw && typeof raw === 'object' ? raw : {};
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function setFpMap(obj) {
+        var el = document.getElementById('fp_por_codigo_json');
+        if (!el) return;
+        el.value = JSON.stringify(obj || {});
+    }
+
+    function applyNumeroToFp(code, numero) {
+        if (!code) return;
+        var n = String(numero || '').trim();
+        var map = getFpMap();
+        map[code] = n;
+        setFpMap(map);
+        var entries = parseCodigosField(codigosInput.value || '');
+        var uniq = Object.create(null);
+        entries.forEach(function (e) { uniq[e.code] = true; });
+        if (Object.keys(uniq).length === 1 && fpInput) {
+            fpInput.value = n;
+        }
+    }
+
+    function runFacturaSuggest() {
+        if (!fpIngresoSuggestWrap || !fpIngresoSelect || !codigosInput) return;
+        var entries = parseCodigosField(codigosInput.value || '');
+        var uniq = Object.create(null);
+        entries.forEach(function (e) { uniq[e.code] = true; });
+        var keys = Object.keys(uniq);
+        if (keys.length === 0) {
+            fpIngresoSuggestWrap.hidden = true;
+            lastSingleSuggestCode = null;
+            if (fpIngresoHint) fpIngresoHint.textContent = '';
+            if (fpIngresoMultiWrap) fpIngresoMultiWrap.hidden = true;
+            if (fpIngresoSingleWrap) fpIngresoSingleWrap.style.display = '';
+            if (fpIngresoMultiTitle) fpIngresoMultiTitle.textContent = FP_MULTI_TITLE_DEFAULT;
+            fpMultiExpandedShowAll = false;
+            fpMultiRowsCache = null;
+            fpMultiRowsCacheSnap = '';
+            if (fpIngresoMultiExpandBtn) fpIngresoMultiExpandBtn.hidden = true;
+            return;
+        }
+        if (allCodesBelongToIngresoBundle(keys)) {
+            fpIngresoSuggestWrap.hidden = true;
+            lastSingleSuggestCode = null;
+            if (fpIngresoHint) fpIngresoHint.textContent = '';
+            if (fpIngresoMultiWrap) fpIngresoMultiWrap.hidden = true;
+            if (fpIngresoSingleWrap) fpIngresoSingleWrap.style.display = '';
+            if (fpIngresoMultiTitle) fpIngresoMultiTitle.textContent = FP_MULTI_TITLE_DEFAULT;
+            fpMultiExpandedShowAll = false;
+            fpMultiRowsCache = null;
+            fpMultiRowsCacheSnap = '';
+            fpMultiSuggestToken += 1;
+            if (fpIngresoMultiExpandBtn) fpIngresoMultiExpandBtn.hidden = true;
+            return;
+        }
+        if (keys.length !== 1) {
+            fpIngresoSuggestWrap.hidden = false;
+            if (fpIngresoSingleWrap) fpIngresoSingleWrap.style.display = 'none';
+            if (fpIngresoMultiWrap) fpIngresoMultiWrap.hidden = false;
+            fpIngresoSelect.innerHTML = '<option value="">—</option>';
+            if (fpIngresoHint) {
+                var bmap = getIngresoBundleCodeMap();
+                var anyIn = false;
+                var anyOut = false;
+                if (bmap) {
+                    for (var hi = 0; hi < keys.length; hi++) {
+                        if (bmap[keys[hi]]) anyIn = true;
+                        else anyOut = true;
+                    }
+                }
+                var hasMix = anyIn && anyOut;
+                fpIngresoHint.textContent = hasMix
+                    ? 'Los códigos del ingreso ya tienen F° P en las etiquetas. Solo se listan abajo los que agregaste: elegí factura de ingreso o manual. La lupa muestra el selector de todos los códigos del ingreso.'
+                    : 'Varios códigos: el F° P global no rellena etiquetas. Por cada código elegí la factura del último ingreso o la anterior (si existe). Si no hay ingresos, el F° P queda vacío.';
+            }
+            lastSingleSuggestCode = null;
+            fetchAndRenderMultiIngreso(keys);
+            return;
+        }
+        if (fpIngresoMultiWrap) fpIngresoMultiWrap.hidden = true;
+        if (fpIngresoSingleWrap) fpIngresoSingleWrap.style.display = '';
+        if (fpIngresoMultiTitle) fpIngresoMultiTitle.textContent = FP_MULTI_TITLE_DEFAULT;
+        fpMultiExpandedShowAll = false;
+        fpMultiRowsCache = null;
+        fpMultiRowsCacheSnap = '';
+        if (fpIngresoMultiExpandBtn) fpIngresoMultiExpandBtn.hidden = true;
+        fpIngresoSelect.style.display = '';
+        var code = keys[0];
+        var bundleSingle = getIngresoBundleCodeMap();
+        if (bundleSingle && bundleSingle[code]) {
+            fpIngresoSuggestWrap.hidden = true;
+            lastSingleSuggestCode = code;
+            if (fpIngresoHint) fpIngresoHint.textContent = '';
+            return;
+        }
+        if (code !== lastSingleSuggestCode) {
+            fpManualTyped = false;
+            lastSingleSuggestCode = code;
+        }
+
+        fetch(URL_FACTURAS_INGRESO + '?codigo=' + encodeURIComponent(code), {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (!data || !data.success || !Array.isArray(data.items) || !data.items.length) {
+                    fpIngresoSuggestWrap.hidden = true;
+                    if (fpIngresoHint) fpIngresoHint.textContent = '';
+                    return;
+                }
+                fpIngresoSelect.innerHTML = '<option value="">— Manual / sin dato —</option>';
+                data.items.forEach(function (it, idx) {
+                    var opt = document.createElement('option');
+                    opt.value = String(it.ingreso_id || '');
+                    var num = String(it.numero_documento || '').trim();
+                    opt.setAttribute('data-numero', num);
+                    var fd = it.fecha_documento || '';
+                    var prov = it.proveedor_nombre || '';
+                    var rest = (num || '—') + ' — ' + prov + (fd ? ' (' + fd + ')' : '');
+                    opt.textContent = (idx === 0 ? 'Última: ' : 'Anterior: ') + rest;
+                    fpIngresoSelect.appendChild(opt);
+                });
+                fpIngresoSuggestWrap.hidden = false;
+                if (fpIngresoHint) {
+                    fpIngresoHint.textContent = data.items.length > 1
+                        ? 'Elegí la factura del último ingreso o la anterior. Se aplica al F° P de este código.'
+                        : 'Tomada del ingreso más reciente. Podés editarla o elegir manual.';
+                }
+                var map = getFpMap();
+                var curMap = String(map[code] || '').trim();
+                var curFp = (fpInput && fpInput.value || '').trim();
+                if (!fpManualTyped && !curMap && !curFp) {
+                    var firstNum = String((data.items[0] && data.items[0].numero_documento) || '').trim();
+                    fpIngresoSelect.selectedIndex = 1;
+                    applyNumeroToFp(code, firstNum);
+                    refreshPreview();
+                    return;
+                }
+                var target = curMap || curFp;
+                var matched = false;
+                for (var i = 1; i < fpIngresoSelect.options.length; i++) {
+                    var o = fpIngresoSelect.options[i];
+                    if (String(o.getAttribute('data-numero') || '').trim() === target) {
+                        fpIngresoSelect.selectedIndex = i;
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched) fpIngresoSelect.selectedIndex = 0;
+            })
+            .catch(function () {
+                fpIngresoSuggestWrap.hidden = true;
+                if (fpIngresoHint) fpIngresoHint.textContent = '';
+            });
+    }
+
+    if (fpIngresoSelect) {
+        fpIngresoSelect.addEventListener('change', function () {
+            var entries = parseCodigosField(codigosInput.value || '');
+            var uniq = Object.create(null);
+            entries.forEach(function (e) { uniq[e.code] = true; });
+            var keys = Object.keys(uniq);
+            if (keys.length !== 1) return;
+            var code = keys[0];
+            var opt = fpIngresoSelect.options[fpIngresoSelect.selectedIndex];
+            if (!opt || !opt.value) {
+                var map = getFpMap();
+                delete map[code];
+                setFpMap(map);
+                fpManualTyped = true;
+                if (fpInput) fpInput.value = '';
+                refreshPreview();
+                return;
+            }
+            fpManualTyped = false;
+            applyNumeroToFp(code, opt.getAttribute('data-numero') || '');
+            refreshPreview();
+        });
+    }
+
+    if (fpInput) {
+        fpInput.addEventListener('input', function () {
+            fpManualTyped = true;
+            debounce();
+        });
+    }
 
     function ensureThermalPageStyle(enabled) {
         const existing = document.getElementById(THERMAL_PAGE_STYLE_ID);
@@ -823,11 +1635,15 @@ html[data-print-mode="thermal"] .barcode img {
         optimizePrintGrid();
     }
 
-    function optimizePrintGrid() {
+    function optimizePrintGrid(opts) {
+        opts = opts || {};
+        const forPrint = opts.forPrint === true;
         const mode = document.documentElement.getAttribute('data-print-mode') || 'a4';
         if (mode === 'thermal') {
             const rootThermal = document.documentElement;
             rootThermal.style.setProperty('--print-label-width', '60mm');
+            rootThermal.style.removeProperty('--print-label-min-height');
+            rootThermal.style.removeProperty('--print-label-max-height');
             rootThermal.style.setProperty('--print-col-gap', '0');
             rootThermal.style.setProperty('--print-row-gap', '0');
             rootThermal.style.setProperty('--print-justify', 'start');
@@ -835,6 +1651,39 @@ html[data-print-mode="thermal"] .barcode img {
         }
 
         const root = document.documentElement;
+        /* Impresión Carta: no usar innerWidth (preview/ventana ≠ ancho útil del papel).
+           4 columnas ≈ 20 etiquetas en 5 filas con escala ~60% como antes. */
+        if (forPrint) {
+            const LETTER_PX = 96 * 8.5;
+            const marginPx = (5 / 25.4) * 96 * 2;
+            const printableW = Math.max(480, Math.round(LETTER_PX - marginPx));
+            const minGapPx = 8;
+            const targetCols = 4;
+            const labelWidth = Math.max(
+                150,
+                Math.floor((printableW - minGapPx * (targetCols - 1)) / targetCols)
+            );
+            /* 5 filas en el alto útil Carta @ 5 mm márgenes — cupo fijo para que quepan 20 @ 100% */
+            const LETTER_H_PX = 96 * 11;
+            const printableH = Math.max(400, Math.round(LETTER_H_PX - marginPx));
+            const rowGapPx = 3;
+            const targetRows = 5;
+            /* Altura exacta por fila (sin floor) para usar todo el alto útil Carta */
+            const labelMaxH = Math.max(
+                160,
+                (printableH - rowGapPx * (targetRows - 1)) / targetRows
+            );
+            root.style.setProperty('--print-label-width', labelWidth + 'px');
+            root.style.removeProperty('--print-label-min-height');
+            root.style.setProperty('--print-label-max-height', labelMaxH.toFixed(2) + 'px');
+            root.style.setProperty('--print-col-gap', minGapPx + 'px');
+            root.style.setProperty('--print-row-gap', rowGapPx + 'px');
+            root.style.setProperty('--print-justify', 'start');
+            return;
+        }
+
+        root.style.removeProperty('--print-label-min-height');
+        root.style.removeProperty('--print-label-max-height');
         const labelWidth = 280;
         const pageMarginPx = 38; // approx 10mm total printable margin safety
         const minGapPx = 10;
@@ -924,7 +1773,7 @@ html[data-print-mode="thermal"] .barcode img {
             entries.push({ code: clean, qty: n });
         }
         codigosInput.value = serializeCodigos(entries);
-        refreshPreview();
+        debounce();
     }
 
     function renderSearchResults(items, searchTerm) {
@@ -989,13 +1838,101 @@ html[data-print-mode="thermal"] .barcode img {
         searchTimer = setTimeout(searchProductsForLabels, 250);
     }
 
+    /**
+     * Antes de re-renderizar la vista previa (AJAX): guarda código editado + descripción / modelo.
+     * No guardamos F° P: viene del formulario / servidor en cada refresh; reaplicar un fp viejo
+     * vacío pisaba el valor nuevo y sync() lo mostraba como "—".
+     * data-anchor-code en cada etiqueta = código que envió el servidor al generar esa fila (no cambia si editas RC→AA).
+     * queues[anchor]: una cola por ancla para el mismo código repetido (x2).
+     */
+    function captureLabelSheetEdits() {
+        var queues = Object.create(null);
+        var inOrder = [];
+        if (!sheet) return { queues: queues, inOrder: inOrder };
+        sheet.querySelectorAll('.label').forEach(function (card) {
+            var anchor = (card.getAttribute('data-anchor-code') || '').trim().toUpperCase();
+            var codeInput = card.querySelector('.edit-codigo');
+            var c = (codeInput && codeInput.value || '').trim().toUpperCase();
+            if (!anchor) {
+                anchor = c;
+            }
+            var row = {
+                anchor: anchor,
+                code: c,
+                descripcion: (card.querySelector('.edit-descripcion') && card.querySelector('.edit-descripcion').value || '').trim(),
+                modelo: (card.querySelector('.edit-modelo') && card.querySelector('.edit-modelo').value || '').trim()
+            };
+            inOrder.push(row);
+            if (!queues[anchor]) {
+                queues[anchor] = [];
+            }
+            queues[anchor].push(row);
+        });
+        return { queues: queues, inOrder: inOrder };
+    }
+
+    function cloneAnchorQueues(qs) {
+        var out = Object.create(null);
+        if (!qs) return out;
+        Object.keys(qs).forEach(function (k) {
+            out[k] = qs[k].slice();
+        });
+        return out;
+    }
+
+    function applyLabelSheetEdits(preserved) {
+        if (!sheet || !preserved) return;
+        var queues = cloneAnchorQueues(preserved.queues);
+        var cards = sheet.querySelectorAll('.label');
+        var lastByAnchor = Object.create(null);
+
+        for (var i = 0; i < cards.length; i++) {
+            var card = cards[i];
+            var anchor = (card.getAttribute('data-anchor-code') || '').trim().toUpperCase();
+            var codeInput = card.querySelector('.edit-codigo');
+            var d = card.querySelector('.edit-descripcion');
+            var m = card.querySelector('.edit-modelo');
+            var codigoOut = card.querySelector('.codigo');
+
+            var p = null;
+            if (anchor && queues[anchor] && queues[anchor].length) {
+                p = queues[anchor].shift();
+            }
+            if (!p && anchor && lastByAnchor[anchor]) {
+                p = lastByAnchor[anchor];
+            }
+            /* No usar fallback por índice (inOrder[i]): si cambiás JS605→5433 en el campo de arriba,
+               la 2ª etiqueta nueva tiene anchor 5433 pero inOrder[1] seguía siendo JS605 y pisaba la vista previa. */
+            if (!p) continue;
+
+            if (codeInput && (p.code || '').trim()) {
+                var pv = String(p.code).trim();
+                codeInput.value = pv;
+                if (codigoOut) codigoOut.textContent = pv;
+            }
+            if (d) d.value = p.descripcion;
+            if (m) m.value = p.modelo;
+            var syncEl = codeInput || d;
+            if (syncEl) syncEl.dispatchEvent(new Event('input', { bubbles: true }));
+
+            if (anchor) {
+                lastByAnchor[anchor] = {
+                    anchor: p.anchor || anchor,
+                    code: p.code,
+                    descripcion: p.descripcion,
+                    modelo: p.modelo
+                };
+            }
+        }
+    }
+
     function renderLabels(labels) {
         if (!sheet) return;
         if (!labels || !labels.length) {
             return;
         }
         sheet.innerHTML = labels.map(function (label) {
-            return '<article class="label">' +
+            return '<article class="label" data-anchor-code="' + escapeHtml(label.codigo) + '">' +
                 '<div class="label-header">' +
                 '<div class="brand-row"><div class="logo-wrap"><img class="logo-img" src="' + logoSrc + '" alt="Logo Andes"></div><div class="empresa">ANDES AUTO PARTS LTDA</div></div>' +
                 '<div class="contacto">+56 9 2615 2826</div>' +
@@ -1228,7 +2165,21 @@ html[data-print-mode="thermal"] .barcode img {
         }
         previewAbort = new AbortController();
         var token = ++previewToken;
+        var preservedEdits = captureLabelSheetEdits();
         var params = new URLSearchParams({ ajax: '1', codigos: codigos, fp: fp });
+        var fpMapEl = document.getElementById('fp_por_codigo_json');
+        var fpMapVal = (fpMapEl && fpMapEl.value || '').trim();
+        if (fpMapVal) {
+            params.set('fp_por_codigo_json', fpMapVal);
+        }
+        var docLockEl = document.getElementById('etiquetasIngresoDocId');
+        var bundleEl = document.getElementById('etiquetasIngresoCodigosJson');
+        if (docLockEl && (docLockEl.value || '').trim()) {
+            params.set('etiquetas_ingreso_doc_id', (docLockEl.value || '').trim());
+        }
+        if (bundleEl && (bundleEl.value || '').trim()) {
+            params.set('etiquetas_ingreso_codigos_json', (bundleEl.value || '').trim());
+        }
         var previewUrl = '{{ url_for("bodega.etiquetas") }}?' + params.toString();
         fetch(previewUrl, {
             method: 'GET',
@@ -1264,6 +2215,7 @@ html[data-print-mode="thermal"] .barcode img {
                     return;
                 }
                 renderLabels(data.labels);
+                applyLabelSheetEdits(preservedEdits);
                 if (hint) {
                     if (miss.length) {
                         hint.textContent = 'Sin etiqueta para (no encontrado o inactivo): ' + miss.slice(0, 15).join(', ');
@@ -1285,18 +2237,87 @@ html[data-print-mode="thermal"] .barcode img {
             });
     }
 
-    function debounce() {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(refreshPreview, 480);
+    /** Antes de la vista previa: completa fp_por_codigo_json con el último ingreso por cada código que aún no tiene F° P. */
+    function refreshPreviewAfterFpSync() {
+        if (!codigosInput) {
+            refreshPreview();
+            return;
+        }
+        var codigos = (codigosInput.value || '').trim();
+        if (!codigos) {
+            fpSyncToken += 1;
+            runFacturaSuggest();
+            refreshPreview();
+            return;
+        }
+        var entries = parseCodigosField(codigos);
+        var uniq = Object.create(null);
+        entries.forEach(function (e) { uniq[e.code] = true; });
+        var keys = Object.keys(uniq);
+        var map = getFpMap();
+        var missing = keys.filter(function (c) {
+            return !String(map[c] || '').trim();
+        });
+        var token = ++fpSyncToken;
+        if (!missing.length) {
+            runFacturaSuggest();
+            refreshPreview();
+            return;
+        }
+        Promise.all(missing.map(function (code) {
+            return fetch(URL_FACTURAS_INGRESO + '?codigo=' + encodeURIComponent(code), {
+                method: 'GET',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    return { code: code, data: data };
+                })
+                .catch(function () {
+                    return { code: code, data: null };
+                });
+        })).then(function (results) {
+            if (token !== fpSyncToken) return;
+            var m = getFpMap();
+            var changed = false;
+            results.forEach(function (r) {
+                var d = r.data;
+                if (!d || !d.success || !Array.isArray(d.items) || !d.items.length) {
+                    return;
+                }
+                var num = String((d.items[0] && d.items[0].numero_documento) || '').trim();
+                if (!num) return;
+                if (!String(m[r.code] || '').trim()) {
+                    m[r.code] = num;
+                    changed = true;
+                }
+            });
+            if (changed) {
+                setFpMap(m);
+            }
+            runFacturaSuggest();
+            refreshPreview();
+        });
     }
 
-    if (codigosInput) codigosInput.addEventListener('input', debounce);
-    if (fpInput) fpInput.addEventListener('input', debounce);
+    function debounce() {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(function () {
+            timer = null;
+            refreshPreviewAfterFpSync();
+        }, 480);
+    }
+
+    if (codigosInput) {
+        codigosInput.addEventListener('input', function () {
+            debounce();
+        });
+    }
     var btnPreviewLabels = document.getElementById('btnPreviewLabels');
     if (btnPreviewLabels) {
         btnPreviewLabels.addEventListener('click', function () {
             if (timer) clearTimeout(timer);
-            refreshPreview();
+            refreshPreviewAfterFpSync();
         });
     }
     if (labelSearchInput) labelSearchInput.addEventListener('input', debounceProductSearch);
@@ -1319,10 +2340,14 @@ html[data-print-mode="thermal"] .barcode img {
     applyPrintMode(preferredMode);
 
     optimizePrintGrid();
+    refreshPreviewAfterFpSync();
     window.addEventListener('resize', optimizePrintGrid);
     window.addEventListener('beforeprint', function () {
-        optimizePrintGrid();
+        optimizePrintGrid({ forPrint: true });
         registerPrintHistory();
+    });
+    window.addEventListener('afterprint', function () {
+        optimizePrintGrid();
     });
 
     /* Evita que bodega_ui.js (initEtiquetasView) vuelva a enlazar el mismo formulario/botón

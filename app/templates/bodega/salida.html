@@ -2,8 +2,412 @@
 
 {% block title %}Salida de Productos | Andes Auto Parts{% endblock %}
 
+{% block extra_head %}
+{{ super() }}
+<style>
+#salidaForm .form-grid {
+    align-items: start;
+}
+.salida-view-topbar {
+    margin-bottom: 8px;
+    align-items: flex-start;
+}
+.salida-view-topbar .page-title {
+    font-size: 1.35rem;
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+.salida-view-topbar .page-subtitle {
+    font-size: 12px;
+    line-height: 1.35;
+    margin: 0;
+}
+.salida-view-topbar .topbar-actions .link-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 8px;
+}
+.salida-form-card.form-card {
+    position: relative;
+    padding: 14px 16px 52px;
+    overflow: visible;
+}
+.salida-form-card > .section-title {
+    font-size: 15px;
+    margin: 0 0 10px;
+}
+.salida-form-card .form-grid {
+    gap: 8px 12px;
+}
+.salida-form-card .field label {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 3px;
+    color: #475569;
+}
+.salida-form-card .form-grid .field input#marca {
+    width: 100%;
+}
+.salida-form-card .form-grid .field input:not([type="hidden"]),
+.salida-form-card .form-grid .field select,
+.salida-form-card .form-grid .field textarea {
+    min-height: 30px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+.salida-form-card .form-grid .field textarea#observacion {
+    min-height: 58px;
+    line-height: 1.35;
+    resize: vertical;
+}
+.salida-form-card .actions {
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
+    flex-wrap: wrap;
+}
+.salida-form-card .actions .btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    min-height: 32px;
+    border-radius: 8px;
+}
+.salida-form-card .actions .link-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+}
+.salida-cantidad-cap {
+    display: block;
+    margin-top: 4px;
+    font-size: 10px;
+    color: #64748b;
+    line-height: 1.35;
+}
+.salida-stock-grupo {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #0f172a;
+}
+.salida-stock-grupo:first-of-type {
+    margin-top: 0;
+}
+.salida-stock-grupo strong {
+    display: block;
+    margin-bottom: 3px;
+    color: #1e3a5f;
+    font-size: 11px;
+}
+.salida-stock-lineas {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 2px;
+}
+.salida-stock-lineas li {
+    padding: 2px 0;
+    color: #334155;
+    font-size: 12px;
+}
+.salida-producto-panel.panel {
+    margin-top: 10px;
+    padding: 12px 14px;
+}
+.salida-producto-panel .section-title {
+    margin-bottom: 6px;
+    font-size: 15px;
+}
+.salida-producto-panel .product-summary {
+    gap: 6px;
+}
+.salida-producto-panel .summary-box {
+    padding: 6px 8px;
+    border-radius: 8px;
+}
+.salida-producto-panel .summary-box h4 {
+    margin: 0 0 3px;
+    font-size: 10px;
+}
+.salida-producto-panel .summary-box > p {
+    font-size: 13px;
+    line-height: 1.3;
+}
+.salida-variantes-panel.panel {
+    margin-top: 12px !important;
+    padding: 12px 14px;
+}
+.salida-variantes-panel .section-title {
+    font-size: 15px;
+    margin-bottom: 6px;
+}
+.salida-variantes-panel .page-subtitle {
+    font-size: 12px;
+    line-height: 1.35;
+}
+.salida-variantes-panel .table-wrap table {
+    font-size: 12px;
+}
+.salida-variantes-panel .table-wrap th,
+.salida-variantes-panel .table-wrap td {
+    padding: 6px 8px;
+}
+.salida-variantes-panel .btn.sm {
+    font-size: 11px;
+    padding: 4px 8px;
+    min-height: 28px;
+}
+.salida-help-anchor {
+    position: absolute;
+    bottom: 14px;
+    left: 14px;
+    z-index: 6;
+}
+.salida-help-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid #93c5fd;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    color: #1e3a8a;
+    font-weight: 800;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.14);
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .15s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+}
+.salida-help-btn svg {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+.salida-help-btn:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border-color: #60a5fa;
+    box-shadow: 0 12px 24px rgba(30, 64, 175, 0.24);
+}
+.salida-help-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+/* Misma apariencia que ingreso (popover sobre el ?). Posición final la fija JS (fixed) para no recortar por el scroll del main. */
+.salida-help-panel {
+    position: absolute;
+    bottom: 52px;
+    left: 0;
+    z-index: 1300;
+    width: min(400px, calc(100vw - 28px));
+    max-height: min(70vh, 420px);
+    overflow: auto;
+    padding: 14px 16px;
+    border: 1px solid #dbe4f0;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 16px 42px rgba(15, 23, 42, 0.16);
+    scrollbar-gutter: stable;
+}
+.salida-help-panel::-webkit-scrollbar {
+    width: 8px;
+}
+.salida-help-panel::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 8px;
+}
+.salida-help-panel::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 8px;
+}
+.salida-help-panel[hidden] {
+    display: none !important;
+}
+.salida-help-title {
+    margin: 0 0 10px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.salida-help-section {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+.salida-help-section-title {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+.salida-help-text {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #334155;
+}
+.salida-help-text strong {
+    color: #334155;
+}
+.salida-help-section:last-of-type {
+    margin-bottom: 6px;
+}
+.salida-help-panel > .btn {
+    font-size: 13px;
+    padding: 6px 14px;
+    min-height: 32px;
+    margin-top: 4px;
+}
+/* Código + lupa dentro del campo (mismo criterio que Ajuste) */
+.salida-codigo-wrap {
+    position: relative;
+    display: block;
+    width: 100%;
+}
+.salida-codigo-wrap input#codigo {
+    width: 100%;
+    min-width: 0;
+    padding-right: 36px;
+    box-sizing: border-box;
+}
+.salida-codigo-wrap .salida-codigo-search-btn {
+    position: absolute;
+    z-index: 1;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 24px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.12s ease, color 0.12s ease;
+    box-shadow: none;
+    font: inherit;
+}
+.salida-codigo-wrap .salida-codigo-search-btn:hover {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+.salida-codigo-wrap .salida-codigo-search-btn:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 1px;
+}
+.salida-codigo-wrap .salida-codigo-search-btn svg {
+    display: block;
+    flex-shrink: 0;
+}
+.ingreso-product-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 1200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.ingreso-product-modal.open {
+    display: flex;
+}
+.ingreso-product-modal-card {
+    width: min(880px, 100%);
+    max-height: min(82vh, 700px);
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #dbe4f0;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.ingreso-product-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.ingreso-product-modal-head h3 {
+    margin: 0;
+    font-size: 15px;
+    color: #0f172a;
+}
+.ingreso-product-modal-body {
+    padding: 10px 12px;
+    overflow: auto;
+}
+.ingreso-product-search {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.ingreso-product-results {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: auto;
+    max-height: 48vh;
+}
+.ingreso-product-item {
+    display: grid;
+    grid-template-columns: 120px 1fr 130px 90px auto;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 8px;
+    border-bottom: 1px solid #eef2f7;
+    font-size: 12px;
+}
+.ingreso-product-item:last-child {
+    border-bottom: none;
+}
+.ingreso-product-item:hover {
+    background: #f8fbff;
+}
+.ingreso-product-meta {
+    font-size: 10px;
+    color: #64748b;
+}
+.ingreso-product-item strong {
+    font-size: 11px;
+    font-weight: 700;
+}
+.ingreso-product-item .btn.btn-primary.btn-sm {
+    padding: 5px 10px;
+    font-size: 11px;
+    border-radius: 8px;
+    min-height: 28px;
+}
+#salidaProductSearchInput {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+#salidaProductSearchBtn {
+    min-height: 34px;
+    padding: 6px 12px;
+    font-size: 12px;
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="topbar">
+<div class="topbar salida-view-topbar">
     <div>
         <h1 class="page-title">Salida de Productos</h1>
         <p class="page-subtitle">Descuenta inventario validando existencia disponible antes de confirmar el movimiento.</p>
@@ -18,25 +422,47 @@
 <div class="message {{ message.type }}">{{ message.text }}</div>
 {% endif %}
 
-<div class="form-card">
+<div class="form-card salida-form-card">
     <h2 class="section-title">Registrar Salida</h2>
-    <form method="post">
+    <form method="post" id="salidaForm"
+          data-marcas-url="{{ url_for('bodega.ajuste_marcas_sugeridas') }}"
+          data-consult-url="{{ url_for('bodega.salida') }}"
+          data-product-search-url="{{ url_for('ventas.api_productos_search') }}">
         <div class="form-grid">
             <div class="field">
                 <label for="codigo">Código del producto</label>
-                <input id="codigo" name="codigo" value="{{ form_data.codigo }}" placeholder="Ej: ABC123" required>
+                <div class="salida-codigo-wrap">
+                    <input id="codigo" name="codigo" value="{{ form_data.codigo }}" placeholder="Código, descripción u OEM" autocomplete="off" required>
+                    <button type="button" class="salida-codigo-search-btn" id="salidaCodigoSearchBtn" title="Buscar producto (F2)" aria-label="Buscar producto">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    </button>
+                </div>
             </div>
             <div class="field">
                 <label for="marca">Marca / Variante</label>
-                <input id="marca" name="marca" value="{{ form_data.marca }}" placeholder="Ej: BOSCH">
+                <datalist id="salidaMarcaDl"></datalist>
+                <input id="marca" name="marca" value="{{ form_data.marca }}" list="salidaMarcaDl" placeholder="Elegí sugerencia o escribí (ej. BOSCH, RCPS)" autocomplete="off">
             </div>
             <div class="field">
                 <label for="bodega">Bodega</label>
-                <input id="bodega" name="bodega" value="{{ form_data.bodega }}" placeholder="Ej: Bodega 1">
+                <select id="bodega" name="bodega" required aria-label="Bodega">
+                    {% for b in bodegas_opciones %}
+                    <option value="{{ b }}" {% if form_data.bodega == b %}selected{% endif %}>{{ b }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="field">
                 <label for="cantidad">Cantidad a retirar</label>
-                <input id="cantidad" name="cantidad" type="number" min="1" step="1" value="{{ form_data.cantidad }}" placeholder="Ej: 3" required>
+                <input id="cantidad" name="cantidad" type="number" min="1" step="1" value="{{ form_data.cantidad }}" placeholder="Ej: 3"{% if salida_stock_max is not none and salida_stock_max > 0 and (not variantes or form_data.marca) %} max="{{ salida_stock_max }}"{% endif %}>
+                {% if variantes and not form_data.marca %}
+                <small class="salida-cantidad-cap">Este código tiene variantes: elegí <strong>marca</strong> y <strong>bodega</strong> (o <strong>Usar esta fila</strong>) y se actualizará el máximo al consultar.</small>
+                {% elif salida_stock_max is not none %}
+                {% if salida_stock_max > 0 %}
+                <small class="salida-cantidad-cap">Máximo según código, marca y bodega: <strong>{{ salida_stock_max | int }}</strong> unidad(es).</small>
+                {% else %}
+                <small class="salida-cantidad-cap" style="color:#b45309;">Sin stock disponible en esta combinación de marca y bodega.</small>
+                {% endif %}
+                {% endif %}
             </div>
             <div class="field field-full">
                 <label for="observacion">Observación</label>
@@ -44,14 +470,61 @@
             </div>
         </div>
         <div class="actions">
-            <button class="btn btn-warn" type="submit">Guardar salida</button>
+            <button class="btn" type="submit" formaction="{{ url_for('bodega.salida') }}" formmethod="get" style="background:#e2e8f0;color:#334155;font-weight:600;box-shadow:none;">Consultar producto</button>
+            <button class="btn btn-warn" type="submit" formmethod="post">Guardar salida</button>
             <a class="link-btn" href="{{ url_for('bodega.salida') }}">Limpiar formulario</a>
+        </div>
+
+        <div class="salida-help-anchor">
+            <button type="button" class="salida-help-btn" id="salidaHelpBtn" aria-expanded="false" aria-controls="salidaHelpPanel" title="Ayuda de salida de stock" aria-label="Ayuda">
+                <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                    <path d="M32 8c-10.5 0-19 7.7-19 17.2 0 2.7 2.2 4.8 4.9 4.8 2.7 0 4.9-2.2 4.9-4.8 0-4.1 4.1-7.4 9.2-7.4 5.1 0 9.2 3.3 9.2 7.4 0 3.3-2.4 5.1-5.8 7.5-3.9 2.8-8.7 6.3-8.7 13.6 0 2.7 2.2 4.8 4.9 4.8s4.9-2.2 4.9-4.8c0-2 1.1-3 4.7-5.6 3.9-2.8 9.8-7 9.8-15.5C51 15.7 42.5 8 32 8z" fill="currentColor"/>
+                    <circle cx="32" cy="55" r="5.5" fill="currentColor"/>
+                </svg>
+            </button>
+            <div id="salidaHelpPanel" class="salida-help-panel" role="region" aria-labelledby="salidaHelpTitle" hidden>
+                <h3 id="salidaHelpTitle" class="salida-help-title">Cómo usar la salida de productos</h3>
+
+                <div class="salida-help-section">
+                    <h4 class="salida-help-section-title">1) Consulta automática</h4>
+                    <p class="salida-help-text">Podés usar la <strong>lupa</strong> dentro del código (o <strong>F2</strong>) para buscar como en Ingreso/Ajuste. Elegí la <strong>bodega</strong> e ingresá el <strong>código</strong>: al terminar de escribirlo (o al cambiar bodega o marca) se cargan los datos del producto y el stock. <strong>Consultar producto</strong> repite la consulta manualmente.</p>
+                </div>
+
+                <div class="salida-help-section">
+                    <h4 class="salida-help-section-title">2) Marca y cantidad</h4>
+                    <p class="salida-help-text">Elegí la <strong>marca</strong> desde la lista o escribila; el sistema sugiere marcas ya usadas en bodega. Indicá la <strong>cantidad a retirar</strong> según el máximo mostrado debajo del campo. Si hay variantes, definí marca y bodega o usá <strong>Usar esta fila</strong> en la tabla inferior.</p>
+                </div>
+
+                <div class="salida-help-section">
+                    <h4 class="salida-help-section-title">3) Registrar</h4>
+                    <p class="salida-help-text">Completá la <strong>observación</strong> si querés dejar motivo, cliente o referencia interna. Pulsá <strong>Guardar salida</strong> para descontar el stock; el sistema valida que haya existencia suficiente.</p>
+                </div>
+
+                <button type="button" class="btn" id="salidaHelpClose">Cerrar</button>
+            </div>
         </div>
     </form>
 </div>
 
+<div id="salidaProductModal" class="ingreso-product-modal" aria-hidden="true">
+    <div class="ingreso-product-modal-card" role="dialog" aria-modal="true" aria-labelledby="salidaProductModalTitle">
+        <div class="ingreso-product-modal-head">
+            <h3 id="salidaProductModalTitle">Buscar producto</h3>
+            <button type="button" class="btn" id="salidaProductModalClose">Cerrar</button>
+        </div>
+        <div class="ingreso-product-modal-body">
+            <div class="ingreso-product-search">
+                <input type="text" id="salidaProductSearchInput" placeholder="Código, descripción u OEM (mín. 2 caracteres)" autocomplete="off">
+                <button type="button" class="btn btn-primary" id="salidaProductSearchBtn">Buscar</button>
+            </div>
+            <div id="salidaProductSearchStatus" class="muted" style="margin-bottom:8px;">Escribe para buscar productos.</div>
+            <div id="salidaProductResults" class="ingreso-product-results"></div>
+        </div>
+    </div>
+</div>
+
 {% if producto %}
-<div class="panel" style="margin-top:18px;">
+<div class="panel salida-producto-panel">
     <h2 class="section-title">Producto Encontrado</h2>
     <div class="product-summary">
         <div class="summary-box">
@@ -66,17 +539,34 @@
             <h4>Marca / Modelo</h4>
             <p>{{ producto.marca or '—' }} / {{ producto.modelo or '—' }}</p>
         </div>
-        <div class="summary-box">
-            <h4>Stock Bodega</h4>
-            <p>{{ producto.stock_actual }}</p>
+        <div class="summary-box" style="grid-column: span 1; min-width:0;">
+            {% if salida_variantes_por_bodega %}
+            <h4>Stock por bodega y variante</h4>
+            {% for grp in salida_variantes_por_bodega %}
+            <div class="salida-stock-grupo">
+                <strong>{{ grp.bodega }}</strong>
+                <ul class="salida-stock-lineas">
+                    {% for ln in grp.lineas %}
+                    <li>{{ ln.marca }} — {{ ln.stock | int }}</li>
+                    {% endfor %}
+                </ul>
+                <span style="font-size:11px;color:#64748b;">Subtotal bodega: {{ grp.subtotal | int }}</span>
+            </div>
+            {% endfor %}
+            <p style="margin:8px 0 0;font-size:11px;color:#64748b;line-height:1.35;">Catálogo STOCK_10JUL (referencia): {{ (producto.stock_actual or 0) | int }}</p>
+            {% else %}
+            <h4>Stock (catálogo)</h4>
+            <p>{{ (producto.stock_actual or 0) | int }}</p>
+            {% endif %}
         </div>
     </div>
 </div>
 {% endif %}
 
 {% if variantes %}
-<div class="panel" style="margin-top:18px;">
+<div class="panel salida-variantes-panel">
     <h2 class="section-title">Variantes Disponibles</h2>
+    <p class="page-subtitle" style="margin-top:0;">Cada fila es marca + bodega. <strong>Usar esta fila</strong> carga código, marca y bodega arriba para registrar la salida de esa variante.</p>
     <div class="table-wrap">
         <table>
             <thead>
@@ -85,6 +575,7 @@
                     <th>Bodega</th>
                     <th>Proveedor</th>
                     <th>Stock</th>
+                    <th class="no-print"></th>
                 </tr>
             </thead>
             <tbody>
@@ -93,7 +584,10 @@
                     <td><strong>{{ variante.marca }}</strong></td>
                     <td>{{ variante.bodega }}</td>
                     <td>{{ variante.proveedor or '—' }}</td>
-                    <td>{{ variante.stock }}</td>
+                    <td>{{ variante.stock | int }}</td>
+                    <td class="no-print">
+                        <a class="btn sm outline" href="{{ url_for('bodega.salida', codigo=form_data.codigo, marca=variante.marca, bodega=variante.bodega) }}">Usar esta fila</a>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -101,4 +595,131 @@
     </div>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<script>
+(function () {
+    var salidaHelpGlobalBound = false;
+
+    function placeSalidaHelpPanel(btn, panel) {
+        if (!btn || !panel || panel.hidden) {
+            return;
+        }
+        var w = Math.min(400, window.innerWidth - 28);
+        var maxH = Math.min(window.innerHeight * 0.7, 420);
+        panel.style.position = "fixed";
+        panel.style.width = w + "px";
+        panel.style.maxHeight = maxH + "px";
+        panel.style.right = "auto";
+        panel.style.bottom = "auto";
+        var br = btn.getBoundingClientRect();
+        var left = br.left;
+        if (left + w > window.innerWidth - 8) {
+            left = window.innerWidth - w - 8;
+        }
+        if (left < 8) {
+            left = 8;
+        }
+        panel.style.left = left + "px";
+        var gap = 8;
+        var h = Math.min(panel.offsetHeight, maxH);
+        var top = br.top - gap - h;
+        if (top < 8) {
+            top = br.bottom + gap;
+            if (top + h > window.innerHeight - 8) {
+                top = Math.max(8, window.innerHeight - h - 8);
+            }
+        }
+        panel.style.top = top + "px";
+    }
+
+    function bindSalidaHelp() {
+        var btn = document.getElementById("salidaHelpBtn");
+        var panel = document.getElementById("salidaHelpPanel");
+        var closeBtn = document.getElementById("salidaHelpClose");
+        if (!btn || !panel || btn.dataset.salidaHelpBound === "1") {
+            return;
+        }
+        btn.dataset.salidaHelpBound = "1";
+
+        function clearPanelGeom() {
+            panel.style.position = "";
+            panel.style.left = "";
+            panel.style.top = "";
+            panel.style.right = "";
+            panel.style.bottom = "";
+            panel.style.width = "";
+            panel.style.maxHeight = "";
+        }
+
+        function closeHelp() {
+            panel.setAttribute("hidden", "");
+            panel.hidden = true;
+            btn.setAttribute("aria-expanded", "false");
+            clearPanelGeom();
+        }
+
+        function openHelp() {
+            panel.removeAttribute("hidden");
+            panel.hidden = false;
+            btn.setAttribute("aria-expanded", "true");
+            requestAnimationFrame(function () {
+                requestAnimationFrame(function () {
+                    placeSalidaHelpPanel(btn, panel);
+                });
+            });
+        }
+
+        function toggleHelp() {
+            if (panel.hasAttribute("hidden") || panel.hidden) {
+                openHelp();
+            } else {
+                closeHelp();
+            }
+        }
+
+        btn.addEventListener("click", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleHelp();
+        });
+        if (closeBtn) {
+            closeBtn.addEventListener("click", closeHelp);
+        }
+        document.addEventListener("click", function (ev) {
+            if (panel.hidden) {
+                return;
+            }
+            var t = ev.target;
+            if (btn.contains(t) || panel.contains(t)) {
+                return;
+            }
+            closeHelp();
+        });
+        document.addEventListener("keydown", function (ev) {
+            if (ev.key === "Escape") {
+                closeHelp();
+            }
+        });
+
+        if (!salidaHelpGlobalBound) {
+            salidaHelpGlobalBound = true;
+            function onScrollOrResize() {
+                var b = document.getElementById("salidaHelpBtn");
+                var p = document.getElementById("salidaHelpPanel");
+                placeSalidaHelpPanel(b, p);
+            }
+            window.addEventListener("resize", onScrollOrResize);
+            var scrollRoot = document.getElementById("appMainContent");
+            if (scrollRoot) {
+                scrollRoot.addEventListener("scroll", onScrollOrResize, { passive: true });
+            }
+        }
+    }
+    bindSalidaHelp();
+    document.addEventListener("app:module-loaded", bindSalidaHelp);
+})();
+</script>
 {% endblock %}

@@ -1,0 +1,355 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block content %}
+<style>
+  .org-page { max-width: 1220px; margin: 0 auto; }
+  .org-head {
+    margin-bottom: 12px;
+  }
+  .org-head h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+  }
+  .org-head p {
+    margin: 3px 0 0;
+    font-size: 12px;
+    font-weight: 400;
+    color: #94a3b8;
+    line-height: 1.4;
+  }
+  .org-map {
+    position: relative;
+    padding-top: 8px;
+  }
+  .org-map__root {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .org-map__root-pill {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748b;
+    background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    padding: 6px 14px;
+  }
+  .org-map__stem {
+    width: 1px;
+    height: 14px;
+    background: linear-gradient(180deg, #cbd5e1 0%, #e2e8f0 100%);
+    margin: 0 auto;
+  }
+  .org-map__rail {
+    height: 1px;
+    width: 100%;
+    max-width: 1080px;
+    margin: 0 auto 12px;
+    background: linear-gradient(90deg, transparent 0%, #e2e8f0 12%, #e2e8f0 88%, transparent 100%);
+  }
+  .org-columns {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    justify-content: center;
+    flex-wrap: wrap;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scrollbar-width: thin;
+  }
+  .org-pillar {
+    flex: 0 1 220px;
+    min-width: 168px;
+    max-width: 280px;
+    border: 1px solid #e8edf3;
+    border-radius: 12px;
+    background: linear-gradient(165deg, #fbfcfe 0%, #fff 48%);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .org-pillar::before {
+    content: "";
+    position: absolute;
+    top: -15px;
+    left: 50%;
+    width: 1px;
+    height: 15px;
+    margin-left: -0.5px;
+    background: #e2e8f0;
+  }
+  .org-tier--second {
+    margin-top: 8px;
+    padding-top: 18px;
+    position: relative;
+  }
+  .org-tier--second::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 1px;
+    height: 14px;
+    margin-left: -0.5px;
+    background: #e2e8f0;
+  }
+  .org-tier__label {
+    text-align: center;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 8px;
+  }
+  .org-pillar__head {
+    text-align: center;
+    padding: 8px 8px 6px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .org-pillar__title {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748b;
+  }
+  .org-pillar__body {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+  }
+  .org-card {
+    border: 1px solid #eef2f7;
+    border-radius: 10px;
+    padding: 10px 10px 9px;
+    background: #fff;
+    text-align: center;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .org-card:hover {
+    border-color: #dbeafe;
+    box-shadow: 0 4px 14px rgba(59, 130, 246, 0.08);
+  }
+  a.org-card--link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    cursor: pointer;
+  }
+  a.org-card--link:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 2px;
+  }
+  .org-avatar {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 8px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: linear-gradient(145deg, hsl(var(--org-hue, 210), 52%, 94%) 0%, hsl(var(--org-hue, 210), 45%, 88%) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  }
+  .org-avatar__sil {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.14;
+    filter: grayscale(0.2);
+  }
+  .org-avatar__letters {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: hsl(var(--org-hue, 210), 35%, 32%);
+  }
+  .org-avatar__photo {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .org-avatar--has-photo .org-avatar__sil,
+  .org-avatar--has-photo .org-avatar__letters {
+    display: none;
+  }
+  .org-card__name {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1e293b;
+    line-height: 1.25;
+  }
+  .org-card__dob {
+    margin: 4px 0 0;
+    font-size: 11px;
+    font-weight: 500;
+    color: #94a3b8;
+  }
+  .org-card__dob span {
+    color: #64748b;
+  }
+  .org-card__tenure {
+    margin: 5px 0 0;
+    font-size: 11px;
+    font-weight: 500;
+    color: #475569;
+    line-height: 1.35;
+  }
+  .org-card__tenure span {
+    color: #94a3b8;
+    font-weight: 500;
+  }
+  .org-card__tenure small {
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    color: #94a3b8;
+    font-weight: 400;
+  }
+  .org-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 13px;
+    border: 1px dashed #e2e8f0;
+    border-radius: 12px;
+    background: #fafbfc;
+  }
+  @media (max-width: 720px) {
+    .org-columns { flex-direction: column; align-items: stretch; }
+    .org-pillar { max-width: none; min-width: 0; align-self: center; width: 100%; }
+    .org-pillar::before { display: none; }
+    .org-map__rail { display: none; }
+    .org-map__stem { display: none; }
+    .org-tier--second::before { display: none; }
+  }
+</style>
+<div class="org-page">
+  <div class="org-head">
+    <h1>Equipo / organigrama</h1>
+    <p>Usuarios activos por rol. Toca una tarjeta para abrir el expediente (liquidaciones, vacaciones, contrato). Cumpleaños y antigüedad según Seguridad.</p>
+  </div>
+
+  {% if not top_groups and not bottom_groups %}
+  <div class="org-empty">No hay usuarios activos para mostrar.</div>
+  {% else %}
+  <div class="org-map">
+    <div class="org-map__root">
+      <div class="org-map__root-pill">Organización</div>
+      <div class="org-map__stem" aria-hidden="true"></div>
+    </div>
+    <div class="org-map__rail" aria-hidden="true"></div>
+    <div class="org-columns">
+      {% for g in top_groups %}
+      <section class="org-pillar">
+        <div class="org-pillar__head">
+          <h2 class="org-pillar__title">{{ g.rol }}</h2>
+        </div>
+        <div class="org-pillar__body">
+          {% for u in g.usuarios %}
+          {% set parts = ((u.nombre or u.usuario or '?')|trim).split() %}
+          {% set ini = ((parts[0][0] if parts and parts[0] else '?') ~ (parts[-1][0] if parts|length > 1 and parts[-1] else ''))|upper %}
+          {% set hue = (u.id * 41) % 360 %}
+          <a class="org-card org-card--link" href="{{ url_for('rrhh.empleado_expediente', uid=u.id) }}" title="Ver expediente RRHH">
+            <div class="org-avatar{% if u.has_foto %} org-avatar--has-photo{% endif %}" style="--org-hue: {{ hue }};">
+              {% if u.has_foto and u.foto_url %}
+              <img class="org-avatar__photo" src="{{ u.foto_url }}?v={{ u.id }}" width="56" height="56" alt="" decoding="async">
+              {% endif %}
+              <img class="org-avatar__sil" src="{{ url_for('static', filename='icons/user.png') }}" width="56" height="56" alt="" decoding="async">
+              <span class="org-avatar__letters">{{ ini }}</span>
+            </div>
+            <h3 class="org-card__name">{{ u.nombre or u.usuario }}</h3>
+            <p class="org-card__dob">
+              {% if u.fecha_nacimiento %}
+              <span>Cumpleaños</span> {{ u.fecha_nacimiento.strftime('%d/%m/%Y') }}
+              {% else %}
+              <span>Cumpleaños</span> — sin fecha
+              {% endif %}
+            </p>
+            <p class="org-card__tenure">
+              <span>En la empresa</span> · {{ u.antiguedad }}
+              {% if u.fecha_alta_fmt %}
+              <small>Alta en sistema {{ u.fecha_alta_fmt }}</small>
+              {% endif %}
+            </p>
+          </a>
+          {% endfor %}
+        </div>
+      </section>
+      {% endfor %}
+    </div>
+
+    {% if bottom_groups %}
+    <div class="org-tier--second">
+      <div class="org-tier__label">Equipo / otros roles</div>
+      <div class="org-map__rail" aria-hidden="true"></div>
+      <div class="org-columns">
+        {% for g in bottom_groups %}
+        <section class="org-pillar">
+          <div class="org-pillar__head">
+            <h2 class="org-pillar__title">{{ g.rol }}</h2>
+          </div>
+          <div class="org-pillar__body">
+            {% for u in g.usuarios %}
+            {% set parts = ((u.nombre or u.usuario or '?')|trim).split() %}
+            {% set ini = ((parts[0][0] if parts and parts[0] else '?') ~ (parts[-1][0] if parts|length > 1 and parts[-1] else ''))|upper %}
+            {% set hue = (u.id * 41) % 360 %}
+            <a class="org-card org-card--link" href="{{ url_for('rrhh.empleado_expediente', uid=u.id) }}" title="Ver expediente RRHH">
+              <div class="org-avatar{% if u.has_foto %} org-avatar--has-photo{% endif %}" style="--org-hue: {{ hue }};">
+                {% if u.has_foto and u.foto_url %}
+                <img class="org-avatar__photo" src="{{ u.foto_url }}?v={{ u.id }}" width="56" height="56" alt="" decoding="async">
+                {% endif %}
+                <img class="org-avatar__sil" src="{{ url_for('static', filename='icons/user.png') }}" width="56" height="56" alt="" decoding="async">
+                <span class="org-avatar__letters">{{ ini }}</span>
+              </div>
+              <h3 class="org-card__name">{{ u.nombre or u.usuario }}</h3>
+              <p class="org-card__dob">
+                {% if u.fecha_nacimiento %}
+                <span>Cumpleaños</span> {{ u.fecha_nacimiento.strftime('%d/%m/%Y') }}
+                {% else %}
+                <span>Cumpleaños</span> — sin fecha
+                {% endif %}
+              </p>
+              <p class="org-card__tenure">
+                <span>En la empresa</span> · {{ u.antiguedad }}
+                {% if u.fecha_alta_fmt %}
+                <small>Alta en sistema {{ u.fecha_alta_fmt }}</small>
+                {% endif %}
+              </p>
+            </a>
+            {% endfor %}
+          </div>
+        </section>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

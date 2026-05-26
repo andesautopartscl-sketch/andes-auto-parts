@@ -16,17 +16,23 @@
     const PARTY_KIND = 'cliente';
     {% endif %}
     const URL_PRODUCTO = {{ url_for('ventas.api_producto')|tojson }};
+    const URL_OV_AUTH_MARGEN = {{ url_for('ventas.api_orden_venta_autorizar_margen')|tojson }};
     const URL_PRODUCT_SEARCH = {{ url_for('ventas.api_productos_search')|tojson }};
     const URL_API_TRACE = {{ url_for('ventas.api_traceability', numero='NUMERO_PLACEHOLDER')|tojson }};
     const URL_CONV_CO_OV = {{ url_for('ventas.api_convert_cotizacion_orden_venta', numero='NUMERO_PLACEHOLDER')|tojson }};
     const URL_CONV_OV_FA = {{ url_for('ventas.api_convert_orden_venta_factura', numero='NUMERO_PLACEHOLDER')|tojson }};
+    const URL_OV_PICKING = {{ url_for('ventas.api_orden_venta_solicitar_picking', numero='NUMERO_PLACEHOLDER')|tojson }};
     const URL_CONV_OC_ING = {{ url_for('ventas.api_convert_orden_compra_ingreso', documento_id=0)|tojson }};
     const URL_CONV_FA_NC = {{ url_for('ventas.api_convert_factura_nota_credito', documento_id=0)|tojson }};
     const PARTY_LABEL = {{ party_label|tojson }};
     const DOC_TYPE = {{ doc_type|tojson }};
+    const IS_SUPPLIER_DOC = {{ is_supplier_doc|tojson }};
+    let partyMayorista = false;
+    let partyMargenPct = 0;
 
     const form = document.getElementById('erpDocForm');
     const hiddenPartyId = document.getElementById('hiddenPartyId');
+    const hiddenProveedorId = document.getElementById('hiddenProveedorId');
     const partyRutHidden = document.getElementById('partyRutHidden');
     const partyName = document.getElementById('party_name');
     const partyAddress = document.getElementById('party_address');
@@ -41,21 +47,32 @@
     const icRegion = document.getElementById('ic_region');
     const icCiudad = document.getElementById('ic_ciudad');
     const btnSaveNewParty = document.getElementById('btnSaveNewParty');
+    const btnClearInlineParty = document.getElementById('btnClearInlineParty');
     const btnCancelNew = document.getElementById('btnCancelNewParty');
+    const partyFieldsWrap = document.getElementById('partyFieldsWrap');
     const itemsBody = document.getElementById('itemsBody');
     const addRowBtn = document.getElementById('addRow');
     const tSubtotal = document.getElementById('tSubtotal');
     const tIva = document.getElementById('tIva');
     const tTotal = document.getElementById('tTotal');
+    const tSubtotalBrutoRow = document.getElementById('tSubtotalBrutoRow');
+    const tDescuentoMayoristaRow = document.getElementById('tDescuentoMayoristaRow');
+    const tSubtotalBruto = document.getElementById('tSubtotalBruto');
+    const tDescuentoMayorista = document.getElementById('tDescuentoMayorista');
+    const tDescuentoMayoristaLbl = document.getElementById('tDescuentoMayoristaLbl');
     const tipoDocumento = document.getElementById('tipo_documento');
     const docNumberInput = document.getElementById('doc_number');
     const docDateInput = document.getElementById('doc_date');
     const docValidInput = document.getElementById('doc_valid_until');
     const statusInput = document.getElementById('status');
     const notesInput = document.getElementById('notes');
+    const docActionsPanel = document.querySelector('.doc-actions');
+    const footerActionsPanel = document.querySelector('.cot-actions');
     const loadedDocumentIdInput = document.getElementById('loaded_document_id');
     const btnConvertToOV = document.getElementById('btnConvertToOV');
     const btnFacturarOV = document.getElementById('btnFacturarOV');
+    const btnBoletearOV = document.getElementById('btnBoletearOV');
+    const btnPickingBodega = document.getElementById('btnPickingBodega');
     const btnRecibirOC = document.getElementById('btnRecibirOC');
     const btnCreateNC = document.getElementById('btnCreateNC');
     const btnTraceDoc = document.getElementById('btnTraceDoc');
@@ -64,6 +81,17 @@
     const traceClose = document.getElementById('traceClose');
     const traceClose2 = document.getElementById('traceClose2');
     const traceHint = document.getElementById('traceHint');
+    const margenAuthModal = document.getElementById('margenAuthModal');
+    const margenAuthClose = document.getElementById('margenAuthClose');
+    const margenAuthCancel = document.getElementById('margenAuthCancel');
+    const margenAuthConfirm = document.getElementById('margenAuthConfirm');
+    const margenAuthUser = document.getElementById('margenAuthUser');
+    const margenAuthPass = document.getElementById('margenAuthPass');
+    const margenAuthError = document.getElementById('margenAuthError');
+    const margenAuthIntro = document.getElementById('margenAuthIntro');
+    const margenAuthFormFields = document.getElementById('margenAuthFormFields');
+    const margenAuthSuccessBox = document.getElementById('margenAuthSuccessBox');
+    const margenAuthSuccessText = document.getElementById('margenAuthSuccessText');
 
     const psModal = document.getElementById('productSearchModal');
     const psInput = document.getElementById('psInput');
@@ -81,11 +109,22 @@
     let activeSearchRow = null;
     let searchTimer = null;
     let partyTimer = null;
+    let margenAuthResolver = null;
+    const initialRutLookupValue = rutLookup ? String(rutLookup.value || '').trim() : '';
+    const initialPartyIdValue = hiddenPartyId ? String(hiddenPartyId.value || '').trim() : '';
+    const initialProveedorIdValue = hiddenProveedorId ? String(hiddenProveedorId.value || '').trim() : '';
+    const initialNotesValue = notesInput ? String(notesInput.value || '').trim() : '';
 
     function parseNum(value) {
         const number = Number(String(value || '').replace(',', '.').trim());
         return Number.isFinite(number) && number >= 0 ? number : 0;
     }
+    function fmtMoney2(value) {
+        const n = Number(String(value || '').replace(',', '.').trim());
+        if (!Number.isFinite(n)) return '—';
+        return '$' + n.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    const MARGEN_MIN_CONFIRMA_OV = 30;
     function fmtCLP(value) {
         return '$' + Math.round(parseNum(value)).toLocaleString('es-CL');
     }
@@ -99,14 +138,56 @@
     function normalize(value) {
         return String(value || '').trim().toLowerCase();
     }
+    function notifyUi(message, tone, title) {
+        const text = String(message || 'No se pudo completar la acción');
+        if (typeof window.showDocActionModal === 'function') {
+            window.showDocActionModal(text, tone || 'error', title || 'Atención');
+            return;
+        }
+        window.alert(text);
+    }
     function currentDocumentId() {
         return parseInt((loadedDocumentIdInput && loadedDocumentIdInput.value) || '0', 10) || 0;
     }
     function currentDocumentNumber() {
         return String((docNumberInput && docNumberInput.value) || '').trim().toUpperCase();
     }
+    function hasAnyOrderInput() {
+        if (currentDocumentId() > 0) return true;
+        const currentPartyId = hiddenPartyId ? String(hiddenPartyId.value || '').trim() : '';
+        const currentProveedorId = hiddenProveedorId ? String(hiddenProveedorId.value || '').trim() : '';
+        if (currentPartyId && currentPartyId !== initialPartyIdValue) return true;
+        if (currentProveedorId && currentProveedorId !== initialProveedorIdValue) return true;
+        const currentRutTyped = rutLookup ? String(rutLookup.value || '').trim() : '';
+        if (currentRutTyped.length >= 7 && currentRutTyped !== initialRutLookupValue) return true;
+        const currentNotes = notesInput ? String(notesInput.value || '').trim() : '';
+        if (currentNotes.length >= 3 && currentNotes !== initialNotesValue) return true;
+        if (itemsBody) {
+            const hasLineData = Array.from(itemsBody.querySelectorAll('.item-row')).some(function (row) {
+                const f = getRF(row);
+                if (!f) return false;
+                const code = String((f.codeInput && f.codeInput.value) || '').trim();
+                const desc = String((f.descInput && f.descInput.value) || '').trim();
+                const note = String((f.noteInput && f.noteInput.value) || '').trim();
+                const unitPrice = parseNum((f.priceInput && f.priceInput.value) || 0);
+                // La cantidad inicial (ej. 1) no debe disparar paneles en documento nuevo.
+                return !!code || !!desc || !!note || unitPrice > 0;
+            });
+            if (hasLineData) return true;
+        }
+        return false;
+    }
+    function refreshProgressiveActionPanels() {
+        const show = hasAnyOrderInput();
+        [docActionsPanel, footerActionsPanel].forEach(function (panel) {
+            if (!panel) return;
+            panel.classList.toggle('is-soft-hidden', !show);
+            panel.setAttribute('aria-hidden', show ? 'false' : 'true');
+        });
+    }
     function endpointWithId(base, id) {
-        return String(base || '').replace(/0$/, String(id));
+        // url_for(..., documento_id=0) → .../factura/0/nota_credito — must replace /0/ in path, not trailing char
+        return String(base || '').replace(/\/0\//, '/' + String(id) + '/');
     }
     function endpointWithNumber(base, number) {
         return String(base || '').replace('NUMERO_PLACEHOLDER', encodeURIComponent(String(number || '').trim().toUpperCase()));
@@ -133,11 +214,32 @@
             cotizacion: 'Cotizacion',
             orden_venta: 'Orden de Venta',
             orden_compra: 'Orden de Compra',
-            factura: 'Factura/Boleta',
+            factura: 'Factura',
+            boleta: 'Boleta',
             factura_proveedor: 'Factura proveedor',
             nota_credito: 'Nota de Credito'
         };
         return map[String(kind || '').toLowerCase()] || String(kind || '').replace(/_/g, ' ');
+    }
+    function tracePaymentLine(node) {
+        const t = String(node.type || '').toLowerCase();
+        if (t !== 'factura' && t !== 'boleta') {
+            return '';
+        }
+        const ep = String(node.estado_pago || 'pendiente').toLowerCase();
+        if (ep === 'pagado') {
+            const lab = node.metodo_pago_label || node.metodo_pago || '';
+            const ref = String(node.pago_referencia || '').trim();
+            let inner = 'Pagado';
+            if (lab) {
+                inner += ' · ' + esc(lab);
+            }
+            if (ref) {
+                inner += ' · Ref. caja: ' + esc(ref);
+            }
+            return '<div class="meta trace-pay-line">Pago: <span class="meta-strong">' + inner + '</span></div>';
+        }
+        return '<div class="meta trace-pay-line">Pago: <span class="meta-strong">Pendiente de cobro en caja</span></div>';
     }
     function renderTrace(chain) {
         if (!traceList) return;
@@ -158,7 +260,8 @@
                             '<span class="tag">' + esc(labelDocType(node.type)) + '</span>' +
                             '<span class="num">' + esc(node.number || ('#' + node.id)) + '</span>' +
                         '</div>' +
-                        '<div class="meta">Estado: <span class="meta-strong">' + esc(node.status || 'pendiente') + '</span> · Total: <span class="meta-strong">$' + total + '</span></div>' +
+                        '<div class="meta">Estado documento: <span class="meta-strong">' + esc(node.status || 'pendiente') + '</span> · Total: <span class="meta-strong">$' + total + '</span></div>' +
+                        tracePaymentLine(node) +
                     '</div>' +
                 '</div>' +
                 '';
@@ -203,19 +306,26 @@
             descInput: row.querySelector('.item-desc'),
             marcaSel: row.querySelector('.item-marca'),
             bodegaSel: row.querySelector('.item-bodega'),
+            origenSel: row.querySelector('.item-origen-compra'),
             qtyInput: row.querySelector('.item-qty'),
             priceInput: row.querySelector('.item-price'),
             subtotalEl: row.querySelector('.item-subtotal'),
             stockEl: row.querySelector('.item-stock-row'),
-            metaEl: row.querySelector('.item-meta-line'),
-            srchBtn: row.querySelector('.code-srch-btn')
+            metaInput: row.querySelector('.item-modelo-input'),
+            srchBtn: row.querySelector('.code-srch-btn'),
+            histBtn: row.querySelector('.code-hist-btn'),
+            margenInput: row.querySelector('.item-margen'),
+            costoToggle: row.querySelector('.item-costo-toggle'),
+            costoBanner: row.querySelector('.item-costo-banner'),
+            costoVal: row.querySelector('.item-costo-val')
         };
     }
     function itemKey(data) {
         return [
             String(data.codigo || '').trim().toUpperCase(),
             String(data.marca || '').trim().toUpperCase(),
-            String(data.bodega || '').trim()
+            String(data.bodega || '').trim(),
+            String(data.origen_compra || '').trim().toLowerCase()
         ].join('|');
     }
     function findRegionData(regionName) {
@@ -252,26 +362,287 @@
         icCiudad.value = exists ? selectedCity : '';
     }
 
-    function updateRowSub(row) {
+    function applyIngresoRefToRow(row, ref, fetchOpts) {
+        const fo = fetchOpts || {};
+        const fields = getRF(row);
+        const btn = fields.costoToggle;
+        const banner = fields.costoBanner;
+        const valEl = fields.costoVal;
+        if (!btn || !banner || !valEl) return;
+        if (ref && ref.costo_unitario_neto != null) {
+            btn.hidden = false;
+            btn.disabled = false;
+            valEl.textContent = fmtMoney2(ref.costo_unitario_neto);
+            row.dataset.costoIngresoNeto = String(ref.costo_unitario_neto);
+        } else {
+            btn.hidden = true;
+            banner.hidden = true;
+            valEl.textContent = '—';
+            try { delete row.dataset.costoIngresoNeto; } catch (e1) { row.removeAttribute('data-costo-ingreso-neto'); }
+            btn.setAttribute('aria-expanded', 'false');
+            btn.innerHTML = '&#9654;';
+        }
+        if (String(DOC_TYPE || '').toLowerCase() === 'orden_venta' && ref && ref.precio_sugerido_neto != null) {
+            if (!fo.skipPrecioMargen) {
+                if (fields.priceInput) fields.priceInput.value = Number(ref.precio_sugerido_neto).toFixed(2);
+                if (fields.margenInput && ref.margen_registrado_pct != null) {
+                    const cur = String(fields.margenInput.value || '').trim();
+                    if (!cur) fields.margenInput.value = String(ref.margen_registrado_pct);
+                }
+            } else if (fields.priceInput) {
+                /* Documento ya guardado: el servidor tiene P. unit. efectivo; mostrar referencia lista del ingreso. */
+                fields.priceInput.value = Number(ref.precio_sugerido_neto).toFixed(2);
+            }
+        }
+    }
+    function fetchIngresoRefForRow(row, fetchOpts) {
+        const fo = fetchOpts || {};
+        const fields = getRF(row);
+        const code = (fields.codeInput && fields.codeInput.value || '').trim().toUpperCase();
+        if (!code) {
+            applyIngresoRefToRow(row, null, fo);
+            return Promise.resolve();
+        }
+        const marca = fields.marcaSel ? fields.marcaSel.value : '';
+        const bodega = fields.bodegaSel ? fields.bodegaSel.value : 'Bodega 1';
+        const origen = fields.origenSel ? fields.origenSel.value : '';
+        const u = URL_PRODUCTO + '?codigo=' + encodeURIComponent(code)
+            + '&marca=' + encodeURIComponent(marca)
+            + '&bodega=' + encodeURIComponent(bodega)
+            + '&origen_compra=' + encodeURIComponent(origen || '');
+        return fetch(u, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (!data.success || !data.producto) {
+                    applyIngresoRefToRow(row, null, fo);
+                    return;
+                }
+                applyIngresoRefToRow(row, data.producto.ingreso_ref || null, fo);
+            })
+            .catch(function () {
+                applyIngresoRefToRow(row, null, fo);
+            });
+    }
+    function wireCostToggle(row) {
+        const fields = getRF(row);
+        if (!fields.costoToggle || fields.costoToggle.dataset.bound === '1') return;
+        fields.costoToggle.dataset.bound = '1';
+        fields.costoToggle.addEventListener('click', function () {
+            if (!fields.costoBanner || fields.costoToggle.hidden) return;
+            const isOpen = !fields.costoBanner.hidden;
+            if (isOpen) {
+                fields.costoBanner.hidden = true;
+                fields.costoToggle.setAttribute('aria-expanded', 'false');
+                fields.costoToggle.innerHTML = '&#9654;';
+            } else {
+                fields.costoBanner.hidden = false;
+                fields.costoToggle.setAttribute('aria-expanded', 'true');
+                fields.costoToggle.innerHTML = '&#9660;';
+            }
+        });
+    }
+    /** OV + costo ingreso + margen: subtotal = cant × costo/(1−m/100). No modifica P. unitario (referencia del ingreso). */
+    function lineSubtotalAmount(row) {
         const fields = getRF(row);
         const qty = Math.max(0, parseInt((fields.qtyInput && fields.qtyInput.value) || '0', 10) || 0);
+        if (String(DOC_TYPE || '').toLowerCase() === 'orden_venta') {
+            const costRaw = row.dataset.costoIngresoNeto;
+            const mgRaw = fields.margenInput ? String(fields.margenInput.value || '').trim() : '';
+            if (costRaw != null && costRaw !== '' && mgRaw !== '') {
+                const cost = parseFloat(String(costRaw).replace(',', '.'));
+                const m = parseFloat(mgRaw.replace(',', '.'));
+                if (Number.isFinite(cost) && cost > 0 && Number.isFinite(m) && m >= 0 && m < 100) {
+                    const denom = 1 - m / 100;
+                    if (denom > 0) return Math.round(qty * (cost / denom) * 100) / 100;
+                }
+            }
+        }
         const price = parseNum(fields.priceInput ? fields.priceInput.value : 0);
-        if (fields.subtotalEl) fields.subtotalEl.textContent = (qty * price).toFixed(2);
+        return Math.round(qty * price * 100) / 100;
+    }
+    /** Precio unitario a enviar al servidor cuando el subtotal sale de costo+margen (debe coincidir con lineSubtotalAmount/cant). */
+    function effectiveUnitPrecioForSubmit(row) {
+        if (String(DOC_TYPE || '').toLowerCase() !== 'orden_venta') return null;
+        const fields = getRF(row);
+        const qty = Math.max(0, parseInt((fields.qtyInput && fields.qtyInput.value) || '0', 10) || 0);
+        if (qty <= 0) return null;
+        const costRaw = row.dataset.costoIngresoNeto;
+        const mgRaw = fields.margenInput ? String(fields.margenInput.value || '').trim() : '';
+        if (costRaw == null || costRaw === '' || mgRaw === '') return null;
+        const cost = parseFloat(String(costRaw).replace(',', '.'));
+        const m = parseFloat(mgRaw.replace(',', '.'));
+        if (!Number.isFinite(cost) || cost <= 0 || !Number.isFinite(m) || m < 0 || m >= 100) return null;
+        const denom = 1 - m / 100;
+        if (denom <= 0) return null;
+        return cost / denom;
+    }
+    function onMargenOrCostoSubtotal(row) {
+        updateRowSub(row);
+    }
+    function collectMargenBajoOV() {
+        const out = [];
+        if (String(DOC_TYPE || '').toLowerCase() !== 'orden_venta') return out;
+        itemsBody.querySelectorAll('.item-row').forEach(function (row) {
+            const f = getRF(row);
+            const code = (f.codeInput && f.codeInput.value || '').trim();
+            if (!code) return;
+            const raw = f.margenInput ? String(f.margenInput.value || '').trim() : '';
+            if (raw === '') return;
+            const m = parseFloat(raw.replace(',', '.'));
+            if (!Number.isFinite(m)) return;
+            if (m < MARGEN_MIN_CONFIRMA_OV) out.push({ codigo: code, margen: m });
+        });
+        return out;
+    }
+    function solicitarAutorizacionMargenBajo(linesText) {
+        return new Promise(function (resolve) {
+            if (!margenAuthModal || !margenAuthUser || !margenAuthPass || !margenAuthConfirm) {
+                resolve(window.confirm('Margen menor al ' + MARGEN_MIN_CONFIRMA_OV + '% en: ' + linesText + '. ¿Confirmas guardar igual?'));
+                return;
+            }
+            margenAuthResolver = resolve;
+            if (margenAuthError) {
+                margenAuthError.style.display = 'none';
+                margenAuthError.textContent = '';
+            }
+            if (margenAuthIntro) {
+                margenAuthIntro.textContent = 'Margen menor al ' + MARGEN_MIN_CONFIRMA_OV + '% en: ' + linesText + '. Ingresa autorización para continuar.';
+            }
+            if (margenAuthSuccessBox) margenAuthSuccessBox.style.display = 'none';
+            margenAuthUser.value = '';
+            margenAuthPass.value = '';
+            if (margenAuthFormFields) margenAuthFormFields.style.display = '';
+            margenAuthUser.disabled = false;
+            margenAuthPass.disabled = false;
+            if (margenAuthCancel) {
+                margenAuthCancel.textContent = 'Cancelar';
+                margenAuthCancel.classList.remove('primary');
+            }
+            if (margenAuthConfirm) margenAuthConfirm.style.display = '';
+            margenAuthConfirm.disabled = false;
+            margenAuthConfirm.textContent = 'Autorizar y guardar';
+            margenAuthModal.classList.add('open');
+            window.setTimeout(function () { margenAuthUser.focus(); }, 10);
+        });
+    }
+    function closeMargenAuthModal(result) {
+        const resolver = margenAuthResolver;
+        margenAuthResolver = null;
+        if (margenAuthModal) margenAuthModal.classList.remove('open');
+        if (typeof resolver === 'function') resolver(!!result);
+    }
+    function resolveMargenAuth(result) {
+        const resolver = margenAuthResolver;
+        margenAuthResolver = null;
+        if (typeof resolver === 'function') resolver(!!result);
+    }
+    function submitMargenAuthorization() {
+        if (!margenAuthUser || !margenAuthPass || !margenAuthConfirm) return;
+        const usuario = String(margenAuthUser.value || '').trim();
+        const password = String(margenAuthPass.value || '');
+        if (!usuario || !password) {
+            if (margenAuthError) {
+                margenAuthError.style.display = 'block';
+                margenAuthError.textContent = 'Debes ingresar usuario y clave.';
+            }
+            return;
+        }
+        margenAuthConfirm.disabled = true;
+        margenAuthConfirm.textContent = 'Validando...';
+        fetch(URL_OV_AUTH_MARGEN, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ usuario: usuario, password: password })
+        })
+            .then(function (response) {
+                return response.json().then(function (data) {
+                    if (!response.ok || !data.success) {
+                        throw new Error((data && data.message) || 'No autorizado para margen bajo');
+                    }
+                    return data;
+                });
+            })
+            .then(function () {
+                /* Mantener modal visible: primero autoriza, luego guarda y muestra estado en el mismo modal. */
+                resolveMargenAuth(true);
+            })
+            .catch(function (error) {
+                if (margenAuthError) {
+                    margenAuthError.style.display = 'block';
+                    margenAuthError.textContent = error.message || 'No se pudo validar autorización';
+                }
+            })
+            .finally(function () {
+                if (margenAuthConfirm) {
+                    margenAuthConfirm.disabled = false;
+                    margenAuthConfirm.textContent = 'Autorizar y guardar';
+                }
+            });
+    }
+    function updateRowSub(row) {
+        const fields = getRF(row);
+        const amt = lineSubtotalAmount(row);
+        if (fields.subtotalEl) fields.subtotalEl.textContent = amt.toFixed(2);
         updateTotals();
     }
     function updateTotals() {
-        let subtotal = 0;
+        let subtotalBruto = 0;
         itemsBody.querySelectorAll('.item-row').forEach(function (row) {
-            const fields = getRF(row);
-            const qty = Math.max(0, parseInt((fields.qtyInput && fields.qtyInput.value) || '0', 10) || 0);
-            const price = parseNum(fields.priceInput ? fields.priceInput.value : 0);
-            subtotal += qty * price;
+            subtotalBruto += lineSubtotalAmount(row);
         });
-        const iva = subtotal * 0.19;
-        const total = subtotal + iva;
+        subtotalBruto = Math.round(subtotalBruto * 100) / 100;
+        let pct = 0;
+        if (!IS_SUPPLIER_DOC && partyMayorista && partyMargenPct > 0) {
+            pct = Math.min(100, partyMargenPct);
+        }
+        const descMonto = pct ? Math.round(subtotalBruto * (pct / 100) * 100) / 100 : 0;
+        const subtotal = Math.round((subtotalBruto - descMonto) * 100) / 100;
+        const iva = Math.round(subtotal * 0.19 * 100) / 100;
+        const total = Math.round((subtotal + iva) * 100) / 100;
+        const showMay = descMonto > 0.004;
+        if (tSubtotalBrutoRow) tSubtotalBrutoRow.hidden = !showMay;
+        if (tDescuentoMayoristaRow) tDescuentoMayoristaRow.hidden = !showMay;
+        if (tSubtotalBruto && showMay) tSubtotalBruto.textContent = fmtCLP(subtotalBruto);
+        if (tDescuentoMayorista && showMay) {
+            tDescuentoMayorista.textContent = '-' + fmtCLP(descMonto);
+        }
+        if (tDescuentoMayoristaLbl) {
+            tDescuentoMayoristaLbl.textContent = pct > 0
+                ? 'Descuento mayorista (' + pct + '%)'
+                : 'Descuento mayorista';
+        }
         if (tSubtotal) tSubtotal.textContent = fmtCLP(subtotal);
         if (tIva) tIva.textContent = fmtCLP(iva);
         if (tTotal) tTotal.textContent = fmtCLP(total);
+    }
+
+    function applyTotalsFromServer(totals) {
+        if (!totals) return;
+        const desc = Number(totals.descuento);
+        const hasDisc = Number.isFinite(desc) && desc > 0.004;
+        let bruto = Number(totals.subtotal_bruto);
+        if (!Number.isFinite(bruto)) {
+            bruto = Number(totals.subtotal || 0) + (Number.isFinite(desc) ? desc : 0);
+        }
+        if (tSubtotalBrutoRow) tSubtotalBrutoRow.hidden = !hasDisc;
+        if (tDescuentoMayoristaRow) tDescuentoMayoristaRow.hidden = !hasDisc;
+        if (tSubtotalBruto && hasDisc) {
+            tSubtotalBruto.textContent = totals.subtotal_bruto_fmt || fmtCLP(bruto);
+        }
+        if (tDescuentoMayorista && hasDisc && Number.isFinite(desc)) {
+            tDescuentoMayorista.textContent = '-' + fmtCLP(desc);
+        }
+        if (tDescuentoMayoristaLbl) {
+            tDescuentoMayoristaLbl.textContent = partyMayorista && partyMargenPct > 0
+                ? 'Descuento mayorista (' + partyMargenPct + '%)'
+                : 'Descuento mayorista';
+        }
+        if (tSubtotal) tSubtotal.textContent = totals.subtotal_fmt || fmtCLP(totals.subtotal || 0);
+        if (tIva) tIva.textContent = totals.iva_fmt || fmtCLP(totals.iva || 0);
+        if (tTotal) tTotal.textContent = totals.total_fmt || fmtCLP(totals.total || 0);
     }
     function renumberRows() {
         let count = 1;
@@ -286,9 +657,29 @@
         partyStatus.textContent = message;
         partyStatus.className = 'cot-rut-status ' + (cssClass || '');
     }
+    function setPartyManualFieldsVisible(visible) {
+        if (!partyFieldsWrap) return;
+        partyFieldsWrap.hidden = !visible;
+    }
+    function clearPartySnapshotFields() {
+        if (partyName) partyName.value = '';
+        if (partyAddress) partyAddress.value = '';
+        if (partyTelefono) partyTelefono.value = '';
+        if (partyEmail) partyEmail.value = '';
+    }
     function fillParty(entity) {
         if (!entity) return;
-        hiddenPartyId.value = String(entity.id || 0);
+        if (hiddenProveedorId && !{{ is_supplier_doc|tojson }}) {
+            if (entity.es_proveedor) {
+                hiddenPartyId.value = '0';
+                hiddenProveedorId.value = String(entity.id || 0);
+            } else {
+                hiddenPartyId.value = String(entity.id || 0);
+                hiddenProveedorId.value = '0';
+            }
+        } else {
+            hiddenPartyId.value = String(entity.id || 0);
+        }
         partyName.value = getPartyDisplay(entity);
         partyAddress.value = [entity.direccion, entity.comuna, entity.ciudad].filter(Boolean).join(', ');
         partyTelefono.value = entity.telefono || '';
@@ -298,7 +689,112 @@
             : (entity.rut || '');
         partyRutHidden.value = formatted;
         if (rutLookup) rutLookup.value = formatted;
+        setPartyManualFieldsVisible(false);
+        if (!IS_SUPPLIER_DOC) {
+            if (entity.es_proveedor) {
+                partyMayorista = false;
+                partyMargenPct = 0;
+            } else {
+                partyMayorista = !!entity.cliente_mayorista;
+                partyMargenPct = parseFloat(entity.margen_descuento_pct) || 0;
+            }
+        } else {
+            partyMayorista = false;
+            partyMargenPct = 0;
+        }
+        syncPartyPrintFromForm(entity);
+        updateTotals();
     }
+    function syncPartyPrintFromForm(entity) {
+        var card = document.querySelector('.doc-party-box, .cot-party-print');
+        if (!card) return;
+        function setPf(key, value) {
+            var el = card.querySelector('[data-pf="' + key + '"]');
+            if (el) el.textContent = String(value || '').trim() || '—';
+        }
+        if (entity) {
+            var rutFmt = (window.RutUtils && window.RutUtils.format)
+                ? window.RutUtils.format(entity.rut || '')
+                : (entity.rut || '');
+            setPf('rut', rutFmt);
+            setPf('name', getPartyDisplay(entity));
+            setPf('address', [entity.direccion, entity.comuna, entity.ciudad].filter(Boolean).join(', '));
+            setPf('phone', entity.telefono || '');
+            setPf('email', entity.email || '');
+            return;
+        }
+        var rutVal = (rutLookup && rutLookup.value) || (partyRutHidden && partyRutHidden.value) || '';
+        setPf('rut', rutVal);
+        setPf('name', partyName ? partyName.value : '');
+        setPf('address', partyAddress ? partyAddress.value : '');
+        setPf('phone', partyTelefono ? partyTelefono.value : '');
+        setPf('email', partyEmail ? partyEmail.value : '');
+    }
+    function formatPrintDate(iso) {
+        if (!iso) return '—';
+        var parts = String(iso).split('-');
+        if (parts.length !== 3) return iso;
+        return parts[2] + '-' + parts[1] + '-' + parts[0];
+    }
+    function syncPrintMetaFields() {
+        var numEl = document.getElementById('doc_number');
+        var dateEl = document.getElementById('doc_date');
+        var validEl = document.getElementById('doc_valid_until');
+        var tipoEl = document.getElementById('tipo_documento');
+        var num = numEl ? String(numEl.value || '').trim() : '';
+        var dateVal = dateEl ? dateEl.value : '';
+        var validVal = validEl && validEl.value ? validEl.value : dateVal;
+        function setText(id, value) {
+            var node = document.getElementById(id);
+            if (node) node.textContent = value || '—';
+        }
+        setText('printDocNum', num);
+        setText('printDocFolio', num);
+        setText('printDocDate', formatPrintDate(dateVal));
+        setText('printDocValid', formatPrintDate(validVal));
+        var folioType = document.querySelector('.doc-folio-type');
+        var titleBadge = document.querySelector('.cot-type-badge');
+        var baseTitle = (titleBadge && titleBadge.textContent) ? titleBadge.textContent.trim().toUpperCase() : '';
+        if (tipoEl && tipoEl.value === 'boleta') {
+            baseTitle = 'BOLETA';
+        }
+        if (folioType && baseTitle) folioType.textContent = baseTitle;
+        setText('printDocType', baseTitle);
+    }
+    function restoreSiiPlaceholder(el) {
+        if (!el || el.dataset.siiPlaceholderOriginal === undefined) return;
+        el.setAttribute('placeholder', el.dataset.siiPlaceholderOriginal);
+        delete el.dataset.siiPlaceholderOriginal;
+    }
+
+    function clearInlinePartyForm() {
+        if (!inlineCreate) return;
+        var icRutEl = document.getElementById('ic_rut');
+        var rutForCache = icRutEl ? icRutEl.value : '';
+        if (window.SiiContribuyenteAutofill) {
+            if (window.SiiContribuyenteAutofill.resetRutProfile) {
+                window.SiiContribuyenteAutofill.resetRutProfile('ic_rut');
+            }
+            if (rutForCache && window.SiiContribuyenteAutofill.clearSessionCache) {
+                window.SiiContribuyenteAutofill.clearSessionCache(rutForCache);
+            }
+        }
+        var ids = ['ic_nombre', 'ic_rut', 'ic_giro', 'ic_direccion', 'ic_telefono', 'ic_email'];
+        {% if is_supplier_doc %}
+        ids.unshift('ic_empresa');
+        {% endif %}
+        ids.forEach(function (id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.value = '';
+            restoreSiiPlaceholder(el);
+        });
+        if (icRegion) icRegion.value = '';
+        updateInlineCities('', '');
+        var focusTarget = document.getElementById('ic_nombre') || document.getElementById('ic_empresa');
+        if (focusTarget) focusTarget.focus();
+    }
+
     function showInlineCreate(show) {
         inlineCreate.hidden = !show;
         if (!show) return;
@@ -308,6 +804,9 @@
         if (window.RutUtils && window.RutUtils.autoBindRutInputs) {
             window.RutUtils.autoBindRutInputs(inlineCreate);
         }
+        if (window.SiiContribuyenteAutofill && window.SiiContribuyenteAutofill.boot) {
+            window.SiiContribuyenteAutofill.boot();
+        }
         const icNombre = document.getElementById('ic_nombre');
         if (icNombre) window.setTimeout(function () { icNombre.focus(); }, 50);
     }
@@ -315,6 +814,7 @@
         const rut = String(rutRaw || '').replace(/\./g, '').replace(/-/g, '').trim();
         if (rut.length < 4) {
             setPartyStatus('', '');
+            setPartyManualFieldsVisible(false);
             return;
         }
         setPartyStatus('Buscando…', '');
@@ -325,16 +825,28 @@
             .then(function (data) {
                 const list = (data && data[PARTY_LIST_KEY]) ? data[PARTY_LIST_KEY] : [];
                 if (list.length) {
-                    fillParty(list[0]);
-                    setPartyStatus('✓ ' + getPartyDisplay(list[0]), 'found');
+                    var row0 = list[0];
+                    fillParty(row0);
+                    var foundLabel = (row0.es_proveedor ? 'Proveedor' : PARTY_LABEL);
+                    setPartyStatus('✓ ' + foundLabel + ': ' + getPartyDisplay(row0), 'found');
                     showInlineCreate(false);
                 } else {
                     hiddenPartyId.value = '0';
-                    setPartyStatus('No encontrado — presiona Enter para crear nuevo ' + PARTY_KIND, 'notfound');
+                    if (hiddenProveedorId) hiddenProveedorId.value = '0';
+                    partyMayorista = false;
+                    partyMargenPct = 0;
+                    clearPartySnapshotFields();
+                    setPartyManualFieldsVisible(false);
+                    updateTotals();
+                    setPartyStatus(
+                        'No encontrado — usa «+ Nuevo ' + PARTY_KIND + '» o Enter para abrir el formulario de alta',
+                        'notfound'
+                    );
                 }
             })
             .catch(function () {
                 setPartyStatus('Error en búsqueda', 'notfound');
+                setPartyManualFieldsVisible(false);
             });
     }
     function saveNewParty() {
@@ -393,7 +905,7 @@
             });
     }
 
-    function renderChips(row, product, selectedMarca, selectedBodega) {
+    function renderChips(row, product, selectedMarca, selectedBodega, selectedOrigen) {
         const fields = getRF(row);
         if (!fields.stockEl) return;
         const entries = Array.isArray(product.stock_entries) ? product.stock_entries : [];
@@ -406,8 +918,12 @@
             const tone = stock > 0 ? 'ok' : 'zero';
             const active =
                 String(entry.marca || '').trim().toUpperCase() === String(selectedMarca || '').trim().toUpperCase() &&
-                String(entry.bodega || '').trim() === String(selectedBodega || '').trim();
-            return '<span class="sc-chip ' + tone + (active ? ' act' : '') + '">' + esc(entry.marca || 'Default') + ' · ' + stock + '</span>';
+                String(entry.bodega || '').trim() === String(selectedBodega || '').trim() &&
+                String(entry.origen_compra || '').trim().toLowerCase() === String(selectedOrigen || '').trim().toLowerCase();
+            const originLabel = String(entry.origen_compra || 'nacional').trim().toLowerCase() === 'importacion'
+                ? 'Importación'
+                : 'Nacional';
+            return '<span class="sc-chip ' + tone + (active ? ' act' : '') + '">' + esc(entry.marca || 'Default') + ' · ' + esc(originLabel) + ' · ' + stock + '</span>';
         }).join(' ');
     }
     function fillSelect(select, options, selectedValue) {
@@ -421,17 +937,19 @@
         });
         if (!select.value && options.length) select.value = options[0].value;
     }
-    function populateVariants(row, product, preferredMarca, preferredBodega) {
+    function populateVariants(row, product, preferredMarca, preferredBodega, preferredOrigen) {
         const fields = getRF(row);
-        if (!fields.marcaSel || !fields.bodegaSel) return;
+        if (!fields.marcaSel || !fields.bodegaSel || !fields.origenSel) return;
         const entries = Array.isArray(product.stock_entries) ? product.stock_entries : [];
         const preferredBrand = String(preferredMarca || fields.marcaSel.value || product.default_marca || '').trim().toUpperCase();
         const preferredWarehouse = String(preferredBodega || fields.bodegaSel.value || product.default_bodega || 'Bodega 1').trim();
+        const preferredOrigin = String(preferredOrigen || fields.origenSel.value || product.default_origen_compra || 'nacional').trim().toLowerCase();
 
         if (!entries.length) {
             fillSelect(fields.marcaSel, [{ value: '', label: 'Sin variante' }], '');
             fillSelect(fields.bodegaSel, [{ value: 'Bodega 1', label: 'Bodega 1' }], 'Bodega 1');
-            renderChips(row, product, '', 'Bodega 1');
+            fillSelect(fields.origenSel, [{ value: 'nacional', label: 'Nacional' }], 'nacional');
+            renderChips(row, product, '', 'Bodega 1', 'nacional');
             return;
         }
 
@@ -461,12 +979,53 @@
                 ? preferredWarehouse
                 : warehouseOptions[0].value;
             fillSelect(fields.bodegaSel, warehouseOptions, value);
-            renderChips(row, product, currentBrand, fields.bodegaSel.value);
+            syncOrigin();
         }
 
-        fields.marcaSel.onchange = syncWarehouse;
+        function syncOrigin() {
+            const currentBrand = String(fields.marcaSel.value || '').trim().toUpperCase();
+            const currentWarehouse = String(fields.bodegaSel.value || '').trim() || 'Bodega 1';
+            const originRows = entries.filter(function (entry) {
+                return String(entry.marca || '').trim().toUpperCase() === currentBrand &&
+                    String(entry.bodega || '').trim() === currentWarehouse;
+            });
+            const uniqueOrigins = [];
+            originRows.forEach(function (entry) {
+                const raw = String(entry.origen_compra || 'nacional').trim().toLowerCase();
+                if (uniqueOrigins.indexOf(raw) === -1) uniqueOrigins.push(raw);
+            });
+            let originOptions = uniqueOrigins.map(function (raw) {
+                return {
+                    value: raw,
+                    label: raw === 'importacion' ? 'Importación' : 'Nacional'
+                };
+            });
+            if (!originOptions.length) {
+                originOptions = [{ value: 'nacional', label: 'Nacional' }];
+            }
+            const requiresExplicit = originOptions.length > 1;
+            if (requiresExplicit) {
+                originOptions.unshift({ value: '', label: 'Seleccionar origen' });
+            }
+            const selectedOrigin = originOptions.some(function (opt) { return opt.value === preferredOrigin; })
+                ? preferredOrigin
+                : (requiresExplicit ? '' : originOptions[0].value);
+            fillSelect(fields.origenSel, originOptions, selectedOrigin);
+            fields.origenSel.required = true;
+            renderChips(row, product, currentBrand, currentWarehouse, fields.origenSel.value);
+        }
+
+        fields.marcaSel.onchange = function () {
+            syncWarehouse();
+            fetchIngresoRefForRow(row, {}).then(function () { updateRowSub(row); });
+        };
         fields.bodegaSel.onchange = function () {
-            renderChips(row, product, fields.marcaSel.value, fields.bodegaSel.value);
+            syncOrigin();
+            fetchIngresoRefForRow(row, {}).then(function () { updateRowSub(row); });
+        };
+        fields.origenSel.onchange = function () {
+            renderChips(row, product, fields.marcaSel.value, fields.bodegaSel.value, fields.origenSel.value);
+            fetchIngresoRefForRow(row, {}).then(function () { updateRowSub(row); });
         };
         syncWarehouse();
     }
@@ -479,22 +1038,29 @@
         if (fields.priceInput && (!fields.priceInput.value || parseNum(fields.priceInput.value) <= 0 || opts.forcePrice)) {
             fields.priceInput.value = Number(product.precio || 0).toFixed(2);
         }
-        if (fields.metaEl) {
+        if (fields.metaInput) {
             const parts = [];
             if (product.oem) parts.push('OEM: ' + product.oem);
             if (product.modelo) parts.push(product.modelo);
-            fields.metaEl.textContent = parts.join(' · ');
+            const built = parts.join(' · ');
+            if (opts.forceModeloLine || !String(fields.metaInput.value || '').trim()) {
+                fields.metaInput.value = built;
+            }
         }
-        populateVariants(row, product, opts.marca, opts.bodega);
+        populateVariants(row, product, opts.marca, opts.bodega, opts.origen_compra);
+        const ingOpts = opts.skipIngresoPrecio ? { skipPrecioMargen: true } : {};
+        fetchIngresoRefForRow(row, ingOpts).then(function () { updateRowSub(row); });
         updateRowSub(row);
     }
     function clearRow(row) {
         const fields = getRF(row);
         row._pd = null;
-        if (fields.metaEl) fields.metaEl.textContent = '';
+        if (fields.metaInput) fields.metaInput.value = '';
         if (fields.stockEl) fields.stockEl.innerHTML = '';
         if (fields.marcaSel) fields.marcaSel.innerHTML = '<option value="">Sin variante</option>';
         if (fields.bodegaSel) fields.bodegaSel.innerHTML = '<option value="Bodega 1">Bodega 1</option>';
+        if (fields.origenSel) fields.origenSel.innerHTML = '<option value="nacional">Nacional</option>';
+        applyIngresoRefToRow(row, null, {});
     }
     function fetchProduct(code) {
         return fetch(URL_PRODUCTO + '?codigo=' + encodeURIComponent(code), {
@@ -527,7 +1093,7 @@
             .catch(function (error) {
                 if (!opts.silent) {
                     clearRow(row);
-                    if (fields.metaEl) fields.metaEl.textContent = error.message;
+                    if (fields.metaInput) fields.metaInput.value = error.message;
                 }
                 return null;
             });
@@ -539,7 +1105,8 @@
             return key === itemKey({
                 codigo: fields.codeInput ? fields.codeInput.value : '',
                 marca: fields.marcaSel ? fields.marcaSel.value : '',
-                bodega: fields.bodegaSel ? fields.bodegaSel.value : ''
+                bodega: fields.bodegaSel ? fields.bodegaSel.value : '',
+                origen_compra: fields.origenSel ? fields.origenSel.value : ''
             });
         }) || null;
     }
@@ -559,7 +1126,7 @@
             return row;
         }
         row = findEmpty() || addRow();
-        applyProduct(row, item, { marca: item.marca, bodega: item.bodega, forceDesc: true, forcePrice: true });
+        applyProduct(row, item, { marca: item.marca, bodega: item.bodega, origen_compra: item.origen_compra, forceDesc: true, forcePrice: true, forceModeloLine: true });
         const fields = getRF(row);
         if (fields.qtyInput) fields.qtyInput.value = String(Math.max(1, parseInt(item.cantidad || 1, 10) || 1));
         if (fields.priceInput) fields.priceInput.value = Number(item.precio || 0).toFixed(2);
@@ -571,6 +1138,10 @@
         row.querySelectorAll('.item-qty, .item-price').forEach(function (input) {
             input.addEventListener('input', function () { updateRowSub(row); });
         });
+        if (fields.margenInput) {
+            fields.margenInput.addEventListener('input', function () { onMargenOrCostoSubtotal(row); });
+            fields.margenInput.addEventListener('change', function () { onMargenOrCostoSubtotal(row); });
+        }
 
         const removeBtn = row.querySelector('.remove-row-btn');
         if (removeBtn) {
@@ -626,6 +1197,31 @@
             });
         }
 
+        if (fields.histBtn && fields.codeInput) {
+            function refreshHistState() {
+                const c = String(fields.codeInput.value || '').trim();
+                if (c) {
+                    fields.histBtn.disabled = false;
+                    fields.histBtn.classList.remove('is-disabled');
+                } else {
+                    fields.histBtn.disabled = true;
+                    fields.histBtn.classList.add('is-disabled');
+                }
+            }
+            fields.histBtn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                const c = String(fields.codeInput.value || '').trim();
+                if (!c) return;
+                if (typeof window.openProductoTraceability === 'function') {
+                    window.openProductoTraceability(c, c);
+                }
+            });
+            fields.codeInput.addEventListener('input', refreshHistState);
+            fields.codeInput.addEventListener('blur', refreshHistState);
+            refreshHistState();
+        }
+
+        wireCostToggle(row);
         updateRowSub(row);
         const code = String(fields.codeInput ? fields.codeInput.value : '').trim();
         if (code) lookupCode(row, { silent: true });
@@ -637,16 +1233,25 @@
         row.innerHTML =
             '<td class="tc-num"><span class="row-num">' + index + '</span></td>' +
             '<td class="tc-code"><div class="code-wrap">' +
+                '<button type="button" class="code-hist-btn no-print" title="Ver movimientos del código (historial)">&#8594;</button>' +
                 '<input name="item_codigo[]" class="item-codigo" autocomplete="off" placeholder="Código">' +
                 '<button class="code-srch-btn no-print" type="button" title="Buscar (F2)">&#128269;</button>' +
-            '</div><span class="item-meta-line"></span></td>' +
-            '<td class="tc-desc"><input name="item_descripcion[]" class="item-desc" placeholder="Descripción"><div class="item-stock-row"></div></td>' +
+            '</div></td>' +
+            '<td class="tc-desc"><div class="tc-desc-stack">' +
+            '<input name="item_descripcion[]" class="item-desc" placeholder="Descripción del producto" autocomplete="off" title="Podés editar la descripción libremente">' +
+            '<input name="item_modelo_linea[]" class="item-modelo-input" type="text" placeholder="Modelo / OEM (opcional)" autocomplete="off" title="Modelo o referencia — editable" aria-label="Modelo o referencia">' +
+            '<div class="item-stock-row"></div></div></td>' +
             '<td class="tc-brand"><select name="item_marca[]" class="item-marca"><option value="">Sin variante</option></select></td>' +
             '<td class="tc-wh"><select name="item_bodega[]" class="item-bodega"><option value="Bodega 1">Bodega 1</option></select></td>' +
+            '<td class="tc-origin"><select name="item_origen_compra[]" class="item-origen-compra"><option value="nacional">Nacional</option><option value="importacion">Importación</option></select></td>' +
             '<td class="tc-qty"><input name="item_cantidad[]" class="item-qty" type="number" min="1" value="1"></td>' +
-            '<td class="tc-price"><input name="item_precio[]" class="item-price" type="number" min="0" step="0.01" value="0"></td>' +
+            '<td class="tc-price"><div class="price-cell-wrap"><div class="price-row-flex">' +
+                '<button type="button" class="item-costo-toggle no-print" hidden title="Ver costo neto del último ingreso" aria-expanded="false" aria-label="Mostrar u ocultar costo de ingreso">&#9654;</button>' +
+                '<input name="item_precio[]" class="item-price" type="number" min="0" step="0.01" value="0">' +
+            '</div><div class="item-costo-banner no-print" hidden>Costo ingreso (neto u.): <strong class="item-costo-val">—</strong></div></div></td>' +
+            '<td class="tc-marg"><input name="item_margen[]" class="item-margen" type="number" min="0" max="999" step="0.01" placeholder="%" title="Margen % sobre P. unitario neto. Si es menor a 30%, al guardar OV se pedirá confirmación." aria-label="Margen porcentaje"></td>' +
             '<td class="tc-sub"><span class="item-subtotal">0.00</span></td>' +
-            '<td class="tc-rm no-print"><button class="btn sm danger remove-row-btn" type="button">&#10005;</button></td>';
+            '<td class="tc-rm no-print"><button class="remove-row-btn" type="button" title="Quitar fila">&#10005;</button></td>';
         itemsBody.appendChild(row);
         wireRow(row);
         return row;
@@ -664,8 +1269,11 @@
             descripcion: '',
             marca: '',
             bodega: 'Bodega 1',
+            origen_compra: 'nacional',
             cantidad: 1,
             precio: 0,
+            margen: null,
+            modelo_linea: '',
         }];
         safeItems.forEach(function (item) {
             const row = addRow();
@@ -674,16 +1282,28 @@
             if (fields.descInput) fields.descInput.value = item.descripcion || '';
             if (fields.qtyInput) fields.qtyInput.value = String(Math.max(1, parseInt(item.cantidad || 1, 10) || 1));
             if (fields.priceInput) fields.priceInput.value = Number(item.precio || 0).toFixed(2);
+            if (fields.margenInput) {
+                fields.margenInput.value = (item.margen != null && item.margen !== '') ? String(item.margen) : '';
+            }
+            if (fields.metaInput) {
+                fields.metaInput.value = item.modelo_linea != null ? String(item.modelo_linea) : '';
+            }
             lookupCode(row, {
                 silent: true,
                 marca: item.marca || '',
                 bodega: item.bodega || 'Bodega 1',
+                origen_compra: item.origen_compra || 'nacional',
                 forceDesc: true,
-                forcePrice: true,
+                forcePrice: false,
+                skipIngresoPrecio: true,
             }).then(function () {
                 const refreshed = getRF(row);
                 if (refreshed.marcaSel && item.marca) refreshed.marcaSel.value = item.marca;
                 if (refreshed.bodegaSel && item.bodega) refreshed.bodegaSel.value = item.bodega;
+                if (refreshed.origenSel && item.origen_compra) refreshed.origenSel.value = item.origen_compra;
+                if (refreshed.metaInput && item.modelo_linea != null && String(item.modelo_linea).trim() !== '') {
+                    refreshed.metaInput.value = String(item.modelo_linea);
+                }
                 updateRowSub(row);
             });
         });
@@ -712,6 +1332,9 @@
 
         const p = doc.party || {};
         hiddenPartyId.value = String(p.id || 0);
+        if (hiddenProveedorId && !{{ is_supplier_doc|tojson }}) {
+            hiddenProveedorId.value = String(p.proveedor_id || 0);
+        }
         partyName.value = p.name || '';
         partyAddress.value = p.address || '';
         partyTelefono.value = p.telefono || '';
@@ -719,12 +1342,53 @@
         partyRutHidden.value = p.rut || '';
         if (rutLookup) rutLookup.value = p.rut || '';
         setPartyStatus(PARTY_LABEL + ' cargado: ' + (p.name || ''), 'found');
+        setPartyManualFieldsVisible(false);
+
+        if (!IS_SUPPLIER_DOC) {
+            partyMayorista = !!p.cliente_mayorista;
+            partyMargenPct = parseFloat(p.margen_descuento_pct) || 0;
+        } else {
+            partyMayorista = false;
+            partyMargenPct = 0;
+        }
 
         setRowsFromDocument(doc.items || []);
-        if (doc.totals) {
-            if (tSubtotal) tSubtotal.textContent = doc.totals.subtotal_fmt || fmtCLP(doc.totals.subtotal || 0);
-            if (tIva) tIva.textContent = doc.totals.iva_fmt || fmtCLP(doc.totals.iva || 0);
-            if (tTotal) tTotal.textContent = doc.totals.total_fmt || fmtCLP(doc.totals.total || 0);
+        applyTotalsFromServer(doc.totals);
+        updateConversionLocks(doc);
+        // Carga por API no dispara eventos input/change: actualizar paneles de inmediato.
+        refreshProgressiveActionPanels();
+    }
+
+    function updateConversionLocks(doc) {
+        if (!doc) return;
+        var dt = String(DOC_TYPE || '').trim().toLowerCase();
+        if (btnConvertToOV) {
+            btnConvertToOV.disabled = false;
+            btnConvertToOV.removeAttribute('title');
+            if (dt === 'cotizacion' && doc.puede_convertir_a_orden_venta === false) {
+                btnConvertToOV.disabled = true;
+                btnConvertToOV.title = 'Ya hay ' + (doc.documento_hijo_tipo || '') + ' ' + (doc.documento_hijo_resumen || '') + ' cobrado en caja en esta cadena.';
+            }
+        }
+        if (btnFacturarOV) {
+            btnFacturarOV.disabled = false;
+            btnFacturarOV.removeAttribute('title');
+            if (dt === 'orden_venta' && doc.puede_convertir_a_factura_boleta === false) {
+                btnFacturarOV.disabled = true;
+                if (doc.picking_bloquea_facturacion) {
+                    btnFacturarOV.title = 'Bodega debe marcar el picking como entregado al vendedor antes de facturar o boletear.';
+                } else {
+                    btnFacturarOV.title = 'Ya existe ' + (doc.documento_hijo_tipo || '') + ' ' + (doc.documento_hijo_resumen || '') + ' cobrado en caja.';
+                }
+            }
+        }
+        if (btnBoletearOV) {
+            btnBoletearOV.disabled = false;
+            btnBoletearOV.removeAttribute('title');
+            if (dt === 'orden_venta' && doc.puede_convertir_a_factura_boleta === false) {
+                btnBoletearOV.disabled = true;
+                btnBoletearOV.title = (btnFacturarOV && btnFacturarOV.title) ? btnFacturarOV.title : '';
+            }
         }
     }
 
@@ -744,9 +1408,10 @@
             })
             .then(function (doc) {
                 hydrateFromDocument(doc);
+                refreshProgressiveActionPanels();
             })
-            .catch(function () {
-                window.alert('Documento no encontrado');
+            .catch(function (err) {
+                notifyUi((err && err.message) ? err.message : 'Documento no encontrado', 'error', 'Documento');
             });
     }
 
@@ -768,13 +1433,14 @@
             const stock = parseInt(item.variant_stock || 0, 10);
             const tone = stock > 0 ? 'ok' : 'zero';
             const key = itemKey(item);
+            const originLabel = String(item.origen_compra || 'nacional').toLowerCase() === 'importacion' ? 'Importación' : 'Nacional';
             const checked = psSelected.has(key) ? 'checked' : '';
             const selected = psSelected.has(key) ? 'sel' : '';
             return '<tr class="' + selected + '" data-key="' + esc(key) + '">' +
                 '<td style="text-align:center;"><input type="checkbox" class="ps-chk" data-key="' + esc(key) + '" ' + checked + '></td>' +
                 '<td><div class="ps-spill"><strong>' + esc(item.codigo) + '</strong><small>' + esc(item.oem || '') + '</small></div></td>' +
                 '<td><div class="ps-spill"><strong>' + esc(item.descripcion || '—') + '</strong><small>' + esc(item.modelo || '') + '</small></div></td>' +
-                '<td>' + esc(item.marca || '—') + '</td>' +
+                '<td>' + esc(item.marca || '—') + '<small>' + esc(originLabel) + '</small></td>' +
                 '<td>' + esc(item.bodega || 'Bodega 1') + '</td>' +
                 '<td><span class="ps-stk ' + tone + '">' + stock + ' disp.</span></td>' +
                 '<td style="text-align:right;">$' + Math.round(Number(item.precio || 0)).toLocaleString('es-CL') + '</td>' +
@@ -844,7 +1510,7 @@
         items.forEach(function (item, index) {
             const target = index === 0 && activeSearchRow ? activeSearchRow : null;
             if (target) {
-                applyProduct(target, item, { marca: item.marca, bodega: item.bodega, forceDesc: true, forcePrice: true });
+                applyProduct(target, item, { marca: item.marca, bodega: item.bodega, origen_compra: item.origen_compra, forceDesc: true, forcePrice: true, forceModeloLine: true });
                 const fields = getRF(target);
                 if (fields.qtyInput && !parseInt(fields.qtyInput.value || '0', 10)) fields.qtyInput.value = '1';
                 updateRowSub(target);
@@ -880,12 +1546,13 @@
         }
 
         rutLookup.addEventListener('input', function () {
+            refreshProgressiveActionPanels();
             if (partyTimer) clearTimeout(partyTimer);
             if (rutLookup.value.trim().length < 4) {
                 setPartyStatus('', '');
                 return;
             }
-            partyTimer = setTimeout(function () { lookupByRut(rutLookup.value); }, 420);
+            partyTimer = setTimeout(function () { lookupByRut(rutLookup.value); }, 180);
         });
         rutLookup.addEventListener('paste', function () {
             window.setTimeout(function () {
@@ -913,6 +1580,7 @@
     if (btnSearchParty) btnSearchParty.addEventListener('click', function () { lookupByRut(rutLookup ? rutLookup.value : ''); });
     if (btnNewParty) btnNewParty.addEventListener('click', function () { showInlineCreate(inlineCreate.hidden); });
     if (btnSaveNewParty) btnSaveNewParty.addEventListener('click', saveNewParty);
+    if (btnClearInlineParty) btnClearInlineParty.addEventListener('click', clearInlinePartyForm);
     if (btnCancelNew) btnCancelNew.addEventListener('click', function () { showInlineCreate(false); });
     if (icRegion) {
         icRegion.addEventListener('change', function () {
@@ -941,7 +1609,7 @@
         btnConvertToOV.addEventListener('click', function () {
             const numero = currentDocumentNumber();
             if (!numero) {
-                window.alert('Carga una cotizacion guardada para convertir.');
+                notifyUi('Carga una cotización guardada para convertir.', 'error', 'Documento requerido');
                 return;
             }
             postJson(endpointWithNumber(URL_CONV_CO_OV, numero), {})
@@ -954,9 +1622,9 @@
                         }
                         return;
                     }
-                    window.alert('Convertida a Orden de Venta: ' + ((data.documento && data.documento.numero) || ''));
+                    notifyUi('Convertida a Orden de Venta: ' + ((data.documento && data.documento.numero) || ''), 'success', 'Conversión exitosa');
                 })
-                .catch(function (error) { window.alert(error.message); });
+                .catch(function (error) { notifyUi(error.message, 'error', 'No se pudo convertir'); });
         });
     }
 
@@ -964,11 +1632,10 @@
         btnFacturarOV.addEventListener('click', function () {
             const numero = currentDocumentNumber();
             if (!numero) {
-                window.alert('Carga una orden de venta guardada para facturar.');
+                notifyUi('Carga una orden de venta guardada para facturar.', 'error', 'Documento requerido');
                 return;
             }
-            const tipo = String((tipoDocumento && tipoDocumento.value) || 'factura').trim().toLowerCase();
-            postJson(endpointWithNumber(URL_CONV_OV_FA, numero), { tipo_documento: tipo })
+            postJson(endpointWithNumber(URL_CONV_OV_FA, numero), { tipo_documento: 'factura' })
                 .then(function (data) {
                     if (data.redirect_url) {
                         if (window._loadModule) {
@@ -978,9 +1645,56 @@
                         }
                         return;
                     }
-                    window.alert('Factura creada: ' + ((data.documento && data.documento.numero) || ''));
+                    notifyUi('Factura creada: ' + ((data.documento && data.documento.numero) || ''), 'success', 'Conversión exitosa');
                 })
-                .catch(function (error) { window.alert(error.message); });
+                .catch(function (error) { notifyUi(error.message, 'error', 'No se pudo convertir'); });
+        });
+    }
+
+    if (btnBoletearOV) {
+        btnBoletearOV.addEventListener('click', function () {
+            const numero = currentDocumentNumber();
+            if (!numero) {
+                notifyUi('Carga una orden de venta guardada para emitir boleta.', 'error', 'Documento requerido');
+                return;
+            }
+            postJson(endpointWithNumber(URL_CONV_OV_FA, numero), { tipo_documento: 'boleta' })
+                .then(function (data) {
+                    if (data.redirect_url) {
+                        if (window._loadModule) {
+                            window._loadModule(data.redirect_url);
+                        } else {
+                            window.location.href = data.redirect_url;
+                        }
+                        return;
+                    }
+                    notifyUi('Boleta creada: ' + ((data.documento && data.documento.numero) || ''), 'success', 'Conversión exitosa');
+                })
+                .catch(function (error) { notifyUi(error.message, 'error', 'No se pudo convertir'); });
+        });
+    }
+
+    if (btnPickingBodega) {
+        btnPickingBodega.addEventListener('click', function () {
+            const numero = currentDocumentNumber();
+            if (!numero) {
+                notifyUi('Cargue o guarde la orden de venta antes de enviar picking a bodega.', 'error', 'Documento requerido');
+                return;
+            }
+            postJson(endpointWithNumber(URL_OV_PICKING, numero), {})
+                .then(function (data) {
+                    const url = (data && data.redirect_url) || '';
+                    if (url) {
+                        if (window._loadModule) {
+                            window._loadModule(url);
+                        } else {
+                            window.location.href = url;
+                        }
+                        return;
+                    }
+                    notifyUi((data && data.message) || 'Listo.', 'success', 'Operación completada');
+                })
+                .catch(function (error) { notifyUi(error.message, 'error', 'No se pudo completar'); });
         });
     }
 
@@ -988,14 +1702,14 @@
         btnRecibirOC.addEventListener('click', function () {
             const id = currentDocumentId();
             if (!id) {
-                window.alert('Carga una orden de compra guardada para recibir.');
+                notifyUi('Carga una orden de compra guardada para recibir.', 'error', 'Documento requerido');
                 return;
             }
             postJson(endpointWithId(URL_CONV_OC_ING, id), {})
                 .then(function (data) {
-                    window.alert('Ingreso registrado: ' + ((data.documento && data.documento.numero) || ''));
+                    notifyUi('Ingreso registrado: ' + ((data.documento && data.documento.numero) || ''), 'success', 'Recepción completada');
                 })
-                .catch(function (error) { window.alert(error.message); });
+                .catch(function (error) { notifyUi(error.message, 'error', 'No se pudo recibir'); });
         });
     }
 
@@ -1003,16 +1717,26 @@
         btnCreateNC.addEventListener('click', function () {
             const id = currentDocumentId();
             if (!id) {
-                window.alert('Carga una factura guardada para crear nota de credito.');
+                notifyUi('Carga una factura guardada para crear nota de crédito.', 'error', 'Documento requerido');
                 return;
             }
-            const razon = window.prompt('Razon de la nota de credito:', 'Devolucion total') || 'Devolucion total';
-            postJson(endpointWithId(URL_CONV_FA_NC, id), { razon: razon })
+            const razonRaw = window.prompt('Razón de la nota de crédito:', 'Devolución total');
+            if (razonRaw === null) {
+                return;
+            }
+            const razon = (razonRaw || '').trim() || 'Devolución total';
+            const devolverDinero = window.confirm(
+                '¿Cómo se liquida el monto frente al cliente?\n\n' +
+                'Aceptar = devolución de dinero (reembolso)\n' +
+                'Cancelar = saldo a favor (crédito para futuras compras)'
+            );
+            const modo_liquidacion = devolverDinero ? 'devolucion_dinero' : 'saldo_favor';
+            postJson(endpointWithId(URL_CONV_FA_NC, id), { razon: razon, modo_liquidacion: modo_liquidacion })
                 .then(function (data) {
                     const nc = data.nota_credito || {};
-                    window.alert('Nota de credito creada: ' + (nc.numero || ''));
+                    notifyUi('Nota de crédito creada: ' + (nc.numero || ''), 'success', 'Conversión exitosa');
                 })
-                .catch(function (error) { window.alert(error.message); });
+                .catch(function (error) { notifyUi(error.message, 'error', 'No se pudo convertir'); });
         });
     }
 
@@ -1024,6 +1748,35 @@
             if (event.target === traceModal) closeTrace();
         });
     }
+    if (margenAuthClose) margenAuthClose.addEventListener('click', function () { closeMargenAuthModal(false); });
+    if (margenAuthCancel) margenAuthCancel.addEventListener('click', function () { closeMargenAuthModal(false); });
+    if (margenAuthConfirm) margenAuthConfirm.addEventListener('click', submitMargenAuthorization);
+    if (margenAuthModal) {
+        margenAuthModal.addEventListener('click', function (event) {
+            if (event.target === margenAuthModal) closeMargenAuthModal(false);
+        });
+    }
+    if (margenAuthPass) {
+        margenAuthPass.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                submitMargenAuthorization();
+            }
+        });
+    }
+    if (margenAuthUser) {
+        margenAuthUser.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                if (margenAuthPass) margenAuthPass.focus();
+            }
+        });
+    }
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && margenAuthModal && margenAuthModal.classList.contains('open')) {
+            closeMargenAuthModal(false);
+        }
+    });
 
     if (itemsBody) itemsBody.querySelectorAll('.item-row').forEach(wireRow);
     if (addRowBtn) {
@@ -1031,9 +1784,42 @@
             const row = addRow();
             const fields = getRF(row);
             if (fields.codeInput) fields.codeInput.focus();
+            setTimeout(refreshProgressiveActionPanels, 0);
         });
     }
+    if (form) {
+        form.addEventListener('input', refreshProgressiveActionPanels);
+        form.addEventListener('change', refreshProgressiveActionPanels);
+    }
+    if (itemsBody) {
+        itemsBody.addEventListener('input', refreshProgressiveActionPanels);
+        itemsBody.addEventListener('change', refreshProgressiveActionPanels);
+    }
+    refreshProgressiveActionPanels();
     updateTotals();
+    syncPartyPrintFromForm();
+    syncPrintMetaFields();
+    window.addEventListener('beforeprint', function () {
+        syncPartyPrintFromForm();
+        syncPrintMetaFields();
+    });
+    if (docNumberInput) docNumberInput.addEventListener('input', syncPrintMetaFields);
+    if (docDateInput) docDateInput.addEventListener('change', syncPrintMetaFields);
+    if (docValidInput) docValidInput.addEventListener('change', syncPrintMetaFields);
+    if (tipoDocumento) tipoDocumento.addEventListener('change', syncPrintMetaFields);
+    if (partyName) partyName.addEventListener('input', function () { syncPartyPrintFromForm(); });
+    if (partyAddress) partyAddress.addEventListener('input', function () { syncPartyPrintFromForm(); });
+    if (partyTelefono) partyTelefono.addEventListener('input', function () { syncPartyPrintFromForm(); });
+    if (partyEmail) partyEmail.addEventListener('input', function () { syncPartyPrintFromForm(); });
+    if (rutLookup) rutLookup.addEventListener('change', function () { syncPartyPrintFromForm(); });
+
+    (function applyInitialConversionLocks() {
+        var el = document.getElementById('erp-doc-conversion');
+        if (!el || !el.textContent) return;
+        try {
+            updateConversionLocks(JSON.parse(el.textContent));
+        } catch (e) { /* ignore */ }
+    })();
 
     if (psRun) psRun.addEventListener('click', function () { runPSSearch(psInput ? psInput.value : ''); });
     if (psClear) psClear.addEventListener('click', function () { if (psInput) psInput.value = ''; runPSSearch(''); });
@@ -1041,6 +1827,21 @@
     if (psClose2) psClose2.addEventListener('click', closePSModal);
     if (psApply) psApply.addEventListener('click', applySelected);
     if (psModal) psModal.addEventListener('click', function (event) { if (event.target === psModal) closePSModal(); });
+
+    var productHistoryClose = document.getElementById('productHistoryClose');
+    var traceabilityModalEl = document.getElementById('traceabilityModal');
+    if (productHistoryClose) {
+        productHistoryClose.addEventListener('click', function () {
+            if (typeof window.closeProductoTraceability === 'function') window.closeProductoTraceability();
+        });
+    }
+    if (traceabilityModalEl) {
+        traceabilityModalEl.addEventListener('click', function (event) {
+            if (event.target === traceabilityModalEl && typeof window.closeProductoTraceability === 'function') {
+                window.closeProductoTraceability();
+            }
+        });
+    }
     if (psInput) {
         psInput.addEventListener('keydown', function (event) {
             if (event.key === 'Enter') {
@@ -1055,64 +1856,209 @@
     }
 
     function showInlineToast(message) {
-        const toast = document.getElementById('ventasFlashToast');
-        if (!toast) {
-            window.alert(message || 'Operación completada');
-            return;
+        notifyUi(message || 'Operación completada', 'success', 'Guardado');
+    }
+
+    function setFormSaveBusy(busy) {
+        if (!form) return;
+        var btn = form.querySelector('.cot-actions button[type="submit"]');
+        if (!btn) return;
+        if (busy) {
+            if (!btn.dataset.saveLabel) btn.dataset.saveLabel = btn.textContent || 'Guardar';
+            btn.disabled = true;
+            btn.textContent = 'Guardando…';
+        } else {
+            btn.disabled = false;
+            btn.textContent = btn.dataset.saveLabel || btn.textContent || 'Guardar';
         }
-        toast.innerHTML = '<div>' + esc(message || 'Operación completada') + '</div>';
-        toast.style.display = 'block';
-        window.setTimeout(function () {
-            toast.style.display = 'none';
-        }, 2600);
     }
 
     if (form) {
         form.addEventListener('submit', function (event) {
+            var ajaxDocTypes = ['cotizacion', 'orden_venta', 'orden_compra', 'factura'];
+            var isAjaxDocType = ajaxDocTypes.indexOf(DOC_TYPE) !== -1;
+            if (isAjaxDocType) event.preventDefault();
+
+            if (!itemsBody) {
+                notifyUi('No se pudo leer las líneas del documento. Recarga la página.', 'error', 'Error al guardar');
+                return;
+            }
+
             const partyId = parseInt(hiddenPartyId ? hiddenPartyId.value : '0', 10) || 0;
+            const provId = hiddenProveedorId ? (parseInt(hiddenProveedorId.value, 10) || 0) : 0;
             const needsParty = DOC_TYPE === 'cotizacion' || DOC_TYPE === 'orden_venta' || DOC_TYPE === 'factura' || DOC_TYPE === 'orden_compra';
-            if (needsParty && !partyId) {
+            if (needsParty && !partyId && !provId) {
                 event.preventDefault();
                 window.alert('Debes buscar o crear un ' + PARTY_KIND + ' antes de guardar el documento.');
                 if (rutLookup) rutLookup.focus();
                 return;
             }
-            itemsBody.querySelectorAll('.item-row').forEach(updateRowSub);
-
-            var ajaxDocTypes = ['cotizacion', 'orden_venta', 'orden_compra', 'factura'];
-            if (ajaxDocTypes.indexOf(DOC_TYPE) === -1) {
+            var rowMissingOrigin = null;
+            itemsBody.querySelectorAll('.item-row').forEach(function (row) {
+                if (rowMissingOrigin) return;
+                var f = getRF(row);
+                var code = String((f.codeInput && f.codeInput.value) || '').trim();
+                if (!code || !f.origenSel) return;
+                if (!String(f.origenSel.value || '').trim()) rowMissingOrigin = row;
+            });
+            if (rowMissingOrigin) {
+                event.preventDefault();
+                window.alert('Debes seleccionar el origen de compra en todas las líneas con producto.');
+                var mf = getRF(rowMissingOrigin);
+                if (mf.origenSel) mf.origenSel.focus();
                 return;
             }
+            itemsBody.querySelectorAll('.item-row').forEach(updateRowSub);
 
-            event.preventDefault();
+            if (String(DOC_TYPE || '').toLowerCase() === 'orden_venta') {
+                const bajos = collectMargenBajoOV();
+                if (bajos.length) {
+                    const lines = bajos.map(function (x) {
+                        return x.codigo + ' (' + (Math.round(x.margen * 100) / 100) + '%)';
+                    }).join(', ');
+                    solicitarAutorizacionMargenBajo(lines).then(function (okAuth) {
+                        if (!okAuth) return;
+                        continuarGuardadoAjax(true);
+                    });
+                    return;
+                }
+            }
+
+            continuarGuardadoAjax(false);
+
+            function continuarGuardadoAjax(fromAuthModal) {
+            if (!isAjaxDocType) {
+                return;
+            }
+            if (fromAuthModal) {
+                if (margenAuthError) {
+                    margenAuthError.style.display = 'none';
+                    margenAuthError.textContent = '';
+                }
+                if (margenAuthConfirm) {
+                    margenAuthConfirm.disabled = true;
+                    margenAuthConfirm.textContent = 'Guardando...';
+                }
+                if (margenAuthCancel) margenAuthCancel.disabled = true;
+                if (margenAuthUser) margenAuthUser.disabled = true;
+                if (margenAuthPass) margenAuthPass.disabled = true;
+            }
+
+            const precioStash = [];
+            itemsBody.querySelectorAll('.item-row').forEach(function (row) {
+                const f = getRF(row);
+                if (!f.priceInput) return;
+                const u = effectiveUnitPrecioForSubmit(row);
+                if (u != null) {
+                    precioStash.push({ el: f.priceInput, was: f.priceInput.value });
+                    f.priceInput.value = u.toFixed(2);
+                }
+            });
+            if (typeof window.ensureCsrfForms === 'function') {
+                window.ensureCsrfForms(form);
+            }
             const formData = new FormData(form);
+            function restorePreciosOV() {
+                precioStash.forEach(function (s) { s.el.value = s.was; });
+            }
+            var saveHeaders = { 'X-Requested-With': 'XMLHttpRequest' };
+            if (typeof window.getCsrfToken === 'function') {
+                var csrfTok = window.getCsrfToken();
+                if (csrfTok) saveHeaders['X-CSRF-Token'] = csrfTok;
+            }
+            if (!fromAuthModal) setFormSaveBusy(true);
             fetch(form.action || window.location.pathname, {
                 method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
+                headers: saveHeaders,
                 body: formData
             })
                 .then(function (response) {
-                    return response.json().then(function (data) {
-                        if (!response.ok || !data.success) {
-                            throw new Error((data && data.message) || 'No se pudo guardar el documento');
-                        }
-                        return data;
+                    function friendlySaveErrorByDocType(statusCode) {
+                        var dt = String(DOC_TYPE || '').toLowerCase();
+                        var base = 'No se pudo guardar el documento.';
+                        if (dt === 'cotizacion') base = 'No se pudo guardar la cotización.';
+                        else if (dt === 'orden_venta') base = 'No se pudo guardar la orden de venta.';
+                        else if (dt === 'orden_compra') base = 'No se pudo guardar la orden de compra.';
+                        else if (dt === 'factura') base = 'No se pudo guardar la factura.';
+
+                        if (statusCode === 404) return base + ' El documento no existe o fue eliminado.';
+                        if (statusCode === 403) return base + ' No tienes permisos para realizar esta acción.';
+                        if (statusCode >= 500) return base + ' Ocurrió un error interno en el servidor.';
+                        return base + ' Revisa los datos e inténtalo nuevamente.';
+                    }
+
+                    var ctype = String(response.headers.get('content-type') || '').toLowerCase();
+                    if (ctype.indexOf('application/json') >= 0) {
+                        return response.json().then(function (data) {
+                            if (!response.ok || !data.success) {
+                                throw new Error((data && data.message) || 'No se pudo guardar el documento');
+                            }
+                            return data;
+                        });
+                    }
+                    // Algunas rutas pueden responder HTML (error o redirect). Evitar error técnico de parse JSON.
+                    return response.text().then(function () {
+                        // Evitamos exponer HTML/CSS del servidor en UI.
+                        throw new Error(friendlySaveErrorByDocType(response.status));
                     });
                 })
                 .then(function (data) {
+                    restorePreciosOV();
+                    if (!fromAuthModal) setFormSaveBusy(false);
                     if (docNumberInput && data.doc_number) {
                         docNumberInput.value = data.doc_number;
                     }
-                    if (loadedDocumentIdInput) {
-                        loadedDocumentIdInput.value = loadedDocumentIdInput.value || '0';
+                    if (loadedDocumentIdInput && data.doc_id) {
+                        loadedDocumentIdInput.value = String(data.doc_id);
                     }
-                    showInlineToast(data.message || 'Documento guardado correctamente');
+                    if (fromAuthModal && margenAuthModal && margenAuthIntro) {
+                        if (margenAuthError) {
+                            margenAuthError.style.display = 'none';
+                            margenAuthError.textContent = '';
+                        }
+                        margenAuthIntro.textContent = '';
+                        if (margenAuthSuccessBox) margenAuthSuccessBox.style.display = '';
+                        if (margenAuthSuccessText) margenAuthSuccessText.textContent = data.message || 'Orden de venta guardada correctamente.';
+                        if (margenAuthFormFields) margenAuthFormFields.style.display = 'none';
+                        if (margenAuthUser) margenAuthUser.value = '';
+                        if (margenAuthPass) margenAuthPass.value = '';
+                        if (margenAuthConfirm) margenAuthConfirm.style.display = 'none';
+                        if (margenAuthCancel) {
+                            margenAuthCancel.textContent = 'Cerrar';
+                            margenAuthCancel.classList.add('primary');
+                            margenAuthCancel.disabled = false;
+                        }
+                        if (margenAuthUser) margenAuthUser.disabled = true;
+                        if (margenAuthPass) margenAuthPass.disabled = true;
+                        window.setTimeout(function () {
+                            if (margenAuthModal && margenAuthModal.classList.contains('open')) {
+                                closeMargenAuthModal(true);
+                            }
+                        }, 2000);
+                    } else {
+                        showInlineToast(data.message || 'Documento guardado correctamente');
+                    }
                 })
                 .catch(function (error) {
-                    window.alert(error.message || 'No se pudo guardar el documento');
+                    restorePreciosOV();
+                    if (!fromAuthModal) setFormSaveBusy(false);
+                    if (fromAuthModal) {
+                        if (margenAuthConfirm) {
+                            margenAuthConfirm.disabled = false;
+                            margenAuthConfirm.textContent = 'Autorizar y guardar';
+                        }
+                        if (margenAuthCancel) margenAuthCancel.disabled = false;
+                        if (margenAuthUser) margenAuthUser.disabled = false;
+                        if (margenAuthPass) margenAuthPass.disabled = false;
+                        if (margenAuthError) {
+                            margenAuthError.style.display = 'block';
+                            margenAuthError.textContent = error.message || 'No se pudo guardar el documento';
+                        }
+                        return;
+                    }
+                    notifyUi(error.message || 'No se pudo guardar el documento', 'error', 'Error al guardar');
                 });
+            }
         });
     }
 })();
@@ -1187,6 +2133,51 @@
 (function () {
     'use strict';
 
+    const docActionModal = document.getElementById('docActionModal');
+    const docActionModalTitle = document.getElementById('docActionModalTitle');
+    const docActionModalMessage = document.getElementById('docActionModalMessage');
+    const docActionModalClose = document.getElementById('docActionModalClose');
+    const docActionModalOk = document.getElementById('docActionModalOk');
+
+    function showDocActionModal(message, tone, title) {
+        const text = String(message || 'No se pudo completar la acción');
+        const modalTone = String(tone || 'error').toLowerCase();
+        const heading = String(title || (modalTone === 'success' ? 'Operación completada' : 'Atención'));
+        if (!docActionModal || !docActionModalMessage || !docActionModalTitle) {
+            window.alert(text);
+            return;
+        }
+        docActionModal.setAttribute('data-tone', modalTone);
+        docActionModalTitle.textContent = heading;
+        docActionModalMessage.textContent = text;
+        docActionModal.classList.add('open');
+        docActionModal.setAttribute('aria-hidden', 'false');
+        if (docActionModalOk) {
+            window.setTimeout(function () { docActionModalOk.focus(); }, 10);
+        }
+    }
+    window.showDocActionModal = showDocActionModal;
+    function closeDocActionModal() {
+        if (!docActionModal) return;
+        docActionModal.classList.remove('open');
+        docActionModal.setAttribute('aria-hidden', 'true');
+        docActionModal.removeAttribute('data-tone');
+    }
+    [docActionModalClose, docActionModalOk].forEach(function (el) {
+        if (!el) return;
+        el.addEventListener('click', closeDocActionModal);
+    });
+    if (docActionModal) {
+        docActionModal.addEventListener('click', function (event) {
+            if (event.target === docActionModal) closeDocActionModal();
+        });
+    }
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && docActionModal && docActionModal.classList.contains('open')) {
+            closeDocActionModal();
+        }
+    });
+
     function withActionButtonState(actionKey, busy) {
         const selector = `.doc-action-btn[data-action="${actionKey}"]`;
         const btn = document.querySelector(selector);
@@ -1196,7 +2187,10 @@
     }
 
     function notifyError(message) {
-        window.alert(message || 'No se pudo completar la acción');
+        showDocActionModal(message || 'No se pudo completar la acción', 'error', 'No se pudo completar');
+    }
+    function notifySuccess(message) {
+        showDocActionModal(message || 'Operación completada correctamente.', 'success', 'Listo');
     }
 
     function getActionMeta(docIdArg) {
@@ -1233,7 +2227,7 @@
                     notifyError(data.error || 'No se pudo enviar el email');
                     return;
                 }
-                window.alert(data.message || 'Email sent');
+                notifySuccess(data.message || 'Email enviado correctamente.');
                 return;
             }
             if (!meta.docType || !meta.docNumber) {
@@ -1246,7 +2240,7 @@
                 notifyError(data.error || 'No se pudo enviar el email');
                 return;
             }
-            window.alert(data.message || 'Email sent');
+            notifySuccess(data.message || 'Email enviado correctamente.');
         } catch (error) {
             notifyError(error.message || 'No se pudo enviar el email');
         } finally {
@@ -1320,7 +2314,7 @@
                     notifyError(data.error || 'No se pudo reenviar el documento');
                     return;
                 }
-                window.alert(data.message || 'Document resent');
+                notifySuccess(data.message || 'Documento reenviado correctamente.');
                 return;
             }
             await window.sendEmail(docId);

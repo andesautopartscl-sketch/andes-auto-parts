@@ -1,0 +1,362 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Auditoría de sesión | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<style>
+  .audit-card {
+    max-width: 1400px;
+    margin: 0 auto;
+    width: calc(100% - 24px);
+    background: #ffffff;
+    border: 1px solid var(--line, #e2e8f0);
+    border-radius: 16px;
+    padding: 18px 20px;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+  }
+  .audit-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .audit-subtitle {
+    margin: 6px 0 0;
+    color: var(--muted, #64748b);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .audit-back {
+    text-decoration: none;
+    font-weight: 600;
+  }
+  .audit-back:hover { text-decoration: underline; }
+  .audit-table-wrap {
+    overflow: auto;
+    max-height: min(70vh, 640px);
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+  }
+  .audit-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .audit-table thead th {
+    background: #f8fafc;
+    color: #0f172a;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-size: 11px;
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .audit-table tbody td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #edf2f7;
+    vertical-align: top;
+  }
+  .audit-table tbody tr:hover td { background: #f1f6ff; }
+  .audit-cell-muted { color: #64748b; font-size: 11px; }
+  .audit-footer {
+    margin-top: 12px;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    color: var(--muted, #64748b);
+    font-size: 12px;
+  }
+
+  .audit-filters {
+    width: 100%;
+    margin: 2px 0 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 12px 12px 10px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  }
+  .audit-filters-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 10px;
+    align-items: end;
+  }
+  .audit-filters .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .audit-filters label {
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--muted, #64748b);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .audit-filters input[type="text"] {
+    height: 40px;
+  }
+  .audit-filters select {
+    height: 40px;
+  }
+  .audit-filters-actions {
+    margin-top: 12px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .audit-filters-toggle {
+    margin-top: 10px;
+    display: flex;
+    justify-content: flex-start;
+  }
+  .audit-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 12px;
+    border: 1px solid #dbe3ef;
+    background: #ffffff;
+    cursor: pointer;
+    user-select: none;
+  }
+  .audit-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+  }
+  .audit-toggle span {
+    font-size: 12px;
+    font-weight: 700;
+    color: #334155;
+  }
+
+  .audit-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 0 0 14px;
+  }
+  .audit-summary-block {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 12px;
+  }
+  .audit-summary-title {
+    font-size: 10px;
+    font-weight: 900;
+    color: var(--muted, #64748b);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 8px;
+  }
+  .audit-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .audit-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid #dbe3ef;
+    background: #fff;
+    color: #0f172a;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 700;
+    max-width: 100%;
+  }
+  .audit-chip:hover {
+    border-color: #93c5fd;
+    background: #f8fafc;
+  }
+  .audit-chip.is-active {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+  .audit-chip-count {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #e0e7ff;
+    color: #1d4ed8;
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .audit-filters input[type="text"],
+  .audit-filters select {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #dbe3ef;
+    border-radius: 11px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #ffffff;
+    color: #0f172a;
+    outline: none;
+  }
+
+  .audit-filters input[type="text"]::placeholder {
+    color: #94a3b8;
+    font-weight: 500;
+  }
+
+  .audit-filters input[type="text"]:focus,
+  .audit-filters select:focus {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+  }
+  @media (max-width: 920px) {
+    .audit-filters-grid { grid-template-columns: 1fr; }
+    .audit-filters-actions { justify-content: flex-start; }
+    .audit-summary { grid-template-columns: 1fr; }
+  }
+</style>
+
+<section class="audit-card">
+  <div class="audit-header">
+    <div>
+      <h1 class="page-title" style="margin:0;">Auditoría de sesión</h1>
+      <p class="audit-subtitle">Últimos eventos (p. ej. cierres de sesión). Solo lectura. Visible solo para SuperAdmin.</p>
+    </div>
+    <div class="topbar-actions" style="margin-top: 2px;">
+      <a class="btn outline" href="{{ url_for('productos.buscar') }}">Volver a Buscar</a>
+    </div>
+  </div>
+
+  <form method="get" class="audit-filters">
+    <div class="audit-filters-grid">
+      <div class="field">
+        <label>Buscar</label>
+        <input
+          type="text"
+          name="q"
+          value="{{ q }}"
+          placeholder="Usuario, acción, IP, ruta o detalle"
+        />
+      </div>
+      <div class="field">
+        <label>Usuario</label>
+        <select name="usuario">
+          <option value="">(Todos)</option>
+          {% for u in available_users %}
+            <option value="{{ u }}" {% if usuario == u %}selected{% endif %}>{{ u }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Acción</label>
+        <select name="accion">
+          <option value="">(Todas)</option>
+          {% for a in available_acciones %}
+            <option value="{{ a }}" {% if accion == a %}selected{% endif %}>{{ a }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="audit-filters-toggle">
+      <label class="audit-toggle">
+        <input type="checkbox" name="solo_logout" value="1" {% if solo_logout %}checked{% endif %}>
+        <span>Solo cierres (logout)</span>
+      </label>
+    </div>
+    <div class="audit-filters-actions">
+      <a class="btn outline" href="{{ url_for('seguridad.auditoria_sesion') }}">Limpiar</a>
+      <button class="btn primary" type="submit">Buscar</button>
+    </div>
+  </form>
+
+  {% if eventos %}
+  <div class="audit-summary">
+    <div class="audit-summary-block">
+      <div class="audit-summary-title">Top usuarios</div>
+      <div class="audit-chip-row">
+        {% for u, c in top_usuarios_list %}
+          {% if u %}
+            <a class="audit-chip {% if usuario == u %}is-active{% endif %}"
+               href="{{ url_for('seguridad.auditoria_sesion', q=q, usuario=u, accion=accion, solo_logout='1' if solo_logout else '') }}"
+               data-module-url="{{ url_for('seguridad.auditoria_sesion', q=q, usuario=u, accion=accion, solo_logout='1' if solo_logout else '') }}">
+              {{ u }}
+              <span class="audit-chip-count">{{ c }}</span>
+            </a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="audit-summary-block">
+      <div class="audit-summary-title">Top acciones</div>
+      <div class="audit-chip-row">
+        {% for a, c in top_acciones_list %}
+          {% if a %}
+            <a class="audit-chip {% if accion == a %}is-active{% endif %}"
+               href="{{ url_for('seguridad.auditoria_sesion', q=q, usuario=usuario, accion=a, solo_logout='1' if solo_logout else '') }}"
+               data-module-url="{{ url_for('seguridad.auditoria_sesion', q=q, usuario=usuario, accion=a, solo_logout='1' if solo_logout else '') }}">
+              {{ a }}
+              <span class="audit-chip-count">{{ c }}</span>
+            </a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="audit-table-wrap">
+    <table class="audit-table">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Usuario</th>
+          <th>Acción</th>
+          <th>IP</th>
+          <th>Ruta</th>
+          <th>Detalle</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in eventos %}
+        <tr>
+          <td style="white-space:nowrap; color:#334155;">{{ e.created_at | chile_datetime }}</td>
+          <td style="color:#334155;">{{ e.actor_usuario or '—' }}</td>
+          <td style="color:#334155;">{{ e.accion }}</td>
+          <td class="audit-cell-muted">{{ e.ip or '—' }}</td>
+          <td class="audit-cell-muted" title="{{ e.ruta or '' }}" style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ e.ruta or '—' }}</td>
+          <td class="audit-cell-muted" style="max-width:220px; word-break:break-word;">{{ e.detalle or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" style="padding: 22px; text-align:center; color:#94a3b8;">
+            Sin eventos registrados aún.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="audit-footer">
+    <span>
+      Mostrando {{ eventos|length }} de {{ total_eventos }} (máx. 300).
+    </span>
+    <span>Solo lectura.</span>
+  </div>
+</section>
+{% endblock %}

@@ -10,13 +10,16 @@ from pathlib import Path
 
 from flask import current_app
 from app.utils.rut_utils import format_rut
+from app.utils.phone_format import format_phone_display
 
 
 PUBLIC_DOCS_DIR = Path(__file__).resolve().parents[2] / "data" / "public_docs"
 
 
 def _secret_key() -> bytes:
-    key = (current_app.secret_key or "andes-default-secret").encode("utf-8")
+    key = (current_app.secret_key or "").encode("utf-8")
+    if not key:
+        raise RuntimeError("SECRET_KEY no configurada")
     return key
 
 
@@ -234,7 +237,7 @@ def render_document_pdf(doc, company: dict) -> Path:
         party_address = (getattr(doc, "cliente_direccion", "") or "")
         party_region = (getattr(doc, "cliente_region", "") or "")
         party_city = (getattr(doc, "cliente_ciudad", "") or "")
-        party_phone = (getattr(doc, "cliente_telefono", "") or "")
+        party_phone = format_phone_display(getattr(doc, "cliente_telefono", "") or "")
         party_email = (getattr(doc, "cliente_email", "") or "")
         vendor = (getattr(doc, "usuario", "") or "")
         payment_method = (getattr(doc, "metodo_pago", "") or "").replace("_", " ").title() or "No especificada"

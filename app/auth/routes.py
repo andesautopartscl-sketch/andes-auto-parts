@@ -1,14 +1,52 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, current_app, jsonify
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime
+import time
 import traceback
 
 from app.seguridad.models import Usuario as UsuarioSistema, PasswordResetRequest
 from app.extensions import db
 from app.models import Usuario as UsuarioLegacy, SessionDB
+from app.utils.csrf import rotate_csrf_token
+from app.utils.audit_log import record_audit_event
+from app.utils.login_wall import safe_next_path
 
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def _looks_like_werkzeug_hash(value: str | None) -> bool:
+    raw = (value or "").strip()
+    return raw.startswith("scrypt:") or raw.startswith("pbkdf2:")
+
+
+def _migrate_plaintext_passwords() -> None:
+    try:
+        changed = False
+        for user in UsuarioSistema.query.all():
+            raw = (user.password_hash or "").strip()
+            if raw and not _looks_like_werkzeug_hash(raw):
+                user.password_hash = generate_password_hash(raw)
+                changed = True
+        if changed:
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    legacy_db = SessionDB()
+    try:
+        changed = False
+        for user in legacy_db.query(UsuarioLegacy).all():
+            raw = (user.password or "").strip()
+            if raw and not _looks_like_werkzeug_hash(raw):
+                user.password = generate_password_hash(raw)
+                changed = True
+        if changed:
+            legacy_db.commit()
+    except Exception:
+        legacy_db.rollback()
+    finally:
+        legacy_db.close()
 
 
 # -----------------------------
@@ -37,7 +75,13 @@ def home():
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     error = None
+    next_url = safe_next_path(
+        (request.values.get("next") or request.args.get("next") or "").strip() or None
+    )
+    if request.method == "GET" and (request.args.get("expirado") or "").strip().lower() in ("1", "true", "si", "yes"):
+        error = "Sesión cerrada por inactividad. Vuelve a iniciar sesión."
     try:
+        _migrate_plaintext_passwords()
         if request.method == "POST":
             username = request.form.get("username")
             password = request.form.get("password")
@@ -52,8 +96,7 @@ def login():
                 try:
                     password_ok = check_password_hash(user.password_hash or "", password or "")
                 except Exception:
-                    # Compatibilidad defensiva: hashes legados/rotos no deben tumbar login con 500.
-                    password_ok = (str(user.password_hash or "") == str(password or ""))
+                    password_ok = False
 
             # -----------------------------
             # VALIDAR LOGIN (con bloqueo por intentos)
@@ -62,15 +105,17 @@ def login():
                 is_superadmin = bool(user.rol and user.rol.nombre == "SuperAdmin")
                 if not user.activo:
                     error = "Usuario inactivo. Contacta al administrador."
-                    return render_template("login.html", error=error)
+                    return render_template("login.html", error=error, next_url=next_url)
                 if user.bloqueado_seguridad and not is_superadmin:
                     error = "Usuario bloqueado por seguridad. El administrador debe desbloquear tu cuenta."
-                    return render_template("login.html", error=error)
+                    return render_template("login.html", error=error, next_url=next_url)
 
             if user and password_ok:
 
                 session["user"] = user.usuario
                 session["rol"] = user.rol.nombre if user.rol else ""
+                session["usuario_id"] = user.id
+                rotate_csrf_token()
 
                 # Update timestamps using the same SQLAlchemy session queried by API routes.
                 print("\n" + "="*70)
@@ -106,6 +151,8 @@ def login():
                     print(f"[LOGIN][ERROR] Error updating timestamps: {e}")
                     print("="*70 + "\n")
 
+                if next_url:
+                    return redirect(next_url)
                 return redirect(url_for("productos.buscar"))
 
             else:
@@ -119,7 +166,7 @@ def login():
                             user.en_linea = False
                             db.session.commit()
                             error = "Cuenta bloqueada por 3 intentos fallidos. Solicita desbloqueo al administrador."
-                            return render_template("login.html", error=error)
+                            return render_template("login.html", error=error, next_url=next_url)
                         db.session.commit()
 
                 if user is None:
@@ -137,17 +184,18 @@ def login():
                             legacy_password_ok = check_password_hash(raw_pass, password)
                         except Exception:
                             legacy_password_ok = False
-                        if not legacy_password_ok:
-                            legacy_password_ok = (raw_pass == (password or ""))
 
                     if legacy_user is not None and legacy_password_ok:
                         session["user"] = legacy_user.username
                         session["rol"] = legacy_user.rol or ""
+                        rotate_csrf_token()
+                        if next_url:
+                            return redirect(next_url)
                         return redirect(url_for("productos.buscar"))
 
                 error = "Usuario o clave incorrectos"
 
-        return render_template("login.html", error=error)
+        return render_template("login.html", error=error, next_url=next_url)
     except Exception as exc:
         db.session.rollback()
         print("[AUTH LOGIN][FATAL]", exc)
@@ -155,7 +203,31 @@ def login():
         return render_template(
             "login.html",
             error="Error temporal al iniciar sesión. Intenta nuevamente en unos segundos.",
+            next_url=next_url,
         )
+
+
+@auth_bp.route("/session/idle-status", methods=["GET"])
+def session_idle_status():
+    """Solo lectura: no renueva _last_activity_ts (así el polling no mantiene viva la sesión)."""
+    max_sec = int(current_app.config.get("ANDES_IDLE_LOGOUT_SECONDS") or 0)
+    if max_sec <= 0:
+        return jsonify(enabled=False)
+    if "user" not in session:
+        return jsonify(enabled=True, logged_in=False)
+    if (session.get("rol") or "").strip().lower() == "superadmin":
+        return jsonify(enabled=True, superadmin=True, remaining_sec=None)
+    now = time.time()
+    raw_last = session.get("_last_activity_ts")
+    if raw_last is None:
+        remaining = float(max_sec)
+    else:
+        try:
+            elapsed = now - float(raw_last)
+            remaining = max(0.0, float(max_sec) - elapsed)
+        except (TypeError, ValueError):
+            remaining = float(max_sec)
+    return jsonify(enabled=True, remaining_sec=round(remaining, 1), max_sec=max_sec)
 
 
 @auth_bp.route("/login/password-reset-request", methods=["POST"])
@@ -198,7 +270,7 @@ def password_reset_request():
 # -----------------------------
 # LOGOUT
 # -----------------------------
-@auth_bp.route("/logout")
+@auth_bp.route("/logout", methods=["POST"])
 def logout():
 
     username = session.get("user")
@@ -207,7 +279,7 @@ def logout():
         if user:
             user.en_linea = False
             db.session.commit()
-
+    record_audit_event("logout", actor_usuario=username)
     session.clear()
 
     return redirect(url_for("auth.login"))

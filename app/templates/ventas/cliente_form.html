@@ -6,44 +6,109 @@
 <style>
 .form-shell {
     display: grid;
-    grid-template-columns: minmax(0, 860px) 280px;
-    gap: 16px;
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 240px);
+    gap: 12px;
     align-items: start;
 }
 .form-card,
 .aside-card {
-    padding: 20px;
+    padding: 14px 16px;
 }
 .form-card h2 {
-    margin: 0 0 6px;
-    font-size: 24px;
+    margin: 0 0 4px;
+    font-size: 20px;
+    line-height: 1.2;
 }
 .form-card p {
-    color: #475569;
-    margin-bottom: 16px;
+    color: #64748b;
+    margin: 0 0 12px;
+    font-size: 13px;
+    line-height: 1.35;
 }
 .group-title {
-    margin: 16px 0 10px;
-    font-size: 14px;
-    letter-spacing: 0.03em;
+    margin: 10px 0 6px;
+    font-size: 12px;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     color: #334155;
     font-weight: 800;
 }
+.group-title:first-of-type {
+    margin-top: 0;
+}
+.form-card form .group-title:not(:first-of-type) {
+    margin-top: 14px;
+}
 .field-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: 8px 10px;
+}
+.field-grid--contacto {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    row-gap: 12px;
+    column-gap: 10px;
+}
+.field-grid--ubic {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+/* Mayorista: hereda columnas de field-grid--contacto; checkbox + texto en una sola fila */
+.field-grid--mayorista-row {
+    align-items: start;
+    margin-top: 16px;
+    margin-bottom: 6px;
+}
+.field--mayorista-group {
+    grid-column: span 2;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+}
+.mayorista-check-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    width: 100%;
+    min-width: 0;
+}
+.mayorista-check-row input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    min-width: 1rem;
+    margin: 0;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+label.mayorista-check-lbl {
+    font-size: 13px;
+    font-weight: 700;
+    color: #334155;
+    margin: 0;
+    padding: 0;
+    cursor: pointer;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+.field--mayorista-group .field-note {
+    margin: 0;
+    padding-left: calc(1rem + 8px);
+    max-width: 100%;
+}
+.field.field--margen-pct {
+    max-width: 160px;
 }
 .field {
     display: grid;
-    gap: 6px;
+    gap: 4px;
 }
 .field.full {
     grid-column: 1 / -1;
 }
 .field label {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     color: #334155;
 }
@@ -52,43 +117,163 @@
 .field select {
     width: 100%;
     border: 1px solid #dbe3ef;
-    border-radius: 10px;
-    padding: 10px 12px;
+    border-radius: 8px;
+    padding: 7px 10px;
     font-size: 13px;
     background: #fff;
 }
 .field textarea {
-    min-height: 92px;
+    min-height: 64px;
     resize: vertical;
 }
 .field-note {
-    font-size: 12px;
+    font-size: 11px;
     color: #64748b;
+    line-height: 1.35;
+}
+.label-with-help {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+.label-with-help label {
+    flex: 1;
+    min-width: 0;
+}
+.tel-help-btn {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+}
+.tel-help-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+.tel-help-btn:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+.tel-help-panel {
+    margin-top: 6px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #dbe3ef;
+    background: #f8fafc;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #475569;
+}
+.tel-help-panel[hidden] {
+    display: none !important;
+}
+.tel-help-panel p {
+    margin: 0 0 8px;
+}
+.tel-help-close {
+    font-size: 12px;
+    padding: 4px 10px;
+}
+.group-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0 6px;
+}
+.form-card form .group-title-row .group-title {
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+}
+.ubic-help-panel {
+    margin: 0 0 10px;
 }
 .hidden {
     display: none !important;
 }
+.sii-rut-label-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+.sii-rut-label-row label {
+    margin: 0;
+}
+.sii-rut-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+.sii-rut-badge--ok {
+    background: #dcfce7;
+    color: #166534;
+}
+.sii-rut-badge--info {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+.sii-rut-badge--warn {
+    background: #fef9c3;
+    color: #a16207;
+}
+.sii-rut-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #cbd5e1;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: sii-rut-spin 0.7s linear infinite;
+    flex-shrink: 0;
+}
+@keyframes sii-rut-spin {
+    to { transform: rotate(360deg); }
+}
 .actions {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
-    margin-top: 16px;
+    margin-top: 12px;
 }
 .aside-card h3 {
-    margin: 0 0 10px;
-    font-size: 16px;
+    margin: 0 0 6px;
+    font-size: 14px;
 }
 .aside-card ul {
-    padding-left: 18px;
+    padding-left: 16px;
     color: #475569;
     display: grid;
-    gap: 8px;
+    gap: 6px;
+    font-size: 12px;
+    line-height: 1.4;
+    margin: 0;
+}
+@media (max-width: 1100px) {
+    .field-grid--contacto { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .field-grid--ubic { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 1024px) {
     .form-shell { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
     .field-grid { grid-template-columns: 1fr; }
+    .field-grid--contacto { grid-template-columns: 1fr; }
+    .field-grid--ubic { grid-template-columns: 1fr; }
+    .field--mayorista-group { grid-column: 1 / -1; }
+    .field--margen-pct { max-width: none; }
 }
 </style>
 {% endblock %}
@@ -97,18 +282,22 @@
 <div class="form-shell">
     <section class="panel form-card">
         <h2>{{ form_title }}</h2>
-        <p>Ficha completa para clientes con estructura tributaria y geografia para Chile e internacional.</p>
+        <p>Datos tributarios y ubicación para cotizaciones y ventas.</p>
 
         <form method="post" id="clienteForm">
             <div class="group-title">Datos comerciales</div>
-            <div class="field-grid">
+            <div class="field-grid field-grid--contacto">
                 <div class="field full">
                     <label for="nombre">Nombre / Razon social</label>
                     <input id="nombre" name="nombre" value="{{ cliente.nombre or '' }}" required>
                 </div>
                 <div class="field">
-                    <label for="rut">RUT</label>
-                    <input id="rut" name="rut" data-rut-input value="{{ cliente.rut|format_rut if cliente.rut else '' }}">
+                    <div class="sii-rut-label-row">
+                        <label for="rut">RUT</label>
+                        <span id="siiRutBadge" class="sii-rut-badge" hidden></span>
+                        <span id="siiRutSpinner" class="sii-rut-spinner" hidden aria-hidden="true"></span>
+                    </div>
+                    <input id="rut" name="rut" data-rut-input data-sii-contribuyente-rut value="{{ cliente.rut|format_rut if cliente.rut else '' }}">
                 </div>
                 <div class="field">
                     <label for="giro">Giro</label>
@@ -119,13 +308,45 @@
                     <input id="email" name="email" type="email" value="{{ cliente.email or '' }}">
                 </div>
                 <div class="field">
-                    <label for="telefono">Telefono</label>
-                    <input id="telefono" name="telefono" value="{{ cliente.telefono or '' }}">
+                    <div class="label-with-help">
+                        <label for="telefono">Telefono</label>
+                        <button type="button" class="tel-help-btn" id="telefonoHelpBtn" aria-expanded="false" aria-controls="telefonoHelpPanel" aria-label="Ayuda formato telefono" title="Formato del telefono">?</button>
+                    </div>
+                    <input id="telefono" name="telefono" type="tel" autocomplete="tel" placeholder="+56 9 …"
+                        value="{{ cliente.telefono or '' }}">
+                    <div id="telefonoHelpPanel" class="tel-help-panel" role="region" aria-labelledby="telefonoHelpTitle" hidden>
+                        <p id="telefonoHelpTitle"><strong>Formato</strong></p>
+                        <p>Ejemplos: <code>926152826</code> o <code>+56 9 2615 2826</code>. Desde el extranjero incluya <code>+</code> y codigo de pais.</p>
+                        <button type="button" class="btn tel-help-close" id="telefonoHelpClose">Cerrar</button>
+                    </div>
                 </div>
             </div>
 
-            <div class="group-title">Ubicacion</div>
-            <div class="field-grid">
+            <div class="field-grid field-grid--contacto field-grid--mayorista-row">
+                <div class="field--mayorista-group">
+                    <div class="mayorista-check-row">
+                        <input type="checkbox" id="cliente_mayorista" name="cliente_mayorista" value="1" {% if cliente.get('cliente_mayorista') %}checked{% endif %} aria-describedby="mayorista-hint">
+                        <label class="mayorista-check-lbl" for="cliente_mayorista">Cliente mayorista</label>
+                    </div>
+                    <span class="field-note" id="mayorista-hint">Si aplica, en cotización, OV y factura se aplica el % sobre el subtotal de líneas (antes del IVA).</span>
+                </div>
+                <div class="field field--margen-pct">
+                    <label for="margen_descuento_pct">Margen descuento (%)</label>
+                    <input type="number" id="margen_descuento_pct" name="margen_descuento_pct" min="0" max="100" step="0.01" inputmode="decimal"
+                        value="{{ cliente.get('margen_descuento_pct', 0) }}">
+                </div>
+            </div>
+
+            <div class="group-title-row">
+                <div class="group-title">Ubicacion</div>
+                <button type="button" class="tel-help-btn" id="ubicacionHelpBtn" aria-expanded="false" aria-controls="ubicacionHelpPanel" aria-label="Ayuda region comuna y ciudad" title="Region, comuna y ciudad">?</button>
+            </div>
+            <div id="ubicacionHelpPanel" class="tel-help-panel ubic-help-panel" role="region" aria-labelledby="ubicacionHelpTitle" hidden>
+                <p id="ubicacionHelpTitle"><strong>Region, comuna y ciudad</strong></p>
+                <p>Si el pais es Chile, region y comuna son obligatorias. La ciudad se sugiere sola: en Region Metropolitana como Santiago; en el resto, igual a la comuna (siempre editable).</p>
+                <button type="button" class="btn tel-help-close" id="ubicacionHelpClose">Cerrar</button>
+            </div>
+            <div class="field-grid field-grid--ubic">
                 <div class="field">
                     <label for="pais">Pais</label>
                     <select id="pais" name="pais" required>
@@ -143,11 +364,6 @@
                     </select>
                 </div>
 
-                <div class="field hidden" id="regionTextWrap">
-                    <label for="region_text">Region / Estado</label>
-                    <input id="region_text" name="region_text" value="{{ cliente.region or '' }}">
-                </div>
-
                 <div class="field" id="comunaSelectWrap">
                     <label for="comuna">Comuna</label>
                     <select id="comuna" name="comuna">
@@ -155,22 +371,24 @@
                     </select>
                 </div>
 
-                <div class="field hidden" id="comunaTextWrap">
-                    <label for="comuna_text">Comuna / Distrito</label>
-                    <input id="comuna_text" name="comuna_text" value="{{ cliente.comuna or '' }}">
-                </div>
-
                 <div class="field">
                     <label for="ciudad">Ciudad</label>
                     <input id="ciudad" name="ciudad" value="{{ cliente.ciudad or '' }}">
                 </div>
 
-                <div class="field full">
-                    <label for="direccion">Direccion</label>
-                    <textarea id="direccion" name="direccion">{{ cliente.direccion or '' }}</textarea>
+                <div class="field full hidden" id="regionTextWrap">
+                    <label for="region_text">Region / Estado</label>
+                    <input id="region_text" name="region_text" value="{{ cliente.region or '' }}">
                 </div>
+
+                <div class="field full hidden" id="comunaTextWrap">
+                    <label for="comuna_text">Comuna / Distrito</label>
+                    <input id="comuna_text" name="comuna_text" value="{{ cliente.comuna or '' }}">
+                </div>
+
                 <div class="field full">
-                    <span class="field-note">Si el pais es Chile, region y comuna son obligatorias. La ciudad se sincroniza automaticamente con la comuna (editable).</span>
+                    <label for="direccion">Calle y número</label>
+                    <textarea id="direccion" name="direccion" placeholder="Ej. Av. Principal 1234, depto. 2">{{ cliente.direccion or '' }}</textarea>
                 </div>
             </div>
 
@@ -187,6 +405,7 @@
             <li>Nombre y pais son obligatorios.</li>
             <li>En Chile se exige region y comuna.</li>
             <li>Cotizacion y orden de venta consumen esta ficha.</li>
+            <li>Cliente mayorista: descuento % opcional sobre subtotal de lineas antes de IVA.</li>
         </ul>
     </aside>
 </div>
@@ -194,6 +413,7 @@
 
 {% block extra_scripts %}
 <script id="chileGeoData" type="application/json">{{ chile_geo | tojson }}</script>
+{% include 'ventas/_sii_contribuyente_assets.html' %}
 <script>
 (function () {
     const CHILE_NAME = 'Chile';
@@ -278,12 +498,40 @@
         }
     }
 
+    function isRegionMetropolitana(regionName) {
+        return normalize(regionName || '').includes('metropolitana');
+    }
+
+    function defaultCiudadForChile(regionName, comuna) {
+        if (!comuna) return '';
+        return isRegionMetropolitana(regionName) ? 'Santiago' : comuna;
+    }
+
     function syncCityFromComuna() {
         if (!isChile()) return;
         const comuna = comunaSelect.value;
         if (!comuna) return;
-        if (!ciudadInput.value || normalize(ciudadInput.value) === normalize(comunaText.value)) {
-            ciudadInput.value = comuna;
+        const regionName = regionSelect.value || regionText.value;
+        const desired = defaultCiudadForChile(regionName, comuna);
+        const cur = (ciudadInput.value || '').trim();
+        if (!cur || normalize(cur) === normalize(comuna)) {
+            ciudadInput.value = desired;
+        }
+    }
+
+    /** Region Metropolitana: mostrar Santiago enseguida aun sin comuna (ciudad vacia o igual a la comuna previa al cambiar region). */
+    function ensureSantiagoIfMetroNoComuna(prevComunaOpt) {
+        if (!isChile()) return;
+        const regionName = regionSelect.value || regionText.value;
+        if (!isRegionMetropolitana(regionName) || comunaSelect.value) return;
+        const cur = (ciudadInput.value || '').trim();
+        const prev = (prevComunaOpt || '').trim();
+        if (!cur) {
+            ciudadInput.value = 'Santiago';
+            return;
+        }
+        if (prev && normalize(cur) === normalize(prev)) {
+            ciudadInput.value = 'Santiago';
         }
     }
 
@@ -305,6 +553,7 @@
             comunaText.value = comunaSelect.value || comunaText.value;
             populateComunas(regionSelect.value, comunaText.value || comunaSelect.value);
             syncCityFromComuna();
+            ensureSantiagoIfMetroNoComuna();
         } else {
             if (!regionText.value) regionText.value = regionSelect.value || '';
             if (!comunaText.value) comunaText.value = comunaSelect.value || '';
@@ -313,7 +562,14 @@
 
     regionSelect.addEventListener('change', () => {
         regionText.value = regionSelect.value || '';
-        populateComunas(regionSelect.value, '');
+        const regionName = regionSelect.value || '';
+        const prevComuna = comunaSelect.value || '';
+        populateComunas(regionName, '');
+        if (isChile() && !isRegionMetropolitana(regionName) && normalize(ciudadInput.value) === 'santiago') {
+            ciudadInput.value = '';
+        }
+        syncCityFromComuna();
+        ensureSantiagoIfMetroNoComuna(prevComuna);
     });
 
     comunaSelect.addEventListener('change', () => {
@@ -326,6 +582,30 @@
     populateCountries(paisSelect.value || CHILE_NAME);
     populateComunas(regionSelect.value || regionText.value, comunaText.value || comunaSelect.value);
     applyCountryRules();
+
+    function bindHelpToggle(btnId, panelId, closeId) {
+        const btn = document.getElementById(btnId);
+        const panel = document.getElementById(panelId);
+        const closeBtn = document.getElementById(closeId);
+        if (!btn || !panel) return;
+        function setOpen(open) {
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            if (open) panel.removeAttribute('hidden');
+            else panel.setAttribute('hidden', '');
+        }
+        btn.addEventListener('click', () => setOpen(panel.hasAttribute('hidden')));
+        if (closeBtn) closeBtn.addEventListener('click', () => setOpen(false));
+        document.addEventListener('click', (e) => {
+            if (!panel.hasAttribute('hidden') && !panel.contains(e.target) && !btn.contains(e.target)) {
+                setOpen(false);
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !panel.hasAttribute('hidden')) setOpen(false);
+        });
+    }
+    bindHelpToggle('telefonoHelpBtn', 'telefonoHelpPanel', 'telefonoHelpClose');
+    bindHelpToggle('ubicacionHelpBtn', 'ubicacionHelpPanel', 'ubicacionHelpClose');
 })();
 </script>
 {% endblock %}

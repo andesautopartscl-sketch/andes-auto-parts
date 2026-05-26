@@ -3,18 +3,46 @@
         <label for="notes">Observaciones</label>
         <textarea id="notes" name="notes" placeholder="Condiciones de pago, validez, observaciones para el documento...">{{ notes }}</textarea>
     </div>
-    <div class="cot-actions no-print">
+    <div class="cot-actions no-print is-soft-hidden">
+        {% set can_save_doc = user_permissions.ventas_guardar_documento if user_permissions is defined else True %}
+        {% set can_convert_doc = user_permissions.ventas_convertir_documento if user_permissions is defined else True %}
+        {% set can_auth_margin = user_permissions.ventas_autorizar_margen_bajo if user_permissions is defined else True %}
+        {% set can_bodega_picking = user_permissions.bodega_picking if user_permissions is defined else True %}
         {% if doc_type == 'cotizacion' %}
+        {% if can_convert_doc %}
         <button class="btn outline" type="button" id="btnConvertToOV">Convertir a Orden de Venta</button>
+        {% endif %}
         {% elif doc_type == 'orden_venta' %}
-        <button class="btn outline" type="button" id="btnFacturarOV">Convertir a Factura / Boleta</button>
+        {% if can_bodega_picking %}
+        <button class="btn outline" type="button" id="btnPickingBodega" title="Enviar a bodega para preparar mercaderia">Picking bodega</button>
+        {% endif %}
+        {% if can_convert_doc %}
+        <button class="btn outline" type="button" id="btnFacturarOV">Convertir a Factura</button>
+        <button class="btn outline" type="button" id="btnBoletearOV">Convertir a Boleta</button>
+        {% endif %}
         {% elif doc_type == 'orden_compra' %}
+        {% if can_convert_doc %}
         <button class="btn outline" type="button" id="btnRecibirOC">Recibir / Factura proveedor</button>
+        {% endif %}
         {% elif doc_type == 'factura' %}
+        {% if can_convert_doc %}
         <button class="btn warn" type="button" id="btnCreateNC">Crear Nota de Crédito</button>
         {% endif %}
+        {% endif %}
         <button class="btn" type="button" onclick="window.print()">Imprimir / PDF</button>
+        {% if can_save_doc %}
         <button class="btn primary" type="submit">Guardar {{ title|lower }}</button>
+        {% endif %}
+    </div>
+    <div class="cot-print-legal only-print" aria-hidden="true">
+        <div class="cot-print-legal-col">
+            <strong>Condiciones generales</strong>
+            <p>Documento emitido por Andes Auto Parts. Precios en pesos chilenos, sujetos a disponibilidad de stock y confirmación comercial.</p>
+        </div>
+        <div class="cot-print-legal-col">
+            <strong>Agradecemos su confianza</strong>
+            <p>Quedamos atentos a sus consultas. Andes Auto Parts — repuestos automotrices con respaldo y trazabilidad.</p>
+        </div>
     </div>
 </div>
 
@@ -45,6 +73,45 @@
             <div class="ps-btns">
                 <button class="btn" type="button" id="pagoModalCancel">Cancelar</button>
                 <button class="btn primary" type="button" id="pagoModalConfirm">Confirmar pago</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if doc_type == 'orden_venta' and can_auth_margin %}
+<div id="margenAuthModal" class="psmodal" aria-hidden="true">
+    <div class="psbox" style="max-width:520px;">
+        <div class="pshead">
+            <h3>Autorizar Margen Bajo</h3>
+            <button class="ps-closex" type="button" id="margenAuthClose">&times;</button>
+        </div>
+        <div style="padding:18px 24px;">
+            <p id="margenAuthIntro" style="margin:0 0 12px;color:#334155;font-size:14px;line-height:1.45;">
+                Debes autorizar esta orden por margen menor al mínimo permitido.
+            </p>
+            <div id="margenAuthSuccessBox" style="display:none;margin:0 0 12px;padding:12px 14px;border:1px solid #86efac;background:#f0fdf4;border-radius:10px;">
+                <div style="display:flex;align-items:flex-start;gap:10px;">
+                    <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:999px;background:#16a34a;color:#fff;font-size:13px;line-height:1;flex:0 0 22px;">✓</span>
+                    <div>
+                        <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:2px;">Autorización validada</div>
+                        <div id="margenAuthSuccessText" style="font-size:13px;color:#166534;line-height:1.4;">Orden guardada correctamente.</div>
+                    </div>
+                </div>
+            </div>
+            <div id="margenAuthFormFields">
+                <label for="margenAuthUser" style="display:block;font-weight:600;margin-bottom:6px;">Usuario autorizador</label>
+                <input id="margenAuthUser" type="text" autocomplete="username" placeholder="Encargado / Subencargado / Admin" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;">
+                <label for="margenAuthPass" style="display:block;font-weight:600;margin:12px 0 6px;">Clave</label>
+                <input id="margenAuthPass" type="password" autocomplete="current-password" placeholder="Ingresa clave de autorización" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;">
+            </div>
+            <p id="margenAuthError" style="color:var(--danger);margin-top:10px;display:none;"></p>
+        </div>
+        <div class="psfoot">
+            <span></span>
+            <div class="ps-btns">
+                <button class="btn" type="button" id="margenAuthCancel">Cancelar</button>
+                <button class="btn primary" type="button" id="margenAuthConfirm">Autorizar y guardar</button>
             </div>
         </div>
     </div>

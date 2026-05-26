@@ -3,6 +3,7 @@
 {% block title %}Panel de Bodega | Andes Auto Parts{% endblock %}
 
 {% block content %}
+<div class="bodega-dashboard bodega-dashboard--compact">
 <div class="topbar">
     <div>
         <h1 class="page-title">Panel de Bodega</h1>
@@ -30,7 +31,7 @@
     </div>
 </div>
 
-<div class="panel" style="margin-bottom:18px;">
+<div class="panel">
     <h2 class="section-title">Resumen Operativo</h2>
     <div class="product-summary">
         <div class="summary-box">
@@ -52,7 +53,7 @@
     </div>
 </div>
 
-<div class="panel" style="margin-bottom:18px;">
+<div class="panel">
     <h2 class="section-title">Accesos Directos</h2>
     <div class="quick-links">
         <a class="quick-link" href="{{ url_for('bodega.ingreso') }}">
@@ -70,6 +71,14 @@
         <a class="quick-link" href="{{ url_for('bodega.movimientos') }}">
             <strong>📊 Historial</strong>
             <span>Consulta ingresos, salidas y ajustes con filtros por fecha y código.</span>
+        </a>
+        <a class="quick-link" href="{{ url_for('bodega.picking_venta_lista') }}">
+            <strong>📦 Picking venta</strong>
+            <span>Preparar pedidos de ordenes de venta y marcar entrega al vendedor.</span>
+        </a>
+        <a class="quick-link" href="{{ url_for('bodega.bodegas_catalogo') }}">
+            <strong>📦 Bodegas</strong>
+            <span>Ver, crear y renombrar bodegas; el cambio de nombre se aplica en todo el sistema.</span>
         </a>
     </div>
 </div>
@@ -93,7 +102,7 @@
             <tbody>
                 {% for movimiento in recientes %}
                 <tr>
-                    <td>{{ movimiento.fecha.strftime('%d/%m/%Y %H:%M') if movimiento.fecha else '' }}</td>
+                    <td>{{ movimiento.fecha|chile_datetime if movimiento.fecha else '' }}</td>
                     <td><strong>{{ movimiento.codigo_producto }}</strong></td>
                     <td><span class="badge {{ movimiento.tipo }}">{{ movimiento.tipo|upper }}</span></td>
                     <td>{{ movimiento.cantidad }}</td>
@@ -108,5 +117,6 @@
     {% else %}
     <div class="empty-state">Aún no hay movimientos registrados en bodega.</div>
     {% endif %}
+</div>
 </div>
 {% endblock %}

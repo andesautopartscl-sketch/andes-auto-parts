@@ -1,6 +1,7 @@
 <h2>Editar Producto</h2>
 
 <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     Código Interno:
     <input type="text" name="codigo_interno" value="{{ producto.codigo_interno }}"><br><br>
 

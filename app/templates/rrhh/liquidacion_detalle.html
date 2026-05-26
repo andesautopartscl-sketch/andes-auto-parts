@@ -1,0 +1,130 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block content %}
+<div class="container" style="max-width:1000px;">
+  <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap;">
+    <div>
+      <h2 style="margin:0;">Liquidación {{ liq.periodo }}</h2>
+      <div style="color:#64748b; margin-top:6px;">
+        <strong>{{ u.nombre if u else ('Usuario #' ~ liq.usuario_id) }}</strong>
+        <span style="margin-left:8px;">Estado: <strong>{{ liq.estado }}</strong></span>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      {% if u %}
+      <a class="btn outline sm" href="{{ url_for('rrhh.empleado_expediente', uid=u.id) }}">Expediente empleado</a>
+      {% endif %}
+      <a class="btn" href="{{ url_for('rrhh.periodo', periodo=liq.periodo) }}">Volver al período</a>
+    </div>
+  </div>
+
+  <div style="margin-top:14px; padding:14px; border:1px solid #e2e8f0; border-radius:14px; background:#fff;">
+    <h3 style="margin:0 0 10px 0;">Resumen</h3>
+    <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:10px;">
+      <div><strong>Sueldo base</strong>: ${{ (liq.sueldo_base or 0)|int | string | replace(',', '.') }}</div>
+      <div><strong>Comisión</strong>: ${{ (liq.comision_bruta or 0)|int | string | replace(',', '.') }}</div>
+      <div><strong>Haberes otros</strong>: ${{ (liq.haberes_otros or 0)|int | string | replace(',', '.') }}</div>
+      <div><strong>Descuentos otros</strong>: ${{ (liq.descuentos_otros or 0)|int | string | replace(',', '.') }}</div>
+      <div><strong>Base imponible</strong>: ${{ (liq.base_imponible or 0)|int | string | replace(',', '.') }}</div>
+      <div><strong>Líquido</strong>: ${{ (liq.total_liquido or 0)|int | string | replace(',', '.') }}</div>
+    </div>
+    <div style="margin-top:10px; color:#64748b; font-size:13px;">
+      AFP: ${{ (liq.afp_descuento or 0)|int }} · Salud: ${{ (liq.salud_descuento or 0)|int }} · AFC: ${{ (liq.afc_descuento or 0)|int }} · Impuesto: ${{ (liq.impuesto_unico or 0)|int }}
+    </div>
+  </div>
+
+  <div style="margin-top:14px; padding:14px; border:1px solid #e2e8f0; border-radius:14px; background:#fff;">
+    <h3 style="margin:0 0 10px 0;">Ajustes / Haberes / Descuentos</h3>
+    {% if liq.estado != 'borrador' %}
+      <div style="color:#64748b;">La liquidación no está en borrador, no se pueden agregar ajustes.</div>
+    {% else %}
+      <div style="display:grid; grid-template-columns: 140px 1fr 160px 140px; gap:10px; align-items:end;">
+        <div>
+          <label style="font-size:12px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:.04em;">Tipo</label>
+          <select id="rrhhTipo" style="height:40px; width:100%; border-radius:10px; border:1px solid #d7dee8; padding:0 12px;">
+            <option value="ajuste">Ajuste</option>
+            <option value="haber">Haber</option>
+            <option value="descuento">Descuento</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:.04em;">Descripción</label>
+          <input id="rrhhDesc" placeholder="Ej: Bono por meta" style="height:40px; width:100%; border-radius:10px; border:1px solid #d7dee8; padding:0 12px;">
+        </div>
+        <div>
+          <label style="font-size:12px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:.04em;">Referencia</label>
+          <input id="rrhhRef" placeholder="Opcional" style="height:40px; width:100%; border-radius:10px; border:1px solid #d7dee8; padding:0 12px;">
+        </div>
+        <div>
+          <label style="font-size:12px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:.04em;">Monto (CLP)</label>
+          <input id="rrhhMonto" type="number" step="1" style="height:40px; width:100%; border-radius:10px; border:1px solid #d7dee8; padding:0 12px;">
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+        <button type="button" class="btn btn-primary" onclick="rrhhAddDetalle()">Agregar y recalcular</button>
+      </div>
+      <div id="rrhhMsg" style="margin-top:8px; color:#64748b; font-size:13px;"></div>
+    {% endif %}
+
+    <div style="margin-top:10px; overflow:auto;">
+      <table style="width:100%; border-collapse:collapse; min-width:760px;">
+        <thead>
+          <tr style="background:#f8fafc;">
+            <th style="text-align:left; padding:10px; border-bottom:1px solid #e2e8f0;">Tipo</th>
+            <th style="text-align:left; padding:10px; border-bottom:1px solid #e2e8f0;">Descripción</th>
+            <th style="text-align:left; padding:10px; border-bottom:1px solid #e2e8f0;">Referencia</th>
+            <th style="text-align:right; padding:10px; border-bottom:1px solid #e2e8f0;">Monto</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in detalles %}
+          <tr>
+            <td style="padding:10px; border-bottom:1px solid #eef2f7;">{{ d.tipo }}</td>
+            <td style="padding:10px; border-bottom:1px solid #eef2f7;">{{ d.descripcion }}</td>
+            <td style="padding:10px; border-bottom:1px solid #eef2f7;">{{ d.referencia }}</td>
+            <td style="padding:10px; border-bottom:1px solid #eef2f7; text-align:right;">${{ (d.monto or 0)|int }}</td>
+          </tr>
+          {% endfor %}
+          {% if not detalles %}
+          <tr><td colspan="4" style="padding:10px; color:#64748b;">Sin líneas.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const lid = {{ liq.id }};
+  const csrf = (window.getCsrfToken && window.getCsrfToken()) || (document.querySelector('meta[name=\"csrf-token\"]') || {}).content || '';
+  function hdr() {
+    return { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrf };
+  }
+  function msg(t, err) {
+    const n = document.getElementById('rrhhMsg');
+    if (!n) return;
+    n.textContent = t || '';
+    n.style.color = err ? '#b91c1c' : '#64748b';
+  }
+  window.rrhhAddDetalle = async function () {
+    msg('Guardando...', false);
+    try {
+      const payload = {
+        tipo: (document.getElementById('rrhhTipo') || {}).value || 'ajuste',
+        descripcion: (document.getElementById('rrhhDesc') || {}).value || '',
+        referencia: (document.getElementById('rrhhRef') || {}).value || '',
+        monto: (document.getElementById('rrhhMonto') || {}).value || '0',
+      };
+      const res = await fetch(`/rrhh/api/liquidacion/${encodeURIComponent(lid)}/detalle`, { method:'POST', headers: hdr(), body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo agregar');
+      window.location.reload();
+    } catch (e) {
+      msg(e.message, true);
+    }
+  };
+})();
+</script>
+{% endblock %}
+

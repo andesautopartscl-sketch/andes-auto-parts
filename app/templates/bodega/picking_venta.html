@@ -1,0 +1,387 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+
+{% block title %}Picking venta | Bodega{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+/* Evita que la barra vertical aparezca/desaparezca y mueva todo el ancho al cambiar filtros */
+html { scrollbar-gutter: stable; }
+.pv-wrap { max-width: 1280px; margin: 0 auto; }
+.pv-hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #2563eb 100%);
+    color: #fff;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
+}
+.pv-hero h1 { margin: 0 0 6px; font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em; }
+.pv-hero p { margin: 0; opacity: 0.92; font-size: 0.8125rem; line-height: 1.45; max-width: 640px; }
+.pv-hero-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pv-hero-actions a {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.22);
+}
+.pv-hero-actions a:hover { background: rgba(255,255,255,0.2); }
+.pv-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.pv-kpi {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+}
+.pv-kpi .n { font-size: 1.35rem; font-weight: 800; color: #0f172a; line-height: 1.1; }
+.pv-kpi .l { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-top: 3px; font-weight: 700; line-height: 1.25; }
+.pv-panel {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+}
+.pv-panel h2 { margin: 0 0 10px; font-size: 13px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.04em; }
+.pv-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+    align-items: center;
+    min-height: 32px;
+    contain: layout style;
+}
+.pv-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-height: 30px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    background: #f8fafc;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.pv-pill:hover { border-color: #cbd5e1; background: #f1f5f9; color: #0f172a; }
+/* Mismo grosor de borde que inactivo (evita micro-saltos); borde oscuro sobre el degradado */
+.pv-pill.on {
+    background: linear-gradient(135deg, #1e40af, #2563eb);
+    color: #fff;
+    border-color: #1e3a8a;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+}
+.pv-pill:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.pv-results { min-height: min(280px, 42vh); }
+.pv-search-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.pv-search-row .field { flex: 1; min-width: 200px; }
+.pv-search-row label { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 3px; }
+.pv-search-row input {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 12px;
+    min-height: 32px;
+    box-sizing: border-box;
+}
+.pv-search-row .btn.primary,
+.pv-search-row .btn.outline {
+    padding: 6px 12px !important;
+    border-radius: 8px !important;
+    font-size: 12px !important;
+    min-height: 32px;
+}
+.pv-table-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
+.pv-table { width: 100%; border-collapse: collapse; min-width: 880px; }
+.pv-table th {
+    text-align: left;
+    padding: 6px 10px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    font-weight: 800;
+}
+.pv-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #0f172a; vertical-align: middle; }
+.pv-table tr:last-child td { border-bottom: none; }
+.pv-table tbody tr:hover td { background: #fafbfc; }
+.pv-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.pv-badge.ok { background: #dcfce7; color: #166534; }
+.pv-badge.wip { background: #fef3c7; color: #92400e; }
+.pv-badge.new { background: #e0e7ff; color: #3730a3; }
+.pv-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pv-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 9px;
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #1e40af;
+    cursor: pointer;
+    font-family: inherit;
+}
+.pv-btn:hover { background: #f8fafc; }
+.pv-btn.danger { color: #b91c1c; border-color: #fecaca; background: #fff; }
+.pv-btn.danger:hover { background: #fef2f2; }
+.pv-empty { text-align: center; padding: 20px 16px; color: #64748b; font-size: 12px; line-height: 1.45; }
+.pv-muted { color: #64748b; font-size: 12px; }
+.pv-id { font-family: ui-monospace, monospace; font-size: 11px; color: #64748b; }
+.pv-wrap.is-loading { opacity: 0.72; pointer-events: none; transition: opacity 0.15s ease; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pv-wrap">
+    <div class="pv-hero">
+        <div>
+            <h1>Picking venta</h1>
+            <p>Cola de preparación para órdenes de venta enviadas desde el módulo Ventas. Marque cantidades, guarde avances y cierre cuando el vendedor retire la mercadería. El stock se descuenta al facturar, no aquí.</p>
+        </div>
+        <div class="pv-hero-actions">
+            <a href="{{ url_for('bodega.index') }}">Panel bodega</a>
+            <a href="{{ url_for('ventas.orden_venta') }}">Órdenes de venta</a>
+        </div>
+    </div>
+
+    <div class="pv-kpis">
+        <div class="pv-kpi"><div class="n">{{ picking_stats.activos }}</div><div class="l">Activos (pend. + prep.)</div></div>
+        <div class="pv-kpi"><div class="n">{{ picking_stats.pendiente }}</div><div class="l">Pendientes</div></div>
+        <div class="pv-kpi"><div class="n">{{ picking_stats.en_preparacion }}</div><div class="l">En preparación</div></div>
+        <div class="pv-kpi"><div class="n">{{ picking_stats.entregado }}</div><div class="l">Entregados</div></div>
+        <div class="pv-kpi"><div class="n">{{ picking_stats.total }}</div><div class="l">Total histórico</div></div>
+    </div>
+
+    <div class="pv-panel" id="pv-filtros">
+        <h2>Filtros y búsqueda</h2>
+        <div class="pv-filters">
+            <a class="pv-pill js-pv-filter {% if estado_filtro == 'activos' %}on{% endif %}" href="{{ url_for('bodega.picking_venta_lista', estado='activos', q=search_q or none) }}">Solo activos</a>
+            <a class="pv-pill js-pv-filter {% if estado_filtro == 'pendiente' %}on{% endif %}" href="{{ url_for('bodega.picking_venta_lista', estado='pendiente', q=search_q or none) }}">Pendiente</a>
+            <a class="pv-pill js-pv-filter {% if estado_filtro == 'en_preparacion' %}on{% endif %}" href="{{ url_for('bodega.picking_venta_lista', estado='en_preparacion', q=search_q or none) }}">En preparación</a>
+            <a class="pv-pill js-pv-filter {% if estado_filtro == 'entregado' %}on{% endif %}" href="{{ url_for('bodega.picking_venta_lista', estado='entregado', q=search_q or none) }}">Entregados</a>
+            <a class="pv-pill js-pv-filter {% if estado_filtro == 'todos' %}on{% endif %}" href="{{ url_for('bodega.picking_venta_lista', estado='todos', q=search_q or none) }}">Todos</a>
+        </div>
+        <form method="get" class="pv-search-row js-pv-search-form">
+            <input type="hidden" name="estado" value="{{ estado_filtro }}">
+            <div class="field">
+                <label for="q">N° orden de venta o cliente</label>
+                <input id="q" name="q" value="{{ search_q }}" placeholder="Ej. OV-0005 o nombre del cliente" autocomplete="off">
+            </div>
+            <button class="btn primary" type="submit">Buscar</button>
+            {% if search_q %}
+            <a class="btn outline" href="{{ url_for('bodega.picking_venta_lista', estado=estado_filtro) }}">Limpiar texto</a>
+            {% endif %}
+        </form>
+    </div>
+
+    <div class="pv-panel">
+        <h2>Listado <span class="pv-muted" style="font-weight:500;text-transform:none;letter-spacing:0;">({{ pickings|length }} mostrados)</span></h2>
+        <div class="pv-results">
+        {% if pickings %}
+        <div class="pv-table-wrap">
+            <table class="pv-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Estado</th>
+                        <th>Orden</th>
+                        <th>Cliente</th>
+                        <th>Líneas</th>
+                        <th>Actualizado</th>
+                        <th style="text-align:right;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in pickings %}
+                    {% set ov = ordenes.get(p.orden_venta_id) %}
+                    <tr>
+                        <td><span class="pv-id">#{{ p.id }}</span></td>
+                        <td>
+                            {% if p.status == 'entregado' %}
+                            <span class="pv-badge ok">Entregado</span>
+                            {% elif p.status == 'en_preparacion' %}
+                            <span class="pv-badge wip">En preparación</span>
+                            {% else %}
+                            <span class="pv-badge new">Pendiente</span>
+                            {% endif %}
+                        </td>
+                        <td><strong>{{ ov.numero if ov else ('Doc #' ~ p.orden_venta_id) }}</strong></td>
+                        <td>{{ ov.cliente_nombre if ov else '—' }}</td>
+                        <td>{{ lineas_por_picking.get(p.id, 0) }}</td>
+                        <td class="pv-muted">{{ p.updated_at.strftime('%d-%m-%Y %H:%M') if p.updated_at else '—' }}</td>
+                        <td style="text-align:right;">
+                            <div class="pv-actions" style="justify-content:flex-end;">
+                                <a class="pv-btn" href="{{ url_for('bodega.picking_venta_detalle', pid=p.id) }}">Abrir</a>
+                                {% if p.status != 'entregado' %}
+                                <button type="button" class="pv-btn danger js-pv-delete" data-pid="{{ p.id }}" data-label="{{ (ov.numero if ov else p.id)|e }}">Eliminar</button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="pv-empty">No hay pickings con los filtros actuales. Ajuste el estado, la búsqueda o espere a que ventas envíe una orden con <strong>Picking bodega</strong>.</div>
+        {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var currentController = null;
+    var currentRequestId = 0;
+
+    function canAjaxNav(ev) {
+        return !(ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey || ev.button !== 0);
+    }
+
+    function applyHtmlFromUrl(url, pushHistory) {
+        var currentWrap = document.querySelector('.pv-wrap');
+        if (!currentWrap) {
+            window.location.href = url;
+            return;
+        }
+        if (currentController) currentController.abort();
+        currentController = new AbortController();
+        var reqId = ++currentRequestId;
+        currentWrap.classList.add('is-loading');
+
+        fetch(url, {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            signal: currentController.signal
+        })
+        .then(function (r) { return r.text(); })
+        .then(function (html) {
+            if (reqId !== currentRequestId) return;
+            var doc = new DOMParser().parseFromString(html, 'text/html');
+            var nextWrap = doc.querySelector('.pv-wrap');
+            var prevWrap = document.querySelector('.pv-wrap');
+            if (!nextWrap || !prevWrap) {
+                window.location.href = url;
+                return;
+            }
+            prevWrap.replaceWith(nextWrap);
+            if (pushHistory) history.pushState({ pvAjax: true }, '', url);
+            bindInteractions();
+        })
+        .catch(function (err) {
+            if (err && err.name === 'AbortError') return;
+            window.location.href = url;
+        })
+        .finally(function () {
+            var wrap = document.querySelector('.pv-wrap');
+            if (wrap) wrap.classList.remove('is-loading');
+        });
+    }
+
+    function bindDeleteButtons() {
+        document.querySelectorAll('.js-pv-delete').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var pid = btn.getAttribute('data-pid');
+                var label = btn.getAttribute('data-label') || pid;
+                if (!window.confirm('¿Eliminar el picking #' + pid + ' (' + label + ')? Solo se permite si aún no fue entregado al vendedor. La orden de venta no se borra.')) return;
+                fetch('/bodega/api/picking-venta/' + pid, {
+                    method: 'DELETE',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+                .then(function (x) {
+                    if (x.ok && x.d.success) {
+                        window.location.reload();
+                    } else {
+                        window.alert((x.d && x.d.message) || 'No se pudo eliminar');
+                    }
+                }).catch(function () { window.alert('Error de red'); });
+            });
+        });
+    }
+
+    function bindFilterLinks() {
+        document.querySelectorAll('.js-pv-filter').forEach(function (a) {
+            a.addEventListener('click', function (ev) {
+                if (!canAjaxNav(ev)) return;
+                ev.preventDefault();
+                applyHtmlFromUrl(a.href, true);
+            });
+        });
+    }
+
+    function bindSearchForm() {
+        var form = document.querySelector('.js-pv-search-form');
+        if (!form) return;
+        form.addEventListener('submit', function (ev) {
+            ev.preventDefault();
+            var action = form.getAttribute('action') || window.location.pathname;
+            var url = new URL(action, window.location.origin);
+            var data = new FormData(form);
+            data.forEach(function (value, key) {
+                if (value !== null && String(value).trim() !== '') {
+                    url.searchParams.set(key, value);
+                } else {
+                    url.searchParams.delete(key);
+                }
+            });
+            applyHtmlFromUrl(url.toString(), true);
+        });
+    }
+
+    function bindInteractions() {
+        bindDeleteButtons();
+        bindFilterLinks();
+        bindSearchForm();
+    }
+
+    window.addEventListener('popstate', function () {
+        applyHtmlFromUrl(window.location.href, false);
+    });
+
+    bindInteractions();
+})();
+</script>
+{% endblock %}

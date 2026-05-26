@@ -2,49 +2,207 @@
 {% block title %}Utilidad y margen | Andes Auto Parts{% endblock %}
 
 {% block content %}
-<div class="topbar">
-  <div>
-    <h1 class="page-title">Utilidad y margen</h1>
-    <p class="page-subtitle">Productos con mayor volumen de venta — facturas y boletas</p>
+<div class="informes-report">
+  <style>
+    .um-filters {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr .9fr .7fr auto;
+      gap: 8px;
+      align-items: end;
+      margin-bottom: 10px;
+      padding: 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      background: #fff;
+    }
+    .um-field { display: flex; flex-direction: column; gap: 4px; }
+    .um-field label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: #64748b;
+    }
+    .um-field input, .um-field select {
+      height: 34px;
+      border: 1px solid #cbd5e1;
+      border-radius: 9px;
+      padding: 6px 9px;
+      font-size: 12px;
+    }
+    .um-actions { display: flex; gap: 8px; }
+    .um-btn {
+      height: 34px;
+      padding: 0 11px;
+      border-radius: 9px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: #0f172a;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+    }
+    .um-btn.primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+    .um-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .um-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      background: #fff;
+      padding: 10px 12px;
+    }
+    .um-card .k {
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: .05em;
+      color: #64748b;
+    }
+    .um-card .v {
+      margin-top: 4px;
+      font-size: 18px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .um-muted { color: #94a3b8; }
+    @media (max-width: 1100px) {
+      .um-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .um-actions { grid-column: 1 / -1; }
+    }
+    @media (max-width: 800px) {
+      .um-filters, .um-summary-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+  <div class="topbar">
+    <div>
+      <h1 class="page-title">Utilidad y margen</h1>
+      <p class="page-subtitle">Rentabilidad por producto (costo de referencia del último ingreso por origen)</p>
+    </div>
+    <div class="topbar-actions">
+      <a class="link-btn" href="{{ url_for('informes.index') }}">← Informes</a>
+    </div>
   </div>
-  <div class="topbar-actions">
-    <a class="link-btn" href="{{ url_for('informes.index') }}">← Informes</a>
+
+  <form method="get" class="um-filters">
+    <div class="um-field">
+      <label for="umDesde">Desde</label>
+      <input id="umDesde" type="date" name="desde" value="{{ filtros.desde }}">
+    </div>
+    <div class="um-field">
+      <label for="umHasta">Hasta</label>
+      <input id="umHasta" type="date" name="hasta" value="{{ filtros.hasta }}">
+    </div>
+    <div class="um-field">
+      <label for="umCodigo">Código producto</label>
+      <input id="umCodigo" name="codigo" value="{{ filtros.codigo }}" placeholder="Ej: 2417">
+    </div>
+    <div class="um-field">
+      <label for="umOrigen">Origen</label>
+      <select id="umOrigen" name="origen">
+        <option value="">Todos</option>
+        <option value="nacional" {% if filtros.origen == 'nacional' %}selected{% endif %}>Nacional</option>
+        <option value="importacion" {% if filtros.origen == 'importacion' %}selected{% endif %}>Importación</option>
+      </select>
+    </div>
+    <div class="um-field">
+      <label for="umLimit">Máx. filas</label>
+      <select id="umLimit" name="limit">
+        <option value="100" {% if filtros.limit == 100 %}selected{% endif %}>100</option>
+        <option value="200" {% if filtros.limit == 200 %}selected{% endif %}>200</option>
+        <option value="400" {% if filtros.limit == 400 %}selected{% endif %}>400</option>
+        <option value="800" {% if filtros.limit == 800 %}selected{% endif %}>800</option>
+      </select>
+    </div>
+    <div class="um-actions">
+      <button type="submit" class="um-btn primary">Filtrar</button>
+      <button type="submit" class="um-btn" name="export" value="csv">Exportar CSV</button>
+      <button type="submit" class="um-btn" name="export" value="excel">Exportar Excel</button>
+      <a class="um-btn" href="{{ url_for('informes.utilidad_margen') }}">Limpiar</a>
+    </div>
+  </form>
+
+  <div class="um-summary-grid">
+    <div class="um-card">
+      <div class="k">Venta total</div>
+      <div class="v">${{ '{:,.0f}'.format(total_venta).replace(',', '.') }}</div>
+    </div>
+    <div class="um-card">
+      <div class="k">Utilidad estimada</div>
+      <div class="v">${{ '{:,.0f}'.format(total_utilidad).replace(',', '.') }}</div>
+    </div>
+    <div class="um-card">
+      <div class="k">Productos con costo ref.</div>
+      <div class="v">{{ cobertura_costo }} / {{ productos|length }}</div>
+    </div>
   </div>
-</div>
 
-<div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px 16px;background:#fff;margin-bottom:16px;display:flex;align-items:center;gap:16px;">
-  <span style="font-size:13px;color:#64748b;">Total ventas facturadas:</span>
-  <span style="font-size:20px;font-weight:700;color:#1d4ed8;">${{ '{:,.0f}'.format(total_venta).replace(',', '.') }}</span>
-</div>
-
-<div style="overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;">
-  <table style="width:100%;border-collapse:collapse;">
-    <thead>
-      <tr>
-        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">#</th>
-        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Código</th>
-        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Descripción</th>
-        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Unidades</th>
-        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Venta total</th>
-        <th style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">% del total</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for p in productos %}
-      <tr>
-        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;color:#64748b;">{{ loop.index }}</td>
-        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;font-weight:600;">{{ p.codigo }}</td>
-        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;">{{ p.descripcion[:50] }}</td>
-        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;text-align:right;">{{ p.qty }}</td>
-        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700;color:#1d4ed8;">${{ '{:,.0f}'.format(p.venta).replace(',', '.') }}</td>
-        <td style="padding:9px 10px;border-bottom:1px solid #f1f5f9;text-align:right;color:#16a34a;">
-          {% if total_venta > 0 %}{{ '{:.1f}'.format(p.venta / total_venta * 100) }}%{% else %}—{% endif %}
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6" style="padding:20px;text-align:center;color:#64748b;">Sin datos de ventas facturadas.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="informes-table-wrap">
+    <table class="informes-data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Código</th>
+          <th>Descripción</th>
+          <th>Origen</th>
+          <th class="text-right">Unidades</th>
+          <th class="text-right">Costo unit. ref.</th>
+          <th class="text-right">Venta unit. prom.</th>
+          <th class="text-right">Utilidad unit.</th>
+          <th class="text-right">Utilidad total</th>
+          <th class="text-right">Margen %</th>
+          <th class="text-right">Venta total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in productos %}
+        <tr>
+          <td class="muted">{{ loop.index }}</td>
+          <td><strong>{{ p.codigo }}</strong></td>
+          <td>{{ p.descripcion[:60] }}</td>
+          <td>{{ 'Importación' if p.origen_compra == 'importacion' else 'Nacional' }}</td>
+          <td class="text-right">{{ p.qty }}</td>
+          <td class="text-right">
+            {% if p.costo_unit_ref is not none %}
+              ${{ '{:,.2f}'.format(p.costo_unit_ref).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+            {% else %}
+              <span class="um-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-right">${{ '{:,.2f}'.format(p.venta_unit).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+          <td class="text-right">
+            {% if p.utilidad_unit is not none %}
+              ${{ '{:,.2f}'.format(p.utilidad_unit).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+            {% else %}
+              <span class="um-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-right">
+            {% if p.utilidad_total is not none %}
+              ${{ '{:,.0f}'.format(p.utilidad_total).replace(',', '.') }}
+            {% else %}
+              <span class="um-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-right">
+            {% if p.margen_pct is not none %}
+              {{ '{:.1f}'.format(p.margen_pct) }}%
+            {% else %}
+              <span class="um-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-right total-cell">${{ '{:,.0f}'.format(p.venta).replace(',', '.') }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11" class="empty-row">Sin datos para los filtros seleccionados.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

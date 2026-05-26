@@ -308,6 +308,99 @@ tbody tr:hover td { background:#edf4ff; }
 .quick-link strong { display:block; margin-bottom:6px; font-size:15px; }
 .quick-link span { color:var(--muted); font-size:13px; }
 
+/* Panel de Bodega (index): compacto; solo aplica con .bodega-dashboard--compact */
+.bodega-dashboard--compact .topbar {
+	margin-bottom: 12px;
+	gap: 10px;
+}
+.bodega-dashboard--compact .page-title {
+	font-size: 22px;
+	letter-spacing: -0.02em;
+}
+.bodega-dashboard--compact .page-subtitle {
+	margin: 4px 0 0;
+	font-size: 12px;
+	line-height: 1.35;
+}
+.bodega-dashboard--compact .topbar-actions {
+	gap: 8px;
+}
+.bodega-dashboard--compact .link-btn {
+	padding: 7px 11px;
+	font-size: 12px;
+	border-radius: 9px;
+}
+.bodega-dashboard--compact .grid-3 {
+	gap: 8px;
+	margin-bottom: 12px;
+}
+.bodega-dashboard--compact .stat-card {
+	padding: 10px 12px;
+	border-radius: 14px;
+}
+.bodega-dashboard--compact .stat-label {
+	margin: 0 0 4px;
+	font-size: 10px;
+}
+.bodega-dashboard--compact .stat-value {
+	font-size: 22px;
+}
+.bodega-dashboard--compact .panel {
+	padding: 12px 14px;
+	margin-bottom: 10px;
+	border-radius: 14px;
+}
+.bodega-dashboard--compact .section-title {
+	margin: 0 0 8px;
+	font-size: 15px;
+}
+.bodega-dashboard--compact .product-summary {
+	gap: 8px;
+}
+.bodega-dashboard--compact .summary-box {
+	padding: 8px 10px;
+	border-radius: 10px;
+}
+.bodega-dashboard--compact .summary-box h4 {
+	margin: 0 0 3px;
+	font-size: 10px;
+}
+.bodega-dashboard--compact .summary-box p {
+	font-size: 14px;
+}
+.bodega-dashboard--compact .quick-links {
+	gap: 8px;
+}
+.bodega-dashboard--compact .quick-link {
+	padding: 10px 12px;
+	border-radius: 12px;
+}
+.bodega-dashboard--compact .quick-link strong {
+	margin-bottom: 3px;
+	font-size: 13px;
+}
+.bodega-dashboard--compact .quick-link span {
+	font-size: 12px;
+	line-height: 1.3;
+	display: block;
+}
+.bodega-dashboard--compact .table-card {
+	padding: 12px 14px;
+	border-radius: 14px;
+}
+.bodega-dashboard--compact .table-wrap th,
+.bodega-dashboard--compact .table-wrap td {
+	padding: 8px 8px;
+	font-size: 12px;
+}
+.bodega-dashboard--compact .table-wrap th {
+	font-size: 11px;
+}
+.bodega-dashboard--compact .empty-state {
+	padding: 16px 14px;
+	font-size: 13px;
+}
+
 @media (max-width: 1200px) {
     .grid-3,
     .quick-links,

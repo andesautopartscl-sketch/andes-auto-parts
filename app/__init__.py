@@ -1,7 +1,9 @@
 from datetime import datetime
 from pathlib import Path
 import logging
+import time
 import os
+import secrets
 import sys
 
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
@@ -25,18 +27,27 @@ from .inventario import models as inventario_models  # noqa: F401
 from .oportunidades import models as oportunidades_models  # noqa: F401
 from .postventa import models as postventa_models  # noqa: F401
 from .contabilidad import models as contabilidad_models  # noqa: F401
+from .rrhh import models as rrhh_models  # noqa: F401
+from .sii_sync import models as sii_sync_models  # noqa: F401
 from .inventario.routes import inventario_bp
 from .oportunidades.routes import oportunidades_bp
 from .postventa.routes import postventa_bp
 from .dashboard.routes import dashboard_bp
 from .contabilidad.routes import contabilidad_bp, finanzas_bp
 from .informes.routes import informes_bp
+from .rrhh.routes import rrhh_bp
+from .sii_sync import sii_sync_bp
 from app.seguridad.init_roles import crear_roles
 from app.seguridad.crear_superadmin import crear_superadmin
 from app.utils.datetime_utils import chile_datetime_filter
 from app.utils.rut_utils import format_rut
+from app.utils.phone_format import format_phone_display
 from app.utils.audit_metadata_filter import format_audit_metadata
-from app.utils.permissions import DEFAULT_PERMISSIONS, get_user_permissions
+from app.utils.csrf import get_csrf_token, validate_csrf_request
+from app.utils.format_currency_cl import format_precio_publico_con_iva
+from app.utils.http_security import apply_security_headers
+from app.utils.login_wall import is_logged_in_session, is_public_auth_route, safe_next_path
+from app.utils.permissions import ALL_PERMISSION_KEYS, DEFAULT_PERMISSIONS, get_user_permissions
 
 
 EXPECTED_VENV_PYTHON = str(
@@ -105,9 +116,34 @@ def log_runtime_startup_info(app: Flask) -> None:
         app.logger.error("reportlab is not available in the active interpreter")
 
 
+def _load_secret_key(base_dir: str) -> str:
+    env_key = (
+        os.environ.get("ANDES_SECRET_KEY")
+        or os.environ.get("SECRET_KEY")
+        or ""
+    ).strip()
+    if env_key:
+        return env_key
+
+    secret_path = Path(base_dir).resolve().parent / "data" / ".flask_secret_key"
+    secret_path.parent.mkdir(parents=True, exist_ok=True)
+    if secret_path.exists():
+        value = secret_path.read_text(encoding="utf-8").strip()
+        if value:
+            return value
+
+    generated = secrets.token_urlsafe(64)
+    secret_path.write_text(generated, encoding="utf-8")
+    return generated
+
+
 def create_app():
 
     enforce_expected_python()
+
+    from app.utils.load_env import load_project_dotenv
+
+    load_project_dotenv()
 
     app = Flask(__name__)
     if not app.logger.handlers:
@@ -116,8 +152,13 @@ def create_app():
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
     app.jinja_env.filters["chile_datetime"] = chile_datetime_filter
     app.jinja_env.filters["format_rut"] = format_rut
+    app.jinja_env.filters["format_telefono"] = format_phone_display
     app.jinja_env.filters["audit_metadata"] = format_audit_metadata
+    app.jinja_env.filters["format_precio_publico_con_iva"] = format_precio_publico_con_iva
     log_runtime_startup_info(app)
+    from app.utils.load_env import log_sii_env_startup
+
+    log_sii_env_startup(app.logger)
 
     # ===============================
     # CONFIGURACIÓN BASE DE DATOS
@@ -133,6 +174,18 @@ def create_app():
         "connect_args": {"check_same_thread": False, "timeout": 30},
     }
 
+    for _mail_key in (
+        "MAIL_SERVER",
+        "MAIL_PORT",
+        "MAIL_USE_TLS",
+        "MAIL_USERNAME",
+        "MAIL_PASSWORD",
+        "MAIL_FROM",
+    ):
+        _mail_val = os.environ.get(_mail_key)
+        if _mail_val is not None and str(_mail_val).strip():
+            app.config[_mail_key] = str(_mail_val).strip()
+
     _app_mode = (os.environ.get("ANDES_APP_MODE") or "").strip().lower()
     app.config["ANDES_APP_MODE"] = _app_mode
 
@@ -145,13 +198,17 @@ def create_app():
     # SEGURIDAD DE SESIÓN
     # ===============================
 
-    app.secret_key = "andes_auto_parts_super_secret_key_2026"
+    app.secret_key = _load_secret_key(BASE_DIR)
 
     app.config["SESSION_COOKIE_HTTPONLY"] = True
-    # En Render el sitio es HTTPS; sin Secure algunos navegadores móviles no guardan la cookie bien.
+    # En Render (HTTPS) la cookie debe ser Secure. En local HTTP, False salvo que fuerces con env.
     _is_render = (os.environ.get("RENDER") or "").strip().lower() in {"1", "true", "yes"}
-    app.config["SESSION_COOKIE_SECURE"] = bool(_is_render)
+    _force_secure = (os.environ.get("ANDES_SESSION_COOKIE_SECURE") or "").strip().lower() in {"1", "true", "yes"}
+    app.config["SESSION_COOKIE_SECURE"] = bool(_is_render or _force_secure)
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    # HSTS en HTTPS: desactivar con ANDES_HSTS=0 (pruebas locales con proxy, etc.)
+    _hsts_env = (os.environ.get("ANDES_HSTS") or "1").strip().lower()
+    app.config["ANDES_HSTS"] = _hsts_env not in {"0", "false", "no", "off"}
 
     # ===============================
     # REGISTRAR BLUEPRINTS
@@ -189,6 +246,8 @@ def create_app():
         app.register_blueprint(contabilidad_bp)
         app.register_blueprint(finanzas_bp)
         app.register_blueprint(informes_bp)
+        app.register_blueprint(rrhh_bp)
+        app.register_blueprint(sii_sync_bp)
 
     print(app.url_map)
 
@@ -212,6 +271,8 @@ def create_app():
                 conn.execute(text("ALTER TABLE usuarios_sistema ADD COLUMN bloqueado_seguridad BOOLEAN DEFAULT 0"))
             if "bloqueado_at" not in col_names:
                 conn.execute(text("ALTER TABLE usuarios_sistema ADD COLUMN bloqueado_at DATETIME"))
+            if "foto_perfil" not in col_names:
+                conn.execute(text("ALTER TABLE usuarios_sistema ADD COLUMN foto_perfil VARCHAR(255)"))
             conn.execute(text("UPDATE usuarios_sistema SET intentos_fallidos = COALESCE(intentos_fallidos, 0)"))
             conn.execute(text("UPDATE usuarios_sistema SET bloqueado_seguridad = COALESCE(bloqueado_seguridad, 0)"))
             conn.execute(
@@ -228,6 +289,115 @@ def create_app():
                 )
             )
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usuarios_permisos_usuario_id ON usuarios_permisos(usuario_id)"))
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS usuarios_permisos_detalle (
+                        id INTEGER PRIMARY KEY,
+                        usuario_id INTEGER NOT NULL,
+                        permiso_key VARCHAR(120) NOT NULL,
+                        allowed BOOLEAN NOT NULL DEFAULT 0,
+                        actualizado_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT uq_usuario_permiso_key UNIQUE(usuario_id, permiso_key)
+                    )
+                    """
+                )
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usuarios_perm_det_usuario_id ON usuarios_permisos_detalle(usuario_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usuarios_perm_det_permiso_key ON usuarios_permisos_detalle(permiso_key)"))
+
+            # Seed inicial de permisos granulares (deny-by-default para no superadmin).
+            user_rows = conn.execute(text("SELECT u.id AS uid, COALESCE(r.nombre, '') AS rol_nombre FROM usuarios_sistema u LEFT JOIN roles r ON r.id = u.rol_id")).fetchall()
+            for ur in user_rows:
+                uid = int(ur[0])
+                rol_name = (ur[1] or "").strip().lower()
+                is_superadmin = ("superadmin" in rol_name)
+                for pkey in ALL_PERMISSION_KEYS:
+                    conn.execute(
+                        text(
+                            """
+                            INSERT OR IGNORE INTO usuarios_permisos_detalle (usuario_id, permiso_key, allowed)
+                            VALUES (:uid, :pkey, :allowed)
+                            """
+                        ),
+                        {"uid": uid, "pkey": pkey, "allowed": 1 if is_superadmin else 0},
+                    )
+
+            # Seed RRHH perfil para usuarios existentes (1:1). No cambia permisos ni comportamiento.
+            # Si la tabla aún no existe (primera corrida), db.create_all ya la crea por los modelos.
+            conn.execute(
+                text(
+                    """
+                    INSERT OR IGNORE INTO rrhh_perfil(
+                        usuario_id,
+                        salud_tipo, salud_entidad, salud_numero,
+                        afp_nombre, afc_afiliado,
+                        banco_nombre, banco_tipo_cuenta, banco_numero_cuenta,
+                        es_vendedor, comision_pct,
+                        created_at, updated_at
+                    )
+                    SELECT
+                        u.id,
+                        '', '', '',
+                        '', 1,
+                        '', '', '',
+                        0, 0,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    FROM usuarios_sistema u
+                    """
+                )
+            )
+
+            rrhh_pf_cols = conn.execute(text("PRAGMA table_info(rrhh_perfil)")).fetchall()
+            rrhh_pf_names = {c[1] for c in rrhh_pf_cols} if rrhh_pf_cols else set()
+            if rrhh_pf_cols:
+                if "contrato_vigencia_desde" not in rrhh_pf_names:
+                    conn.execute(text("ALTER TABLE rrhh_perfil ADD COLUMN contrato_vigencia_desde DATE"))
+                if "contrato_notas" not in rrhh_pf_names:
+                    conn.execute(text("ALTER TABLE rrhh_perfil ADD COLUMN contrato_notas VARCHAR(500) DEFAULT ''"))
+                if "contrato_pdf_relpath" not in rrhh_pf_names:
+                    conn.execute(text("ALTER TABLE rrhh_perfil ADD COLUMN contrato_pdf_relpath VARCHAR(500)"))
+                if "contrato_pdf_original" not in rrhh_pf_names:
+                    conn.execute(text("ALTER TABLE rrhh_perfil ADD COLUMN contrato_pdf_original VARCHAR(260)"))
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS rrhh_vacaciones_registro (
+                        id INTEGER PRIMARY KEY,
+                        usuario_id INTEGER NOT NULL REFERENCES usuarios_sistema(id),
+                        tipo VARCHAR(16) NOT NULL,
+                        fecha_inicio DATE NOT NULL,
+                        fecha_fin DATE,
+                        dias INTEGER,
+                        estado VARCHAR(24) NOT NULL DEFAULT '',
+                        notas VARCHAR(500) NOT NULL DEFAULT '',
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rrhh_vacaciones_usuario ON rrhh_vacaciones_registro(usuario_id)"))
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS rrhh_contrato_anexos (
+                        id INTEGER PRIMARY KEY,
+                        usuario_id INTEGER NOT NULL REFERENCES usuarios_sistema(id),
+                        titulo VARCHAR(200) NOT NULL,
+                        archivo_relpath VARCHAR(500) NOT NULL,
+                        nombre_original VARCHAR(260) NOT NULL DEFAULT '',
+                        mensaje VARCHAR(500) NOT NULL DEFAULT '',
+                        estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+                        aceptado_at DATETIME,
+                        aceptado_evidencia_hash VARCHAR(64),
+                        creado_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        creado_por_usuario_id INTEGER REFERENCES usuarios_sistema(id)
+                    )
+                    """
+                )
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rrhh_anexos_usuario ON rrhh_contrato_anexos(usuario_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rrhh_anexos_estado ON rrhh_contrato_anexos(estado)"))
 
             product_cols = conn.execute(text("PRAGMA table_info(productos)")).fetchall()
             product_col_names = {col[1] for col in product_cols}
@@ -285,7 +455,96 @@ def create_app():
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_variante_codigo ON productos_variantes_stock(codigo_producto)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_variante_marca ON productos_variantes_stock(marca)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_variante_bodega ON productos_variantes_stock(bodega)"))
+            variante_cols = conn.execute(text("PRAGMA table_info(productos_variantes_stock)")).fetchall()
+            variante_col_names = {col[1] for col in variante_cols}
+            if variante_cols and "margen_override_pct" not in variante_col_names:
+                conn.execute(text("ALTER TABLE productos_variantes_stock ADD COLUMN margen_override_pct REAL"))
+            variante_cols = conn.execute(text("PRAGMA table_info(productos_variantes_stock)")).fetchall()
+            variante_col_names = {col[1] for col in variante_cols}
+            if variante_cols and "precio_publico_neto_override" not in variante_col_names:
+                conn.execute(text("ALTER TABLE productos_variantes_stock ADD COLUMN precio_publico_neto_override REAL"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_mov_ingreso_documento ON movimientos_stock(ingreso_documento_id)"))
+
+            ing_items_cols = conn.execute(text("PRAGMA table_info(ingresos_documentos_items)")).fetchall()
+            ing_items_col_names = {col[1] for col in ing_items_cols}
+            if ing_items_cols and "valor_neto" not in ing_items_col_names:
+                conn.execute(text("ALTER TABLE ingresos_documentos_items ADD COLUMN valor_neto REAL"))
+            ing_items_cols = conn.execute(text("PRAGMA table_info(ingresos_documentos_items)")).fetchall()
+            ing_items_col_names = {col[1] for col in ing_items_cols}
+            if ing_items_cols and "margen_pct" not in ing_items_col_names:
+                conn.execute(text("ALTER TABLE ingresos_documentos_items ADD COLUMN margen_pct REAL"))
+            if ing_items_cols and "precio_venta_neto" not in ing_items_col_names:
+                conn.execute(text("ALTER TABLE ingresos_documentos_items ADD COLUMN precio_venta_neto REAL"))
+
+            ing_docs_cols = conn.execute(text("PRAGMA table_info(ingresos_documentos)")).fetchall()
+            ing_docs_col_names = {col[1] for col in ing_docs_cols}
+            if ing_docs_cols and "metodo_pago" not in ing_docs_col_names:
+                conn.execute(text("ALTER TABLE ingresos_documentos ADD COLUMN metodo_pago VARCHAR(120) DEFAULT ''"))
+            if ing_docs_cols and "anulado" not in ing_docs_col_names:
+                conn.execute(text("ALTER TABLE ingresos_documentos ADD COLUMN anulado BOOLEAN NOT NULL DEFAULT 0"))
+            if ing_docs_cols and "anulado_at" not in ing_docs_col_names:
+                conn.execute(text("ALTER TABLE ingresos_documentos ADD COLUMN anulado_at DATETIME"))
+            if ing_docs_cols and "anulado_por" not in ing_docs_col_names:
+                conn.execute(text("ALTER TABLE ingresos_documentos ADD COLUMN anulado_por VARCHAR(100)"))
+            if ing_docs_cols and "anulacion_motivo" not in ing_docs_col_names:
+                conn.execute(text("ALTER TABLE ingresos_documentos ADD COLUMN anulacion_motivo VARCHAR(255) DEFAULT ''"))
+            ing_docs_cols = conn.execute(text("PRAGMA table_info(ingresos_documentos)")).fetchall()
+            ing_docs_col_names = {col[1] for col in ing_docs_cols}
+            if ing_docs_cols and "total_factura" not in ing_docs_col_names:
+                conn.execute(text("ALTER TABLE ingresos_documentos ADD COLUMN total_factura REAL"))
+            if ing_docs_cols and "iva_factura" not in ing_docs_col_names:
+                conn.execute(text("ALTER TABLE ingresos_documentos ADD COLUMN iva_factura REAL"))
+
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS bodegas_catalogo (
+                        id INTEGER PRIMARY KEY,
+                        nombre VARCHAR(120) NOT NULL UNIQUE,
+                        activo BOOLEAN NOT NULL DEFAULT 1,
+                        orden INTEGER NOT NULL DEFAULT 0,
+                        nota VARCHAR(255) DEFAULT ''
+                    )
+                    """
+                )
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_bodegas_catalogo_nombre ON bodegas_catalogo(nombre)"))
+
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS bodega_picking_ventas (
+                        id INTEGER PRIMARY KEY,
+                        orden_venta_id INTEGER NOT NULL UNIQUE,
+                        status VARCHAR(30) NOT NULL DEFAULT 'pendiente',
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL,
+                        usuario_creacion VARCHAR(100),
+                        usuario_entrega VARCHAR(100),
+                        nota VARCHAR(500) DEFAULT ''
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS bodega_picking_venta_lineas (
+                        id INTEGER PRIMARY KEY,
+                        picking_id INTEGER NOT NULL,
+                        codigo_producto VARCHAR(100) NOT NULL,
+                        descripcion VARCHAR(255) DEFAULT '',
+                        marca VARCHAR(120) DEFAULT '',
+                        bodega VARCHAR(120) NOT NULL DEFAULT 'Bodega 1',
+                        cantidad_pedida INTEGER NOT NULL DEFAULT 0,
+                        cantidad_entregada INTEGER NOT NULL DEFAULT 0,
+                        orden_linea INTEGER NOT NULL DEFAULT 0
+                    )
+                    """
+                )
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_picking_vent_orden ON bodega_picking_ventas(orden_venta_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_picking_linea_picking ON bodega_picking_venta_lineas(picking_id)"))
 
             ventas_proveedores_cols = conn.execute(text("PRAGMA table_info(ventas_proveedores)")).fetchall()
             ventas_proveedores_col_names = {col[1] for col in ventas_proveedores_cols}
@@ -323,9 +582,12 @@ def create_app():
                 ("root_id", "INTEGER"),
                 ("metodo_pago", "VARCHAR(50)"),
                 ("estado_pago", "VARCHAR(30)"),
+                ("pago_referencia", "VARCHAR(200)"),
             ]:
                 if ventas_documentos_cols and col_name not in ventas_documentos_col_names:
                     conn.execute(text(f"ALTER TABLE ventas_documentos ADD COLUMN {col_name} {col_type}"))
+            if ventas_documentos_cols and "monto_saldo_favor" not in ventas_documentos_col_names:
+                conn.execute(text("ALTER TABLE ventas_documentos ADD COLUMN monto_saldo_favor REAL NOT NULL DEFAULT 0"))
 
             ventas_nc_cols = conn.execute(text("PRAGMA table_info(ventas_notas_credito)")).fetchall()
             ventas_nc_col_names = {col[1] for col in ventas_nc_cols}
@@ -333,6 +595,7 @@ def create_app():
                 ("source_id", "INTEGER"),
                 ("source_type", "VARCHAR(40)"),
                 ("root_id", "INTEGER"),
+                ("modo_liquidacion", "VARCHAR(32) DEFAULT 'saldo_favor'"),
             ]:
                 if ventas_nc_cols and col_name not in ventas_nc_col_names:
                     conn.execute(text(f"ALTER TABLE ventas_notas_credito ADD COLUMN {col_name} {col_type}"))
@@ -342,6 +605,46 @@ def create_app():
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_ventas_documentos_root ON ventas_documentos(root_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_ventas_nc_source ON ventas_notas_credito(source_type, source_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_ventas_nc_root ON ventas_notas_credito(root_id)"))
+
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS ventas_clientes_saldo_movimientos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        cliente_id INTEGER NOT NULL,
+                        monto REAL NOT NULL,
+                        tipo VARCHAR(32) NOT NULL,
+                        ref_factura_numero VARCHAR(100),
+                        ref_nota_credito_numero VARCHAR(100),
+                        razon TEXT,
+                        documento_venta_id INTEGER,
+                        nota_credito_id INTEGER,
+                        created_at DATETIME NOT NULL,
+                        usuario VARCHAR(100),
+                        FOREIGN KEY (cliente_id) REFERENCES ventas_clientes (id)
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_vc_saldo_cliente ON "
+                    "ventas_clientes_saldo_movimientos (cliente_id)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_vc_saldo_doc ON "
+                    "ventas_clientes_saldo_movimientos (documento_venta_id)"
+                )
+            )
+
+            ventas_items_cols = conn.execute(text("PRAGMA table_info(ventas_documentos_items)")).fetchall()
+            ventas_items_col_names = {col[1] for col in ventas_items_cols}
+            if ventas_items_cols and "margen_porcentaje" not in ventas_items_col_names:
+                conn.execute(text("ALTER TABLE ventas_documentos_items ADD COLUMN margen_porcentaje REAL"))
+            if ventas_items_cols and "modelo_linea" not in ventas_items_col_names:
+                conn.execute(text("ALTER TABLE ventas_documentos_items ADD COLUMN modelo_linea VARCHAR(255)"))
 
             # Finance compatibility objects expected by older ERP screens.
             conn.execute(
@@ -422,6 +725,41 @@ def create_app():
             )
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oem_despiece_oem_norm ON oem_despiece(oem_norm)"))
 
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS sii_documentos (
+                        id INTEGER PRIMARY KEY,
+                        tipo_dte VARCHAR(10) NOT NULL,
+                        folio INTEGER NOT NULL,
+                        fecha_emision DATE,
+                        rut_receptor VARCHAR(20),
+                        razon_social_receptor VARCHAR(255),
+                        monto_neto INTEGER NOT NULL DEFAULT 0,
+                        monto_iva INTEGER NOT NULL DEFAULT 0,
+                        monto_total INTEGER NOT NULL DEFAULT 0,
+                        estado_sii VARCHAR(30) NOT NULL DEFAULT 'PENDIENTE',
+                        track_id VARCHAR(120),
+                        xml_disponible BOOLEAN NOT NULL DEFAULT 0,
+                        sincronizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        periodo VARCHAR(7),
+                        documento_venta_id INTEGER,
+                        notas VARCHAR(500),
+                        FOREIGN KEY (documento_venta_id) REFERENCES ventas_documentos(id),
+                        CONSTRAINT uq_sii_documentos_tipo_folio UNIQUE (tipo_dte, folio)
+                    )
+                    """
+                )
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_sii_documentos_periodo ON sii_documentos(periodo)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_sii_documentos_estado ON sii_documentos(estado_sii)"))
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_sii_documentos_documento_venta "
+                    "ON sii_documentos(documento_venta_id)"
+                )
+            )
+
             # Tablas antiguas sin producto_codigo: ALTER primero; luego el índice (no indexar columna inexistente).
             oem_d_cols = conn.execute(text("PRAGMA table_info(oem_despiece)")).fetchall()
             oem_d_names = {c[1] for c in oem_d_cols} if oem_d_cols else set()
@@ -458,10 +796,93 @@ def create_app():
 
         crear_superadmin()
 
+    # Sesión: cierre automático por inactividad (cualquier petición HTTP actualiza el reloj).
+    # ANDES_IDLE_LOGOUT_MINUTES: default 15; use 0 para desactivar (p. ej. desarrollo local).
+    _IDLE_LOGOUT_MINUTES = int((os.environ.get("ANDES_IDLE_LOGOUT_MINUTES") or "15").strip() or "15")
+    _IDLE_LOGOUT_SECONDS = max(0, _IDLE_LOGOUT_MINUTES * 60)
+    app.config["ANDES_IDLE_LOGOUT_MINUTES"] = _IDLE_LOGOUT_MINUTES
+    app.config["ANDES_IDLE_LOGOUT_SECONDS"] = _IDLE_LOGOUT_SECONDS
+    _IDLE_STATUS_ENDPOINT = "auth.session_idle_status"
+
+    @app.before_request
+    def require_login_for_erp():
+        """Sin sesion valida, solo se permiten rutas publicas (login, estaticos, etc.)."""
+        if is_public_auth_route():
+            return None
+        if is_logged_in_session():
+            return None
+        if request.method == "OPTIONS":
+            return None
+        p = (request.path or "")
+        nxt: str | None
+        if p in ("/", "/login") or p.rstrip("/") == "" or p.startswith("/login?"):
+            nxt = None
+        else:
+            nxt = safe_next_path(request.full_path)
+        is_api_like = (
+            request.is_json
+            or (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
+            or "/api/" in p
+        )
+        if is_api_like:
+            return (
+                jsonify(success=False, message="Debe iniciar sesion.", code="auth_required"),
+                401,
+            )
+        if nxt:
+            return redirect(url_for("auth.login", next=nxt))
+        return redirect(url_for("auth.login"))
+
+    @app.before_request
+    def enforce_session_idle_timeout():
+        if _IDLE_LOGOUT_SECONDS <= 0:
+            return None
+        if request.endpoint in {None, "static"}:
+            return None
+        if "user" not in session:
+            return None
+        rol = (session.get("rol") or "").strip().lower()
+        if rol == "superadmin":
+            return None
+        now = time.time()
+        raw_last = session.get("_last_activity_ts")
+        if raw_last is not None:
+            try:
+                if now - float(raw_last) > _IDLE_LOGOUT_SECONDS:
+                    session.clear()
+                    if (
+                        request.is_json
+                        or (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
+                        or "/api/" in (request.path or "")
+                        or request.endpoint == _IDLE_STATUS_ENDPOINT
+                    ):
+                        return (
+                            jsonify(
+                                success=False,
+                                message="Sesión cerrada por inactividad. Vuelve a iniciar sesión.",
+                                code="idle_timeout",
+                            ),
+                            401,
+                        )
+                    _n_idle = safe_next_path(request.full_path)
+                    if _n_idle:
+                        return redirect(url_for("auth.login", expirado=1, next=_n_idle))
+                    return redirect(url_for("auth.login", expirado=1))
+            except (TypeError, ValueError):
+                pass
+        # /session/idle-status solo consulta el tiempo: no extiende la sesión
+        if request.endpoint == _IDLE_STATUS_ENDPOINT:
+            return None
+        session["_last_activity_ts"] = now
+        session.modified = True
+        return None
+
     @app.before_request
     def update_last_seen_activity() -> None:
         # Skip static/unknown endpoints to reduce noisy commits.
         if request.endpoint in {None, "static"}:
+            return
+        if request.endpoint == _IDLE_STATUS_ENDPOINT:
             return
 
         username = session.get("user")
@@ -474,11 +895,31 @@ def create_app():
             current_user = db.session.query(Usuario).filter_by(usuario=username).first()
             if current_user is None:
                 return
-            current_user.last_seen = datetime.utcnow()
+            now = datetime.utcnow()
+            last = current_user.last_seen
+            # Evita un commit a SQLite en cada click (mejora respuesta en formularios como ajuste de stock).
+            if last is not None and (now - last).total_seconds() < 45:
+                return
+            current_user.last_seen = now
             current_user.en_linea = True
             db.session.commit()
         except Exception:
             db.session.rollback()
+
+    @app.before_request
+    def enforce_csrf() -> None:
+        if request.method in {"GET", "HEAD", "OPTIONS", "TRACE"}:
+            return None
+        if request.endpoint in {None, "static"}:
+            return None
+        if request.path.startswith("/chat/api/messages/media/"):
+            return None
+        if not validate_csrf_request():
+            is_ajax = request.is_json or (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
+            if is_ajax or request.path.startswith("/chat/api/") or request.path.startswith("/ventas/api/") or request.path.startswith("/seguridad/api/"):
+                return jsonify(success=False, message="Token CSRF inválido o ausente"), 400
+            return render_template("login.html", error="La sesión del formulario expiró. Vuelve a intentarlo."), 400
+        return None
 
     # ===============================
     # USUARIO DISPONIBLE EN TEMPLATES
@@ -492,11 +933,39 @@ def create_app():
                 perms = dict(DEFAULT_PERMISSIONS)
         except Exception:
             perms = dict(DEFAULT_PERMISSIONS)
+        foto_url = None
+        try:
+            from app.seguridad.models import Usuario
+            from app.utils.user_photo import user_photo_url
+
+            uid = session.get("usuario_id")
+            if uid:
+                u = db.session.get(Usuario, int(uid))
+                if u:
+                    foto_url = user_photo_url(u)
+        except Exception:
+            foto_url = None
         return dict(
             usuario_nombre=session.get("user"),
             usuario_rol=session.get("rol"),
+            usuario_foto_url=foto_url,
             user_permissions=perms,
+            csrf_token=get_csrf_token(),
         )
+
+    @app.context_processor
+    def session_idle_client_config():
+        if _IDLE_LOGOUT_SECONDS <= 0 or "user" not in session:
+            return {"session_idle_client": None}
+        if (session.get("rol") or "").strip().lower() == "superadmin":
+            return {"session_idle_client": None}
+        return {
+            "session_idle_client": {
+                "statusUrl": url_for("auth.session_idle_status"),
+                "warningBeforeSec": 60,
+                "pollMs": 30000,
+            }
+        }
 
     @app.context_processor
     def inject_partial_flag():
@@ -524,6 +993,12 @@ def create_app():
             return response
         if "user" not in session:
             return response
+        try:
+            perms = get_user_permissions(session.get("user"), session.get("rol"))
+            if not bool(perms.get("mod_chat")):
+                return response
+        except Exception:
+            return response
         if not response.mimetype or "html" not in response.mimetype:
             return response
         if response.direct_passthrough:
@@ -541,6 +1016,18 @@ def create_app():
             return response
         except Exception:
             return response
+
+    @app.after_request
+    def _apply_http_security_headers(response):
+        try:
+            apply_security_headers(
+                response,
+                session_cookie_secure=bool(app.config.get("SESSION_COOKIE_SECURE")),
+                hsts_enabled=bool(app.config.get("ANDES_HSTS", True)),
+            )
+        except Exception:
+            pass
+        return response
 
     @app.errorhandler(500)
     def handle_internal_error(_error):

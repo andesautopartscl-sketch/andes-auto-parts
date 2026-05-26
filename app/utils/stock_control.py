@@ -275,6 +275,7 @@ def get_product_history(codigo_producto: str, limit: int = 1000) -> dict:
             "proveedor_rut": doc.proveedor_rut,
             "fecha": doc.fecha_documento.isoformat() if doc.fecha_documento else None,
             "cantidad": item.cantidad,
+            "valor_neto": item.valor_neto,
             "marca": item.marca,
             "bodega": item.bodega,
             "timestamp": doc.created_at.isoformat() if doc.created_at else None,
@@ -345,11 +346,18 @@ def get_product_history(codigo_producto: str, limit: int = 1000) -> dict:
             "stock": v.stock,
         }
     
-    product_row = db.session.execute(
-        text("SELECT id FROM productos WHERE UPPER(CODIGO) = :codigo LIMIT 1"),
-        {"codigo": codigo_producto},
-    ).mappings().first()
-    product_id = int(product_row.get("id") or 0) if product_row else 0
+    # Tabla productos usa CODIGO como PK (no hay columna id). En SQLite, rowid
+    # alinea con registros de etiquetas si product_id se resolvió con el mismo criterio.
+    product_id = 0
+    try:
+        row = db.session.execute(
+            text("SELECT rowid FROM productos WHERE UPPER(CODIGO) = :codigo LIMIT 1"),
+            {"codigo": codigo_producto},
+        ).first()
+        if row:
+            product_id = int(row[0] or 0)
+    except Exception:
+        product_id = 0
 
     label_prints = []
     if product_id > 0:

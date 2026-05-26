@@ -88,8 +88,23 @@ const StockControl = (function() {
    * Get full product history (ingresos, ventas, notas_credito, stock)
    */
   function getProductHistory(codigo) {
-    return fetch("/ventas/api/product/history/" + encodeURIComponent(codigo))
-      .then(res => res.json())
+    return fetch("/ventas/api/product/history/" + encodeURIComponent(codigo), {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    })
+      .then(function (res) {
+        var ct = (res.headers.get("content-type") || "").toLowerCase();
+        if (!ct.includes("application/json")) {
+          return res.text().then(function () {
+            throw new Error(
+              res.status === 401 || res.status === 403
+                ? "Sesión expirada. Inicia sesión de nuevo."
+                : "Respuesta inválida del servidor (código " + res.status + ")."
+            );
+          });
+        }
+        return res.json();
+      })
       .catch(err => ({
         success: false,
         message: "Error obteniendo historial: " + err.message,
@@ -275,7 +290,7 @@ const StockControl = (function() {
   }
 
   /**
-   * Open traceability modal for a product
+   * Abre el modal con el mismo listado que la página Historial de producto (movimientos de stock).
    */
   function openTraceabilityModal(codigo, titulo) {
     const modal = document.getElementById("traceabilityModal");
@@ -287,38 +302,39 @@ const StockControl = (function() {
     const contenido = document.getElementById("traceabilityContenido");
     if (!contenido) return;
 
-    // Show loading
-    contenido.innerHTML = `
-      <div style="text-align: center; padding: 40px;">
-        <div class="spinner" style="display: inline-block;"></div>
-        <p>Cargando trazabilidad...</p>
-      </div>
-    `;
+    const c = String(codigo || "").trim();
+    if (!c) return;
+
+    contenido.innerHTML =
+      '<div style="text-align:center;padding:32px;color:#64748b;font-size:13px;">Cargando historial...</div>';
 
     modal.style.display = "flex";
 
-    // Fetch history
-    getProductHistory(codigo).then(history => {
-      contenido.innerHTML = formatTraceabilityHTML(history);
+    const url = "/producto/" + encodeURIComponent(c) + "/historial?embed=1";
 
-      // Attach tab switching
-      const tabBtns = contenido.querySelectorAll(".tab-btn");
-      const tabPanes = contenido.querySelectorAll(".tab-pane");
-
-      tabBtns.forEach(btn => {
-        btn.addEventListener("click", function(e) {
-          const tabName = this.getAttribute("data-tab");
-
-          // Remove active from all
-          tabBtns.forEach(b => b.classList.remove("active"));
-          tabPanes.forEach(p => p.classList.remove("active"));
-
-          // Add active to clicked
-          this.classList.add("active");
-          document.getElementById(tabName).classList.add("active");
-        });
+    fetch(url, {
+      credentials: "same-origin",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        Accept: "text/html",
+      },
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("No se pudo cargar el historial (código " + res.status + ").");
+        }
+        return res.text();
+      })
+      .then(function (html) {
+        contenido.innerHTML = html;
+      })
+      .catch(function (err) {
+        const msg = String((err && err.message) || err || "Error");
+        contenido.innerHTML =
+          '<div style="padding:16px;color:#b91c1c;font-size:13px;">' +
+          msg.replace(/</g, "&lt;").replace(/>/g, "&gt;") +
+          "</div>";
       });
-    });
   }
 
   /**

@@ -1,0 +1,193 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}SII Sync — Documentos | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.sii-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	align-items: flex-end;
+	margin-bottom: 14px;
+	padding: 12px 14px;
+	border: 1px solid #e2e8f0;
+	border-radius: 12px;
+	background: #f8fafc;
+}
+.sii-toolbar .field { display: flex; flex-direction: column; gap: 4px; }
+.sii-toolbar label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
+.sii-toolbar select, .sii-toolbar input[type="number"] {
+	height: 34px; border-radius: 8px; border: 1px solid #d7dee8; padding: 0 10px; font-size: 12px; min-width: 88px;
+}
+.sii-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.sii-filters select { height: 32px; font-size: 12px; border-radius: 8px; border: 1px solid #d7dee8; padding: 0 8px; }
+.sii-badge {
+	display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .03em;
+}
+.sii-badge--ok { background: #dcfce7; color: #166534; }
+.sii-badge--err { background: #fee2e2; color: #b91c1c; }
+.sii-badge--warn { background: #fef9c3; color: #a16207; }
+.sii-sync-msg { font-size: 12px; margin-top: 8px; min-height: 18px; }
+.sii-sync-msg.is-ok { color: #166534; }
+.sii-sync-msg.is-err { color: #b91c1c; }
+.sii-conc-yes { color: #166534; font-weight: 600; }
+.sii-conc-no { color: #94a3b8; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="contab-compact">
+	<div class="topbar">
+		<div>
+			<h1 class="page-title">SII Sync</h1>
+			<p class="page-subtitle">Documentos tributarios emitidos en el portal SII (solo consulta)</p>
+		</div>
+		<div class="topbar-actions">
+			<a class="link-btn" href="{{ url_for('contabilidad.libro_ventas') }}">📄 Libro ventas ERP</a>
+		</div>
+	</div>
+
+	<form class="sii-toolbar" method="get" action="{{ url_for('sii_sync.documentos') }}" id="siiFilterForm">
+		<div class="field">
+			<label for="siiMes">Mes</label>
+			<select id="siiMes" name="mes">
+				{% for m in range(1, 13) %}
+				<option value="{{ m }}" {% if m == mes_sel %}selected{% endif %}>{{ '%02d'|format(m) }}</option>
+				{% endfor %}
+			</select>
+		</div>
+		<div class="field">
+			<label for="siiAnio">Año</label>
+			<input type="number" id="siiAnio" name="anio" min="2000" max="2100" value="{{ anio_sel }}">
+		</div>
+		<input type="hidden" name="periodo" id="siiPeriodoHidden" value="{{ periodo }}">
+		<button type="submit" class="btn sm outline">Aplicar periodo</button>
+		{% if puede_sincronizar %}
+		<button type="button" class="btn sm edit" id="btnSiiSync" data-periodo="{{ periodo }}">⟳ Sincronizar desde SII</button>
+		{% endif %}
+		<div class="sii-sync-msg" id="siiSyncMsg" aria-live="polite"></div>
+	</form>
+
+	<form class="sii-filters" method="get" action="{{ url_for('sii_sync.documentos') }}">
+		<input type="hidden" name="mes" value="{{ mes_sel }}">
+		<input type="hidden" name="anio" value="{{ anio_sel }}">
+		<select name="tipo_dte" onchange="this.form.submit()">
+			<option value="">Todos los tipos DTE</option>
+			{% for t in tipos_disponibles %}
+			<option value="{{ t }}" {% if filtros.tipo_dte == t %}selected{% endif %}>{{ t }}</option>
+			{% endfor %}
+			<option value="33" {% if filtros.tipo_dte == '33' %}selected{% endif %}>33 Factura</option>
+			<option value="39" {% if filtros.tipo_dte == '39' %}selected{% endif %}>39 Boleta</option>
+			<option value="61" {% if filtros.tipo_dte == '61' %}selected{% endif %}>61 Nota crédito</option>
+		</select>
+		<select name="estado_sii" onchange="this.form.submit()">
+			<option value="">Todos los estados</option>
+			<option value="ACEPTADO" {% if filtros.estado_sii == 'ACEPTADO' %}selected{% endif %}>Aceptado</option>
+			<option value="RECHAZADO" {% if filtros.estado_sii == 'RECHAZADO' %}selected{% endif %}>Rechazado</option>
+			<option value="PENDIENTE" {% if filtros.estado_sii == 'PENDIENTE' %}selected{% endif %}>Pendiente</option>
+		</select>
+		<select name="conciliado" onchange="this.form.submit()">
+			<option value="">Conciliación: todos</option>
+			<option value="si" {% if filtros.conciliado == 'si' %}selected{% endif %}>Conciliados</option>
+			<option value="no" {% if filtros.conciliado == 'no' %}selected{% endif %}>Sin conciliar</option>
+		</select>
+	</form>
+
+	<div class="lv-table-wrap">
+		<table class="lv-table lv-money-tail3 lv-muted-col2">
+			<thead>
+				<tr>
+					<th>Tipo DTE</th>
+					<th>Folio</th>
+					<th>Fecha</th>
+					<th>Receptor</th>
+					<th>RUT</th>
+					<th>Neto</th>
+					<th>IVA</th>
+					<th>Total</th>
+					<th>Estado SII</th>
+					<th>Conciliado</th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for d in registros %}
+				<tr>
+					<td>{{ d.tipo_dte }} <span style="color:#94a3b8;font-size:10px;">{{ d.tipo_dte_label }}</span></td>
+					<td>{{ d.folio }}</td>
+					<td>{{ d.fecha_emision.strftime('%d/%m/%Y') if d.fecha_emision else '—' }}</td>
+					<td>{{ d.razon_social_receptor or '—' }}</td>
+					<td>{{ d.rut_receptor|format_rut if d.rut_receptor else '—' }}</td>
+					<td>${{ '{:,.0f}'.format(d.monto_neto or 0).replace(',', '.') }}</td>
+					<td>${{ '{:,.0f}'.format(d.monto_iva or 0).replace(',', '.') }}</td>
+					<td>${{ '{:,.0f}'.format(d.monto_total or 0).replace(',', '.') }}</td>
+					<td><span class="{{ estado_badge_class(d.estado_sii) }}">{{ d.estado_sii }}</span></td>
+					<td>
+						{% if d.conciliado %}
+						<span class="sii-conc-yes">Sí</span>
+						{% else %}
+						<span class="sii-conc-no">No</span>
+						{% endif %}
+					</td>
+					<td><a class="link-btn" href="{{ url_for('sii_sync.documento_detalle', doc_id=d.id) }}">Ver</a></td>
+				</tr>
+				{% else %}
+				<tr><td class="lv-empty" colspan="11">Sin documentos para {{ periodo }}.{% if puede_sincronizar %} Use «Sincronizar desde SII».{% endif %}</td></tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+	var btn = document.getElementById('btnSiiSync');
+	var msg = document.getElementById('siiSyncMsg');
+	if (!btn) return;
+	btn.addEventListener('click', async function () {
+		var periodo = btn.getAttribute('data-periodo') || '';
+		var mes = document.getElementById('siiMes');
+		var anio = document.getElementById('siiAnio');
+		if (mes && anio) {
+			var m = String(mes.value || '').padStart(2, '0');
+			var y = String(anio.value || '').trim();
+			if (y && m) periodo = y + '-' + m;
+		}
+		btn.disabled = true;
+		if (msg) {
+			msg.textContent = 'Sincronizando ' + periodo + '…';
+			msg.className = 'sii-sync-msg';
+		}
+		try {
+			var res = await fetch('{{ url_for("sii_sync.api_sincronizar") }}', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'X-Requested-With': 'XMLHttpRequest'
+				},
+				credentials: 'same-origin',
+				body: JSON.stringify({ periodo: periodo })
+			});
+			var json = await res.json().catch(function () { return null; });
+			if (!res.ok || !json) throw new Error((json && json.mensaje) || 'Error al sincronizar');
+			if (msg) {
+				msg.textContent = json.mensaje || 'Listo.';
+				msg.className = 'sii-sync-msg ' + (json.ok ? 'is-ok' : 'is-err');
+			}
+			if (json.ok) {
+				setTimeout(function () { window.location.reload(); }, 900);
+			}
+		} catch (e) {
+			if (msg) {
+				msg.textContent = e.message || 'Error de sincronización';
+				msg.className = 'sii-sync-msg is-err';
+			}
+		} finally {
+			btn.disabled = false;
+		}
+	});
+})();
+</script>
+{% endblock %}

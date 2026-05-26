@@ -42,7 +42,8 @@ class Usuario(db.Model):
     intentos_fallidos = db.Column(db.Integer, default=0, nullable=False)
     bloqueado_seguridad = db.Column(db.Boolean, default=False, nullable=False)
     bloqueado_at = db.Column(db.DateTime, nullable=True)
-    
+    foto_perfil = db.Column(db.String(255), nullable=True)
+
     # Timestamps
     ultimo_acceso = db.Column(db.DateTime, nullable=True)
     ultimo_ingreso = db.Column(db.DateTime, nullable=True)  # Nuevo: registro de último login
@@ -79,3 +80,30 @@ class UsuarioPermiso(db.Model):
     actualizado_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     usuario = db.relationship("Usuario", lazy="joined")
+
+
+class UsuarioPermisoDetalle(db.Model):
+    __tablename__ = "usuarios_permisos_detalle"
+    __table_args__ = (
+        UniqueConstraint("usuario_id", "permiso_key", name="uq_usuario_permiso_key"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios_sistema.id"), nullable=False, index=True)
+    permiso_key = db.Column(db.String(120), nullable=False, index=True)
+    allowed = db.Column(db.Boolean, nullable=False, default=False)
+    actualizado_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    usuario = db.relationship("Usuario", lazy="joined")
+
+
+class AuditEvent(db.Model):
+    """Trazas de cumplimiento: accesos y acciones sensibles (se amplía con record_audit_event)."""
+    __tablename__ = "audit_event"
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    actor_usuario = db.Column(db.String(120), nullable=True, index=True)
+    accion = db.Column(db.String(200), nullable=False, index=True)
+    detalle = db.Column(db.Text, nullable=True)
+    ip = db.Column(db.String(80), nullable=True)
+    ruta = db.Column(db.String(500), nullable=True)

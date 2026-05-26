@@ -1,70 +1,85 @@
 <div class="cot-dochead">
     <div class="cot-company">
-        <div class="cot-company-name">{{ company.name }}</div>
-        <div class="cot-company-line"><strong>RUT:</strong> {{ company.rut }}</div>
-        <div class="cot-company-line">{{ company.business }}</div>
-        <div class="cot-company-line">{{ company.address }}</div>
+        <img class="cot-company-logo" src="{{ url_for('static', filename='logo_andes.png') }}" alt="Andes Auto Parts" width="72" height="72">
+        <div class="cot-company-text">
+            <div class="cot-company-name">{{ company.name }}</div>
+            <div class="cot-company-line"><strong>RUT:</strong> {{ company.rut }}</div>
+            <div class="cot-company-line">{{ company.business }}</div>
+            <div class="cot-company-line">{{ company.address }}</div>
+            <div class="cot-company-line cot-company-contact only-print"><strong>Tel:</strong> +56 9 2615 2826 · <strong>Email:</strong> andesautopartscl@gmail.com</div>
+        </div>
     </div>
 
     <div class="cot-metamode">
-        <span class="cot-type-badge">{{ title }}</span>
-        <div class="cot-meta-grid">
-            <div class="cot-meta-field">
-                <label for="doc_number">Número</label>
-                <div class="doc-number-wrap">
-                    <input id="doc_number" name="doc_number" value="{{ doc_number }}" class="doc-num-input" autocomplete="off" spellcheck="false" required>
-                    {% if can_traceability %}
-                    <button class="btn sm outline no-print" type="button" id="btnTraceDoc" title="Ver trazabilidad">Ver trazabilidad</button>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="cot-meta-field">
-                <label for="doc_date">Fecha</label>
-                <input id="doc_date" name="doc_date" type="date" value="{{ doc_date }}" required>
-            </div>
-            {% if doc_type == 'cotizacion' %}
-            <div class="cot-meta-field">
-                <label for="doc_valid_until">Válida hasta</label>
-                <input id="doc_valid_until" name="doc_valid_until" type="date" value="{{ doc_valid_until }}">
-            </div>
-            {% endif %}
-            {% if doc_type in ['orden_venta', 'factura'] %}
-            <div class="cot-meta-field">
-                <label for="tipo_documento">Tipo de documento</label>
-                <select id="tipo_documento" name="tipo_documento">
-                    {% for option in tipo_documento_options %}
-                    <option value="{{ option }}" {% if tipo_documento == option %}selected{% endif %}>{{ option|capitalize }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% endif %}
-            {% if status_enabled %}
-            <div class="cot-meta-field">
-                <label for="status">Estado</label>
-                <select id="status" name="status">
-                    {% for option in status_options %}
-                    <option value="{{ option }}" {% if status == option %}selected{% endif %}>{{ option|capitalize }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% endif %}
-            {% if doc_id and doc_type in ['orden_venta', 'factura'] %}
-            <div class="cot-meta-field">
-                <label>Pago</label>
-                <div id="pagoStatusWrap" style="display:flex;align-items:center;gap:8px;">
-                    <span id="pagoStatusBadge" class="badge {% if estado_pago == 'pagado' %}badge-ok{% else %}badge-warn{% endif %}">
-                        {% if estado_pago == 'pagado' %}
-                            Pagado{% if metodo_pago %} – {{ metodo_pago|replace('_',' ')|title }}{% endif %}
-                        {% else %}
-                            Pendiente
+        <div class="doc-folio-box only-print" aria-hidden="true">
+            <div class="doc-folio-rut">R.U.T. {{ company.rut }}</div>
+            <div class="doc-folio-type">{{ title|upper }}</div>
+            <div class="doc-folio-n" id="printDocNum">{{ doc_number }}</div>
+            <div class="doc-folio-sii">Andes Auto Parts · Documento interno</div>
+        </div>
+        <div class="cot-meta-screen no-print">
+            <span class="cot-type-badge">{{ title }}</span>
+            <div class="cot-meta-grid">
+                <div class="cot-meta-field">
+                    <label for="doc_number">Número</label>
+                    <div class="doc-number-wrap">
+                        <input id="doc_number" name="doc_number" value="{{ doc_number }}" class="doc-num-input" autocomplete="off" spellcheck="false" required>
+                        {% if can_traceability %}
+                        <button class="btn sm outline no-print" type="button" id="btnTraceDoc" title="Ver trazabilidad">Ver trazabilidad</button>
                         {% endif %}
-                    </span>
-                    {% if estado_pago != 'pagado' %}
-                    <button class="btn sm outline no-print" type="button" id="btnRegistrarPago">Registrar pago</button>
-                    {% endif %}
+                    </div>
                 </div>
+                <div class="cot-meta-field">
+                    <label for="doc_date">Fecha</label>
+                    <input id="doc_date" name="doc_date" type="date" value="{{ doc_date }}" required>
+                </div>
+                {% if doc_type == 'cotizacion' %}
+                <div class="cot-meta-field">
+                    <label for="doc_valid_until">Válida hasta</label>
+                    <input id="doc_valid_until" name="doc_valid_until" type="date" value="{{ doc_valid_until }}">
+                </div>
+                {% endif %}
+                {% if doc_type in ['orden_venta', 'factura'] %}
+                <div class="cot-meta-field">
+                    <label for="tipo_documento">Tipo de documento</label>
+                    <select id="tipo_documento" name="tipo_documento">
+                        {% for option in tipo_documento_options %}
+                        <option value="{{ option }}" {% if tipo_documento == option %}selected{% endif %}>{{ option|capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                {% if status_enabled %}
+                <div class="cot-meta-field">
+                    <label for="status">Estado</label>
+                    <select id="status" name="status">
+                        {% for option in status_options %}
+                        <option value="{{ option }}" {% if status == option %}selected{% endif %}>{{ option|capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                {% if doc_id and doc_type in ['orden_venta', 'factura'] %}
+                <div class="cot-meta-field">
+                    <label>Pago</label>
+                    <div id="pagoStatusWrap" style="display:flex;align-items:center;gap:8px;">
+                        <span id="pagoStatusBadge" class="badge {% if estado_pago == 'pagado' %}badge-ok{% else %}badge-warn{% endif %}">
+                            {% if estado_pago == 'pagado' %}
+                                Pagado
+                                {%- if monto_saldo_favor is defined and monto_saldo_favor|float > 0.01 %}
+                                – con saldo ${{ '{:,.0f}'.format(monto_saldo_favor|float).replace(',','.') }}{% if metodo_pago and metodo_pago != 'saldo_favor' %}+ resto ({{ metodo_pago|replace('_',' ')|title }}){% endif %}
+                                {%- elif metodo_pago %} – {{ metodo_pago|replace('_',' ')|title }}{% endif %}
+                            {% else %}
+                                Pendiente
+                            {% endif %}
+                        </span>
+                        {% if estado_pago != 'pagado' %}
+                        <button class="btn sm outline no-print" type="button" id="btnRegistrarPago">Registrar pago</button>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
         </div>
     </div>
 </div>

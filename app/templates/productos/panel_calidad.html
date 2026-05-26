@@ -4,36 +4,49 @@
 
 {% block extra_head %}
 <style>
-.topbar { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:18px; }
-.kpi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin-bottom:16px; }
-.kpi {
-  background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:14px 16px;
-  box-shadow:0 8px 20px rgba(15,23,42,.06);
+.panel-calidad-compact .topbar { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px; }
+.panel-calidad-compact .page-title { font-size:20px; margin:0; line-height:1.2; letter-spacing:-0.02em; }
+.panel-calidad-compact .page-subtitle { margin:3px 0 0; font-size:12px; line-height:1.35; }
+.panel-calidad-compact .topbar-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.panel-calidad-compact .topbar-actions .btn { padding:6px 10px; font-size:12px; }
+.panel-calidad-compact .kpi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:8px; margin-bottom:10px; }
+.panel-calidad-compact .kpi {
+  background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:8px 10px;
+  box-shadow:0 4px 12px rgba(15,23,42,.05);
+  display:flex; flex-direction:column; gap:2px;
 }
-.kpi strong { display:block; font-size:1.35rem; color:#0f172a; }
-.kpi span.muted { font-size:12px; color:#64748b; }
-.card {
-  background:#fff; border:1px solid #e2e8f0; border-radius:16px; padding:16px 18px;
-  margin-bottom:14px; box-shadow:0 10px 25px rgba(0,0,0,.05);
+.panel-calidad-compact .kpi strong { display:block; font-size:1.1rem; color:#0f172a; line-height:1.15; }
+.panel-calidad-compact .kpi span.muted { font-size:11px; color:#64748b; }
+.panel-calidad-compact .card {
+  background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:10px 12px;
+  margin-bottom:10px; box-shadow:0 6px 16px rgba(0,0,0,.04);
 }
-.card h2 { margin:0 0 10px; font-size:15px; color:#1e3a8a; }
-.filters { display:flex; flex-wrap:wrap; gap:12px; align-items:end; margin-bottom:12px; }
-.filters label { display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px; }
-.filters input { padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; width:100px; }
-.table-wrap { overflow:auto; max-height:min(340px,50vh); border:1px solid #e2e8f0; border-radius:10px; }
-table { width:100%; border-collapse:collapse; font-size:12px; }
-th, td { padding:7px 8px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:top; }
-th { background:#1e3a8a; color:#fff; font-size:11px; position:sticky; top:0; }
-.actions-inline a { margin-right:8px; white-space:nowrap; }
-.dup-block { margin-bottom:12px; padding:10px 12px; background:#f8fafc; border-radius:10px; border:1px solid #e2e8f0; }
-.note { font-size:12px; color:#64748b; margin-top:8px; line-height:1.45; }
-body.dark .card, body.dark .kpi { background:#1f2937; border-color:#374151; color:#e5e7eb; }
-body.dark .kpi strong { color:#f8fafc; }
-body.dark th { background:#1e3a8a; }
+.panel-calidad-compact .card h2 { margin:0 0 6px; font-size:13px; color:#1e3a8a; }
+.panel-calidad-compact .filters { display:flex; flex-wrap:wrap; gap:8px; align-items:end; margin-bottom:0; }
+.panel-calidad-compact .filters label { display:block; font-size:11px; font-weight:600; color:#475569; margin-bottom:3px; }
+.panel-calidad-compact .filters input { padding:5px 8px; border:1px solid #cbd5e1; border-radius:6px; width:88px; font-size:13px; }
+.panel-calidad-compact .filters .btn { padding:6px 12px; font-size:12px; }
+.panel-calidad-compact .table-wrap { overflow:auto; max-height:min(300px,46vh); border:1px solid #e2e8f0; border-radius:8px; }
+.panel-calidad-compact table { width:100%; border-collapse:collapse; font-size:11px; }
+.panel-calidad-compact th, .panel-calidad-compact td { padding:5px 6px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:top; }
+.panel-calidad-compact th { background:#1e3a8a; color:#fff; font-size:10px; position:sticky; top:0; }
+.panel-calidad-compact .actions-inline a { margin-right:6px; white-space:nowrap; font-size:11px; }
+.panel-calidad-compact .dup-block { margin-bottom:6px; padding:6px 8px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; font-size:12px; }
+.panel-calidad-compact .dup-block .actions-inline { margin-top:4px; line-height:1.5; }
+.panel-calidad-compact .note { font-size:11px; color:#64748b; margin-top:4px; line-height:1.35; }
+.panel-calidad-compact .note-line { margin:0 0 8px; }
+.panel-calidad-compact .panel-subhead { margin:8px 0 4px; font-size:12px; color:#334155; font-weight:600; }
+.panel-calidad-compact .panel-subhead-tight { margin:10px 0 4px; font-size:12px; color:#334155; font-weight:600; }
+.panel-calidad-compact .panel-prio-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
+.panel-calidad-compact .panel-prio-grid h3 { margin:0 0 6px; font-size:12px; }
+body.dark .panel-calidad-compact .card, body.dark .panel-calidad-compact .kpi { background:#1f2937; border-color:#374151; color:#e5e7eb; }
+body.dark .panel-calidad-compact .kpi strong { color:#f8fafc; }
+body.dark .panel-calidad-compact th { background:#1e3a8a; }
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="panel-calidad-compact">
 <div class="topbar">
   <div>
     <h1 class="page-title">Calidad de datos y alertas de stock</h1>
@@ -65,7 +78,7 @@ body.dark th { background:#1e3a8a; }
   <div><button type="submit" class="btn btn-primary">Actualizar panel</button></div>
 </form>
 
-<p class="note" style="margin:-4px 0 12px;">Productos activos en catálogo: <strong>{{ total_activos }}</strong></p>
+<p class="note note-line">Productos activos en catálogo: <strong>{{ total_activos }}</strong></p>
 
 <div class="kpi-grid">
   <div class="kpi"><span class="muted">Sin imagen</span><strong>{{ kpis.sin_imagen.count }}</strong><span class="muted">{{ kpis.sin_imagen.pct }}%</span></div>
@@ -83,7 +96,7 @@ body.dark th { background:#1e3a8a; }
     {% for d in duplicados_oem %}
     <div class="dup-block">
       <strong>{{ d.oem }}</strong> — {{ d.count }} productos
-      <div class="actions-inline" style="margin-top:6px;">
+      <div class="actions-inline">
         {% for c in d.codigos %}
         <a href="{{ url_for('productos.editar_productos_view') }}?codigo={{ c|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ c|urlencode }}">{{ c }}</a>
         {% endfor %}
@@ -98,7 +111,7 @@ body.dark th { background:#1e3a8a; }
 <section class="card">
   <h2>Alertas de movimiento (bodega)</h2>
   <p class="note">Con stock &gt; 0 pero sin ningún movimiento en historial, o con último movimiento anterior a {{ params.dias_sin_movimiento }} días.</p>
-  <h3 style="margin:12px 0 6px;font-size:13px;color:#334155;">Sin movimientos registrados</h3>
+  <h3 class="panel-subhead">Sin movimientos registrados</h3>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Código</th><th>Descripción</th><th>Acciones</th></tr></thead>
@@ -118,7 +131,7 @@ body.dark th { background:#1e3a8a; }
       </tbody>
     </table>
   </div>
-  <h3 style="margin:16px 0 6px;font-size:13px;color:#334155;">Último movimiento antiguo</h3>
+  <h3 class="panel-subhead-tight">Último movimiento antiguo</h3>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Código</th><th>Descripción</th><th>Última fecha</th><th>Acciones</th></tr></thead>
@@ -143,9 +156,9 @@ body.dark th { background:#1e3a8a; }
 
 <section class="card">
   <h2>Priorizá corrección (primeras {{ params.limite }} por categoría)</h2>
-  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px;">
+  <div class="panel-prio-grid">
     <div>
-      <h3 style="margin:0 0 8px;font-size:13px;">Sin imagen</h3>
+      <h3>Sin imagen</h3>
       <div class="table-wrap">
         <table><thead><tr><th>Código</th><th></th></tr></thead>
         <tbody>
@@ -156,8 +169,8 @@ body.dark th { background:#1e3a8a; }
       </div>
     </div>
     <div>
-      <h3 style="margin:0 0 8px;font-size:13px;">Sin categoría</h3>
-      <p class="note" style="margin:0 0 8px;"><a href="{{ url_for('productos.productos_sin_categoria') }}" data-module-url="{{ url_for('productos.productos_sin_categoria') }}">Listado completo y autoasignar en lote →</a></p>
+      <h3>Sin categoría</h3>
+      <p class="note" style="margin:0 0 6px;"><a href="{{ url_for('productos.productos_sin_categoria') }}" data-module-url="{{ url_for('productos.productos_sin_categoria') }}">Listado completo y autoasignar en lote →</a></p>
       <div class="table-wrap">
         <table><thead><tr><th>Código</th><th></th></tr></thead>
         <tbody>
@@ -168,7 +181,7 @@ body.dark th { background:#1e3a8a; }
       </div>
     </div>
     <div>
-      <h3 style="margin:0 0 8px;font-size:13px;">Sin OEM</h3>
+      <h3>Sin OEM</h3>
       <div class="table-wrap">
         <table><thead><tr><th>Código</th><th></th></tr></thead>
         <tbody>
@@ -179,7 +192,7 @@ body.dark th { background:#1e3a8a; }
       </div>
     </div>
     <div>
-      <h3 style="margin:0 0 8px;font-size:13px;">Sin homologados</h3>
+      <h3>Sin homologados</h3>
       <div class="table-wrap">
         <table><thead><tr><th>Código</th><th></th></tr></thead>
         <tbody>
@@ -190,7 +203,7 @@ body.dark th { background:#1e3a8a; }
       </div>
     </div>
     <div>
-      <h3 style="margin:0 0 8px;font-size:13px;">Stock total 0</h3>
+      <h3>Stock total 0</h3>
       <div class="table-wrap">
         <table><thead><tr><th>Código</th><th>Stock</th><th></th></tr></thead>
         <tbody>
@@ -201,7 +214,7 @@ body.dark th { background:#1e3a8a; }
       </div>
     </div>
     <div>
-      <h3 style="margin:0 0 8px;font-size:13px;">Stock bajo (≤ {{ params.stock_critico }})</h3>
+      <h3>Stock bajo (≤ {{ params.stock_critico }})</h3>
       <div class="table-wrap">
         <table><thead><tr><th>Código</th><th>Stock</th><th></th></tr></thead>
         <tbody>
@@ -215,4 +228,5 @@ body.dark th { background:#1e3a8a; }
 </section>
 
 {% endif %}
+</div>
 {% endblock %}

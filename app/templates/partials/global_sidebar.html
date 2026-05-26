@@ -1,300 +1,460 @@
 {% set nombre_usuario = usuario_nombre if usuario_nombre else session.get('user', 'Invitado') %}
 {% set inicial_usuario = (nombre_usuario[:1] | upper) if nombre_usuario else 'I' %}
 {% set rol_actual = (session.get('rol', '') | lower) %}
-{% set puede_gestionar_excel = ('admin' in rol_actual) %}
-{% set opciones_activo = active_page in ['seguridad_usuarios', 'seguridad_roles', 'seguridad_nuevo_usuario'] %}
-{% set productos_activo = active_page in ['productos_buscar', 'productos_editar', 'productos_desactivados', 'productos_auditoria', 'productos_panel_calidad', 'productos_sin_categoria'] %}
-{% set ventas_activo = active_page in ['ventas', 'ventas_index', 'cotizacion', 'orden_venta', 'orden_compra', 'factura', 'clientes', 'proveedores'] %}
-{% set bodega_activo = active_page in ['bodega', 'index', 'ingreso', 'salida', 'ajuste', 'movimientos', 'recepcion', 'etiquetas', 'etiquetas_historial'] %}
-{% set contabilidad_activo = active_page in ['contabilidad', 'contabilidad_movimientos', 'contabilidad_asientos', 'contabilidad_libro_mayor', 'contabilidad_cxp', 'contabilidad_cxc', 'contabilidad_libro_ventas', 'contabilidad_libro_compras', 'contabilidad_iva', 'contabilidad_reportes', 'contabilidad_balance_general', 'contabilidad_estado_resultados'] %}
+{% set puede_gestionar_excel = (user_permissions.productos_importar_exportar if user_permissions is defined else ('admin' in rol_actual)) %}
+{% set puede_mod_seguridad = (user_permissions.mod_seguridad if user_permissions is defined else ('admin' in rol_actual)) %}
 {% set puede_ver_finanzas = (user_permissions.ver_finanzas if user_permissions is defined else True) %}
-{% set informes_activo = active_page in ['dashboard', 'informes', 'informes_ventas_periodo', 'informes_ventas_cliente', 'informes_utilidad', 'informes_stock', 'informes_productos_top', 'informes_movimientos', 'informes_compras', 'transferencias'] %}
+{% set puede_mod_productos = (user_permissions.mod_productos if user_permissions is defined else True) %}
+{% set puede_mod_ventas = (user_permissions.mod_ventas if user_permissions is defined else True) %}
+{% set puede_mod_bodega = (user_permissions.mod_bodega if user_permissions is defined else True) %}
+{% set puede_mod_finanzas = (user_permissions.mod_finanzas if user_permissions is defined else puede_ver_finanzas) %}
+{% set puede_mod_informes = (user_permissions.mod_informes if user_permissions is defined else True) %}
+{% set puede_mod_rrhh = (user_permissions.mod_rrhh if user_permissions is defined else False) %}
+{% set puede_mod_sii_sync = (user_permissions.mod_sii_sync if user_permissions is defined else False) %}
+{% set show_verify_badge = ('admin' in rol_actual) or ('super' in rol_actual) %}
+{% set n_online = (online_users|length) if (online_users is defined and online_users) else 0 %}
 <style>
 /* Reserva hueco solo en el documento para que el contenido principal no “salte” al aparecer scroll del body */
 html {
 	scrollbar-gutter: stable;
 }
+.sidebar-frame {
+	/* Gradiente horizontal marino → azul royal (misma línea que la referencia) */
+	--sb-navy: #16213e;
+	--sb-navy-mid: #1a2a4a;
+	--sb-blue: #1e40af;
+	--sb-blue-bright: #3b82f6;
+	--sb-deep: #0f172a;
+	width: 300px;
+	min-width: 300px;
+	flex-shrink: 0;
+	box-sizing: border-box;
+	padding: 2px;
+	border-radius: 24px;
+	align-self: stretch;
+	background: linear-gradient(90deg, var(--sb-navy) 0%, var(--sb-navy-mid) 38%, var(--sb-blue) 100%);
+	box-shadow:
+		0 0 0 1px rgba(59, 130, 246, 0.22),
+		0 20px 50px rgba(2, 8, 23, 0.55),
+		0 0 40px rgba(30, 64, 175, 0.12);
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
 .sidebar {
-	width:300px;
-	min-width:300px;
-	flex-shrink:0;
-	box-sizing:border-box;
-	border-radius:22px;
-	color:var(--text);
-	background:linear-gradient(180deg, var(--bg) 0%, var(--panel) 46%, var(--panel-soft) 100%);
-	border:1px solid rgba(255,255,255,0.08);
-	box-shadow:0 24px 40px rgba(2,8,23,0.45);
-	padding:20px;
-	display:flex;
-	flex-direction:column;
-	height:100vh;
-	max-height:100vh;
-	overflow:hidden;
+	box-sizing: border-box;
+	border-radius: 22px;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	color: #f8fafc;
+	/* Degradado vertical: más oscuro arriba → un poco más claro abajo */
+	background:
+		linear-gradient(180deg, rgba(59, 130, 246, 0.07) 0%, transparent 22%),
+		linear-gradient(
+			180deg,
+			#020617 0%,
+			#0a1628 28%,
+			var(--sb-deep) 52%,
+			#152a45 78%,
+			#1e3a5f 100%
+		);
+	border: 1px solid rgba(96, 165, 250, 0.14);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	padding: 12px 12px 10px;
 }
 .user-card {
-	flex-shrink:0;
-	display:flex;
-	gap:14px;
-	align-items:center;
-	margin-bottom:16px;
-	padding:14px 14px 14px 14px;
-	border-radius:16px;
-	background:linear-gradient(145deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.05) 100%);
-	border:1px solid rgba(255,255,255,0.2);
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	margin-bottom: 10px;
+	padding: 10px 10px 9px;
+	border-radius: 14px;
+	background: linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%);
+	border: 1px solid rgba(255, 255, 255, 0.14);
 	box-shadow:
-		inset 0 1px 0 rgba(255,255,255,0.2),
-		0 8px 22px rgba(0,0,0,0.22);
-	transition:border-color .2s ease, box-shadow .2s ease;
-}
-.user-card:hover {
-	border-color:rgba(255,255,255,0.28);
-	box-shadow:
-		inset 0 1px 0 rgba(255,255,255,0.24),
-		0 10px 28px rgba(0,0,0,0.28);
+		inset 0 1px 0 rgba(255, 255, 255, 0.1),
+		0 10px 28px rgba(0, 0, 0, 0.35);
 }
 .user-card-body {
-	min-width:0;
-	flex:1;
+	min-width: 0;
+	width: 100%;
+	margin-top: 6px;
 }
-.avatar {
-	width:44px;
-	height:44px;
-	flex-shrink:0;
-	border-radius:50%;
-	display:flex;
-	align-items:center;
-	justify-content:center;
-	color:rgba(15,23,42,0.9);
-	background:linear-gradient(145deg,#e0f2fe 0%,#7dd3fc 38%,#38bdf8 72%,#0284c7 100%);
-	box-shadow:
-		0 2px 10px rgba(14,165,233,0.45),
-		inset 0 1px 0 rgba(255,255,255,0.55);
-	border:1px solid rgba(255,255,255,0.45);
-	position:relative;
-}
-.avatar-icon {
-	width:24px;
-	height:24px;
-	display:block;
-	object-fit:contain;
-	pointer-events:none;
-	flex-shrink:0;
-}
-.avatar::after {
-	content:'';
-	position:absolute;
-	width:11px;
-	height:11px;
-	border-radius:50%;
-	right:-1px;
-	bottom:-1px;
-	border:2px solid rgba(15,23,42,0.88);
-	background:#22c55e;
-	box-shadow:0 0 0 1px rgba(0,0,0,0.2);
+.user-name-row {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	flex-wrap: wrap;
 }
 .user-name {
-	font-weight:700;
-	font-size:14px;
-	line-height:1.25;
-	letter-spacing:-0.02em;
-	color:#f8fafc;
-	overflow:hidden;
-	text-overflow:ellipsis;
-	white-space:nowrap;
+	font-weight: 700;
+	font-size: 13px;
+	line-height: 1.2;
+	letter-spacing: -0.02em;
+	color: #fff;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 100%;
 }
-.user-role {
-	font-size:10px;
-	font-weight:600;
-	letter-spacing:0.06em;
-	text-transform:uppercase;
-	margin-top:4px;
-	color:rgba(248,250,252,0.72);
-	overflow:hidden;
-	text-overflow:ellipsis;
-	white-space:nowrap;
+.user-verify {
+	display: inline-flex;
+	color: var(--sb-blue-bright);
+	flex-shrink: 0;
+	filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.45));
+}
+.user-verify svg {
+	display: block;
+	width: 14px;
+	height: 14px;
+}
+.user-role-accent {
+	font-size: 9px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	margin-top: 4px;
+	color: #93c5fd;
+	text-shadow: 0 0 14px rgba(59, 130, 246, 0.25);
+	line-height: 1.3;
+	word-break: break-word;
+}
+.user-status {
+	margin-top: 3px;
+	font-size: 11px;
+	font-weight: 600;
+	color: #4ade80;
+	letter-spacing: 0.02em;
+}
+.avatar {
+	width: 52px;
+	height: 52px;
+	flex-shrink: 0;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: rgba(255, 255, 255, 0.95);
+	/* Oscuro (arriba-izq) → azul algo más claro (abajo-der) */
+	background: linear-gradient(145deg, #070f1c 0%, #0f2444 32%, #1a3f6b 62%, #2d5a94 100%);
+	border: 2px solid rgba(59, 130, 246, 0.4);
+	box-shadow:
+		0 4px 18px rgba(0, 0, 0, 0.45),
+		inset 0 1px 0 rgba(255, 255, 255, 0.08);
+	position: relative;
+}
+.avatar-icon {
+	width: 28px;
+	height: 28px;
+	display: block;
+	object-fit: contain;
+	pointer-events: none;
+	flex-shrink: 0;
+	filter: brightness(0) invert(1);
+	opacity: 0.96;
+}
+.avatar-photo {
+	width: 100%;
+	height: 100%;
+	display: block;
+	object-fit: cover;
+	border-radius: 50%;
+	pointer-events: none;
+}
+.avatar::after {
+	content: '';
+	position: absolute;
+	width: 11px;
+	height: 11px;
+	border-radius: 50%;
+	right: 1px;
+	bottom: 1px;
+	border: 2px solid var(--sb-deep);
+	background: #22c55e;
+	box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.35);
 }
 .nav-modules {
-	display:flex;
-	flex-direction:column;
-	gap:4px;
-	margin-bottom:8px;
-	flex:1 1 auto;
-	min-height:0;
-	overflow-y:auto;
-	overflow-x:hidden;
-	-webkit-overflow-scrolling:touch;
-	/* Barra nativa oculta: evita el rail gris y el cambio de ancho al mostrar/ocultar scroll */
-	scrollbar-width:none;
-	-ms-overflow-style:none;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-bottom: 6px;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
 }
 .nav-modules::-webkit-scrollbar {
-	display:none;
-	width:0;
-	height:0;
+	display: none;
+	width: 0;
+	height: 0;
 }
-.nav-module { display:flex; flex-direction:column; }
+.nav-module { display: flex; flex-direction: column; }
 .module-header {
-	display:grid;
-	grid-template-columns:28px minmax(0,1fr) 22px;
-	align-items:center;
-	gap:6px;
-	padding:10px 12px;
-	border-radius:10px;
-	cursor:pointer;
-	color:white;
-	font-size:12px;
-	font-weight:700;
-	letter-spacing:.06em;
-	text-transform:uppercase;
-	background:rgba(255,255,255,0.07);
-	border:1px solid rgba(255,255,255,0.10);
-	transition:background .2s;
-	user-select:none;
+	display: grid;
+	grid-template-columns: 26px minmax(0, 1fr) 18px;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px;
+	border-radius: 10px;
+	cursor: pointer;
+	color: #fff;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+	transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+	user-select: none;
 }
 .module-header:hover {
-	background:rgba(255,255,255,0.14);
+	background: rgba(255, 255, 255, 0.11);
+	border-color: rgba(255, 255, 255, 0.16);
 }
 .module-header.active {
-	background:rgba(255,255,255,0.16);
-	border-color:rgba(255,255,255,0.24);
-	box-shadow:0 4px 12px rgba(0,0,0,0.22);
+	background: rgba(37, 99, 235, 0.22);
+	border-color: rgba(96, 165, 250, 0.45);
+	box-shadow:
+		0 0 18px rgba(37, 99, 235, 0.18),
+		inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 .module-header > span:first-child {
-	display:flex;
-	align-items:center;
-	justify-content:center;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 15px;
+	line-height: 1;
+	filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
 }
 .module-label {
-	text-align:center;
-	min-width:0;
+	text-align: left;
+	min-width: 0;
 }
 .module-arrow {
-	font-size:11px;
-	display:flex;
-	align-items:center;
-	justify-content:center;
-	width:22px;
-	transition:transform .25s ease;
-	opacity:.7;
+	font-size: 12px;
+	font-weight: 300;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	transition: transform 0.28s ease;
+	opacity: 0.85;
+	color: rgba(255, 255, 255, 0.75);
 }
 .module-arrow--spacer {
-	visibility:hidden;
-	pointer-events:none;
+	visibility: hidden;
+	pointer-events: none;
 }
 .module-header.active .module-arrow {
-	transform:rotate(-180deg);
-	opacity:1;
+	transform: rotate(90deg);
+	opacity: 1;
 }
 .submenu {
-	max-height:0;
-	overflow:hidden;
-	transition:max-height .32s cubic-bezier(0.4,0,0.2,1);
-	padding-left:6px;
+	max-height: 0;
+	overflow: hidden;
+	transition: max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+	padding-left: 4px;
 }
-/* Bodega tiene más ítems y textos largos; si el máximo es bajo, el contenido “late” al animar */
-.submenu.open { max-height:min(680px, 72vh); }
+.submenu.open { max-height: min(680px, 72vh); }
 .submenu a,
 .submenu .submenu-disabled {
-	display:flex;
-	align-items:center;
-	gap:9px;
-	padding:8px 10px 8px 18px;
-	border-radius:8px;
-	font-size:13px;
-	margin:2px 0;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 5px 8px 5px 12px;
+	border-radius: 8px;
+	font-size: 12px;
+	margin: 1px 0;
 }
 .submenu a {
-	color:rgba(255,255,255,0.85);
-	text-decoration:none;
-	transition:background .18s, color .15s;
+	color: rgba(255, 255, 255, 0.82);
+	text-decoration: none;
+	transition: background 0.18s, color 0.15s;
 }
 .submenu a:hover {
-	background:rgba(255,255,255,0.14);
-	color:white;
+	background: rgba(255, 255, 255, 0.1);
+	color: #fff;
 }
 .submenu a.nav-active {
-	background:rgba(255,255,255,0.2);
-	color:white;
-	font-weight:600;
+	background: rgba(37, 99, 235, 0.3);
+	color: #fff;
+	font-weight: 600;
+	border: 1px solid rgba(96, 165, 250, 0.32);
 }
 .submenu-disabled {
-	color:rgba(255,255,255,0.35);
-	font-style:italic;
+	color: rgba(255, 255, 255, 0.32);
+	font-style: italic;
 }
-.sidebar-logout {
-	flex-shrink:0;
-	padding-top:8px;
-	border-top:1px solid rgba(255,255,255,0.12);
-	margin-top:4px;
+.sidebar-actions {
+	flex-shrink: 0;
+	padding-top: 6px;
+	margin-top: 2px;
+	border-top: 1px solid rgba(255, 255, 255, 0.1);
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
 }
-.sidebar-logout a {
-	display:flex;
-	align-items:center;
-	gap:9px;
-	color:rgba(255,255,255,0.72);
-	text-decoration:none;
-	padding:9px 12px;
-	border-radius:10px;
-	font-size:13px;
+.sidebar-theme-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 7px 10px;
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
-.sidebar-logout a:hover {
-	background:rgba(220,38,38,0.24);
-	color:white;
+.sidebar-theme-lead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	font-weight: 600;
+	color: rgba(255, 255, 255, 0.88);
+	min-width: 0;
 }
-.sidebar-dark-btn {
-	display:flex;
-	align-items:center;
-	gap:9px;
-	width:100%;
-	background:rgba(255,255,255,0.07);
-	border:1px solid rgba(255,255,255,0.13);
-	border-radius:10px;
-	color:rgba(255,255,255,0.72);
-	padding:9px 12px;
-	font-size:13px;
-	cursor:pointer;
-	margin-bottom:6px;
-	transition:background .15s,color .15s;
+.sidebar-theme-emoji {
+	flex-shrink: 0;
+	font-size: 14px;
+	line-height: 1;
+	filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.35));
 }
-.sidebar-dark-btn:hover {
-	background:rgba(255,255,255,0.16);
-	color:#fff;
+.sidebar-theme-switch {
+	flex-shrink: 0;
+	width: 42px;
+	height: 22px;
+	padding: 0;
+	border: none;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.12);
+	cursor: pointer;
+	position: relative;
+	transition: background 0.2s, box-shadow 0.2s;
+	box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.sidebar-theme-switch:focus-visible {
+	outline: 2px solid var(--sb-blue-bright);
+	outline-offset: 2px;
+}
+.sidebar-theme-switch.is-on {
+	background: linear-gradient(90deg, var(--sb-blue), var(--sb-blue-bright));
+	box-shadow:
+		0 0 14px rgba(37, 99, 235, 0.45),
+		inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.sidebar-theme-knob {
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	background: linear-gradient(180deg, #fff 0%, #e2e8f0 100%);
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+	transition: transform 0.22s ease;
+}
+.sidebar-theme-switch.is-on .sidebar-theme-knob {
+	transform: translateX(20px);
+}
+.sidebar-logout-btn {
+	display: grid;
+	grid-template-columns: 24px minmax(0, 1fr) 18px;
+	align-items: center;
+	gap: 6px;
+	padding: 7px 10px;
+	border-radius: 10px;
+	text-decoration: none;
+	color: rgba(255, 255, 255, 0.88);
+	font-size: 12px;
+	font-weight: 600;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	transition: background 0.18s, border-color 0.18s, color 0.18s;
+}
+.sidebar-logout-btn:hover {
+	background: rgba(220, 38, 38, 0.22);
+	border-color: rgba(248, 113, 113, 0.35);
+	color: #fff;
+}
+.sidebar-logout-btn .logout-chev {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	opacity: 0.75;
+	font-size: 12px;
 }
 .online-list {
-	flex-shrink:0;
-	margin-top:auto;
-	background:rgba(15,23,42,.34);
-	border:1px solid rgba(255,255,255,.11);
-	border-radius:12px;
-	padding:12px;
+	flex-shrink: 0;
+	margin-top: 6px;
+	background: rgba(15, 23, 42, 0.45);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 10px;
+	padding: 8px 10px;
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+}
+.online-list-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 5px;
 }
 .online-list h4 {
-	margin:0 0 8px;
-	font-size:12px;
-	letter-spacing:.07em;
-	text-transform:uppercase;
-	opacity:.86;
+	margin: 0;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: rgba(186, 210, 255, 0.92);
+}
+.online-count-pill {
+	font-size: 10px;
+	font-weight: 700;
+	min-width: 22px;
+	padding: 2px 7px;
+	border-radius: 999px;
+	background: rgba(0, 0, 0, 0.35);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	color: rgba(255, 255, 255, 0.9);
 }
 .online-item {
-	display:flex;
-	gap:8px;
-	align-items:flex-start;
-	padding:6px 0;
+	display: flex;
+	gap: 6px;
+	align-items: flex-start;
+	padding: 4px 0;
 }
 .online-dot {
-	width:8px;
-	height:8px;
-	border-radius:50%;
-	margin-top:6px;
-	background:#22c55e;
-	box-shadow:0 0 0 4px rgba(34,197,94,.18);
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	margin-top: 4px;
+	background: #22c55e;
+	box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
 }
-.online-name { font-size:13px; font-weight:600; }
-.online-meta { font-size:11px; opacity:.72; }
+.online-name { font-size: 12px; font-weight: 600; }
+.online-meta { font-size: 10px; opacity: 0.72; }
 @media (max-width: 960px) {
-	.sidebar {
+	.sidebar-frame {
 		width: 100%;
 		min-width: 0;
+		max-height: min(72vh, 560px);
+	}
+	.sidebar {
 		height: auto;
 		max-height: min(72vh, 560px);
 		overflow-y: auto;
@@ -315,35 +475,52 @@ html {
 	}
 }
 </style>
+<div class="sidebar-frame">
 <aside class="sidebar">
 	<div class="user-card">
 		<div class="avatar" aria-hidden="true">
-			<img class="avatar-icon" src="{{ url_for('static', filename='img/sidebar-user-icon.svg') }}" width="24" height="24" alt="" decoding="async">
+			{% if usuario_foto_url %}
+			<img class="avatar-photo" src="{{ usuario_foto_url }}?v={{ session.get('usuario_id', 0) }}" width="52" height="52" alt="" decoding="async">
+			{% else %}
+			<img class="avatar-icon" src="{{ url_for('static', filename='icons/user.png') }}?v=andes-login-3" width="28" height="28" alt="" decoding="async">
+			{% endif %}
 		</div>
 		<div class="user-card-body">
-			<div class="user-name">{{ nombre_usuario }}</div>
-			<div class="user-role">{{ usuario_rol if usuario_rol else session.get('rol', 'Sin rol') }}</div>
+			<div class="user-name-row">
+				<span class="user-name">{{ nombre_usuario }}</span>
+				{% if show_verify_badge %}
+				<span class="user-verify" title="Cuenta con privilegios de administración" aria-hidden="true">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+						<circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.92"/>
+						<path d="M8 12.2l2.2 2.2L16 8.6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+					</svg>
+				</span>
+				{% endif %}
+			</div>
+			<div class="user-role-accent">{{ (usuario_rol if usuario_rol else session.get('rol', 'Sin rol'))|upper }}</div>
+			<div class="user-status">● En línea</div>
 		</div>
 	</div>
 
 	<div class="nav-modules">
-		{% if puede_gestionar_excel %}
+		{% if puede_mod_seguridad %}
+		{% if puede_mod_productos %}
 		<div class="nav-module">
 			<div class="module-header" id="hdr-mod-opciones" onclick="openOptionsModal(); return false;">
 				<span>⚙️</span>
 				<span class="module-label">Opciones</span>
-				<span class="module-arrow module-arrow--spacer" aria-hidden="true">▾</span>
+				<span class="module-arrow module-arrow--spacer" aria-hidden="true">›</span>
 			</div>
 		</div>
 		{% endif %}
 
 		<div class="nav-module">
-			<div class="module-header {% if productos_activo %}active{% endif %}" id="hdr-mod-productos" onclick="toggleMenu('mod-productos')">
+			<div class="module-header" id="hdr-mod-productos" onclick="toggleMenu('mod-productos')">
 				<span>📦</span>
 				<span class="module-label">PRODUCTOS</span>
-				<span class="module-arrow">▾</span>
+				<span class="module-arrow" aria-hidden="true">›</span>
 			</div>
-			<div class="submenu {% if productos_activo %}open{% endif %}" id="mod-productos">
+			<div class="submenu" id="mod-productos">
 				<a class="{% if active_page == 'productos_buscar' %}nav-active{% endif %}"
 				   href="{{ url_for('productos.buscar') }}"
 				   data-module-url="{{ url_for('productos.buscar') }}">🔍 Buscar</a>
@@ -365,42 +542,57 @@ html {
 				   href="{{ url_for('productos.productos_sin_categoria') }}"
 				   data-module-url="{{ url_for('productos.productos_sin_categoria') }}">🏷 Sin categoría</a>
 				{% if puede_gestionar_excel %}
-				<a href="{{ url_for('productos.buscar') }}#exportar-excel">📥 Exportar Excel</a>
-				<a href="{{ url_for('productos.buscar') }}#importar-excel">📤 Importar Excel</a>
+				<a href="{{ url_for('productos.buscar') }}#exportar-excel"
+				   data-module-url="{{ url_for('productos.buscar') }}#exportar-excel">📥 Exportar Excel</a>
+				<a href="{{ url_for('productos.buscar') }}#importar-excel"
+				   data-module-url="{{ url_for('productos.buscar') }}#importar-excel">📤 Importar Excel</a>
 				{% endif %}
 			</div>
 		</div>
+		{% endif %}
 
+		{% if puede_mod_ventas %}
 		<div class="nav-module">
-			<div class="module-header {% if ventas_activo %}active{% endif %}" id="hdr-mod-ventas" onclick="toggleMenu('mod-ventas')">
+			<div class="module-header" id="hdr-mod-ventas" onclick="toggleMenu('mod-ventas')">
 				<span>🛒</span>
 				<span class="module-label">VENTAS</span>
-				<span class="module-arrow">▾</span>
+				<span class="module-arrow" aria-hidden="true">›</span>
 			</div>
-			<div class="submenu {% if ventas_activo %}open{% endif %}" id="mod-ventas">
+			<div class="submenu" id="mod-ventas">
 				<a class="{% if active_page == 'ventas_index' %}nav-active{% endif %}" href="{{ url_for('ventas.index') }}" data-module-url="{{ url_for('ventas.index') }}">🏠 Módulo Ventas</a>
 				<a class="{% if active_page == 'cotizacion' %}nav-active{% endif %}" href="{{ url_for('ventas.cotizacion') }}" data-module-url="{{ url_for('ventas.cotizacion') }}">📄 Cotización</a>
 				<a class="{% if active_page == 'orden_venta' %}nav-active{% endif %}" href="{{ url_for('ventas.orden_venta') }}" data-module-url="{{ url_for('ventas.orden_venta') }}">📋 Orden de venta</a>
 				<a class="{% if active_page == 'orden_compra' %}nav-active{% endif %}" href="{{ url_for('ventas.orden_compra') }}" data-module-url="{{ url_for('ventas.orden_compra') }}">🛍 Orden de compra</a>
 				<a class="{% if active_page == 'factura' %}nav-active{% endif %}" href="{{ url_for('ventas.facturacion') }}" data-module-url="{{ url_for('ventas.facturacion') }}">🧾 Facturación</a>
+				<a class="{% if active_page == 'boleta' %}nav-active{% endif %}" href="{{ url_for('ventas.facturacion', tipo_documento='boleta') }}" data-module-url="{{ url_for('ventas.facturacion', tipo_documento='boleta') }}">🎫 Boletas</a>
+				<a class="{% if active_page == 'notas_credito' %}nav-active{% endif %}" href="{{ url_for('ventas.notas_credito') }}" data-module-url="{{ url_for('ventas.notas_credito') }}">📋 Notas de crédito</a>
+				<a class="{% if active_page == 'pagos' %}nav-active{% endif %}" href="{{ url_for('ventas.pagos_caja') }}" data-module-url="{{ url_for('ventas.pagos_caja') }}">💳 Pagos</a>
 				<a class="{% if active_page == 'clientes' %}nav-active{% endif %}" href="{{ url_for('ventas.clientes') }}" data-module-url="{{ url_for('ventas.clientes') }}">👥 Clientes</a>
 				<a class="{% if active_page == 'proveedores' %}nav-active{% endif %}" href="{{ url_for('ventas.proveedores') }}" data-module-url="{{ url_for('ventas.proveedores') }}">🏭 Proveedores</a>
 			</div>
 		</div>
+		{% endif %}
 
+		{% if puede_mod_bodega %}
 		<div class="nav-module">
-			<div class="module-header {% if bodega_activo %}active{% endif %}" id="hdr-mod-bodega" onclick="toggleMenu('mod-bodega')">
-				<span>🏭</span>
+			<div class="module-header" id="hdr-mod-bodega" onclick="toggleMenu('mod-bodega')">
+				<span>🚜</span>
 				<span class="module-label">BODEGA</span>
-				<span class="module-arrow">▾</span>
+				<span class="module-arrow" aria-hidden="true">›</span>
 			</div>
-			<div class="submenu {% if bodega_activo %}open{% endif %}" id="mod-bodega">
+			<div class="submenu" id="mod-bodega">
 				<a class="{% if active_page == 'index' %}nav-active{% endif %}"
 				   href="{{ url_for('bodega.index') }}"
 				   data-module-url="{{ url_for('bodega.index') }}">🏠 Panel Bodega</a>
+				<a class="{% if active_page == 'bodegas' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.bodegas_catalogo') }}"
+				   data-module-url="{{ url_for('bodega.bodegas_catalogo') }}">📦 Bodegas (catálogo)</a>
 				<a class="{% if active_page == 'ingreso' %}nav-active{% endif %}"
 				   href="{{ url_for('bodega.ingreso') }}"
 				   data-module-url="{{ url_for('bodega.ingreso') }}">📥 Ingreso de productos</a>
+				<a class="{% if active_page == 'ingreso_historial' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.ingreso_historial') }}"
+				   data-module-url="{{ url_for('bodega.ingreso_historial') }}">🧾 Historial de ingresos</a>
 				<a class="{% if active_page == 'salida' %}nav-active{% endif %}"
 				   href="{{ url_for('bodega.salida') }}"
 				   data-module-url="{{ url_for('bodega.salida') }}">📤 Salida de productos</a>
@@ -410,6 +602,9 @@ html {
 				<a class="{% if active_page == 'movimientos' %}nav-active{% endif %}"
 				   href="{{ url_for('bodega.movimientos') }}"
 				   data-module-url="{{ url_for('bodega.movimientos') }}">📊 Movimientos de stock</a>
+				<a class="{% if active_page == 'picking_venta' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.picking_venta_lista') }}"
+				   data-module-url="{{ url_for('bodega.picking_venta_lista') }}">📦 Picking venta</a>
 				<a class="{% if active_page == 'recepcion' %}nav-active{% endif %}"
 				   href="{{ url_for('bodega.recepcion') }}"
 				   data-module-url="{{ url_for('bodega.recepcion') }}">📋 Guía recepción proveedor</a>
@@ -421,15 +616,17 @@ html {
 				   data-module-url="{{ url_for('bodega.etiquetas_historial') }}">🗂 Historial de Etiquetas</a>
 			</div>
 		</div>
+		{% endif %}
 
-		{% if puede_ver_finanzas %}
+		{% if puede_mod_finanzas %}
+		{% if puede_mod_informes %}
 		<div class="nav-module">
-			<div class="module-header {% if contabilidad_activo %}active{% endif %}" id="hdr-mod-contabilidad" onclick="toggleMenu('mod-contabilidad')">
-				<span>📚</span>
+			<div class="module-header" id="hdr-mod-contabilidad" onclick="toggleMenu('mod-contabilidad')">
+				<span>📊</span>
 				<span class="module-label">CONTABILIDAD</span>
-				<span class="module-arrow">▾</span>
+				<span class="module-arrow" aria-hidden="true">›</span>
 			</div>
-			<div class="submenu {% if contabilidad_activo %}open{% endif %}" id="mod-contabilidad">
+			<div class="submenu" id="mod-contabilidad">
 				<a class="{% if active_page == 'contabilidad' %}nav-active{% endif %}"
 				   href="{{ url_for('contabilidad.index') }}"
 				   data-module-url="{{ url_for('contabilidad.index') }}">📒 Plan de cuentas</a>
@@ -466,20 +663,63 @@ html {
 				<a class="{% if active_page == 'contabilidad_estado_resultados' %}nav-active{% endif %}"
 				   href="{{ url_for('contabilidad.estado_resultados') }}"
 				   data-module-url="{{ url_for('contabilidad.estado_resultados') }}">📈 Estado de resultados</a>
+				{% if puede_mod_sii_sync %}
+				<a class="{% if active_page == 'sii_sync_documentos' %}nav-active{% endif %}"
+				   href="{{ url_for('sii_sync.documentos') }}"
+				   data-module-url="{{ url_for('sii_sync.documentos') }}">🏛 SII Sync (DTE)</a>
+				{% endif %}
+			</div>
+		</div>
+		{% endif %}
+		{% endif %}
+
+		{% if puede_mod_rrhh %}
+		<div class="nav-module">
+			<div class="module-header" id="hdr-mod-rrhh" onclick="toggleMenu('mod-rrhh')">
+				<span>🧑‍💼</span>
+				<span class="module-label">RRHH</span>
+				<span class="module-arrow" aria-hidden="true">›</span>
+			</div>
+			<div class="submenu" id="mod-rrhh">
+				<a class="{% if active_page == 'rrhh' %}nav-active{% endif %}"
+				   href="{{ url_for('rrhh.index') }}"
+				   data-module-url="{{ url_for('rrhh.index') }}">🧾 Nómina / liquidaciones</a>
+				<a class="{% if active_page == 'rrhh_organigrama' %}nav-active{% endif %}"
+				   href="{{ url_for('rrhh.organigrama') }}"
+				   data-module-url="{{ url_for('rrhh.organigrama') }}">🗺 Equipo / organigrama</a>
+				{% if user_permissions is defined and user_permissions.rrhh_editar %}
+				<a href="{{ url_for('rrhh.config') }}" data-module-url="{{ url_for('rrhh.config') }}">⚙️ Configuración</a>
+				{% endif %}
 			</div>
 		</div>
 		{% endif %}
 
 		<div class="nav-module">
-			<div class="module-header {% if informes_activo %}active{% endif %}" id="hdr-mod-informes" onclick="toggleMenu('mod-informes')">
+			<div class="module-header" id="hdr-mod-cuenta" onclick="toggleMenu('mod-cuenta')">
+				<span>👤</span>
+				<span class="module-label">CUENTA</span>
+				<span class="module-arrow" aria-hidden="true">›</span>
+			</div>
+			<div class="submenu" id="mod-cuenta">
+				<a class="{% if active_page == 'rrhh_mi_expediente' %}nav-active{% endif %}"
+				   href="{{ url_for('rrhh.mi_expediente') }}"
+				   data-module-url="{{ url_for('rrhh.mi_expediente') }}">📋 Mi expediente laboral</a>
+			</div>
+		</div>
+
+		<div class="nav-module">
+			<div class="module-header" id="hdr-mod-informes" onclick="toggleMenu('mod-informes')">
 				<span>📈</span>
 				<span class="module-label">INFORMES</span>
-				<span class="module-arrow">▾</span>
+				<span class="module-arrow" aria-hidden="true">›</span>
 			</div>
-			<div class="submenu {% if informes_activo %}open{% endif %}" id="mod-informes">
+			<div class="submenu" id="mod-informes">
 				<a class="{% if active_page == 'dashboard' %}nav-active{% endif %}"
 				   href="{{ url_for('dashboard.index') }}"
 				   data-module-url="{{ url_for('dashboard.index') }}">📊 Dashboard</a>
+				<a class="{% if active_page == 'postventa' %}nav-active{% endif %}"
+				   href="{{ url_for('postventa.index') }}"
+				   data-module-url="{{ url_for('postventa.index') }}">🛡️ Postventa / Garantías</a>
 				<a class="{% if active_page == 'informes' %}nav-active{% endif %}"
 				   href="{{ url_for('informes.index') }}"
 				   data-module-url="{{ url_for('informes.index') }}">🗂 Centro de informes</a>
@@ -504,9 +744,24 @@ html {
 		</div>
 	</div>
 
-	<div class="sidebar-logout">
-		<button class="sidebar-dark-btn" type="button" id="sidebarDarkBtn" onclick="sidebarToggleDark()">🌙 <span id="sidebarDarkLabel">Modo oscuro</span></button>
-		<a href="{{ url_for('auth.logout') }}">🚪 Cerrar sesión</a>
+	<div class="sidebar-actions">
+		<div class="sidebar-theme-row">
+			<span class="sidebar-theme-lead">
+				<span class="sidebar-theme-emoji" aria-hidden="true">🌙</span>
+				<span id="sidebarDarkLabel">Modo oscuro</span>
+			</span>
+			<button type="button" class="sidebar-theme-switch" id="sidebarDarkBtn" role="switch" aria-checked="false" aria-labelledby="sidebarDarkLabel" title="Cambiar tema" onclick="sidebarToggleDark()">
+				<span class="sidebar-theme-knob" aria-hidden="true"></span>
+			</button>
+		</div>
+		<form method="POST" action="{{ url_for('auth.logout') }}" style="margin:0;">
+			<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+			<button type="submit" class="sidebar-logout-btn">
+				<span aria-hidden="true">🚪</span>
+				<span>Cerrar sesión</span>
+				<span class="logout-chev" aria-hidden="true">›</span>
+			</button>
+		</form>
 	</div>
 
 <script>
@@ -518,27 +773,34 @@ html {
 		document.body.classList.toggle('dark', on);
 		var btn = document.getElementById('sidebarDarkBtn');
 		var lbl = document.getElementById('sidebarDarkLabel');
-		if (btn) btn.title = on ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
+		var emo = document.querySelector('.sidebar-theme-emoji');
+		if (btn) {
+			btn.title = on ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
+			btn.setAttribute('aria-checked', on ? 'true' : 'false');
+			btn.classList.toggle('is-on', on);
+		}
 		if (lbl) lbl.textContent = on ? 'Modo claro' : 'Modo oscuro';
-		if (btn) btn.children[0] && (btn.childNodes[0].textContent = on ? '☀️ ' : '🌙 ');
+		if (emo) emo.textContent = on ? '☀️' : '🌙';
 	}
 	window.sidebarToggleDark = function () {
 		var isDark = document.body.classList.contains('dark');
 		applyDark(!isDark);
-		try { localStorage.setItem(DARK_KEY, (!isDark) ? '1' : '0'); } catch(e){}
+		try { localStorage.setItem(DARK_KEY, (!isDark) ? '1' : '0'); } catch (e) {}
 	};
-	// Restore preference on load
 	document.addEventListener('DOMContentLoaded', function () {
 		var saved = '';
-		try { saved = localStorage.getItem(DARK_KEY) || ''; } catch(e){}
+		try { saved = localStorage.getItem(DARK_KEY) || ''; } catch (e) {}
 		applyDark(saved === '1');
 	});
 })();
 </script>
 
 	<div class="online-list">
-		<h4>Usuarios en linea</h4>
-		{% if online_users and online_users|length > 0 %}
+		<div class="online-list-head">
+			<h4>Usuarios en línea</h4>
+			<span class="online-count-pill" aria-label="Usuarios en línea">{{ n_online }}</span>
+		</div>
+		{% if online_users is defined and online_users and online_users|length > 0 %}
 			{% for u in online_users %}
 			<div class="online-item">
 				<span class="online-dot"></span>
@@ -553,3 +815,4 @@ html {
 		{% endif %}
 	</div>
 </aside>
+</div>

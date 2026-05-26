@@ -1,0 +1,212 @@
+{% extends 'base_content.html' if _partial else 'ventas/base.html' %}
+
+{% block title %}Pagos (caja) | Andes Auto Parts{% endblock %}
+
+{% block content %}
+{# Estilos en static/css/erp_module.css (.pagos-caja-page) para que cargas AJAX vean el mismo layout que F5. #}
+<div class="page-stack pagos-caja-page">
+    <section class="panel hero-card">
+        <div class="hero-copy">
+            <h2>Pagos (caja)</h2>
+            <p>Busque por número de factura o boleta (incluye documentos ya pagados). Registre método de pago y referencia de caja. Use la pestaña <strong>Pagados</strong> para revisar los últimos cobros registrados.</p>
+        </div>
+    </section>
+
+    <section class="panel table-card">
+        <div class="pagos-toolbar">
+            <nav class="pagos-tabs" aria-label="Vista de pagos">
+                <a class="{% if filtro == 'pendientes' %}active{% endif %}" href="{{ url_for('ventas.pagos_caja', filtro='pendientes', cliente=cliente_filtro or none) }}">Pendientes de cobro</a>
+                <a class="{% if filtro == 'pagados' %}active{% endif %}" href="{{ url_for('ventas.pagos_caja', filtro='pagados', cliente=cliente_filtro or none) }}">Últimos pagados</a>
+                <a class="{% if filtro == 'todos' %}active{% endif %}" href="{{ url_for('ventas.pagos_caja', filtro='todos', cliente=cliente_filtro or none) }}">Todos (recientes)</a>
+            </nav>
+
+            <form class="search-form" method="get" action="{{ url_for('ventas.pagos_caja') }}">
+                <input type="hidden" name="filtro" value="{{ filtro }}">
+                <div class="field grow-lg">
+                    <label for="pagos-q">N° factura o boleta</label>
+                    <input id="pagos-q" type="search" name="q" value="{{ search_term }}" placeholder="Ej. BO-0001, FA-0002" autocomplete="off">
+                </div>
+                <div class="field grow">
+                    <label for="pagos-cliente">Cliente (filtra la tabla inferior)</label>
+                    <input id="pagos-cliente" type="text" name="cliente" value="{{ cliente_filtro }}" placeholder="Nombre o parte del nombre" autocomplete="off">
+                </div>
+                <div class="field" style="flex: 0 0 auto;">
+                    <label>&nbsp;</label>
+                    <button class="btn outline" type="submit">Buscar / aplicar</button>
+                </div>
+                {% if search_term or cliente_filtro %}
+                <div class="field" style="flex: 0 0 auto;">
+                    <label>&nbsp;</label>
+                    <a class="btn" href="{{ url_for('ventas.pagos_caja', filtro=filtro) }}">Limpiar búsqueda</a>
+                </div>
+                {% endif %}
+            </form>
+        </div>
+
+        {% if search_term and not documento %}
+        <div class="alert-warn">No se encontró una factura o boleta que coincida con «{{ search_term }}».</div>
+        {% endif %}
+
+        {% if documento %}
+        <section class="detail-card">
+            <div class="detail-grid">
+                <div>
+                    <dt>Documento</dt>
+                    <dd>
+                        <span class="badge" style="background:#e0e7ff;color:#3730a3;">{{ (documento.tipo or '')|upper }}</span>
+                        {{ documento.numero or documento.id }}
+                    </dd>
+                </div>
+                <div>
+                    <dt>Fecha</dt>
+                    <dd>{{ documento.fecha_documento.strftime('%d-%m-%Y') if documento.fecha_documento else '—' }}</dd>
+                </div>
+                <div>
+                    <dt>Cliente</dt>
+                    <dd>{{ documento.cliente_nombre or '—' }}</dd>
+                </div>
+                <div>
+                    <dt>Total</dt>
+                    <dd>${{ '{:,.0f}'.format(documento.total or 0).replace(',', '.') }}</dd>
+                </div>
+                <div>
+                    <dt>Estado pago</dt>
+                    <dd>
+                        {% if (documento.estado_pago or '') == 'pagado' %}
+                        <span class="badge badge-ok">Pagado</span>
+                        {% else %}
+                        <span class="badge badge-warn">Pendiente</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt>Ver en facturación</dt>
+                    <dd>
+                        <a href="{{ url_for('ventas.facturacion', numero=documento.numero, tipo_documento=documento.tipo) }}">Abrir documento</a>
+                    </dd>
+                </div>
+            </div>
+
+            {% if (documento.estado_pago or '') == 'pagado' and documento.metodo_pago %}
+            <p style="margin:0 0 12px;font-size:13px;color:#334155;">Registrado: <strong>{{ metodo_labels.get(documento.metodo_pago, documento.metodo_pago) }}</strong>{% if documento.pago_referencia %} · Ref. caja: {{ documento.pago_referencia }}{% endif %}</p>
+            {% endif %}
+
+            <div id="pagoMsgOk" class="msg ok"></div>
+            <div id="pagoMsgErr" class="msg err"></div>
+
+            <form class="pago-form" id="formPagoCaja" data-doc-id="{{ documento.id }}">
+                <div>
+                    <label for="metodo_pago_sel">Método de pago</label>
+                    <select id="metodo_pago_sel" name="metodo_pago" required>
+                        {% for opt in metodo_options %}
+                        <option value="{{ opt }}" {% if (documento.metodo_pago or '') == opt %}selected{% endif %}>{{ metodo_labels.get(opt, opt) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="pago_referencia_inp">Referencia de caja (opcional)</label>
+                    <input type="text" id="pago_referencia_inp" name="pago_referencia" maxlength="200"
+                           value="{{ (documento.pago_referencia or '')|e }}"
+                           placeholder="Ej. voucher, turno, nota de caja">
+                </div>
+                <div>
+                    <button class="btn" type="submit" id="btnRegistrarPagoCaja">Guardar pago</button>
+                </div>
+            </form>
+        </section>
+        {% endif %}
+    </section>
+
+    <section class="panel table-card">
+        <h3 class="section-title">Listado según vista</h3>
+        <p class="section-hint">
+            {% if filtro == 'pendientes' %}Facturas y boletas que aún no están marcadas como pagadas en caja.{% elif filtro == 'pagados' %}Últimos 25 documentos marcados como pagados (orden por fecha de actualización).{% else %}Últimos 25 facturas o boletas por fecha de documento, sin filtrar por pago.{% endif %}
+            {% if cliente_filtro %} Filtro cliente: «{{ cliente_filtro }}».{% endif %}
+        </p>
+        {% if lista_documentos %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tipo</th>
+                        <th>Número</th>
+                        <th>Fecha</th>
+                        <th>Cliente</th>
+                        <th>Total</th>
+                        <th>Pago (caja)</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in lista_documentos %}
+                    <tr>
+                        <td><span class="badge" style="background:#e0e7ff;color:#3730a3;">{{ (p.tipo or '')|upper }}</span></td>
+                        <td><strong>{{ p.numero or p.id }}</strong></td>
+                        <td>{{ p.fecha_documento.strftime('%d-%m-%Y') if p.fecha_documento else '—' }}</td>
+                        <td>{{ p.cliente_nombre or '—' }}</td>
+                        <td>${{ '{:,.0f}'.format(p.total or 0).replace(',', '.') }}</td>
+                        <td>
+                            {% if (p.estado_pago or '') == 'pagado' %}
+                            <span class="badge badge-ok">Pagado</span>
+                            {% if p.metodo_pago %}<span class="pago-cell-muted">{{ metodo_labels.get(p.metodo_pago, p.metodo_pago) }}</span>{% endif %}
+                            {% if p.pago_referencia %}<span class="pago-cell-muted">{{ p.pago_referencia }}</span>{% endif %}
+                            {% else %}
+                            <span class="badge badge-warn">Pendiente</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a class="btn outline" href="{{ url_for('ventas.pagos_caja', q=p.numero or p.id, filtro=filtro, cliente=cliente_filtro or none) }}">Abrir</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty">No hay documentos en esta vista con los filtros actuales.</div>
+        {% endif %}
+    </section>
+</div>
+
+<script>
+(function () {
+    var form = document.getElementById('formPagoCaja');
+    if (!form) return;
+    var docId = form.getAttribute('data-doc-id');
+    var okEl = document.getElementById('pagoMsgOk');
+    var errEl = document.getElementById('pagoMsgErr');
+    var btn = document.getElementById('btnRegistrarPagoCaja');
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var metodo = (document.getElementById('metodo_pago_sel') || {}).value || 'efectivo';
+        var ref = (document.getElementById('pago_referencia_inp') || {}).value || '';
+        okEl.style.display = 'none';
+        errEl.style.display = 'none';
+        btn.disabled = true;
+        fetch('/ventas/api/documento/' + docId + '/pago', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ metodo_pago: metodo, pago_referencia: ref })
+        }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+        .then(function (res) {
+            if (res.ok && res.data && res.data.ok) {
+                okEl.textContent = 'Pago registrado: ' + (res.data.metodo_label || metodo) + '.';
+                okEl.style.display = 'block';
+                var badge = document.querySelector('.detail-grid dd .badge-ok, .detail-grid dd .badge-warn');
+                if (badge) {
+                    badge.className = 'badge badge-ok';
+                    badge.textContent = 'Pagado';
+                }
+                window.setTimeout(function () { window.location.reload(); }, 600);
+            } else {
+                errEl.textContent = (res.data && res.data.error) ? res.data.error : 'No se pudo registrar el pago.';
+                errEl.style.display = 'block';
+            }
+        }).catch(function () {
+            errEl.textContent = 'Error de red al registrar el pago.';
+            errEl.style.display = 'block';
+        }).finally(function () { btn.disabled = false; });
+    });
+})();
+</script>
+{% endblock %}

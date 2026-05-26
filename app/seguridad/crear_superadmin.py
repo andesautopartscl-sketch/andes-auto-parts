@@ -10,10 +10,14 @@ def crear_superadmin():
         print("Rol SuperAdmin no encontrado")
         return
 
-    existe = Usuario.query.filter_by(usuario="albert").first()
-
-    if existe:
-        print("SuperAdmin ya existe")
+    # Evitar duplicar cuentas SuperAdmin si ya existe cualquiera (p. ej. albertadmin).
+    ya_super = (
+        Usuario.query.join(Rol, Rol.id == Usuario.rol_id)
+        .filter(Rol.nombre == "SuperAdmin")
+        .first()
+    )
+    if ya_super:
+        print("SuperAdmin ya existe (usuario:", ya_super.usuario, ") — no se crea otro.")
         return
 
     nuevo = Usuario(

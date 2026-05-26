@@ -1,0 +1,4 @@
+{% if session_idle_client %}
+<script type="application/json" id="session-idle-config">{{ session_idle_client | tojson }}</script>
+<script src="{{ url_for('static', filename='idle_session_warning.js') }}"></script>
+{% endif %}

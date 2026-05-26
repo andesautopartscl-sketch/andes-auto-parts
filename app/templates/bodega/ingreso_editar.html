@@ -1,0 +1,374 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+
+{% block title %}Editar ingreso | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<style>
+  .ing-edit-wrap { max-width: none; width: 100%; border-radius: 10px; }
+  .ing-edit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; }
+  .ing-edit-grid .field { margin-bottom: 0; }
+  .ing-edit-grid .field label { font-size: 10px; margin-bottom: 2px; color: #475569; letter-spacing: .01em; }
+  .ing-edit-grid .field input,
+  .ing-edit-grid .field select { height: 30px; font-size: 11px; padding: 4px 8px; border-radius: 8px; }
+  .ing-edit-totals-strip {
+    grid-column: 1 / -1;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    padding: 12px 14px;
+    margin-top: 6px;
+    margin-left: auto;
+    width: min(520px, 100%);
+    border-radius: 10px;
+  }
+  .ing-edit-totals-grid {
+    display: grid;
+    grid-template-columns: 1.45fr 1fr;
+    grid-template-areas:
+      "factura iva"
+      "factura total";
+    gap: 6px 8px;
+    align-items: stretch;
+  }
+  .ing-edit-total-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .ing-edit-total-field.ing-edit-total-field--factura { grid-area: factura; }
+  .ing-edit-total-field.is-iva { grid-area: iva; }
+  .ing-edit-total-field.is-total { grid-area: total; }
+  .ing-edit-total-field label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+  }
+  .ing-edit-total-field.ing-edit-total-field--factura label {
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0.01em;
+    color: #94a3b8;
+  }
+  .ing-edit-total-field input {
+    display: block;
+    width: 100%;
+    min-height: 30px;
+    padding: 5px 8px;
+    border: 1px dashed #e2e8f0;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.65);
+    font-size: 12px;
+    font-weight: 400;
+    color: #334155;
+    text-align: left;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .ing-edit-total-field input:hover { border-color: #cbd5e1; background: #fff; }
+  .ing-edit-total-field input:focus {
+    outline: none;
+    border-style: solid;
+    border-color: #93c5fd;
+    background: #fff;
+    box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.25);
+  }
+  .ing-edit-total-field input::placeholder { color: #cbd5e1; font-weight: 400; font-size: 12px; }
+  .ing-edit-total-field output {
+    display: block;
+    width: 100%;
+    min-height: 32px;
+    padding: 6px 9px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    color: #0f172a;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    box-sizing: border-box;
+  }
+  .ing-edit-total-hint { color: #cbd5e1; font-size: 8px; line-height: 1.3; }
+  .ing-edit-table-wrap { overflow-x: hidden; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 9px; }
+  .ing-edit-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9px; }
+  .ing-edit-table th {
+    padding: 3px 4px;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+    font-size: 8px;
+    letter-spacing: .01em;
+    color: #334155;
+  }
+  .ing-edit-table td { padding: 3px 4px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; line-height: 1.05; font-size: 9px; }
+  .ing-edit-table td input[type="number"],
+  .ing-edit-table td input[type="text"] { height: 24px; font-size: 9px; padding: 2px 5px; border-radius: 6px; width: 100%; min-width: 0; }
+  .ing-edit-table td .ing-edit-readonly { background: #f8fafc; color: #334155; }
+  .ing-edit-table td input.ing-desc-input { height: auto; min-height: 27px; line-height: 1.2; }
+  .ing-edit-table td input[type="checkbox"] { width: 13px; height: 13px; margin: 0; }
+  .ing-edit-help-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  .ing-edit-help-btn {
+    width: 22px; height: 22px; border-radius: 999px; border: 1px solid #93c5fd; background: #eff6ff;
+    color: #1e3a8a; font-size: 13px; font-weight: 700; line-height: 1; cursor: pointer;
+  }
+  .ing-edit-help-btn:hover { background: #dbeafe; border-color: #60a5fa; }
+  .ing-edit-help-panel {
+    display: none; margin-top: 4px; padding: 6px 8px; border: 1px solid #dbeafe; border-radius: 8px;
+    background: #f8fbff; color: #475569; font-size: 9px; line-height: 1.25;
+  }
+  .ing-edit-help-panel.open { display: block; }
+  .ing-edit-actions { grid-column: 1 / -1; justify-content: flex-end; gap: 6px; margin-top: 2px; }
+  .ing-edit-actions .btn,
+  .ing-edit-actions .link-btn { padding: 6px 9px; font-size: 11px; border-radius: 8px; min-height: 30px; }
+  .topbar .page-title { margin-bottom: 2px; }
+  .topbar .page-subtitle { font-size: 12px; }
+  .topbar-actions .link-btn { font-size: 11px; padding: 5px 9px; border-radius: 8px; }
+</style>
+<div class="topbar">
+    <div>
+        <h1 class="page-title">Editar ingreso #{{ doc.id }}</h1>
+        <p class="page-subtitle">Corrige encabezado e ítems; el sistema ajusta stock por diferencia en cada línea.</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="link-btn" href="{{ url_for('bodega.ingreso_historial') }}">← Volver al historial</a>
+    </div>
+</div>
+
+<div class="form-card ing-edit-wrap" style="padding:10px;">
+    <form method="post" class="form-grid ing-edit-grid">
+        <div class="field" style="grid-column:1 / -1;">
+            <label>ID documento</label>
+            <input type="text" value="#{{ doc.id }}" disabled>
+        </div>
+        <div class="field">
+            <label for="fecha_documento">Fecha documento *</label>
+            <input id="fecha_documento" name="fecha_documento" type="date" required value="{{ doc.fecha_documento.strftime('%Y-%m-%d') if doc.fecha_documento else '' }}">
+        </div>
+        <div class="field">
+            <label for="numero_documento">N° documento</label>
+            <input id="numero_documento" name="numero_documento" maxlength="60" value="{{ doc.numero_documento or '' }}" placeholder="Factura / guía">
+        </div>
+        <div class="field">
+            <label>Proveedor</label>
+            <input type="text" value="{{ doc.proveedor_nombre or '' }}" disabled>
+        </div>
+        <div class="field" style="grid-column:1 / -1;">
+            <label for="metodo_pago">Método de pago</label>
+            {% set mp = (doc.metodo_pago or '') %}
+            {% set mp_presets = metodos_pago_opciones or [] %}
+            <select id="metodo_pago" name="metodo_pago" title="Cómo se pagó esta factura al proveedor">
+                <option value="">— Opcional —</option>
+                {% if mp and mp not in mp_presets %}
+                <option value="{{ mp }}" selected>{{ mp }}</option>
+                {% endif %}
+                {% for label in mp_presets %}
+                <option value="{{ label }}" {% if mp == label %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field" style="grid-column:1 / -1;">
+            <label for="observacion">Observación</label>
+            <input id="observacion" name="observacion" maxlength="255" value="{{ doc.observacion or '' }}" placeholder="Nota u observación del ingreso">
+        </div>
+        <div class="field" style="grid-column:1 / -1;">
+            <div class="ing-edit-help-row">
+                <label style="margin:0;">Ítems del ingreso</label>
+                <button type="button" class="ing-edit-help-btn" id="ingEditHelpBtn" aria-expanded="false" aria-controls="ingEditHelpPanel" title="Ayuda de edición de ingreso" aria-label="Ayuda">?</button>
+            </div>
+            <div class="ing-edit-table-wrap">
+                <table class="ing-edit-table">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Cód. prov.</th>
+                            <th>Descripción</th>
+                            <th>Marca</th>
+                            <th>Bodega</th>
+                            <th>Origen</th>
+                            <th>Cantidad</th>
+                            <th>Valor neto</th>
+                            <th>Marg. %</th>
+                            <th>P. neto</th>
+                            <th>P. con IVA</th>
+                            <th>Nota</th>
+                            <th style="text-align:center;">Quitar</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for it in items %}
+                        <tr>
+                            <td>
+                                <input type="hidden" name="line_id[]" value="{{ it.id }}">
+                                {{ it.codigo_producto }}
+                            </td>
+                            <td style="width:7%;">
+                                <input type="text" name="line_codigo_proveedor[]" maxlength="120" value="{{ (proveedor_codes.get(it.id) if proveedor_codes else '') or '' }}" placeholder="Cód. prov.">
+                            </td>
+                            <td style="width:18%;">
+                                <input type="text" class="ing-desc-input" name="line_descripcion_producto[]" maxlength="255" value="{{ it.descripcion_producto or '' }}" placeholder="Descripción">
+                            </td>
+                            <td style="width:9%;">
+                                <input type="text" name="line_marca[]" maxlength="120" value="{{ it.marca or '' }}" placeholder="Marca">
+                            </td>
+                            <td style="width:6%;">{{ it.bodega }}</td>
+                            <td style="width:5%;">{{ it.origen_compra or 'nacional' }}</td>
+                            <td style="width:6%;">
+                                <input type="number" name="line_cantidad[]" min="1" step="1" value="{{ it.cantidad }}" style="width:100%;">
+                            </td>
+                            <td style="width:8%;">
+                                <input type="text" name="line_valor_neto[]" value="{{ '{:,.2f}'.format(it.valor_neto).replace(',', 'X').replace('.', ',').replace('X', '.') if it.valor_neto is not none else '' }}" placeholder="Ej: 12.500">
+                            </td>
+                            <td style="width:6%;">
+                                <input type="text" class="ing-edit-margen-input" name="line_margen_pct[]" value="{{ '{:,.2f}'.format(it.margen_pct).replace(',', 'X').replace('.', ',').replace('X', '.') if it.margen_pct is not none else '' }}" placeholder="%">
+                            </td>
+                            <td style="width:8%;">
+                                <input type="text" class="ing-edit-precio-neto-input" name="line_precio_venta_neto[]" value="{{ '{:,.2f}'.format(it.precio_venta_neto).replace(',', 'X').replace('.', ',').replace('X', '.') if it.precio_venta_neto is not none else '' }}" placeholder="P. neto">
+                            </td>
+                            <td style="width:8%;">
+                                <input type="text" class="ing-edit-precio-iva-input ing-edit-readonly" value="" placeholder="P. c/IVA" readonly tabindex="-1">
+                            </td>
+                            <td style="width:10%;">
+                                <input type="text" name="line_nota[]" maxlength="255" value="{{ it.nota or '' }}" placeholder="Opcional">
+                            </td>
+                            <td style="text-align:center; width:3%;">
+                                <input type="checkbox" name="line_delete[]" value="{{ it.id }}" title="Eliminar línea">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div id="ingEditHelpPanel" class="ing-edit-help-panel" role="note">
+                Podés cambiar descripción, marca, código proveedor, cantidad, valor neto y nota.
+                Si cambiás la marca, el sistema mueve la cantidad de esa línea entre variantes de stock
+                (salida desde la marca anterior e ingreso a la nueva). Si marcas &quot;Quitar&quot;,
+                se elimina la línea y se descuenta su stock del inventario.
+                <br><br>
+                En &quot;Total factura (c/IVA)&quot; podés ingresar el monto del documento físico para cuadrar IVA y total.
+            </div>
+        </div>
+        <div class="ing-edit-totals-strip">
+            <div class="ing-edit-totals-grid">
+                <div class="ing-edit-total-field ing-edit-total-field--factura">
+                    <label for="ingEditTotalFactura">Total factura (c/IVA)</label>
+                    <input id="ingEditTotalFactura" name="total_factura" type="text" inputmode="decimal"
+                           value="{% if total_factura_referencia is not none %}{{ '{:,.2f}'.format(total_factura_referencia).replace(',', 'X').replace('.', ',').replace('X', '.') }}{% endif %}"
+                           placeholder="Ej. 38000" autocomplete="off">
+                    <span class="ing-edit-total-hint">Solo si querés cuadrar con el papel</span>
+                </div>
+                <div class="ing-edit-total-field is-iva">
+                    <label for="ingEditIvaRef">IVA</label>
+                    <output id="ingEditIvaRef">${{ '{:,.0f}'.format(iva_referencia).replace(',', '.') }}</output>
+                </div>
+                <div class="ing-edit-total-field is-total">
+                    <label for="ingEditTotalConIva">Total</label>
+                    <output id="ingEditTotalConIva">${{ '{:,.0f}'.format(total_con_iva).replace(',', '.') }}</output>
+                </div>
+            </div>
+        </div>
+        <div class="actions ing-edit-actions">
+            <a class="link-btn" href="{{ url_for('bodega.ingreso_historial') }}">Cancelar</a>
+            <button class="btn btn-primary" type="submit">Guardar cambios</button>
+        </div>
+    </form>
+</div>
+<script>
+(function () {
+    var form = document.querySelector('.ing-edit-wrap form');
+    if (!form) return;
+    var IVA_RATE = 0.19;
+    var helpBtn = document.getElementById('ingEditHelpBtn');
+    var helpPanel = document.getElementById('ingEditHelpPanel');
+
+    if (helpBtn && helpPanel) {
+        helpBtn.addEventListener('click', function () {
+            var open = helpPanel.classList.toggle('open');
+            helpBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+    }
+
+    function parseCLNumber(raw) {
+        var s = String(raw || '').trim();
+        if (!s) return null;
+        s = s.replace(/\s+/g, '');
+        var hasComma = s.indexOf(',') >= 0;
+        var hasDot = s.indexOf('.') >= 0;
+        if (hasComma && hasDot) {
+            s = s.replace(/\./g, '').replace(',', '.');
+        } else if (hasComma) {
+            s = s.replace(',', '.');
+        }
+        var n = Number(s);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    function formatCL(n) {
+        var v = Number(n || 0);
+        return v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatCL0(n) {
+        var v = Number(n || 0);
+        return v.toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    function recalcRow(row) {
+        var qtyInp = row.querySelector("input[name='line_cantidad[]']");
+        var netInp = row.querySelector("input[name='line_valor_neto[]']");
+        var mgInp = row.querySelector("input[name='line_margen_pct[]']");
+        var pvInp = row.querySelector("input[name='line_precio_venta_neto[]']");
+        var pvIvaInp = row.querySelector('.ing-edit-precio-iva-input');
+        if (!qtyInp || !netInp || !mgInp || !pvInp || !pvIvaInp) return;
+
+        var qty = parseCLNumber(qtyInp.value);
+        var netLine = parseCLNumber(netInp.value);
+        var mg = parseCLNumber(mgInp.value);
+        var pv = parseCLNumber(pvInp.value);
+        var unitCost = (qty && netLine !== null && qty > 0) ? (netLine / qty) : null;
+
+        if ((pv === null || pv <= 0) && unitCost !== null && mg !== null && mg >= 0 && mg < 100) {
+            pv = unitCost / (1 - (mg / 100));
+            pvInp.value = formatCL(pv);
+        } else if ((mg === null || mg < 0 || mg >= 100) && unitCost !== null && pv !== null && pv > 0) {
+            mg = (1 - (unitCost / pv)) * 100;
+            if (Number.isFinite(mg)) mgInp.value = formatCL(mg);
+        }
+
+        var pvForIva = parseCLNumber(pvInp.value);
+        pvIvaInp.value = (pvForIva !== null && pvForIva > 0) ? formatCL(pvForIva * (1 + IVA_RATE)) : '';
+    }
+
+    function recalcTotals() {
+        var totalNeto = 0;
+        form.querySelectorAll('tbody tr').forEach(function (row) {
+            var qty = parseCLNumber((row.querySelector("input[name='line_cantidad[]']") || {}).value);
+            var net = parseCLNumber((row.querySelector("input[name='line_valor_neto[]']") || {}).value);
+            if (qty !== null && net !== null) totalNeto += (qty * net);
+        });
+        var totalFacturaInp = document.getElementById('ingEditTotalFactura');
+        var totalFactura = totalFacturaInp ? parseCLNumber(totalFacturaInp.value) : null;
+        var iva = totalFactura !== null && totalFactura > 0 ? (totalFactura - totalNeto) : (totalNeto * IVA_RATE);
+        var totalOut = totalFactura !== null && totalFactura > 0 ? totalFactura : (totalNeto * (1 + IVA_RATE));
+        var ivaOut = document.getElementById('ingEditIvaRef');
+        var out = document.getElementById('ingEditTotalConIva');
+        if (ivaOut) ivaOut.textContent = '$' + formatCL0(iva);
+        if (out) out.textContent = '$' + formatCL0(totalOut);
+    }
+
+    form.querySelectorAll('tbody tr').forEach(function (row) {
+        recalcRow(row);
+    });
+    recalcTotals();
+
+    form.addEventListener('input', function (e) {
+        var tr = e.target && e.target.closest('tr');
+        if (tr) recalcRow(tr);
+        recalcTotals();
+    });
+    form.addEventListener('change', function (e) {
+        var tr = e.target && e.target.closest('tr');
+        if (tr) recalcRow(tr);
+        recalcTotals();
+    });
+})();
+</script>
+{% endblock %}
+

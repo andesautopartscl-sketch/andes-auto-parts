@@ -143,13 +143,45 @@ _SUBCATEGORIA_SINONIMOS: dict[str, tuple[str, ...]] = {
         "axial",
         "punta eje",
     ),
-    "espejos": ("espejo", "espejos", "retrovisor", "retrovisores"),
+    "espejos": (
+        "espejo",
+        "espejos",
+        "retrovisor",
+        "retrovisores",
+        "luna",
+        "luneta",
+        "vidrio lateral",
+    ),
     "paragolpes": (
         "paragolpe",
         "paragolpes",
         "parachoques",
         "bumper",
         "defensa",
+        "refuerzo paragolpe",
+        "bigote",
+        "bigotes",
+        "tapabarro",
+        "tapabarros",
+        "tapa barro",
+        "tapas barro",
+        "guardabarro",
+        "guardabarros",
+        "guarda barro",
+        "guardafango",
+        "guardafangos",
+        "parafango",
+        "parafangos",
+        "salpicadera",
+        "salpicaderas",
+        "deflector",
+        "deflectores",
+        "mudguard",
+        "fender",
+        "quilla",
+        "aerofango",
+        "extension",
+        "alma paragolpe",
     ),
     "accesorios": (
         "moldura",
@@ -158,6 +190,30 @@ _SUBCATEGORIA_SINONIMOS: dict[str, tuple[str, ...]] = {
         "rejilla",
         "spoiler",
         "estribo",
+        "chapon",
+        "chapones",
+        "capot",
+        "cofre",
+        "bisagra",
+        "bisagras",
+        "cerradura",
+        "manija",
+        "manijas",
+        "embellecedor",
+        "cubre",
+        "bagueta",
+        "felpa",
+        "empaquetadura",
+        "burlete",
+        "burletes",
+        "persiana",
+        "techo",
+        "sunroof",
+        "quemacocos",
+        "porton",
+        "compuerta",
+        "alzavidrio",
+        "elevalunas",
     ),
 }
 
@@ -307,12 +363,13 @@ def auto_asignar_categoria_si_vacio(sess, producto: "Producto", *, do_commit: bo
 
 
 def bulk_auto_asignar_categorias_faltantes(sess, batch_flush: int = 500) -> int:
-    """Asigna categoría a productos sin categoría (commits en lotes)."""
+    """Asigna categoría a productos activos sin categoría (commits en lotes)."""
     from app.models import Producto
 
     n = 0
     q = (
         sess.query(Producto)
+        .filter(Producto.activo.is_(True))
         .filter(Producto.categoria_id.is_(None))
         .filter(Producto.subcategoria_id.is_(None))
     )

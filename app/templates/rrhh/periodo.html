@@ -1,0 +1,193 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block content %}
+<div class="rrhh-page">
+  <div class="topbar" style="margin-bottom:10px;">
+    <div>
+      <h1 class="page-title" style="font-size:22px;margin:0;">RRHH / Nómina</h1>
+      <p class="page-subtitle" style="margin:4px 0 0;">Período: <strong>{{ periodo }}</strong></p>
+    </div>
+    <div class="topbar-actions">
+      <form method="GET" action="{{ url_for('rrhh.index') }}" style="display:flex; gap:8px; align-items:center;">
+        <input name="periodo" value="{{ periodo }}" placeholder="YYYY-MM" style="height:38px; border-radius:10px; border:1px solid var(--line); padding:0 12px; background:#fff;">
+        <button type="submit" class="btn btn-primary" style="height:38px;">Ir</button>
+      </form>
+    </div>
+  </div>
+
+  <section class="panel" style="overflow:hidden;">
+    <div style="border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 12px;">
+      <div style="font-weight:800;">Vendedores</div>
+      <div id="rrhhStatus" style="color:var(--muted); font-size:13px;"></div>
+    </div>
+    {% if not perfiles %}
+      <div style="margin:12px; padding:12px; border:1px solid var(--line); border-radius:12px; background:linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);">
+        <div style="font-weight:800; color:#0f172a;">No hay vendedores configurados aún</div>
+        <div style="margin-top:6px; color:var(--muted); font-size:13px;">
+          Ve a <strong>Seguridad → Usuarios</strong>, edita el usuario y marca <strong>“Es vendedor”</strong> + su <strong>% comisión</strong>.
+          Después vuelve acá y aparecerá en la lista.
+        </div>
+      </div>
+    {% endif %}
+    <div style="overflow:auto;">
+      <table class="erp-table" style="min-width:1060px;">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Comisión %</th>
+            <th>Ventas</th>
+            <th>NC</th>
+            <th>Comisión calc.</th>
+            <th>Sueldo base</th>
+            <th>Haberes</th>
+            <th>Descuentos</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for perfil, u in perfiles %}
+            {% set liq = liq_by_uid.get(u.id) %}
+            <tr>
+              <td>
+                <div style="font-weight:800;">{{ u.nombre }}</div>
+                <div style="color:#64748b; font-size:12px;">{{ u.usuario }}</div>
+              </td>
+              <td>{{ perfil.comision_pct or 0 }}%</td>
+              <td><span id="vtotal-{{u.id}}">—</span></td>
+              <td><span id="nctotal-{{u.id}}">—</span></td>
+              <td><span id="comision-{{u.id}}">—</span></td>
+              <td>
+                <input id="sb-{{u.id}}" type="number" min="0" step="1" value="{{ liq.sueldo_base if liq else 0 }}" style="height:34px; width:130px; border-radius:10px; border:1px solid var(--line); padding:0 10px; background:#fff;">
+              </td>
+              <td>
+                <input id="hab-{{u.id}}" type="number" min="0" step="1" value="{{ liq.haberes_otros if liq else 0 }}" style="height:34px; width:120px; border-radius:10px; border:1px solid var(--line); padding:0 10px; background:#fff;">
+              </td>
+              <td>
+                <input id="des-{{u.id}}" type="number" min="0" step="1" value="{{ liq.descuentos_otros if liq else 0 }}" style="height:34px; width:120px; border-radius:10px; border:1px solid var(--line); padding:0 10px; background:#fff;">
+              </td>
+              <td>
+                {% if liq %}
+                  <span class="badge slate" style="text-transform:capitalize;">{{ liq.estado }}</span>
+                {% else %}
+                  <span style="color:#64748b;">sin liquidación</span>
+                {% endif %}
+              </td>
+              <td style="white-space:nowrap;">
+                <button type="button" class="btn btn-secondary sm" onclick="rrhhPrecalc({{u.id}})">Precalcular</button>
+                <button type="button" class="btn btn-primary sm" onclick="rrhhGenerar({{u.id}})">Generar</button>
+                {% if liq %}
+                  <a class="btn btn-secondary sm" href="{{ url_for('rrhh.liquidacion_detalle', lid=liq.id) }}">Ver</a>
+                {% endif %}
+                {% if liq and liq.estado == 'borrador' %}
+                  <button type="button" class="btn btn-secondary sm" onclick="rrhhCerrar({{liq.id}})">Cerrar</button>
+                {% endif %}
+                {% if liq and liq.estado == 'cerrada' %}
+                  <button type="button" class="btn btn-success sm" onclick="rrhhPagar({{liq.id}})">Pagar</button>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const periodo = {{ periodo|tojson }};
+  const csrf = (window.getCsrfToken && window.getCsrfToken()) || (document.querySelector('meta[name=\"csrf-token\"]') || {}).content || '';
+
+  function setStatus(msg, isErr) {
+    const n = document.getElementById('rrhhStatus');
+    if (!n) return;
+    n.textContent = msg || '';
+    n.style.color = isErr ? '#b91c1c' : '#64748b';
+  }
+
+  function hdr() {
+    return {
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-Token': csrf
+    };
+  }
+
+  window.rrhhPrecalc = async function (uid) {
+    setStatus('Calculando...', false);
+    try {
+      const res = await fetch(`/rrhh/api/periodo/${encodeURIComponent(periodo)}/precalcular_comision`, {
+        method: 'POST',
+        headers: hdr(),
+        body: JSON.stringify({ usuario_id: uid })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo calcular');
+      document.getElementById(`vtotal-${uid}`).textContent = '$' + Number(data.ventas_total || 0).toLocaleString('es-CL');
+      document.getElementById(`nctotal-${uid}`).textContent = '$' + Number(data.notas_credito_total || 0).toLocaleString('es-CL');
+      document.getElementById(`comision-${uid}`).textContent = '$' + Number(data.comision_calculada || 0).toLocaleString('es-CL');
+      setStatus('OK', false);
+    } catch (e) {
+      setStatus(e.message, true);
+    }
+  };
+
+  window.rrhhGenerar = async function (uid) {
+    const sb = document.getElementById(`sb-${uid}`);
+    const sueldoBase = sb ? Number(sb.value || 0) : 0;
+    const hab = document.getElementById(`hab-${uid}`);
+    const haberes = hab ? Number(hab.value || 0) : 0;
+    const des = document.getElementById(`des-${uid}`);
+    const descuentos = des ? Number(des.value || 0) : 0;
+    setStatus('Generando liquidación...', false);
+    try {
+      const res = await fetch(`/rrhh/api/liquidacion/generar`, {
+        method: 'POST',
+        headers: hdr(),
+        body: JSON.stringify({ periodo: periodo, usuario_id: uid, sueldo_base: sueldoBase, haberes_otros: haberes, descuentos_otros: descuentos })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo generar');
+      setStatus('Liquidación generada. Recarga la página para ver estado.', false);
+      setTimeout(function () { window.location.reload(); }, 600);
+    } catch (e) {
+      setStatus(e.message, true);
+    }
+  };
+
+  window.rrhhCerrar = async function (lid) {
+    if (!confirm('¿Cerrar liquidación?')) return;
+    setStatus('Cerrando...', false);
+    try {
+      const res = await fetch(`/rrhh/api/liquidacion/${encodeURIComponent(lid)}/cerrar`, { method:'POST', headers: hdr(), body: '{}' });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cerrar');
+      window.location.reload();
+    } catch (e) {
+      setStatus(e.message, true);
+    }
+  };
+
+  window.rrhhPagar = async function (lid) {
+    const medio = prompt('Medio de pago (transferencia/efectivo/etc):', 'transferencia') || '';
+    if (!medio) return;
+    const ref = prompt('Referencia (opcional):', '') || '';
+    setStatus('Registrando pago...', false);
+    try {
+      const res = await fetch(`/rrhh/api/liquidacion/${encodeURIComponent(lid)}/pagar`, {
+        method:'POST',
+        headers: hdr(),
+        body: JSON.stringify({ pago_medio: medio, pago_referencia: ref })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo pagar');
+      window.location.reload();
+    } catch (e) {
+      setStatus(e.message, true);
+    }
+  };
+})();
+</script>
+{% endblock %}
+

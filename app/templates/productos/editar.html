@@ -4,112 +4,600 @@
 
 {% block extra_head %}
 <style>
-.card {
-    border:1px solid #e2e8f0;
-    border-radius:16px;
-    padding:18px;
-    margin-bottom:16px;
-    background:#fff;
-    box-shadow:0 10px 25px rgba(0,0,0,0.05);
+.productos-edit-page .topbar .page-title {
+    font-size: 1.25rem;
+    line-height: 1.2;
+    margin: 0 0 2px;
+}
+.productos-edit-page .topbar .page-subtitle {
+    font-size: 13px;
+    line-height: 1.35;
+    color: #64748b;
+    margin: 0;
 }
 
-.row {
-    display:flex;
-    gap:10px;
-    flex-wrap:wrap;
+.productos-edit-page .card {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: #fff;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
 }
 
-.field {
-    flex:1 1 250px;
+.productos-edit-page .row {
+    display: flex;
+    gap: 8px 10px;
+    flex-wrap: wrap;
 }
 
-.field label {
-    display:block;
-    margin-bottom:6px;
-    font-size:13px;
-    font-weight:600;
-    color:#334155;
+.productos-edit-page .field {
+    flex: 1 1 200px;
 }
 
-input {
-    width:100%;
-    padding:10px 12px;
-    border:1px solid #cbd5e1;
-    border-radius:8px;
-    font-size:14px;
+.productos-edit-page .field label {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #334155;
+    letter-spacing: 0.02em;
 }
 
-.actions {
-    display:flex;
-    gap:10px;
-    margin-top:12px;
-    flex-wrap:wrap;
+.productos-edit-page input,
+.productos-edit-page select,
+.productos-edit-page .tax-filter-input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    font-size: 13px;
+    box-sizing: border-box;
 }
 
-.hidden {
-    display:none;
+.productos-edit-page .input-readonly {
+    background: #f1f5f9;
+    color: #64748b;
 }
 
-.badge {
-    display:inline-flex;
-    align-items:center;
-    gap:6px;
-    padding:5px 9px;
-    border-radius:999px;
-    font-size:12px;
-    font-weight:600;
+.productos-edit-page .actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+    align-items: center;
 }
 
-.badge-active {
-    background:rgba(34,197,94,.15);
-    color:#166534;
+.productos-edit-page .row-buscar-producto {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.productos-edit-page .row-buscar-producto .field-buscar-grow {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+.productos-edit-page .btn-limpiar-busqueda {
+    flex: 0 0 auto;
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 7px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    cursor: pointer;
+}
+.productos-edit-page .btn-limpiar-busqueda:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    color: #0f172a;
 }
 
-.badge-inactive {
-    background:rgba(220,38,38,.12);
-    color:#991b1b;
+.productos-edit-page .hidden {
+    display: none;
 }
 
-.msg {
-    margin-top:10px;
-    padding:10px 12px;
-    border-radius:8px;
-    font-size:13px;
+.productos-edit-page .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
 }
 
-.msg-ok {
-    background:#ecfdf3;
-    border:1px solid #86efac;
-    color:#166534;
+.productos-edit-page .badge-active {
+    background: rgba(34, 197, 94, 0.15);
+    color: #166534;
 }
 
-.msg-err {
-    background:#fef2f2;
-    border:1px solid #fca5a5;
-    color:#991b1b;
+.productos-edit-page .badge-inactive {
+    background: rgba(220, 38, 38, 0.12);
+    color: #991b1b;
 }
 
-body.dark .card {
-    background:#1f2937;
-    border-color:#374151;
+.productos-edit-page .msg {
+    margin-top: 6px;
+    padding: 6px 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    line-height: 1.35;
 }
 
-body.dark .card h3,
-body.dark .page-title,
-body.dark .page-subtitle,
-body.dark .field label {
-    color:#e5e7eb;
+.productos-edit-page .msg-ok {
+    background: #ecfdf3;
+    border: 1px solid #86efac;
+    color: #166534;
+}
+
+.productos-edit-page .msg-err {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+}
+
+.productos-edit-page .form-sec {
+    margin: 10px 0 6px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+.productos-edit-page .form-sec:first-of-type {
+    margin-top: 0;
+}
+
+.productos-edit-page .activo-box {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.productos-edit-page .activo-box input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    cursor: pointer;
+    accent-color: #16a34a;
+}
+.productos-edit-page .activo-box label {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.productos-edit-page .activo-hint {
+    font-size: 11px;
+    color: #64748b;
+    padding-left: 2px;
+}
+
+.productos-edit-page .vc-variantes-module {
+    margin-bottom: 26px;
+    padding-bottom: 2px;
+}
+.productos-edit-page .vc-variantes-intro {
+    margin-top: 4px;
+}
+.productos-edit-page .vc-block-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+.productos-edit-page .vc-block-title {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+.productos-edit-page .vc-total-erp {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.productos-edit-page .vc-total-erp-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.productos-edit-page .vc-total-erp-val {
+    display: inline-block;
+    min-width: 1.5rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #e0f2fe;
+    border: 1px solid #7dd3fc;
+    font-size: 11px;
+    font-weight: 800;
+    color: #0369a1;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.4;
+    text-align: center;
+}
+.productos-edit-page .precios-sec-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 6px;
+    flex-wrap: wrap;
+}
+.productos-edit-page .precios-sec-head .precios-sec-title {
+    margin: 0;
+}
+.productos-edit-page .precios-help-wrap {
+    position: relative;
+    flex: 0 0 auto;
+}
+.productos-edit-page .precios-help-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    border: 1px solid #93c5fd;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    color: #1e3a8a;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(30, 64, 175, 0.12);
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .15s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+}
+.productos-edit-page .precios-help-btn svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+}
+.productos-edit-page .precios-help-btn:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border-color: #60a5fa;
+    box-shadow: 0 6px 16px rgba(30, 64, 175, 0.2);
+}
+.productos-edit-page .precios-help-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+.productos-edit-page .precios-help-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 30;
+    width: min(420px, calc(100vw - 32px));
+    max-height: min(55vh, 320px);
+    overflow: auto;
+    padding: 12px 14px;
+    border: 1px solid #dbe4f0;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 12px 36px rgba(15, 23, 42, 0.14);
+}
+.productos-edit-page .precios-help-panel[hidden] {
+    display: none !important;
+}
+.productos-edit-page .precios-help-title {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.productos-edit-page .precios-help-list {
+    margin: 0 0 10px;
+    padding-left: 18px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #475569;
+}
+.productos-edit-page .precios-help-list li + li {
+    margin-top: 4px;
+}
+.productos-edit-page .precios-help-close {
+    font-size: 11px;
+    padding: 4px 10px;
+}
+.productos-edit-page .vc-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    margin-top: 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fafafa;
+}
+.productos-edit-page .vc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    line-height: 1.3;
+}
+.productos-edit-page .vc-table th,
+.productos-edit-page .vc-table td {
+    padding: 3px 6px;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+.productos-edit-page .vc-table th {
+    background: #f1f5f9;
+    font-weight: 700;
+    color: #334155;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+.productos-edit-page .vc-table tr:last-child td {
+    border-bottom: none;
+}
+/* Anula .card .num del ERP (32px / azul) en celdas de esta tabla */
+#appMainContent .productos-edit-page .vc-table th.num,
+#appMainContent .productos-edit-page .vc-table td.num,
+.productos-edit-page .vc-table th.num,
+.productos-edit-page .vc-table td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    font-weight: 600;
+    color: #334155;
+    margin: 0;
+    line-height: 1.3;
+}
+#appMainContent .productos-edit-page .vc-table td.num,
+.productos-edit-page .vc-table td.num {
+    font-weight: 500;
+    color: #1e293b;
+}
+.productos-edit-page .vc-table input.vc-input {
+    width: 100%;
+    max-width: 82px;
+    margin: 0;
+    padding: 2px 5px;
+    font-size: 11px;
+    line-height: 1.25;
+    min-height: 26px;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    box-sizing: border-box;
+}
+.productos-edit-page .vc-table td.vc-actions {
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.productos-edit-page .vc-table .btn-vc-save {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 5px;
+    border: 1px solid #94a3b8;
+    background: #f8fafc;
+    cursor: pointer;
+    color: #334155;
+}
+.productos-edit-page .vc-table .btn-vc-save:hover {
+    background: #e2e8f0;
+}
+.productos-edit-page .vc-table .btn-vc-save:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.productos-edit-page .vc-empty {
+    font-size: 12px;
+    color: #64748b;
+    padding: 8px 0;
+}
+.productos-edit-page #variantesComercialesWrap.hidden {
+    display: none;
+}
+
+.productos-edit-page .tax-filter-input {
+    margin-bottom: 4px;
+}
+
+/* Formulario de edición: densidad similar a tabla "Por variante" */
+.productos-edit-page #formCard input,
+.productos-edit-page #formCard select,
+.productos-edit-page #formCard .tax-filter-input {
+    padding: 5px 8px;
+    font-size: 12px;
+    line-height: 1.3;
+    border-radius: 6px;
+    min-height: 30px;
+}
+.productos-edit-page #formCard .field label {
+    margin-bottom: 2px;
+    font-size: 10px;
+    letter-spacing: 0.03em;
+}
+.productos-edit-page #formCard .form-sec {
+    margin: 8px 0 5px;
+    font-size: 11px;
+}
+.productos-edit-page #formCard .form-sec:first-of-type {
+    margin-top: 0;
+}
+.productos-edit-page #formCard .field-codigo {
+    flex: 0 0 132px;
+    max-width: 150px;
+}
+.productos-edit-page #formCard .field-nombre {
+    flex: 1 1 200px;
+    min-width: 140px;
+}
+.productos-edit-page #formCard .field-app {
+    flex: 1 1 120px;
+    min-width: 100px;
+}
+.productos-edit-page #formCard .field-medidas {
+    flex: 1 1 160px;
+    min-width: 120px;
+}
+.productos-edit-page #formCard .field-tax {
+    flex: 1 1 200px;
+    min-width: 160px;
+}
+.productos-edit-page #formCard .tax-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: stretch;
+}
+.productos-edit-page #formCard .tax-inline .tax-filter-input {
+    flex: 0 1 40%;
+    min-width: 90px;
+    max-width: 150px;
+    width: auto;
+    margin-bottom: 0;
+}
+.productos-edit-page #formCard .tax-inline select {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.productos-edit-page #formCard > .row {
+    gap: 6px 8px;
+}
+.productos-edit-page #formCard .activo-box {
+    padding: 6px 8px;
+}
+.productos-edit-page #formCard .activo-box label {
+    font-size: 12px;
+}
+
+body.dark .productos-edit-page .card {
+    background: #1f2937;
+    border-color: #374151;
+}
+body.dark .productos-edit-page .btn-limpiar-busqueda {
+    background: #111827;
+    border-color: #4b5563;
+    color: #e5e7eb;
+}
+body.dark .productos-edit-page .btn-limpiar-busqueda:hover {
+    background: #1f2937;
+    border-color: #64748b;
+    color: #f8fafc;
+}
+
+body.dark .productos-edit-page .form-sec,
+body.dark .productos-edit-page .page-title,
+body.dark .productos-edit-page .field label {
+    color: #e5e7eb;
+}
+
+body.dark .productos-edit-page #formCard input:not([type="checkbox"]),
+body.dark .productos-edit-page #formCard select {
+    background: #111827;
+    border-color: #4b5563;
+    color: #e5e7eb;
+}
+body.dark .productos-edit-page #formCard .input-readonly {
+    background: #374151;
+    color: #9ca3af;
+}
+
+body.dark .productos-edit-page .vc-block-title {
+    color: #e5e7eb;
+}
+body.dark .productos-edit-page .vc-total-erp-label {
+    color: #9ca3af;
+}
+body.dark .productos-edit-page .vc-total-erp-val {
+    background: #1e3a5f;
+    border-color: #2563eb;
+    color: #93c5fd;
+}
+
+body.dark .productos-edit-page .vc-empty {
+    color: #9ca3af;
+}
+
+body.dark .productos-edit-page .precios-help-btn {
+    border-color: #3b82f6;
+    background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 100%);
+    color: #dbeafe;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+body.dark .productos-edit-page .precios-help-btn:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    border-color: #60a5fa;
+}
+body.dark .productos-edit-page .precios-help-panel {
+    border-color: #374151;
+    background: #1f2937;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+}
+body.dark .productos-edit-page .precios-help-title {
+    color: #f1f5f9;
+}
+body.dark .productos-edit-page .precios-help-list {
+    color: #cbd5e1;
+}
+
+body.dark .productos-edit-page .vc-table-wrap {
+    border-color: #374151;
+    background: #111827;
+}
+
+body.dark .productos-edit-page .vc-table th {
+    background: #1f2937;
+    color: #e5e7eb;
+    border-bottom-color: #374151;
+}
+
+body.dark .productos-edit-page .vc-table td {
+    border-bottom-color: #374151;
+    color: #e5e7eb;
+}
+
+body.dark #appMainContent .productos-edit-page .vc-table th.num,
+body.dark #appMainContent .productos-edit-page .vc-table td.num,
+body.dark .productos-edit-page .vc-table th.num,
+body.dark .productos-edit-page .vc-table td.num {
+    color: #e5e7eb;
+}
+
+body.dark .productos-edit-page .vc-table input.vc-input {
+    border-color: #4b5563;
+    background: #111827;
+    color: #e5e7eb;
+}
+
+body.dark .productos-edit-page .vc-table .btn-vc-save {
+    border-color: #4b5563;
+    background: #374151;
+    color: #e5e7eb;
+}
+body.dark .productos-edit-page .vc-table .btn-vc-save:hover {
+    background: #4b5563;
 }
 
 @media (max-width: 960px) {
-    .row {
-        flex-direction:column;
+    .productos-edit-page .row {
+        flex-direction: column;
+    }
+    .productos-edit-page #formCard .tax-inline .tax-filter-input {
+        max-width: none;
+        flex: 1 1 100%;
     }
 }
 </style>
 {% endblock %}
 
 {% block content %}
+<div id="productosEditarRoot" class="productos-edit-page">
 <div class="topbar">
     <div>
         <h1 class="page-title">Edición de Productos</h1>
@@ -123,11 +611,12 @@ body.dark .field label {
 </div>
 
 <section class="card">
-    <div class="row">
-        <div class="field">
-            <label for="codigoBuscar">Código del producto</label>
-            <input id="codigoBuscar" placeholder="Ej: ABC123">
+    <div class="row row-buscar-producto">
+        <div class="field field-buscar-grow">
+            <label for="codigoBuscar">Buscar producto</label>
+            <input id="codigoBuscar" type="text" autocomplete="off" placeholder="Código interno, OEM o buscar en descripción — se carga solo al escribir, pegar o Enter" spellcheck="false">
         </div>
+        <button type="button" class="btn-limpiar-busqueda" id="btnLimpiarEdicionBusqueda" title="Vaciar búsqueda y ocultar la ficha del producto">Limpiar</button>
     </div>
     <div class="actions">
         <button class="btn btn-primary" type="button" onclick="buscarProductoParaEditar()">Buscar producto</button>
@@ -137,81 +626,122 @@ body.dark .field label {
 </section>
 
 <section id="formCard" class="card hidden">
-    <h3 style="margin:0 0 14px;font-size:16px;color:#0f172a;">📌 Identificación</h3>
+    <h3 class="form-sec">Identificación</h3>
     <div class="row">
-        <div class="field">
+        <div class="field field-codigo">
             <label for="codigo">Código (solo lectura)</label>
-            <input id="codigo" readonly style="background:#f1f5f9;color:#64748b;">
+            <input id="codigo" class="input-readonly" readonly>
         </div>
-        <div class="field">
+        <div class="field field-nombre">
             <label for="nombre">Descripción / Nombre</label>
             <input id="nombre" placeholder="Descripción del producto">
         </div>
     </div>
 
-    <h3 style="margin:18px 0 10px;font-size:16px;color:#0f172a;">🚗 Aplicación Vehicular</h3>
+    <h3 class="form-sec">Aplicación vehicular</h3>
     <div class="row">
-        <div class="field">
+        <div class="field field-app">
             <label for="marca">Marca</label>
             <input id="marca" placeholder="Ej: Toyota">
         </div>
-        <div class="field">
+        <div class="field field-app">
             <label for="modelo">Modelo</label>
             <input id="modelo" placeholder="Ej: Corolla">
         </div>
-        <div class="field">
+        <div class="field field-app">
             <label for="motor">Motor</label>
             <input id="motor" placeholder="Ej: 1.8 VVTi">
         </div>
-        <div class="field">
+        <div class="field field-app">
             <label for="anio">Año</label>
             <input id="anio" placeholder="Ej: 2018-2023">
         </div>
-        <div class="field">
+        <div class="field field-app">
             <label for="version">Versión</label>
             <input id="version" placeholder="Ej: XLi, GLi">
         </div>
     </div>
 
-    <h3 style="margin:18px 0 10px;font-size:16px;color:#0f172a;">📋 Características</h3>
+    <h3 class="form-sec">Características</h3>
     <div class="row">
-        <div class="field">
+        <div class="field field-medidas">
             <label for="medidas">Medidas</label>
             <input id="medidas" placeholder="Ej: 200x50x30 mm">
         </div>
-        <div class="field">
+        <div class="field field-tax">
             <label for="categoria_id">Categoría</label>
-            <input id="categoria_buscar" placeholder="Buscar categoría..." style="margin-bottom:6px;">
-            <select id="categoria_id" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;">
-                <option value="">— Seleccionar —</option>
-            </select>
+            <div class="tax-inline">
+                <input id="categoria_buscar" class="tax-filter-input" type="search" placeholder="Filtrar…" autocomplete="off" aria-label="Filtrar lista de categorías">
+                <select id="categoria_id" aria-label="Categoría">
+                    <option value="">— Seleccionar —</option>
+                </select>
+            </div>
         </div>
-        <div class="field">
+        <div class="field field-tax">
             <label for="subcategoria_id">Subcategoría</label>
-            <input id="subcategoria_buscar" placeholder="Buscar subcategoría..." style="margin-bottom:6px;">
-            <select id="subcategoria_id" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;">
-                <option value="">— Primero categoría —</option>
-            </select>
+            <div class="tax-inline">
+                <input id="subcategoria_buscar" class="tax-filter-input" type="search" placeholder="Filtrar…" autocomplete="off" aria-label="Filtrar lista de subcategorías">
+                <select id="subcategoria_id" aria-label="Subcategoría">
+                    <option value="">— Primero categoría —</option>
+                </select>
+            </div>
         </div>
     </div>
 
-    <h3 style="margin:18px 0 10px;font-size:16px;color:#0f172a;">💲 Precios</h3>
-    <div class="row">
-        <div class="field">
-            <label for="precio">Precio Público</label>
-            <input id="precio" type="number" step="0.01" min="0" placeholder="0.00">
-        </div>
-        <div class="field">
-            <label for="precio_mayor">Precio Mayor</label>
-            <input id="precio_mayor" type="number" step="0.01" min="0" placeholder="0.00">
-        </div>
-        <div class="field">
-            <label>Stock Total (info)</label>
-            <input id="stock_display" readonly style="background:#f1f5f9;color:#64748b;" placeholder="—">
+    <div class="precios-sec-head">
+        <h3 class="form-sec precios-sec-title">Precios</h3>
+        <div class="precios-help-wrap">
+            <button type="button" class="precios-help-btn" id="preciosHelpBtn" aria-expanded="false" aria-controls="preciosHelpPanel" title="Ayuda: precios por variante" aria-label="Ayuda sobre precios">
+                <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                    <path d="M32 8c-10.5 0-19 7.7-19 17.2 0 2.7 2.2 4.8 4.9 4.8 2.7 0 4.9-2.2 4.9-4.8 0-4.1 4.1-7.4 9.2-7.4 5.1 0 9.2 3.3 9.2 7.4 0 3.3-2.4 5.1-5.8 7.5-3.9 2.8-8.7 6.3-8.7 13.6 0 2.7 2.2 4.8 4.9 4.8s4.9-2.2 4.9-4.8c0-2 1.1-3 4.7-5.6 3.9-2.8 9.8-7 9.8-15.5C51 15.7 42.5 8 32 8z" fill="currentColor"/>
+                    <circle cx="32" cy="55" r="5.5" fill="currentColor"/>
+                </svg>
+            </button>
+            <div id="preciosHelpPanel" class="precios-help-panel" role="region" aria-labelledby="preciosHelpTitle" hidden>
+                <h4 id="preciosHelpTitle" class="precios-help-title">Precios por variante</h4>
+                <ul class="precios-help-list">
+                    <li>El <strong>precio mayorista</strong> por cliente se define en la ficha del cliente (RUT).</li>
+                    <li>Por <strong>variante</strong> (bodega y marca): el <strong>costo</strong> sale de los ingresos; podés ajustar <strong>margen %</strong> y <strong>precio público neto</strong> (sin IVA) en la tabla.</li>
+                    <li>Esos valores se guardan como <strong>referencia para ventas</strong> (misma lógica que al cargar producto en documentos).</li>
+                    <li>Dejá un campo <strong>vacío</strong> y guardá la fila para volver al valor del <strong>último ingreso</strong> en ese campo.</li>
+                </ul>
+                <button type="button" class="btn precios-help-close" id="preciosHelpClose">Cerrar</button>
+            </div>
         </div>
     </div>
+    <div class="vc-variantes-module">
+        <div class="vc-variantes-intro">
+            <div class="vc-block-head">
+                <h4 class="vc-block-title">Por variante (ingreso + stock)</h4>
+                <div class="vc-total-erp" title="Suma de stock en bodegas (ERP)">
+                    <span class="vc-total-erp-label">Total ERP</span>
+                    <strong class="vc-total-erp-val" id="stockTotalDisplay">—</strong>
+                </div>
+            </div>
+        </div>
+        <div id="variantesComercialesWrap" class="hidden" aria-live="polite">
+            <div class="vc-table-wrap">
+                <table class="vc-table">
+                    <thead>
+                        <tr>
+                            <th>Bodega</th>
+                            <th>Marca</th>
+                            <th class="num">Stock</th>
+                            <th class="num">Costo neto u.</th>
+                            <th class="num">Margen %</th>
+                            <th class="num">P. público neto</th>
+                            <th class="vc-actions"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="variantesComercialesBody"></tbody>
+                </table>
+            </div>
+            <div id="msgVarianteComercial" style="margin-top:6px;"></div>
+        </div>
+        <div id="variantesComercialesEmpty" class="vc-empty hidden"></div>
+    </div>
 
-    <h3 style="margin:18px 0 10px;font-size:16px;color:#0f172a;">🔢 Codificación OEM</h3>
+    <h3 class="form-sec">Codificación OEM</h3>
     <div class="row">
         <div class="field">
             <label for="oem">Código OEM</label>
@@ -223,7 +753,7 @@ body.dark .field label {
         </div>
     </div>
 
-    <h3 style="margin:18px 0 10px;font-size:16px;color:#0f172a;">🔄 Homologados</h3>
+    <h3 class="form-sec">Homologados</h3>
     <div class="row">
         <div class="field" style="flex:1 1 100%;">
             <label for="homologados">Homologados</label>
@@ -231,22 +761,23 @@ body.dark .field label {
         </div>
     </div>
 
-    <h3 style="margin:18px 0 10px;font-size:16px;color:#0f172a;">⚙️ Estado del Producto</h3>
+    <h3 class="form-sec">Estado del producto</h3>
     <div class="row" style="align-items:center;">
-        <div class="field" style="flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
-            <input type="checkbox" id="activo_toggle" style="width:18px;height:18px;cursor:pointer;accent-color:#16a34a;" checked>
-            <label for="activo_toggle" style="margin:0;font-weight:600;cursor:pointer;font-size:14px;">Producto activo</label>
+        <div class="activo-box">
+            <input type="checkbox" id="activo_toggle" checked>
+            <label for="activo_toggle">Producto activo</label>
         </div>
-        <div style="font-size:12px;color:#64748b;padding-left:4px;">
-            Desmarcar para desactivar este producto al guardar.
+        <div class="activo-hint">
+            Desmarcar para desactivar al guardar.
         </div>
     </div>
 
-    <div class="actions" style="margin-top:20px;">
+    <div class="actions" style="margin-top:12px;">
         <button class="btn btn-primary" type="button" onclick="guardarEdicion()">💾 Guardar cambios</button>
     </div>
     <div id="msgEdicion"></div>
 </section>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -292,7 +823,96 @@ function cargarTaxonomia() {
         .catch(function () {});
 }
 
-document.addEventListener('DOMContentLoaded', function () {
+function debounce(fn, wait) {
+    var t; return function () { clearTimeout(t); t = setTimeout(fn, wait); };
+}
+
+function terminoBusquedaActual() {
+    var inp = document.getElementById('codigoBuscar');
+    return (inp && inp.value || '').trim();
+}
+
+function limpiarMsgBusquedaVisual() {
+    var el = document.getElementById('msgBusqueda');
+    if (el) {
+        el.textContent = '';
+        el.className = '';
+    }
+}
+
+/**
+ * Oculta la ficha y vacía campos. clearSearch: true también borra el cuadro de búsqueda (botón Limpiar).
+ */
+function limpiarPantallaEdicionProducto(opts) {
+    opts = opts || {};
+    var clearSearchBox = opts.clearSearch !== false;
+    var cb = document.getElementById('codigoBuscar');
+    if (clearSearchBox && cb) cb.value = '';
+    window.__editLastSearchOkTerm = '';
+
+    var fc = document.getElementById('formCard');
+    if (fc) fc.classList.add('hidden');
+
+    var badge = document.getElementById('estadoBadge');
+    if (badge) {
+        badge.classList.add('hidden');
+        badge.classList.remove('badge-active', 'badge-inactive');
+        badge.textContent = '';
+    }
+
+    ['codigo', 'nombre', 'marca', 'modelo', 'motor', 'anio', 'version', 'medidas', 'oem', 'alternativo', 'homologados'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    var catB = document.getElementById('categoria_buscar');
+    var subB = document.getElementById('subcategoria_buscar');
+    if (catB) catB.value = '';
+    if (subB) subB.value = '';
+    var act = document.getElementById('activo_toggle');
+    if (act) act.checked = true;
+
+    renderVariantesComerciales(null);
+    var st = document.getElementById('stockTotalDisplay');
+    if (st) st.textContent = '—';
+
+    var msgE = document.getElementById('msgEdicion');
+    if (msgE) {
+        msgE.textContent = '';
+        msgE.className = '';
+    }
+    limpiarMsgBusquedaVisual();
+
+    cargarTaxonomia();
+
+    var preciosPanel = document.getElementById('preciosHelpPanel');
+    var preciosBtn = document.getElementById('preciosHelpBtn');
+    if (preciosPanel) preciosPanel.hidden = true;
+    if (preciosBtn) preciosBtn.setAttribute('aria-expanded', 'false');
+}
+
+/** Evita repetir la misma búsqueda que ya dio resultado (sirve para OEM/descr. distinto del código cargado). */
+function debeOmitirBusquedaRepetida(raw) {
+    if (!raw) return true;
+    var fc = document.getElementById('formCard');
+    var lastOk = (window.__editLastSearchOkTerm || '').trim();
+    if (!fc || fc.classList.contains('hidden')) return false;
+    if (lastOk && raw === lastOk) return true;
+    return false;
+}
+
+/** Búsqueda automática al escribir (debounce); no dispara con 1 solo carácter para no saturar en textos largos. */
+var debouncedBuscarProducto = debounce(function () {
+    var raw = terminoBusquedaActual();
+    if (!raw || raw.length < 2) return;
+    if (debeOmitirBusquedaRepetida(raw)) return;
+    buscarProductoParaEditar();
+}, 180);
+
+function initProductosEditarPage() {
+    var root = document.getElementById('productosEditarRoot');
+    if (!root || root.getAttribute('data-pe-wired') === '1') return;
+    root.setAttribute('data-pe-wired', '1');
+
     cargarTaxonomia();
     var csel = document.getElementById('categoria_id');
     if (csel) {
@@ -349,7 +969,102 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
     } catch (e) {}
-});
+
+    var codigoBuscar = document.getElementById('codigoBuscar');
+    if (codigoBuscar) {
+        codigoBuscar.addEventListener('input', function () {
+            if (!(codigoBuscar.value || '').trim()) {
+                limpiarPantallaEdicionProducto({ clearSearch: false });
+                return;
+            }
+            debouncedBuscarProducto();
+        });
+        codigoBuscar.addEventListener('paste', function () {
+            window.setTimeout(function () {
+                var raw = terminoBusquedaActual();
+                if (!raw || raw.length < 2) return;
+                if (debeOmitirBusquedaRepetida(raw)) return;
+                buscarProductoParaEditar();
+            }, 0);
+        });
+        /* Al salir del campo: carga inmediata sin esperar el debounce */
+        codigoBuscar.addEventListener('blur', function () {
+            var raw = terminoBusquedaActual();
+            if (!raw) {
+                limpiarPantallaEdicionProducto({ clearSearch: false });
+                return;
+            }
+            if (debeOmitirBusquedaRepetida(raw)) return;
+            buscarProductoParaEditar();
+        });
+        codigoBuscar.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                buscarProductoParaEditar();
+            }
+        });
+    }
+
+    var btnLimpiarBusq = document.getElementById('btnLimpiarEdicionBusqueda');
+    if (btnLimpiarBusq) {
+        btnLimpiarBusq.addEventListener('click', function () {
+            limpiarPantallaEdicionProducto({ clearSearch: true });
+            var inp = document.getElementById('codigoBuscar');
+            if (inp) inp.focus();
+        });
+    }
+
+    var preciosHelpBtn = document.getElementById('preciosHelpBtn');
+    var preciosHelpPanel = document.getElementById('preciosHelpPanel');
+    var preciosHelpClose = document.getElementById('preciosHelpClose');
+    function closePreciosHelp() {
+        if (!preciosHelpPanel) return;
+        preciosHelpPanel.hidden = true;
+        if (preciosHelpBtn) preciosHelpBtn.setAttribute('aria-expanded', 'false');
+    }
+    function openPreciosHelp() {
+        if (!preciosHelpPanel) return;
+        preciosHelpPanel.hidden = false;
+        if (preciosHelpBtn) preciosHelpBtn.setAttribute('aria-expanded', 'true');
+    }
+    function togglePreciosHelp() {
+        if (!preciosHelpPanel) return;
+        if (preciosHelpPanel.hidden) openPreciosHelp(); else closePreciosHelp();
+    }
+    if (preciosHelpBtn && preciosHelpPanel) {
+        preciosHelpBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            togglePreciosHelp();
+        });
+        if (preciosHelpClose) preciosHelpClose.addEventListener('click', closePreciosHelp);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', initProductosEditarPage);
+document.addEventListener('app:module-loaded', initProductosEditarPage);
+initProductosEditarPage();
+
+(function wirePreciosAyudaDocumentOnce() {
+    if (window.__andesPreciosHelpDocBound) return;
+    window.__andesPreciosHelpDocBound = true;
+    document.addEventListener('click', function (ev) {
+        var panel = document.getElementById('preciosHelpPanel');
+        var btn = document.getElementById('preciosHelpBtn');
+        if (!panel || !btn || panel.hidden) return;
+        var t = ev.target;
+        if (btn.contains(t) || panel.contains(t)) return;
+        panel.hidden = true;
+        btn.setAttribute('aria-expanded', 'false');
+    });
+    document.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Escape') return;
+        var panel = document.getElementById('preciosHelpPanel');
+        var btn = document.getElementById('preciosHelpBtn');
+        if (!panel || !btn || panel.hidden) return;
+        panel.hidden = true;
+        btn.setAttribute('aria-expanded', 'false');
+    });
+})();
 
 function payloadEdicion() {
     return {
@@ -363,8 +1078,6 @@ function payloadEdicion() {
         medidas: document.getElementById('medidas').value || '',
         categoria_id: document.getElementById('categoria_id').value || '',
         subcategoria_id: document.getElementById('subcategoria_id').value || '',
-        precio: document.getElementById('precio').value || '',
-        precio_mayor: document.getElementById('precio_mayor').value || '',
         codigo_oem: document.getElementById('oem').value || '',
         alternativo: document.getElementById('alternativo').value || '',
         homologados: document.getElementById('homologados').value || '',
@@ -387,10 +1100,6 @@ function validarEdicionRealtime() {
         return !!data.valid;
     })
     .catch(function () { return true; });
-}
-
-function debounce(fn, wait) {
-    var t; return function () { clearTimeout(t); t = setTimeout(fn, wait); };
 }
 
 function saveDraftLocal() {
@@ -419,25 +1128,172 @@ function setMsg(targetId, text, ok) {
     el.textContent = text;
 }
 
+function fmtNumCl(n) {
+    if (n == null || n === '' || (typeof n === 'number' && !isFinite(n))) return '—';
+    var x = Number(n);
+    if (!isFinite(x)) return '—';
+    return x.toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function numForVarianteInput(n, decimals) {
+    if (n == null || n === '') return '';
+    var x = Number(n);
+    if (!isFinite(x)) return '';
+    var d = decimals != null ? decimals : 2;
+    return String(Math.round(x * Math.pow(10, d)) / Math.pow(10, d));
+}
+
+function setMsgVc(text, ok) {
+    var el = document.getElementById('msgVarianteComercial');
+    if (!el) return;
+    if (!text) {
+        el.textContent = '';
+        el.className = '';
+        return;
+    }
+    el.className = 'msg ' + (ok ? 'msg-ok' : 'msg-err');
+    el.textContent = text;
+}
+
+function guardarVarianteFila(btn) {
+    var tr = btn && btn.closest ? btn.closest('tr') : null;
+    if (!tr) return;
+    var codigo = (document.getElementById('codigo').value || '').trim().toUpperCase();
+    var vid = tr.getAttribute('data-variante-id');
+    if (!codigo || !vid) return;
+    var mEl = tr.querySelector('.vc-in-margen');
+    var pEl = tr.querySelector('.vc-in-precio');
+    var fd = new FormData();
+    fd.append('codigo', codigo);
+    fd.append('variante_id', vid);
+    fd.append('margen_override', mEl ? (mEl.value || '').trim() : '');
+    fd.append('precio_publico_neto_override', pEl ? (pEl.value || '').trim() : '');
+    btn.disabled = true;
+    fetch('/productos/guardar_variante_comercial', { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            btn.disabled = false;
+            if (!data.success) {
+                setMsgVc(data.error || 'No se pudo guardar', false);
+                return;
+            }
+            setMsgVc('Referencia de variante guardada.', true);
+            var rw = data.row;
+            if (rw && mEl && pEl) {
+                mEl.value = numForVarianteInput(rw.margen_pct, 4);
+                pEl.value = numForVarianteInput(rw.precio_publico_neto, 2);
+                var costTd = tr.querySelector('.vc-costo-display');
+                if (costTd) costTd.textContent = fmtNumCl(rw.costo_ingreso_neto);
+            }
+        })
+        .catch(function () {
+            btn.disabled = false;
+            setMsgVc('Error de conexion al guardar variante.', false);
+        });
+}
+
+function renderVariantesComerciales(items) {
+    var wrap = document.getElementById('variantesComercialesWrap');
+    var body = document.getElementById('variantesComercialesBody');
+    var empty = document.getElementById('variantesComercialesEmpty');
+    if (!wrap || !body || !empty) return;
+    body.innerHTML = '';
+    if (items == null) {
+        wrap.classList.add('hidden');
+        empty.classList.add('hidden');
+        empty.textContent = '';
+        setMsgVc('', false);
+        return;
+    }
+    if (!items.length) {
+        wrap.classList.add('hidden');
+        empty.classList.remove('hidden');
+        empty.textContent = 'No hay variantes de stock en bodega para este código.';
+        setMsgVc('', false);
+        return;
+    }
+    wrap.classList.remove('hidden');
+    empty.classList.add('hidden');
+    empty.textContent = '';
+    items.forEach(function (v) {
+        var tr = document.createElement('tr');
+        if (v.variante_id != null) tr.setAttribute('data-variante-id', String(v.variante_id));
+        function tdTxt(txt, cls) {
+            var c = document.createElement('td');
+            if (cls) c.className = cls;
+            c.textContent = txt;
+            return c;
+        }
+        tr.appendChild(tdTxt(v.bodega || '—', ''));
+        tr.appendChild(tdTxt(v.marca || '—', ''));
+        tr.appendChild(tdTxt(String(v.stock != null ? v.stock : 0), 'num'));
+        var tdCost = document.createElement('td');
+        tdCost.className = 'num vc-costo-display';
+        tdCost.textContent = fmtNumCl(v.costo_ingreso_neto);
+        tr.appendChild(tdCost);
+        var tdM = document.createElement('td');
+        tdM.className = 'num';
+        var inM = document.createElement('input');
+        inM.type = 'number';
+        inM.className = 'vc-input vc-in-margen';
+        inM.setAttribute('step', '0.01');
+        inM.setAttribute('min', '0');
+        inM.setAttribute('max', '99.99');
+        inM.setAttribute('placeholder', '—');
+        inM.value = v.margen_pct != null && v.margen_pct !== '' ? numForVarianteInput(v.margen_pct, 4) : '';
+        tdM.appendChild(inM);
+        tr.appendChild(tdM);
+        var tdP = document.createElement('td');
+        tdP.className = 'num';
+        var inP = document.createElement('input');
+        inP.type = 'number';
+        inP.className = 'vc-input vc-in-precio';
+        inP.setAttribute('step', '0.01');
+        inP.setAttribute('min', '0');
+        inP.setAttribute('placeholder', '—');
+        inP.value = v.precio_publico_neto != null && v.precio_publico_neto !== '' ? numForVarianteInput(v.precio_publico_neto, 2) : '';
+        tdP.appendChild(inP);
+        tr.appendChild(tdP);
+        var tdAct = document.createElement('td');
+        tdAct.className = 'vc-actions';
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn-vc-save';
+        b.textContent = 'Guardar';
+        b.setAttribute('aria-label', 'Guardar margen y precio de esta variante');
+        b.addEventListener('click', function () { guardarVarianteFila(b); });
+        tdAct.appendChild(b);
+        tr.appendChild(tdAct);
+        body.appendChild(tr);
+    });
+}
+
 function buscarProductoParaEditar() {
-    const codigo = (document.getElementById('codigoBuscar').value || '').trim().toUpperCase();
-    if (!codigo) {
-        setMsg('msgBusqueda', 'Ingresa un codigo para buscar.', false);
+    const term = terminoBusquedaActual();
+    if (!term) {
+        setMsg('msgBusqueda', 'Ingresa un codigo o texto para buscar.', false);
         return;
     }
 
+    const seq = (window.__editSearchSeq = (window.__editSearchSeq || 0) + 1);
+
     const formData = new FormData();
-    formData.append('codigo', codigo);
+    formData.append('q', term);
 
     fetch('/productos/buscar_para_editar', { method: 'POST', body: formData })
         .then(res => res.json())
         .then(data => {
+            if (seq !== window.__editSearchSeq) return;
             if (!data.success) {
                 document.getElementById('formCard').classList.add('hidden');
+                renderVariantesComerciales(null);
+                var stReset = document.getElementById('stockTotalDisplay');
+                if (stReset) stReset.textContent = '—';
                 setMsg('msgBusqueda', data.error || 'No encontrado', false);
                 return;
             }
 
+            window.__editLastSearchOkTerm = term;
             document.getElementById('codigo').value = data.codigo || '';
             document.getElementById('nombre').value = data.nombre || '';
             document.getElementById('marca').value = data.marca || '';
@@ -459,9 +1315,9 @@ function buscarProductoParaEditar() {
                     ssel.value = String(data.subcategoria_id);
                 }
             });
-            document.getElementById('precio').value = data.precio || 0;
-            document.getElementById('precio_mayor').value = data.precio_mayor || 0;
-            document.getElementById('stock_display').value = data.stock || 0;
+            var stEl = document.getElementById('stockTotalDisplay');
+            if (stEl) stEl.textContent = data.stock != null ? String(data.stock) : '—';
+            renderVariantesComerciales(data.variantes_stock || []);
             document.getElementById('oem').value = data.oem || '';
             document.getElementById('alternativo').value = data.alternativo || '';
             document.getElementById('homologados').value = data.homologados || '';
@@ -517,8 +1373,6 @@ function guardarEdicion() {
     formData.append('medidas', document.getElementById('medidas').value || '');
     formData.append('categoria_id', document.getElementById('categoria_id').value || '');
     formData.append('subcategoria_id', document.getElementById('subcategoria_id').value || '');
-    formData.append('precio', document.getElementById('precio').value || '');
-    formData.append('precio_mayor', document.getElementById('precio_mayor').value || '');
     formData.append('oem', document.getElementById('oem').value || '');
     formData.append('alternativo', document.getElementById('alternativo').value || '');
     formData.append('homologados', document.getElementById('homologados').value || '');

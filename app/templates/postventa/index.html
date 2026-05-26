@@ -1,13 +1,24 @@
-{% extends 'base_content.html' if _partial else 'erp_shell.html' %}
+{% extends 'base_content.html' if _partial else 'base.html' %}
 {% block title %}Postventa | Andes Auto Parts{% endblock %}
-{% block header_subtitle %}Postventa &mdash; Registro de garantías{% endblock %}
 
 {% block extra_head %}
 <style>
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1000;align-items:center;justify-content:center;}
 .modal-bg.open{display:flex;}
 .modal-box{background:#fff;border-radius:18px;padding:28px;max-width:560px;width:95%;box-shadow:0 24px 60px rgba(15,23,42,.22);}
+.modal-box.modal-box--wide{max-width:720px;}
 .modal-box h3{margin:0 0 18px;font-size:18px;}
+.gar-doc-row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;}
+.gar-doc-row .form-group{flex:1;min-width:160px;}
+.gar-doc-row button{flex-shrink:0;margin-bottom:2px;}
+#garDocStatus{font-size:12px;margin-top:6px;color:#64748b;}
+#garDocStatus.ok{color:#15803d;}
+#garDocStatus.err{color:#b91c1c;}
+#garClienteStatus{font-size:12px;margin-top:6px;color:#64748b;}
+#garClienteStatus.ok{color:#15803d;}
+#garClienteStatus.warn{color:#92400e;}
+#garClienteStatus.err{color:#b91c1c;}
+#garLineaWrap{display:none;}
 </style>
 {% endblock %}
 
@@ -36,6 +47,7 @@
           <tr>
             <th>N°</th>
             <th>Cliente</th>
+            <th>RUT</th>
             <th>Producto</th>
             <th>Factura/Doc</th>
             <th>Motivo</th>
@@ -47,8 +59,9 @@
         <tbody>
           {% for g in garantias %}
           <tr>
-            <td><strong>{{ g.numero }}</strong></td>
+            <td><strong><a href="{{ url_for('postventa.garantia_detalle', gid=g.id) }}">{{ g.numero }}</a></strong></td>
             <td>{{ g.cliente_nombre or '—' }}</td>
+            <td style="white-space:nowrap;">{{ g.cliente_rut or '—' }}</td>
             <td>{{ g.producto_codigo }}{% if g.producto_descripcion %} — {{ g.producto_descripcion[:30] }}{% endif %}</td>
             <td>{{ g.documento_numero or '—' }}</td>
             <td>{{ g.motivo[:50] if g.motivo else '—' }}</td>
@@ -61,6 +74,7 @@
             <td>{{ g.fecha.strftime('%d/%m/%Y') }}</td>
             <td>
               <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <a class="btn sm outline" href="{{ url_for('postventa.garantia_detalle', gid=g.id) }}">Trazabilidad</a>
                 <button class="btn sm outline btn-estado-gar" data-id="{{ g.id }}" data-estado="{{ g.estado }}">Estado</button>
                 <form method="post" action="{{ url_for('postventa.eliminar', gid=g.id) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar garantía?')">
                   <button class="btn sm danger" type="submit">Eliminar</button>
@@ -81,38 +95,55 @@
 
 <!-- Modal: Nueva garantía -->
 <div class="modal-bg" id="modalNuevaGar">
-  <div class="modal-box">
+  <div class="modal-box modal-box--wide">
     <h3>Registrar garantía</h3>
-    <form method="post" action="{{ url_for('postventa.nueva') }}">
+    <form method="post" action="{{ url_for('postventa.nueva') }}" id="formNuevaGar">
+      <input type="hidden" name="documento_item_id" id="garDocumentoItemId" value="">
       <div style="display:grid;gap:12px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div class="form-group">
-            <label>Cliente</label>
-            <select name="cliente_id">
-              <option value="">-- Sin cliente --</option>
-              {% for c in clientes %}
-              <option value="{{ c.id }}">{{ c.nombre }}</option>
-              {% endfor %}
-            </select>
+            <label>RUT cliente</label>
+            <input type="text" name="cliente_rut" id="garClienteRut" placeholder="Ej: 12.345.678-9" autocomplete="off">
           </div>
           <div class="form-group">
-            <label>Nombre cliente (manual)</label>
-            <input type="text" name="cliente_nombre_manual">
+            <label>Cliente</label>
+            <div class="gar-cliente-actions" style="display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;">
+              <input type="text" name="cliente_nombre" id="garClienteNombre" placeholder="Nombre o razón social" autocomplete="off" style="flex:1;min-width:160px;">
+              <a class="btn sm primary" id="garLinkNuevoCliente" href="{{ url_for('ventas.cliente_nuevo') }}" data-module-url="{{ url_for('ventas.cliente_nuevo') }}">Nuevo cliente</a>
+              <button type="button" class="btn sm outline" id="garBtnCrearCliente" style="display:none;" title="Crea el cliente con RUT y nombre sin salir del formulario">Crear aquí (rápido)</button>
+            </div>
           </div>
+        </div>
+        <input type="hidden" name="cliente_id" id="garClienteIdHidden" value="">
+        <p id="garClienteStatus" class=""></p>
+        <p style="font-size:11px;color:#64748b;margin:0 0 8px;"><strong>Nuevo cliente</strong> abre el mismo formulario completo que en Ventas. <strong>Crear aquí (rápido)</strong> solo aparece si el RUT no está en maestro. También puedes guardar la garantía y el cliente se crea automáticamente con RUT y nombre válidos.</p>
+        <div class="form-group">
+          <label>Factura, boleta u orden de venta</label>
+          <div class="gar-doc-row">
+            <div class="form-group" style="margin:0;min-width:200px;">
+              <input type="text" name="documento_numero" id="garDocumentoNumero" placeholder="Ej: FA-0001" autocomplete="off">
+            </div>
+            <button type="button" class="btn sm primary" id="garBtnBuscarDoc">Buscar documento</button>
+          </div>
+          <p id="garDocStatus" class=""></p>
+          <p style="font-size:11px;color:#64748b;margin:6px 0 0;">Ingresa el <strong>mismo número</strong> que en ventas y pulsa <strong>Buscar documento</strong> para cargar cliente y líneas.</p>
+        </div>
+        <div class="form-group" id="garLineaWrap">
+          <label>Línea afectada por la garantía <span style="color:#b91c1c">*</span></label>
+          <select id="garLineaSelect" aria-label="Línea del documento">
+            <option value="">-- Seleccione el producto / línea --</option>
+          </select>
+          <p style="font-size:11px;color:#64748b;margin:6px 0 0;">Si el documento tiene varios ítems, indica sobre cuál aplica el caso.</p>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div class="form-group">
             <label>Código producto</label>
-            <input type="text" name="producto_codigo" placeholder="Ej: LUB-001">
+            <input type="text" name="producto_codigo" id="garProductoCodigo" placeholder="Se rellena al elegir línea o manual">
           </div>
           <div class="form-group">
             <label>Descripción producto</label>
-            <input type="text" name="producto_descripcion">
+            <input type="text" name="producto_descripcion" id="garProductoDesc" placeholder="Se rellena al elegir línea">
           </div>
-        </div>
-        <div class="form-group">
-          <label>Número de factura / boleta asociada</label>
-          <input type="text" name="documento_numero" placeholder="Ej: FA-0001">
         </div>
         <div class="form-group">
           <label>Motivo de la garantía</label>
@@ -155,8 +186,104 @@
   'use strict';
   let targetId = null;
   const URL_ESTADO = '/postventa/{id}/estado';
+  const URL_BUSCAR_DOC = {{ url_for('postventa.api_buscar_documento') | tojson }};
+  const URL_CLIENTE_RUT = {{ url_for('postventa.api_cliente_por_rut') | tojson }};
+  const URL_CLIENTE_RAPIDO = {{ url_for('postventa.api_cliente_rapido') | tojson }};
+  var garLastDocItems = [];
+  var garRutTimer = null;
+
+  function garResetClienteUi() {
+    var st = document.getElementById('garClienteStatus');
+    if (st) { st.textContent = ''; st.className = ''; }
+    var hid = document.getElementById('garClienteIdHidden');
+    if (hid) hid.value = '';
+    var btn = document.getElementById('garBtnCrearCliente');
+    if (btn) btn.style.display = 'none';
+  }
+
+  function garUpdateCrearBtn() {
+    var btn = document.getElementById('garBtnCrearCliente');
+    if (!btn) return;
+    var st = document.getElementById('garClienteStatus');
+    /* Muestra "Crear aquí" en cuanto el RUT no está en maestro (sin exigir nombre aún). */
+    var show = st && st.classList.contains('warn');
+    btn.style.display = show ? 'inline-flex' : 'none';
+  }
+
+  function garLookupRut() {
+    var rutIn = document.getElementById('garClienteRut');
+    var rut = (rutIn.value || '').trim();
+    var st = document.getElementById('garClienteStatus');
+    var hid = document.getElementById('garClienteIdHidden');
+    if (!rut) {
+      garResetClienteUi();
+      return;
+    }
+    if (rut.replace(/\./g, '').length < 8) {
+      st.textContent = '';
+      st.className = '';
+      hid.value = '';
+      return;
+    }
+    st.textContent = 'Buscando cliente…';
+    st.className = '';
+    fetch(URL_CLIENTE_RUT + '?rut=' + encodeURIComponent(rut), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.j || !res.j.ok) {
+          st.textContent = (res.j && res.j.error) ? res.j.error : 'No se pudo validar el RUT.';
+          st.className = 'err';
+          hid.value = '';
+          garUpdateCrearBtn();
+          return;
+        }
+        if (res.j.encontrado && res.j.cliente) {
+          hid.value = String(res.j.cliente.id);
+          document.getElementById('garClienteNombre').value = res.j.cliente.nombre || '';
+          st.textContent = 'Cliente encontrado en maestro.';
+          st.className = 'ok';
+          document.getElementById('garBtnCrearCliente').style.display = 'none';
+        } else {
+          hid.value = '';
+          st.textContent = 'Cliente no registrado — ingrese el nombre y puede crear el registro con el botón o al guardar la garantía.';
+          st.className = 'warn';
+          garUpdateCrearBtn();
+        }
+      })
+      .catch(function () {
+        st.textContent = 'Error de red al buscar el cliente.';
+        st.className = 'err';
+        hid.value = '';
+      });
+  }
+
+  function garScheduleRutLookup() {
+    clearTimeout(garRutTimer);
+    garRutTimer = setTimeout(garLookupRut, 450);
+  }
+
+  function garResetDocUi() {
+    var st = document.getElementById('garDocStatus');
+    if (st) { st.textContent = ''; st.className = ''; }
+    document.getElementById('garLineaWrap').style.display = 'none';
+    var sel = document.getElementById('garLineaSelect');
+    sel.innerHTML = '<option value="">-- Seleccione el producto / línea --</option>';
+    document.getElementById('garDocumentoItemId').value = '';
+    garLastDocItems = [];
+  }
+
+  function garApplyLine(it) {
+    document.getElementById('garDocumentoItemId').value = String(it.id);
+    document.getElementById('garProductoCodigo').value = it.codigo || '';
+    document.getElementById('garProductoDesc').value = it.descripcion || '';
+  }
 
   document.getElementById('btnNuevaGar').addEventListener('click', () => {
+    garResetDocUi();
+    garResetClienteUi();
+    document.getElementById('formNuevaGar').reset();
+    garResetDocUi();
+    garResetClienteUi();
     document.getElementById('modalNuevaGar').classList.add('open');
   });
   document.getElementById('btnCancelarGar').addEventListener('click', () => {
@@ -188,6 +315,127 @@
         });
     });
   });
+
+  document.getElementById('garBtnBuscarDoc').addEventListener('click', function () {
+    var num = (document.getElementById('garDocumentoNumero').value || '').trim();
+    var st = document.getElementById('garDocStatus');
+    garResetDocUi();
+    if (!num) {
+      st.textContent = 'Ingresa el número del documento.';
+      st.className = 'err';
+      return;
+    }
+    st.textContent = 'Buscando…';
+    st.className = '';
+    var url = URL_BUSCAR_DOC + '?numero=' + encodeURIComponent(num);
+    fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.j || !res.j.ok) {
+          st.textContent = (res.j && res.j.error) ? res.j.error : 'No se pudo cargar el documento.';
+          st.className = 'err';
+          return;
+        }
+        var d = res.j.documento;
+        var items = res.j.items || [];
+        garLastDocItems = items;
+        st.textContent = 'Documento ' + (d.tipo || '').toUpperCase() + ' ' + (d.numero || '') + ' — ' + items.length + ' línea(s).';
+        st.className = 'ok';
+        if (d.cliente_rut) document.getElementById('garClienteRut').value = d.cliente_rut;
+        if (d.cliente_nombre) document.getElementById('garClienteNombre').value = d.cliente_nombre;
+        if (d.cliente_id) document.getElementById('garClienteIdHidden').value = String(d.cliente_id);
+        var stc = document.getElementById('garClienteStatus');
+        if (stc) {
+          stc.textContent = 'Datos tomados del documento; puedes ajustar o buscar de nuevo por RUT.';
+          stc.className = 'ok';
+        }
+        document.getElementById('garBtnCrearCliente').style.display = 'none';
+        var wrap = document.getElementById('garLineaWrap');
+        var sel = document.getElementById('garLineaSelect');
+        sel.innerHTML = '<option value="">-- Seleccione el producto / línea --</option>';
+        items.forEach(function (it) {
+          var opt = document.createElement('option');
+          opt.value = String(it.id);
+          opt.textContent = (it.codigo || '') + ' ×' + it.cantidad + (it.descripcion ? ' — ' + it.descripcion.slice(0, 48) : '');
+          sel.appendChild(opt);
+        });
+        wrap.style.display = items.length ? 'block' : 'none';
+        if (items.length === 1) {
+          sel.value = String(items[0].id);
+          garApplyLine(items[0]);
+        } else {
+          document.getElementById('garProductoCodigo').value = '';
+          document.getElementById('garProductoDesc').value = '';
+        }
+      })
+      .catch(function () {
+        st.textContent = 'Error de red al buscar el documento.';
+        st.className = 'err';
+      });
+  });
+
+  document.getElementById('garLineaSelect').addEventListener('change', function () {
+    var vid = (this.value || '').trim();
+    if (!vid) {
+      document.getElementById('garDocumentoItemId').value = '';
+      return;
+    }
+    var id = parseInt(vid, 10);
+    var it = garLastDocItems.filter(function (x) { return x.id == id; })[0];
+    if (it) garApplyLine(it);
+    else document.getElementById('garDocumentoItemId').value = vid;
+  });
+
+  document.getElementById('formNuevaGar').addEventListener('submit', function (e) {
+    var wrap = document.getElementById('garLineaWrap');
+    var sel = document.getElementById('garLineaSelect');
+    if (wrap.style.display !== 'none' && sel.options.length > 1 && !sel.value) {
+      e.preventDefault();
+      alert('Selecciona la línea del documento sobre la que aplica la garantía.');
+      return;
+    }
+  });
+
+  document.getElementById('garClienteRut').addEventListener('blur', garLookupRut);
+  document.getElementById('garClienteRut').addEventListener('input', garScheduleRutLookup);
+  document.getElementById('garClienteNombre').addEventListener('input', garUpdateCrearBtn);
+
+  document.getElementById('garBtnCrearCliente').addEventListener('click', function () {
+    var rut = (document.getElementById('garClienteRut').value || '').trim();
+    var nombre = (document.getElementById('garClienteNombre').value || '').trim();
+    var st = document.getElementById('garClienteStatus');
+    if (!nombre) {
+      alert('Ingrese el nombre del cliente para crearlo.');
+      return;
+    }
+    fetch(URL_CLIENTE_RAPIDO, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ rut: rut, nombre: nombre }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.j || !res.j.ok) {
+          alert((res.j && res.j.error) ? res.j.error : 'No se pudo crear el cliente.');
+          return;
+        }
+        document.getElementById('garClienteIdHidden').value = String(res.j.cliente.id);
+        document.getElementById('garClienteNombre').value = res.j.cliente.nombre || nombre;
+        if (res.j.cliente.rut) document.getElementById('garClienteRut').value = res.j.cliente.rut;
+        st.textContent = res.j.creado ? 'Cliente creado en maestro.' : 'Cliente ya existía; vinculado.';
+        st.className = 'ok';
+        document.getElementById('garBtnCrearCliente').style.display = 'none';
+      })
+      .catch(function () { alert('Error de red al crear el cliente.'); });
+  });
+
+  var garLinkNv = document.getElementById('garLinkNuevoCliente');
+  if (garLinkNv) {
+    garLinkNv.addEventListener('click', function () {
+      document.getElementById('modalNuevaGar').classList.remove('open');
+    });
+  }
 })();
 </script>
 {% endblock %}

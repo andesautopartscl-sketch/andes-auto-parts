@@ -1,0 +1,1139 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+
+{% block title %}Historial de Ingresos | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+.ingreso-historial-topbar {
+    margin-bottom: 8px;
+    align-items: flex-start;
+}
+.ingreso-historial-topbar .page-title {
+    font-size: 1.35rem;
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+.ingreso-historial-topbar .page-subtitle {
+    font-size: 12px;
+    line-height: 1.35;
+    margin: 0;
+    color: #64748b;
+}
+.ingreso-historial-topbar .topbar-actions .link-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 8px;
+}
+.ingreso-historial-filter.form-card {
+    margin-bottom: 10px !important;
+    padding: 10px 12px;
+}
+.ingreso-historial-filter .field label {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 3px;
+    color: #475569;
+}
+.ingreso-historial-filter .field input,
+.ingreso-historial-filter .field select {
+    min-height: 30px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+.ingreso-historial-filter .btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    min-height: 32px;
+    border-radius: 8px;
+}
+.ingreso-historial-filter .link-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+}
+.ingreso-historial-filter-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 140px auto auto;
+    gap: 8px 10px;
+    align-items: end;
+}
+@media (max-width: 900px) {
+    .ingreso-historial-filter-form {
+        grid-template-columns: 1fr;
+    }
+}
+.ingreso-historial-table-wrap {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.table.ingreso-historial-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    color: #334155;
+}
+.table.ingreso-historial-table thead th {
+    padding: 5px 7px;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    color: #64748b;
+    background: #f1f5f9;
+    border-bottom: 1px solid #e2e8f0;
+    white-space: nowrap;
+}
+.table.ingreso-historial-table tbody td {
+    padding: 4px 7px;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f5f9;
+    line-height: 1.35;
+    font-size: 11px;
+}
+.table.ingreso-historial-table tbody td.ingreso-historial-acciones {
+    vertical-align: middle;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+.table.ingreso-historial-table tbody td strong {
+    font-weight: 600;
+    font-size: 11px;
+}
+.table.ingreso-historial-table tbody tr:hover td {
+    background: #fafbfc;
+}
+.table.ingreso-historial-table .muted {
+    font-size: 9px;
+    margin-top: 1px;
+    line-height: 1.25;
+    color: #94a3b8;
+    font-weight: 400;
+}
+.table.ingreso-historial-table .status-badge {
+    font-size: 9px;
+    padding: 2px 5px;
+}
+.ingreso-historial-acciones {
+    white-space: normal;
+    min-width: 72px;
+    max-width: 92px;
+}
+.btn-ingreso-opciones-open {
+    width: 100%;
+    justify-content: center;
+}
+.ingreso-opciones-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(15, 23, 42, 0.48);
+    z-index: 1195;
+}
+.ingreso-opciones-modal.open {
+    display: flex;
+}
+.ingreso-opciones-card {
+    width: min(380px, 100%);
+    background: #fff;
+    border: 1px solid #dbe3ef;
+    border-radius: 12px;
+    box-shadow: 0 20px 55px rgba(15, 23, 42, 0.28);
+    padding: 14px 14px 12px;
+}
+.ingreso-opciones-title {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #0f172a;
+}
+.ingreso-opciones-sub {
+    margin: 0 0 12px;
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.35;
+}
+.ingreso-opciones-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.ingreso-opciones-vigente {
+    margin-bottom: 8px;
+}
+.ingreso-opciones-danger-inner {
+    margin: 0 !important;
+}
+.ingreso-opciones-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 4px;
+    border-top: 1px solid #f1f5f9;
+    margin-top: 4px;
+}
+.ing-acc-actions-primary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+}
+.ing-acc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 7px;
+    min-height: 22px;
+    font-size: 10px;
+    font-weight: 600;
+    border-radius: 5px;
+    cursor: pointer;
+    text-decoration: none;
+    border: 1px solid transparent;
+    line-height: 1.15;
+    box-sizing: border-box;
+    transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, filter .12s ease;
+}
+.ing-acc-btn:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 1px;
+}
+.ing-acc-btn-primary {
+    background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+    color: #fff;
+    border-color: #1d4ed8;
+    box-shadow: 0 1px 2px rgba(37, 99, 235, 0.22);
+}
+.ing-acc-btn-primary:hover {
+    filter: brightness(1.04);
+    box-shadow: 0 1px 4px rgba(37, 99, 235, 0.22);
+}
+.ing-acc-btn-outline {
+    background: #fff;
+    color: #334155;
+    border-color: #cbd5e1;
+}
+.ing-acc-btn-outline:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+}
+.ing-acc-actions-danger-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 4px;
+    padding: 3px 5px;
+    margin: 0 -2px;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+}
+.ingreso-historial-acciones .input-motivo,
+.ingreso-opciones-modal .input-motivo {
+    flex: 1 1 auto;
+    min-width: 56px;
+    max-width: none;
+    min-height: 22px;
+    padding: 2px 6px;
+    font-size: 10px;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    box-sizing: border-box;
+}
+.ingreso-historial-acciones .input-motivo::placeholder,
+.ingreso-opciones-modal .input-motivo::placeholder {
+    color: #94a3b8;
+}
+.ing-acc-btn-danger {
+    flex: 0 0 auto;
+    background: linear-gradient(180deg, #fb7185 0%, #e11d48 100%);
+    color: #fff;
+    border-color: #be123c;
+    box-shadow: 0 1px 2px rgba(225, 29, 72, 0.18);
+}
+.ing-acc-btn-danger:hover {
+    filter: brightness(1.05);
+    box-shadow: 0 1px 4px rgba(225, 29, 72, 0.22);
+}
+.ingreso-historial-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    font-size: 11px;
+    color: #94a3b8;
+}
+.ingreso-historial-footer .link-btn {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+.ingreso-auth-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(15, 23, 42, 0.48);
+    z-index: 1200;
+}
+.ingreso-auth-modal.open {
+    display: flex;
+}
+.ingreso-auth-card {
+    width: min(400px, 100%);
+    background: #fff;
+    border: 1px solid #dbe3ef;
+    border-radius: 12px;
+    box-shadow: 0 20px 55px rgba(15, 23, 42, 0.28);
+    padding: 14px;
+}
+.ingreso-auth-title {
+    margin: 0 0 4px;
+    font-size: 16px;
+    color: #0f172a;
+}
+.ingreso-auth-sub {
+    margin: 0 0 10px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.4;
+}
+.ingreso-auth-grid {
+    display: grid;
+    gap: 8px;
+}
+.ingreso-auth-grid .field label {
+    font-size: 11px;
+}
+.ingreso-auth-grid input {
+    min-height: 32px;
+    font-size: 13px;
+    padding: 6px 10px;
+}
+.ingreso-auth-actions {
+    margin-top: 10px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+.ingreso-auth-actions .btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    min-height: 32px;
+}
+.ingreso-detalle-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.48);
+    z-index: 1210;
+}
+.ingreso-detalle-modal.open {
+    display: flex;
+}
+.ingreso-detalle-card {
+    width: min(1020px, 100%);
+    max-height: min(86vh, 760px);
+    background: #fff;
+    border: 1px solid #dbe3ef;
+    border-radius: 12px;
+    box-shadow: 0 20px 55px rgba(15, 23, 42, 0.28);
+    display: flex;
+    flex-direction: column;
+}
+.ingreso-detalle-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.ingreso-detalle-head h3 {
+    margin: 0;
+    font-size: 15px;
+    color: #0f172a;
+}
+.ingreso-detalle-body {
+    padding: 10px 12px;
+    overflow: auto;
+}
+.ingreso-detalle-table-wrap {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    overflow: auto;
+}
+.table.ingreso-detalle-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.table.ingreso-detalle-table th {
+    padding: 6px 7px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 700;
+    color: #475569;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    white-space: nowrap;
+}
+.table.ingreso-detalle-table td {
+    padding: 5px 7px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+.ingreso-detalle-empty {
+    text-align: center;
+    color: #64748b;
+    padding: 12px;
+}
+.ingreso-hist-cods-prov-compact {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    font-size: 10px;
+    color: #475569;
+    letter-spacing: 0.01em;
+}
+.ingreso-hist-cods-prov-compact .muted {
+    font-size: 9px;
+    color: #94a3b8;
+    font-weight: 500;
+}
+.ingreso-hist-etiq-col {
+    width: 44px;
+    text-align: center;
+    vertical-align: middle;
+}
+.ingreso-hist-etiq-cb {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+}
+.ingreso-hist-etiq-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1220;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    background: #0f172a;
+    color: #f8fafc;
+    font-size: 13px;
+    box-shadow: 0 -8px 28px rgba(15, 23, 42, 0.35);
+}
+.ingreso-hist-etiq-bar.is-visible {
+    display: flex;
+}
+.ingreso-hist-etiq-bar .ingreso-hist-etiq-bar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+.ingreso-hist-etiq-bar .btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    min-height: 32px;
+    border-radius: 8px;
+}
+.ingreso-hist-etiq-bar .btn-secondary {
+    background: #334155;
+    color: #f8fafc;
+    border: 1px solid #475569;
+}
+.ingreso-hist-etiq-bar .btn-primary {
+    background: #2563eb;
+    color: #fff;
+    border: 1px solid #1d4ed8;
+}
+body.ingreso-hist-etiq-bar-pad {
+    padding-bottom: 56px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar ingreso-historial-topbar">
+    <div>
+        <h1 class="page-title">Historial de Ingresos</h1>
+        <p class="page-subtitle">Consulta documentos de ingreso y anula cuando corresponda para revertir stock.</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="link-btn" href="{{ url_for('bodega.ingreso') }}">📥 Nuevo ingreso</a>
+        <a class="link-btn" href="{{ url_for('bodega.index') }}">🏠 Panel Bodega</a>
+    </div>
+</div>
+
+<div class="form-card ingreso-historial-filter">
+    <form method="get" class="ingreso-historial-filter-form">
+        <div class="field" style="margin:0;">
+            <label for="q">Buscar</label>
+            <input id="q" name="q" value="{{ q }}" placeholder="N° doc, proveedor, RUT, observación o ID">
+        </div>
+        <div class="field" style="margin:0;">
+            <label for="anulado">Estado</label>
+            <select id="anulado" name="anulado">
+                <option value="" {% if not anulado %}selected{% endif %}>Todos</option>
+                <option value="no" {% if anulado == 'no' %}selected{% endif %}>Vigentes</option>
+                <option value="si" {% if anulado == 'si' %}selected{% endif %}>Anulados</option>
+            </select>
+        </div>
+        <button class="btn btn-primary" type="submit">Buscar</button>
+        {% if q or anulado %}
+        <a class="link-btn" href="{{ url_for('bodega.ingreso_historial') }}">Limpiar</a>
+        {% endif %}
+    </form>
+</div>
+
+<div class="table-wrap ingreso-historial-table-wrap">
+    <table class="table ingreso-historial-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>N° documento</th>
+                <th>Fecha doc</th>
+                <th>Proveedor</th>
+                <th title="Códigos proveedor (compacto)">Códs. prov.</th>
+                <th class="ingreso-hist-etiq-col" title="Incluir códigos internos para etiquetas">Etq.</th>
+                <th>Total neto</th>
+                <th>Total factura (c/IVA)</th>
+                <th>Estado</th>
+                <th>Usuario</th>
+                <th>Opciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            {% set total_neto = totales_por_doc.get(row.id, 0) %}
+            <tr>
+                <td>#{{ row.id }}</td>
+                <td><strong>{{ row.numero_documento or ('ING-' ~ row.id) }}</strong></td>
+                <td>{{ row.fecha_documento.strftime('%d-%m-%Y') if row.fecha_documento else '-' }}</td>
+                <td>
+                    {{ row.proveedor_nombre }}
+                    <div class="muted">{{ row.proveedor_rut|format_rut if row.proveedor_rut else '' }}</div>
+                </td>
+                <td class="ingreso-hist-cods-prov-compact">
+                    {% set cps = codigos_proveedor_por_doc.get(row.id, []) %}
+                    {% if cps|length == 1 %}
+                        {{ cps[0] }}
+                    {% elif cps|length > 1 %}
+                        {{ cps[0] }} <span class="muted">+{{ cps|length - 1 }}</span>
+                    {% else %}
+                    <span class="muted">—</span>
+                    {% endif %}
+                </td>
+                <td class="ingreso-hist-etiq-col">
+                    {% set cis = codigos_internos_por_doc.get(row.id, []) %}
+                    {% if cis %}
+                    <input type="checkbox" class="ingreso-hist-etiq-cb" title="Incluir códigos internos de este ingreso para imprimir etiquetas"
+                           data-doc-id="{{ row.id }}"
+                           aria-label="Seleccionar ingreso {{ row.id }} para etiquetas">
+                    {% else %}
+                    <span class="muted" title="Sin códigos internos en ítems">—</span>
+                    {% endif %}
+                </td>
+                <td>${{ '{:,.0f}'.format(total_neto).replace(',', '.') }}</td>
+                <td>
+                    {% if row.total_factura is not none %}
+                    {% set _tf = (row.total_factura + 1e-9)|round(2) %}
+                    {% set _tfs = (_tf|string).replace('.', ',') %}
+                    ${{ _tfs }}
+                    {% else %}
+                    <span class="muted">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if row.anulado %}
+                    <span class="status-badge bad">Anulado</span>
+                    <div class="muted">{{ row.anulado_at|chile_datetime if row.anulado_at else '' }}{% if row.anulado_por %} · {{ row.anulado_por }}{% endif %}</div>
+                    {% else %}
+                    <span class="status-badge ok">Vigente</span>
+                    {% endif %}
+                </td>
+                <td>{{ row.usuario or 'sistema' }}</td>
+                <td class="ingreso-historial-acciones">
+                    <button type="button"
+                            class="ing-acc-btn ing-acc-btn-outline btn-ingreso-opciones-open"
+                            data-doc-id="{{ row.id }}"
+                            data-doc-num="{{ row.numero_documento or ('ING-' ~ row.id) }}"
+                            data-anulado="{{ '1' if row.anulado else '0' }}"
+                            data-mov-url="{{ url_for('bodega.movimientos', ingreso_documento_id=row.id) }}"
+                            data-edit-url="{% if not row.anulado %}{{ url_for('bodega.ingreso_editar', doc_id=row.id) }}{% endif %}"
+                            aria-haspopup="dialog"
+                            aria-expanded="false"
+                            aria-controls="ingresoOpcionesModal">Opciones</button>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="11" style="text-align:center;color:#64748b;padding:12px;font-size:12px;">No hay ingresos para mostrar.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="ingreso-historial-footer">
+    <div>Mostrando {{ rows|length }} de {{ total }} registros</div>
+    <div style="display:flex;gap:6px;align-items:center;">
+        {% if page > 1 %}
+        <a class="link-btn" href="{{ url_for('bodega.ingreso_historial', q=q, anulado=anulado, page=page-1) }}">← Anterior</a>
+        {% endif %}
+        <span class="muted">Página {{ page }} / {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a class="link-btn" href="{{ url_for('bodega.ingreso_historial', q=q, anulado=anulado, page=page+1) }}">Siguiente →</a>
+        {% endif %}
+    </div>
+</div>
+
+<script id="ingresoHistorialDetalleData" type="application/json">{{ detalles_items_por_doc|tojson }}</script>
+<script id="ingresoHistorialCodigosInternosPorDoc" type="application/json">{{ codigos_internos_por_doc|tojson }}</script>
+<script id="ingresoHistorialNumeroDocPorDoc" type="application/json">{{ numero_documento_por_doc|tojson }}</script>
+
+<form id="ingresoHistorialEtiquetasForm" method="post" action="{{ url_for('bodega.etiquetas') }}" style="display:none;" aria-hidden="true">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="codigos" id="ingresoHistorialEtiquetasCodigos" value="">
+    <input type="hidden" name="fp" id="ingresoHistorialEtiquetasFp" value="">
+    <input type="hidden" name="fp_por_codigo_json" id="ingresoHistorialEtiquetasFpMap" value="">
+</form>
+
+<div id="ingresoHistorialEtiquetasBar" class="ingreso-hist-etiq-bar" role="status" aria-live="polite">
+    <span id="ingresoHistorialEtiquetasBarText">Nada seleccionado para etiquetas.</span>
+    <div class="ingreso-hist-etiq-bar-actions">
+        <button type="button" class="btn btn-secondary" id="ingresoHistorialEtiquetasLimpiar">Quitar todo</button>
+        <button type="button" class="btn btn-primary" id="ingresoHistorialEtiquetasIr">Ir a etiquetas</button>
+    </div>
+</div>
+
+<div id="ingresoAuthModal" class="ingreso-auth-modal" aria-hidden="true">
+    <div class="ingreso-auth-card" role="dialog" aria-modal="true" aria-labelledby="ingresoAuthTitle">
+        <h3 id="ingresoAuthTitle" class="ingreso-auth-title">Autorizar anulación de ingreso</h3>
+        <p class="ingreso-auth-sub" id="ingresoAuthSub">Confirma credenciales para anular y revertir stock.</p>
+        <form id="ingresoAuthForm" method="post">
+            <input type="hidden" name="motivo" id="ingresoAuthMotivo">
+            <div class="ingreso-auth-grid">
+                <div class="field" style="margin:0;">
+                    <label for="ingresoAuthUser">Usuario autorizador</label>
+                    <input id="ingresoAuthUser" name="auth_user" required autocomplete="username">
+                </div>
+                <div class="field" style="margin:0;">
+                    <label for="ingresoAuthPass">Contraseña</label>
+                    <input id="ingresoAuthPass" name="auth_password" type="password" required autocomplete="current-password">
+                </div>
+            </div>
+            <div class="ingreso-auth-actions">
+                <button type="button" class="btn" id="ingresoAuthCancel">Cancelar</button>
+                <button type="submit" class="btn btn-danger">Autorizar y anular</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="ingresoOpcionesModal" class="ingreso-opciones-modal" aria-hidden="true">
+    <div class="ingreso-opciones-card" role="dialog" aria-modal="true" aria-labelledby="ingresoOpcionesTitle">
+        <h3 id="ingresoOpcionesTitle" class="ingreso-opciones-title">Opciones del ingreso</h3>
+        <p id="ingresoOpcionesSub" class="ingreso-opciones-sub"></p>
+        <div class="ingreso-opciones-grid">
+            <button type="button" class="ing-acc-btn ing-acc-btn-primary btn-ver-detalle" id="ingresoOpcionesVerDetalle"
+                    data-doc-id="" data-doc-num="">Ver detalle</button>
+            <a class="ing-acc-btn ing-acc-btn-outline" id="ingresoOpcionesMov" href="#">Movimientos</a>
+            <a class="ing-acc-btn ing-acc-btn-outline" id="ingresoOpcionesEditar" href="#" style="display:none;">Editar</a>
+        </div>
+        <div id="ingresoOpcionesVigenteWrap" class="ingreso-opciones-vigente">
+            <div class="ing-acc-actions-danger-row ingreso-opciones-danger-inner">
+                <input type="text" id="ingresoOpcionesMotivo" class="input-motivo" placeholder="Motivo (opc.)" autocomplete="off" aria-label="Motivo opcional al anular ingreso">
+                <button type="button" class="ing-acc-btn ing-acc-btn-danger btn-anular-open" id="ingresoOpcionesAnular"
+                        data-doc-id="" data-doc-num="">Anular</button>
+            </div>
+        </div>
+        <div class="ingreso-opciones-footer">
+            <button type="button" class="ing-acc-btn ing-acc-btn-outline" id="ingresoOpcionesClose">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<div id="ingresoDetalleModal" class="ingreso-detalle-modal" aria-hidden="true">
+    <div class="ingreso-detalle-card" role="dialog" aria-modal="true" aria-labelledby="ingresoDetalleTitle">
+        <div class="ingreso-detalle-head">
+            <h3 id="ingresoDetalleTitle">Detalle de ingreso</h3>
+            <button type="button" class="btn" id="ingresoDetalleClose">Cerrar</button>
+        </div>
+        <div class="ingreso-detalle-body">
+            <div class="muted" id="ingresoDetalleSub" style="margin-bottom:8px;">Items del documento.</div>
+            <div class="ingreso-detalle-table-wrap">
+                <table class="table ingreso-detalle-table">
+                    <thead>
+                        <tr>
+                            <th>Cód. int.</th>
+                            <th>Cód. prov.</th>
+                            <th>Descripción</th>
+                            <th>Marca</th>
+                            <th>Bodega</th>
+                            <th>Origen</th>
+                            <th>Cant.</th>
+                            <th>V. neto</th>
+                            <th>Nota</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ingresoDetalleBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var opcionesModal = document.getElementById('ingresoOpcionesModal');
+    var subEl = document.getElementById('ingresoOpcionesSub');
+    var vdBtn = document.getElementById('ingresoOpcionesVerDetalle');
+    var movA = document.getElementById('ingresoOpcionesMov');
+    var editA = document.getElementById('ingresoOpcionesEditar');
+    var vigWrap = document.getElementById('ingresoOpcionesVigenteWrap');
+    var anuBtn = document.getElementById('ingresoOpcionesAnular');
+    var closeBtn = document.getElementById('ingresoOpcionesClose');
+    if (!opcionesModal || !subEl || !vdBtn || !movA || !editA || !vigWrap || !anuBtn || !closeBtn) return;
+
+    function closeOpcionesModal() {
+        opcionesModal.classList.remove('open');
+        opcionesModal.setAttribute('aria-hidden', 'true');
+        document.querySelectorAll('.btn-ingreso-opciones-open[aria-expanded="true"]').forEach(function (el) {
+            el.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    window.closeIngresoOpcionesModal = closeOpcionesModal;
+
+    function openOpciones(trigger) {
+        var docId = trigger.getAttribute('data-doc-id') || '';
+        var docNum = trigger.getAttribute('data-doc-num') || ('#' + docId);
+        var anulado = trigger.getAttribute('data-anulado') === '1';
+        var movUrl = trigger.getAttribute('data-mov-url') || '#';
+        var editUrl = (trigger.getAttribute('data-edit-url') || '').trim();
+
+        subEl.textContent = 'Documento ' + docNum + ' · ID #' + docId + (anulado ? ' · Estado: anulado' : '') + '.';
+
+        vdBtn.setAttribute('data-doc-id', docId);
+        vdBtn.setAttribute('data-doc-num', docNum);
+
+        movA.setAttribute('href', movUrl);
+
+        if (!anulado && editUrl) {
+            editA.setAttribute('href', editUrl);
+            editA.style.display = 'inline-flex';
+        } else {
+            editA.removeAttribute('href');
+            editA.style.display = 'none';
+        }
+
+        vigWrap.style.display = anulado ? 'none' : 'block';
+
+        anuBtn.setAttribute('data-doc-id', docId);
+        anuBtn.setAttribute('data-doc-num', docNum);
+
+        opcionesModal.classList.add('open');
+        opcionesModal.setAttribute('aria-hidden', 'false');
+        trigger.setAttribute('aria-expanded', 'true');
+    }
+
+    document.querySelectorAll('.btn-ingreso-opciones-open').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            openOpciones(btn);
+        });
+    });
+
+    closeBtn.addEventListener('click', closeOpcionesModal);
+    movA.addEventListener('click', closeOpcionesModal);
+    editA.addEventListener('click', closeOpcionesModal);
+    opcionesModal.addEventListener('click', function (e) {
+        if (e.target === opcionesModal) closeOpcionesModal();
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        var auth = document.getElementById('ingresoAuthModal');
+        if (auth && auth.classList.contains('open')) return;
+        var detalle = document.getElementById('ingresoDetalleModal');
+        if (detalle && detalle.classList.contains('open')) return;
+        if (!opcionesModal.classList.contains('open')) return;
+        closeOpcionesModal();
+    });
+})();
+
+(function () {
+    var modal = document.getElementById('ingresoAuthModal');
+    var form = document.getElementById('ingresoAuthForm');
+    var sub = document.getElementById('ingresoAuthSub');
+    var motivoHidden = document.getElementById('ingresoAuthMotivo');
+    var authUser = document.getElementById('ingresoAuthUser');
+    var authPass = document.getElementById('ingresoAuthPass');
+    var cancelBtn = document.getElementById('ingresoAuthCancel');
+    if (!modal || !form || !sub || !motivoHidden || !authUser || !authPass) return;
+
+    function closeModal() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+        authPass.value = '';
+    }
+
+    document.body.addEventListener('click', function (e) {
+        var btn = e.target.closest('.btn-anular-open');
+        if (!btn) return;
+        var docId = btn.getAttribute('data-doc-id');
+        if (!docId) return;
+        var docNum = btn.getAttribute('data-doc-num') || ('#' + docId);
+        var motivoInput = document.getElementById('ingresoOpcionesMotivo');
+        motivoHidden.value = motivoInput ? (motivoInput.value || '').trim() : '';
+        if (typeof window.closeIngresoOpcionesModal === 'function') {
+            window.closeIngresoOpcionesModal();
+        }
+        form.action = '/bodega/ingreso/anular/' + encodeURIComponent(docId);
+        sub.textContent = 'Vas a anular el ingreso ' + docNum + ' y revertir stock. Ingresa credenciales autorizadas.';
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+        setTimeout(function () { authUser.focus(); }, 20);
+    });
+
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+    });
+})();
+
+(function () {
+    var modal = document.getElementById('ingresoDetalleModal');
+    var closeBtn = document.getElementById('ingresoDetalleClose');
+    var body = document.getElementById('ingresoDetalleBody');
+    var sub = document.getElementById('ingresoDetalleSub');
+    var dataEl = document.getElementById('ingresoHistorialDetalleData');
+    if (!modal || !closeBtn || !body || !sub || !dataEl) return;
+
+    var data = {};
+    try {
+        data = JSON.parse(dataEl.textContent || '{}');
+    } catch (_) {
+        data = {};
+    }
+
+    function formatNeto(value) {
+        if (value === null || value === undefined || value === '') return '—';
+        var num = Number(value);
+        if (!isFinite(num)) return '—';
+        return '$' + num.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function closeModal() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function renderRows(items) {
+        body.innerHTML = '';
+        if (!Array.isArray(items) || items.length === 0) {
+            body.innerHTML = '<tr><td colspan="9" class="ingreso-detalle-empty">No hay items para mostrar.</td></tr>';
+            return;
+        }
+        function appendCell(tr, value) {
+            var td = document.createElement('td');
+            td.textContent = value;
+            tr.appendChild(td);
+        }
+        items.forEach(function (it) {
+            var tr = document.createElement('tr');
+            appendCell(tr, it.codigo_producto || '—');
+            appendCell(tr, it.codigo_proveedor || '—');
+            appendCell(tr, it.descripcion_producto || '—');
+            appendCell(tr, it.marca || '—');
+            appendCell(tr, it.bodega || '—');
+            appendCell(tr, it.origen_compra || '—');
+            appendCell(tr, String(it.cantidad || 0));
+            appendCell(tr, formatNeto(it.valor_neto));
+            appendCell(tr, it.nota || '—');
+            body.appendChild(tr);
+        });
+    }
+
+    document.body.addEventListener('click', function (e) {
+        var btn = e.target.closest('.btn-ver-detalle');
+        if (!btn) return;
+        var docId = String(btn.getAttribute('data-doc-id') || '');
+        var docNum = btn.getAttribute('data-doc-num') || ('#' + docId);
+        if (typeof window.closeIngresoOpcionesModal === 'function') {
+            window.closeIngresoOpcionesModal();
+        }
+        sub.textContent = 'Documento ' + docNum + ' (ID #' + docId + ').';
+        renderRows(data[docId] || []);
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+    });
+
+    closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+    });
+})();
+
+(function () {
+    /* Selección solo en memoria: al salir del historial o recargar, no queda nada marcado. */
+    try {
+        sessionStorage.removeItem('bodega_ingreso_hist_etiq_v2');
+    } catch (_) {}
+    var dataEl = document.getElementById('ingresoHistorialCodigosInternosPorDoc');
+    var bar = document.getElementById('ingresoHistorialEtiquetasBar');
+    var barText = document.getElementById('ingresoHistorialEtiquetasBarText');
+    var btnLimpiar = document.getElementById('ingresoHistorialEtiquetasLimpiar');
+    var btnIr = document.getElementById('ingresoHistorialEtiquetasIr');
+    var form = document.getElementById('ingresoHistorialEtiquetasForm');
+    var codigosInput = document.getElementById('ingresoHistorialEtiquetasCodigos');
+    var fpInput = document.getElementById('ingresoHistorialEtiquetasFp');
+    var fpMapInput = document.getElementById('ingresoHistorialEtiquetasFpMap');
+    var ndEl = document.getElementById('ingresoHistorialNumeroDocPorDoc');
+    if (!dataEl || !bar || !barText || !btnLimpiar || !btnIr || !form || !codigosInput || !fpInput || !fpMapInput) return;
+
+    var codigosPorDoc = {};
+    try {
+        codigosPorDoc = JSON.parse(dataEl.textContent || '{}');
+    } catch (_) {
+        codigosPorDoc = {};
+    }
+
+    var detalleEl = document.getElementById('ingresoHistorialDetalleData');
+    var detallePorDoc = {};
+    try {
+        detallePorDoc = JSON.parse(detalleEl ? (detalleEl.textContent || '{}') : '{}');
+    } catch (_) {
+        detallePorDoc = {};
+    }
+
+    /** Partes para POST a etiquetas: "COD" o "COD xN" (coincide con _parse_codigos en servidor). */
+    function lineasEtiquetaParaDoc(docId) {
+        var items = detallePorDoc[docId];
+        if (Array.isArray(items) && items.length) {
+            var out = [];
+            items.forEach(function (it) {
+                var c = (it.codigo_producto || '').trim().toUpperCase();
+                if (!c) return;
+                var q = parseInt(String(it.cantidad != null ? it.cantidad : '0'), 10) || 0;
+                if (q <= 0) return;
+                q = Math.min(q, 50);
+                out.push(q === 1 ? c : (c + ' x' + q));
+            });
+            if (out.length) return out;
+        }
+        var fb = codigosPorDoc[docId];
+        if (Array.isArray(fb) && fb.length) {
+            return fb.map(function (x) { return (x || '').trim().toUpperCase(); }).filter(Boolean);
+        }
+        return [];
+    }
+
+    function parseEtqPart(part) {
+        var raw = (part || '').trim();
+        if (!raw) return null;
+        var m = raw.match(/^(.+?)\s+x\s*(\d+)$/i);
+        if (m) {
+            var code = (m[1] || '').trim().toUpperCase();
+            var q = parseInt(m[2], 10) || 1;
+            if (!code) return null;
+            return { code: code, qty: Math.min(50, Math.max(1, q)) };
+        }
+        return { code: raw.toUpperCase(), qty: 1 };
+    }
+
+    function totalEtiquetasEnSel(s) {
+        var docs = s.docs || {};
+        var n = 0;
+        Object.keys(docs).forEach(function (docId) {
+            var arr = docs[docId];
+            if (!Array.isArray(arr)) return;
+            arr.forEach(function (part) {
+                var pq = parseEtqPart(part);
+                if (pq) n += pq.qty;
+            });
+        });
+        return n;
+    }
+
+    function codigosUnicosEnSel(s) {
+        var docs = s.docs || {};
+        var seen = Object.create(null);
+        var out = [];
+        Object.keys(docs).forEach(function (docId) {
+            var arr = docs[docId];
+            if (!Array.isArray(arr)) return;
+            arr.forEach(function (part) {
+                var pq = parseEtqPart(part);
+                if (!pq || !pq.code) return;
+                if (!seen[pq.code]) {
+                    seen[pq.code] = true;
+                    out.push(pq.code);
+                }
+            });
+        });
+        return out;
+    }
+
+    var numeroDocPorDoc = {};
+    try {
+        if (ndEl) numeroDocPorDoc = JSON.parse(ndEl.textContent || '{}');
+    } catch (_) {
+        numeroDocPorDoc = {};
+    }
+
+    function resolveNumeroDoc(docId) {
+        var v = numeroDocPorDoc[docId];
+        if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+        return 'ING-' + docId;
+    }
+
+    var sel = { docs: {}, numeroPorDoc: {} };
+
+    function updateBar() {
+        var docs = sel.docs || {};
+        var nDocs = Object.keys(docs).length;
+        var nEtq = totalEtiquetasEnSel(sel);
+        var nCodes = codigosUnicosEnSel(sel).length;
+        if (nDocs === 0) {
+            bar.classList.remove('is-visible');
+            document.body.classList.remove('ingreso-hist-etiq-bar-pad');
+            barText.textContent = 'Nada seleccionado para etiquetas.';
+            return;
+        }
+        bar.classList.add('is-visible');
+        document.body.classList.add('ingreso-hist-etiq-bar-pad');
+        barText.textContent = nDocs + ' ingreso(s) · ' + nEtq + ' etiqueta(s) · ' + nCodes + ' código(s) distintos.';
+    }
+
+    function restoreCheckboxes() {
+        var docs = sel.docs || {};
+        document.querySelectorAll('.ingreso-hist-etiq-cb').forEach(function (cb) {
+            var id = cb.getAttribute('data-doc-id');
+            cb.checked = Boolean(id && Object.prototype.hasOwnProperty.call(docs, id));
+        });
+    }
+
+    document.querySelectorAll('.ingreso-hist-etiq-cb').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var docId = cb.getAttribute('data-doc-id');
+            if (!docId) return;
+            if (cb.checked) {
+                sel.docs[docId] = lineasEtiquetaParaDoc(docId);
+                sel.numeroPorDoc[docId] = resolveNumeroDoc(docId);
+            } else {
+                delete sel.docs[docId];
+                delete sel.numeroPorDoc[docId];
+            }
+            updateBar();
+        });
+    });
+
+    btnLimpiar.addEventListener('click', function () {
+        sel.docs = {};
+        sel.numeroPorDoc = {};
+        restoreCheckboxes();
+        updateBar();
+    });
+
+    btnIr.addEventListener('click', function () {
+        var docs = sel.docs || {};
+        var parts = [];
+        Object.keys(docs).forEach(function (docId) {
+            var arr = docs[docId];
+            if (!Array.isArray(arr)) return;
+            arr.forEach(function (p) {
+                if ((p || '').trim()) parts.push(String(p).trim());
+            });
+        });
+        if (parts.length === 0) {
+            return;
+        }
+        var nmap = sel.numeroPorDoc || {};
+        var fpMap = {};
+        Object.keys(docs).forEach(function (docId) {
+            var nums = nmap[docId];
+            if (nums === undefined || nums === null || String(nums).trim() === '') {
+                nums = resolveNumeroDoc(docId);
+            } else {
+                nums = String(nums).trim();
+            }
+            var arr = docs[docId];
+            if (!Array.isArray(arr)) return;
+            arr.forEach(function (part) {
+                var pq = parseEtqPart(part);
+                if (!pq) return;
+                var k = pq.code;
+                if (!fpMap[k]) fpMap[k] = nums;
+                else if (fpMap[k] !== nums && nums) {
+                    if (fpMap[k].indexOf(nums) === -1) fpMap[k] = fpMap[k] + ' / ' + nums;
+                }
+            });
+        });
+        var numsList = [];
+        var seenF = Object.create(null);
+        Object.keys(docs).forEach(function (docId) {
+            var n = nmap[docId];
+            if (n === undefined || n === null || String(n).trim() === '') n = resolveNumeroDoc(docId);
+            else n = String(n).trim();
+            if (!seenF[n]) {
+                seenF[n] = true;
+                numsList.push(n);
+            }
+        });
+        numsList.sort(function (a, b) { return a.localeCompare(b, 'es', { numeric: true }); });
+        form.querySelectorAll('input[name="etiquetas_ingreso_doc_id"], input[name="etiquetas_ingreso_codigos_json"]').forEach(function (el) {
+            el.remove();
+        });
+        var docKeys = Object.keys(docs);
+        if (docKeys.length === 1) {
+            var hidDoc = document.createElement('input');
+            hidDoc.type = 'hidden';
+            hidDoc.name = 'etiquetas_ingreso_doc_id';
+            hidDoc.id = 'etiquetasIngresoDocIdHist';
+            hidDoc.value = docKeys[0];
+            form.appendChild(hidDoc);
+            var hidCodes = document.createElement('input');
+            hidCodes.type = 'hidden';
+            hidCodes.name = 'etiquetas_ingreso_codigos_json';
+            hidCodes.id = 'etiquetasIngresoCodigosJsonHist';
+            hidCodes.value = JSON.stringify(codigosUnicosEnSel(sel));
+            form.appendChild(hidCodes);
+        }
+        codigosInput.value = parts.join(', ');
+        fpInput.value = numsList.join(' · ');
+        fpMapInput.value = JSON.stringify(fpMap);
+        form.submit();
+    });
+
+    restoreCheckboxes();
+    updateBar();
+})();
+</script>
+{% endblock %}
+

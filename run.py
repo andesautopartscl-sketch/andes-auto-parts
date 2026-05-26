@@ -2,6 +2,10 @@ from pathlib import Path
 import os
 import sys
 
+from app.utils.load_env import load_project_dotenv
+
+load_project_dotenv()
+
 
 EXPECTED_VENV_PYTHON = str((Path(__file__).resolve().parent / ".venv" / "Scripts" / "python.exe").resolve())
 

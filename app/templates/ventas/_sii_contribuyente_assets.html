@@ -1,0 +1,5 @@
+{# Config + script SII autocompletado (cliente_form, documento/cotización, etc.) #}
+<script id="siiContribuyenteConfig" type="application/json">{{ sii_contribuyente_config | tojson }}</script>
+{% if sii_contribuyente_lookup_available|default(false) %}
+<script src="{{ url_for('static', filename='sii_contribuyente_autofill.js') }}"></script>
+{% endif %}

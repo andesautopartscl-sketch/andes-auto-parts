@@ -2,6 +2,7 @@
     <h1 class="page-title">Crear Usuario</h1>
 
     <form method="POST" action="{{ url_for('seguridad.nuevo_usuario') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-grid">
             <div class="field">
                 <label>Nombre</label>
@@ -26,7 +27,118 @@
                     {% endfor %}
                 </select>
             </div>
+
+            <div class="field field-full" style="margin-top:8px;">
+                <label>RRHH / Nómina</label>
+                <small>Datos previsionales y bancarios (opcional).</small>
+            </div>
+            <div class="field">
+                <label>Salud</label>
+                <select name="rrhh_salud_tipo">
+                    <option value="">—</option>
+                    <option value="FONASA">FONASA</option>
+                    <option value="ISAPRE">ISAPRE</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Isapre (si aplica)</label>
+                <input name="rrhh_salud_entidad" id="saludEntidad" list="isapreChileList" placeholder="Ej: Colmena" disabled>
+            </div>
+            <div class="field">
+                <label>N° contrato/afiliado</label>
+                <input name="rrhh_salud_numero" placeholder="Opcional">
+            </div>
+            <div class="field">
+                <label>AFP</label>
+                <input name="rrhh_afp_nombre" list="afpChileList" placeholder="Ej: Habitat">
+            </div>
+            <div class="field">
+                <label>Banco</label>
+                <input name="rrhh_banco_nombre" list="bancoChileList" placeholder="Ej: BancoEstado" required>
+            </div>
+            <div class="field">
+                <label>Tipo cuenta</label>
+                <select name="rrhh_banco_tipo_cuenta" required>
+                    <option value="">—</option>
+                    <option value="rut">Cuenta RUT</option>
+                    <option value="vista">Vista</option>
+                    <option value="corriente">Corriente</option>
+                    <option value="ahorro">Ahorro</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>N° cuenta</label>
+                <input name="rrhh_banco_numero_cuenta" placeholder="Ej: 12345678" required>
+            </div>
+            <div class="field field-full">
+                <label><input type="checkbox" name="rrhh_afc_afiliado" checked> AFC afiliado</label>
+                <span style="margin-left:14px;">Comisión %</span>
+                <input name="rrhh_comision_pct" type="number" min="0" max="100" step="0.01" placeholder="0" style="width:120px;">
+            </div>
         </div>
+        <datalist id="afpChileList">
+            <option value="AFP Capital"></option>
+            <option value="AFP Cuprum"></option>
+            <option value="AFP Habitat"></option>
+            <option value="AFP Modelo"></option>
+            <option value="AFP PlanVital"></option>
+            <option value="AFP Provida"></option>
+            <option value="AFP Uno"></option>
+        </datalist>
+        <datalist id="isapreChileList">
+            <option value="Banmédica"></option>
+            <option value="Colmena"></option>
+            <option value="Consalud"></option>
+            <option value="Cruz Blanca"></option>
+            <option value="Esencial"></option>
+            <option value="Fundación"></option>
+            <option value="Nueva Masvida"></option>
+            <option value="Vida Tres"></option>
+        </datalist>
+        <datalist id="bancoChileList">
+            <option value="BancoEstado"></option>
+            <option value="Banco de Chile"></option>
+            <option value="Banco BCI"></option>
+            <option value="Banco Santander"></option>
+            <option value="Banco Itaú"></option>
+            <option value="Scotiabank"></option>
+            <option value="Banco Security"></option>
+            <option value="Banco BICE"></option>
+            <option value="Banco Internacional"></option>
+            <option value="Banco Consorcio"></option>
+            <option value="Banco Falabella"></option>
+            <option value="Banco Ripley"></option>
+            <option value="Banco BTG Pactual Chile"></option>
+            <option value="Coopeuch"></option>
+
+            <!-- Cuentas digitales / emisores prepago (CMF) -->
+            <option value="Tenpo"></option>
+            <option value="Mercado Pago"></option>
+            <option value="Los Héroes"></option>
+            <option value="Tricard"></option>
+            <option value="SumUp"></option>
+            <option value="Global Card"></option>
+            <option value="Digital Payments Prepago"></option>
+            <option value="Compañía Emisora de Medios de Pago Digitales"></option>
+            <option value="Los Andes Tarjetas de Prepago"></option>
+            <option value="Inversiones LP"></option>
+        </datalist>
+        <script>
+        (function () {
+            'use strict';
+            var sel = document.querySelector('select[name="rrhh_salud_tipo"]');
+            var inp = document.getElementById('saludEntidad');
+            function sync() {
+                if (!sel || !inp) return;
+                var v = String(sel.value || '').toUpperCase();
+                var enable = (v === 'ISAPRE');
+                inp.disabled = !enable;
+                if (!enable) inp.value = '';
+            }
+            if (sel) sel.addEventListener('change', sync);
+            sync();
+        })();
+        </script>
 
         <div class="actions" style="margin-top:18px; justify-content:flex-end;">
             <button type="submit" class="btn btn-primary">Crear Usuario</button>
