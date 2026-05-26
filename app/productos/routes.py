@@ -44,6 +44,14 @@ from ..utils.categoria_autodetect import (
 )
 from ..utils.product_image_postprocess import process_uploaded_image
 from ..utils.catalog_cache import get_or_load, invalidate_taxonomia
+from ..utils.cloudinary_config import is_configured as cloudinary_is_configured
+from ..utils.cloudinary_config import upload_image as cloudinary_upload_image
+from ..utils.cloudinary_config import delete_image_by_url
+from ..utils.product_image_url import (
+    is_remote_image_url,
+    normalize_stored_image_ref,
+    static_filename_from_ref,
+)
 
 
 productos_bp = Blueprint("productos", __name__)
@@ -274,6 +282,109 @@ def _collect_imagenes_producto_carpeta(ruta_imagenes: str, producto: Producto) -
     return out
 
 
+STATIC_PRODUCTOS_IMG = Path(__file__).resolve().parent.parent / "static" / "productos_img"
+
+
+def _delete_product_image_ref(ref: str | None) -> None:
+    """Elimina imagen previa (Cloudinary o archivo local)."""
+    r = (ref or "").strip()
+    if not r:
+        return
+    if is_remote_image_url(r):
+        if cloudinary_is_configured():
+            delete_image_by_url(r)
+        return
+    rel = static_filename_from_ref(r)
+    if not rel:
+        return
+    path = Path(__file__).resolve().parent.parent / "static" / rel.replace("/", os.sep)
+    if path.is_file():
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
+def _upload_product_image_file(
+    file_obj,
+    *,
+    codigo: str,
+    suffix: str,
+    allowed_exts: set[str] | None = None,
+) -> str | None:
+    """
+    Sube imagen a Cloudinary (si está configurado) o disco local.
+    Retorna URL https o ruta relativa productos_img/...
+    """
+    if not file_obj or not getattr(file_obj, "filename", None):
+        return None
+    try:
+        ext = _validate_image_upload(file_obj, allowed_exts=allowed_exts or {"jpg", "jpeg", "png", "webp"})
+    except ValueError:
+        return None
+
+    codigo_safe = re.sub(r"[^a-zA-Z0-9_\-]", "_", (codigo or "").strip().upper()) or "producto"
+    target_name = f"{codigo_safe}{suffix}.{ext}"
+
+    if cloudinary_is_configured():
+        import tempfile
+
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
+                file_obj.save(tmp.name)
+                tmp_path = Path(tmp.name)
+            processed = process_uploaded_image(tmp_path)
+            upload_path = processed if processed is not None else tmp_path
+            public_id = f"andes_erp/productos/{Path(target_name).stem}"
+            result = cloudinary_upload_image(upload_path, public_id=public_id)
+            url = normalize_stored_image_ref(result.get("url"))
+            if processed is not None and processed != tmp_path and processed.is_file():
+                processed.unlink(missing_ok=True)
+            return url or None
+        finally:
+            if tmp_path and tmp_path.is_file():
+                tmp_path.unlink(missing_ok=True)
+        return None
+
+    static_dir = STATIC_PRODUCTOS_IMG
+    static_dir.mkdir(parents=True, exist_ok=True)
+    target = static_dir / target_name
+    file_obj.save(str(target))
+    out = process_uploaded_image(target)
+    if out is not None:
+        target_name = out.name
+    return f"productos_img/{target_name}"
+
+
+def _collect_imagenes_producto(producto: Producto) -> list[str]:
+    """URLs o rutas relativas para mostrar imágenes (BD + carpeta local)."""
+    seen: set[str] = set()
+    out: list[str] = []
+
+    def add(val: str | None) -> None:
+        v = (val or "").strip()
+        if not v or v in seen:
+            return
+        seen.add(v)
+        out.append(v)
+
+    if getattr(producto, "imagen_url", None):
+        add(producto.imagen_url)
+    try:
+        for img in producto.imagenes or []:
+            if img.ruta:
+                add(img.ruta)
+    except Exception:
+        pass
+
+    folder = str(STATIC_PRODUCTOS_IMG)
+    if STATIC_PRODUCTOS_IMG.is_dir():
+        for name in _collect_imagenes_producto_carpeta(folder, producto):
+            add(f"productos_img/{name}")
+    return out
+
+
 def _producto_snapshot(p: Producto) -> dict:
     return {
         "codigo": p.codigo or "",
@@ -339,26 +450,26 @@ def _resolve_taxonomia_create(sess, categoria_nombre: str, subcategoria_nombre: 
     return categoria_id, subcategoria_id
 
 
-def _save_uploaded_images(codigo: str, files: list) -> list[str]:
+def _save_uploaded_images(codigo: str, files: list, producto: Producto | None = None) -> list[str]:
     if not codigo or not files:
         return []
-    static_dir = Path("app/static/productos_img")
-    static_dir.mkdir(parents=True, exist_ok=True)
     rutas: list[str] = []
     for idx, f in enumerate(files):
-        if not f or not getattr(f, "filename", None):
-            continue
-        try:
-            ext = _validate_image_upload(f, allowed_exts={"jpg", "jpeg", "png", "webp"})
-        except ValueError:
-            continue
-        target_name = f"{codigo}.jpg" if idx == 0 else f"{codigo}_{idx + 1}.{ext}"
-        target = static_dir / target_name
-        f.save(str(target))
-        out = process_uploaded_image(target)
-        if out is not None:
-            target_name = out.name
-        rutas.append(f"productos_img/{target_name}")
+        if idx == 0 and producto is not None:
+            if getattr(producto, "imagen_url", None):
+                _delete_product_image_ref(producto.imagen_url)
+            for old in list(producto.imagenes or []):
+                if old.ruta:
+                    _delete_product_image_ref(old.ruta)
+        suffix = "" if idx == 0 else f"_{idx + 1}"
+        stored = _upload_product_image_file(
+            f,
+            codigo=codigo,
+            suffix=suffix,
+            allowed_exts={"jpg", "jpeg", "png", "webp"},
+        )
+        if stored:
+            rutas.append(stored)
     return rutas
 
 
@@ -1706,8 +1817,7 @@ def ver_producto(codigo):
         # (mientras la sesión sigue abierta; si se cerrara antes, producto queda detached)
         # =============================
 
-        ruta_imagenes = "app/static/productos_img"
-        imagenes = _collect_imagenes_producto_carpeta(ruta_imagenes, producto)
+        imagenes = _collect_imagenes_producto(producto)
 
         # =============================
         # BUSCAR IMÁGENES 360 POR CARPETA
@@ -1740,12 +1850,12 @@ def ver_producto(codigo):
                 despiece_notas = (despiece_row.notas or "").strip()
                 img_rel = (despiece_row.imagen_static or "").strip()
                 if img_rel:
-                    despiece_imagen_url = url_for("static", filename=img_rel)
+                    despiece_imagen_url = img_rel
                 else:
                     # Si el registro OEM compartido aún no tiene imagen, usar respaldo legado.
                     img_fallback_rel = _find_shared_despiece_image_fallback(db, producto)
                     if img_fallback_rel:
-                        despiece_imagen_url = url_for("static", filename=img_fallback_rel)
+                        despiece_imagen_url = img_fallback_rel
                 if despiece_row.partes_json:
                     try:
                         parsed = json.loads(despiece_row.partes_json)
@@ -1765,9 +1875,7 @@ def ver_producto(codigo):
             if not despiece_imagen_url and producto:
                 fb_name = _find_epc_despiece_archivo_en_static(producto)
                 if fb_name:
-                    despiece_imagen_url = url_for(
-                        "static", filename=f"epc_despiece/{fb_name}"
-                    )
+                    despiece_imagen_url = f"epc_despiece/{fb_name}"
 
         oem_match = _norm_oem_despiece(getattr(producto, "codigo_oem", None)) if producto else ""
         despiece_erp_precio = getattr(producto, "p_publico", None) if producto else None
@@ -2387,25 +2495,24 @@ def crear_producto():
         sess.flush()
 
         image_files = request.files.getlist("imagenes")
-        image_routes = _save_uploaded_images(codigo, image_files)
+        image_routes = _save_uploaded_images(codigo, image_files, producto=p)
         for i, ruta in enumerate(image_routes):
             p.imagenes.append(ProductoImagen(ruta=ruta, es_principal=(i == 0)))
+        if image_routes:
+            p.imagen_url = image_routes[0]
 
         despiece = request.files.get("despiece_img")
         if despiece and getattr(despiece, "filename", None):
-            try:
-                ext = _validate_image_upload(despiece, allowed_exts={"jpg", "jpeg", "png", "webp"})
-            except ValueError:
-                ext = ""
-            if ext:
-                target_name = f"{codigo}_despiece.{ext}"
-                target = Path("app/static/productos_img") / target_name
-                target.parent.mkdir(parents=True, exist_ok=True)
-                despiece.save(str(target))
-                out = process_uploaded_image(target)
-                if out is not None:
-                    target_name = out.name
-                p.despiece = f"productos_img/{target_name}"
+            if p.despiece:
+                _delete_product_image_ref(p.despiece)
+            stored_despiece = _upload_product_image_file(
+                despiece,
+                codigo=codigo,
+                suffix="_despiece",
+                allowed_exts={"jpg", "jpeg", "png", "webp"},
+            )
+            if stored_despiece:
+                p.despiece = stored_despiece
 
         register_product_audit(
             sess,

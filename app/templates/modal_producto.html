@@ -1292,7 +1292,7 @@ body.ficha-tecnica-page {
 "{{ url_for('static', filename='productos360/' + producto.codigo + '/' + img) }}"{% if not loop.last %},{% endif %}
 {% endfor %}
 ]'
-       src="{{ url_for('static', filename='productos_img/' + imagenes[0]) }}"
+       src="{{ imagenes[0] | product_image_src }}"
        alt="{{ producto.descripcion or producto.codigo }}">
   </div>
 </div>
@@ -1300,7 +1300,7 @@ body.ficha-tecnica-page {
 <div class="ft-thumb-row">
   {% for img in imagenes %}
   <img class="miniatura"
-       src="{{ url_for('static', filename='productos_img/' + img) }}"
+       src="{{ img | product_image_src }}"
        alt=""
        onclick="volverImagenNormal(this.src)">
   {% endfor %}
@@ -1455,7 +1455,7 @@ body.ficha-tecnica-page {
         <div class="epc-despiece-zoom-inner" id="epcDespieceZoomInner">
           <div class="epc-despiece-imgbox" id="epcDespieceImgBox">
             <div style="position:relative;display:inline-block;max-width:100%;max-height:268px;line-height:0;">
-              <img id="epcDespieceImg" src="{{ despiece_imagen_url }}" alt="Despiece" style="max-width:100%;max-height:268px;height:auto;display:block;" />
+              <img id="epcDespieceImg" src="{{ despiece_imagen_url | product_image_src }}" alt="Despiece" style="max-width:100%;max-height:268px;height:auto;display:block;" />
               <div class="epc-despiece-hotspots" id="epcDespieceHotspots"></div>
             </div>
           </div>
@@ -1570,7 +1570,7 @@ body.ficha-tecnica-page {
       <span class="epc-despiece-label">Imagen del diagrama</span>
       <div id="epcDespiecePreviewBox" class="epc-despiece-preview">
         {% if despiece_imagen_url %}
-        <img id="epcDespiecePreviewImg" src="{{ despiece_imagen_url }}" alt="Vista previa del diagrama" />
+        <img id="epcDespiecePreviewImg" src="{{ despiece_imagen_url | product_image_src }}" alt="Vista previa del diagrama" />
         {% else %}
         <span id="epcDespiecePreviewPlaceholder" class="epc-despiece-preview__placeholder">Vista previa: sin imagen<br /><span style="font-size:10px;">Elegí un archivo para previsualizar</span></span>
         {% endif %}

@@ -45,6 +45,7 @@ from app.utils.phone_format import format_phone_display
 from app.utils.audit_metadata_filter import format_audit_metadata
 from app.utils.csrf import get_csrf_token, validate_csrf_request
 from app.utils.format_currency_cl import format_precio_publico_con_iva
+from app.utils.product_image_url import product_image_src
 from app.utils.http_security import apply_security_headers
 from app.utils.login_wall import is_logged_in_session, is_public_auth_route, safe_next_path
 from app.utils.permissions import ALL_PERMISSION_KEYS, DEFAULT_PERMISSIONS, get_user_permissions
@@ -155,6 +156,7 @@ def create_app():
     app.jinja_env.filters["format_telefono"] = format_phone_display
     app.jinja_env.filters["audit_metadata"] = format_audit_metadata
     app.jinja_env.filters["format_precio_publico_con_iva"] = format_precio_publico_con_iva
+    app.jinja_env.filters["product_image_src"] = product_image_src
     log_runtime_startup_info(app)
     from app.utils.load_env import log_sii_env_startup
 
