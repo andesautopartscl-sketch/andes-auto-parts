@@ -48,9 +48,11 @@ from ..utils.cloudinary_config import is_configured as cloudinary_is_configured
 from ..utils.cloudinary_config import upload_image as cloudinary_upload_image
 from ..utils.cloudinary_config import delete_image_by_url
 from ..utils.cloudinary_product_import import (
+    cloudinary_storage_key,
     codigo_from_filename,
     find_producto_by_image_code,
     link_cloudinary_url_to_producto,
+    producto_resolver_payload,
     resolver_producto_por_codigo,
     search_productos_for_assign,
 )
@@ -319,10 +321,12 @@ def _upload_product_image_file(
     codigo: str,
     suffix: str,
     allowed_exts: set[str] | None = None,
+    storage_codigo: str | None = None,
 ) -> str | None:
     """
     Sube imagen a Cloudinary (si está configurado) o disco local.
     Retorna URL https o ruta relativa productos_img/...
+    storage_codigo: nombre en Cloudinary/disco (p. ej. OEM); si no se indica, usa codigo.
     """
     if not file_obj or not getattr(file_obj, "filename", None):
         return None
@@ -331,8 +335,8 @@ def _upload_product_image_file(
     except ValueError:
         return None
 
-    codigo_safe = re.sub(r"[^a-zA-Z0-9_\-]", "_", (codigo or "").strip().upper()) or "producto"
-    target_name = f"{codigo_safe}{suffix}.{ext}"
+    stem = re.sub(r"[^a-zA-Z0-9_\-]", "_", (storage_codigo or codigo or "").strip().upper()) or "producto"
+    target_name = f"{stem}{suffix}.{ext}"
 
     if cloudinary_is_configured():
         import tempfile
@@ -3356,9 +3360,13 @@ def _procesar_subida_imagen_cloudinary(
         row["mensaje"] = "Sin código asignado"
         return row
 
+    producto, match_type = find_producto_by_image_code(sess, codigo)
+    storage_key = cloudinary_storage_key(producto, codigo)
+
     stored = _upload_product_image_file(
         file_obj,
         codigo=codigo,
+        storage_codigo=storage_key,
         suffix="",
         allowed_exts=ALLOWED_IMAGE_EXTENSIONS,
     )
@@ -3368,14 +3376,19 @@ def _procesar_subida_imagen_cloudinary(
         return row
 
     row["cloudinary_url"] = stored
-    producto = find_producto_by_image_code(sess, codigo)
+    row["cloudinary_name"] = storage_key
+    row["match_type"] = match_type
     if producto:
         link_cloudinary_url_to_producto(sess, producto, stored)
-        row["producto_codigo"] = (producto.codigo or "").strip().upper()
-        row["producto_descripcion"] = (producto.descripcion or "")[:120]
+        info = producto_resolver_payload(producto, match_type or "interno")
+        row["producto_codigo"] = info["codigo"]
+        row["producto_descripcion"] = info["descripcion"]
+        row["producto_oem"] = info.get("oem") or ""
+        row["display_codigo"] = info["display_codigo"]
         row["estado"] = "vinculado"
         row["mensaje"] = "Vinculado"
     else:
+        row["display_codigo"] = codigo
         row["estado"] = "sin_producto"
         row["mensaje"] = "Subida a Cloudinary; producto no encontrado en BD"
     return row
@@ -3529,9 +3542,7 @@ def importar_imagenes_cloudinary_resolver():
     sess = SessionDB()
     try:
         info = resolver_producto_por_codigo(sess, codigo)
-        if info:
-            return jsonify({"success": True, "found": True, **info})
-        return jsonify({"success": True, "found": False, "codigo": codigo})
+        return jsonify({"success": True, **info})
     finally:
         sess.close()
 
