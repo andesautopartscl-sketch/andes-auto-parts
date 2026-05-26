@@ -1,34 +1,60 @@
-from app.extensions import db
-from app.seguridad.models import Usuario, Rol
+import os
+
 from werkzeug.security import generate_password_hash
 
+from app.extensions import db
+from app.seguridad.models import Rol, Usuario
+
+
+def _admin_config():
+    return {
+        "username": (os.environ.get("ANDES_ADMIN_USERNAME") or "admin").strip(),
+        "password": (os.environ.get("ANDES_ADMIN_PASSWORD") or "1234").strip(),
+        "email": (os.environ.get("ANDES_ADMIN_EMAIL") or "admin@andesautoparts.cl").strip(),
+    }
+
+
 def crear_superadmin():
+    """
+    Crea el usuario SuperAdmin inicial si no existe el username configurado.
 
-    rol = Rol.query.filter_by(nombre="SuperAdmin").first()
+    Variables de entorno (Render / local):
+      ANDES_ADMIN_USERNAME  (default: admin)
+      ANDES_ADMIN_PASSWORD  (default: 1234)
+      ANDES_ADMIN_EMAIL     (default: admin@andesautoparts.cl)
+    """
+    cfg = _admin_config()
+    username = cfg["username"]
+    password = cfg["password"]
+    email = cfg["email"]
 
-    if not rol:
-        print("Rol SuperAdmin no encontrado")
+    if not username:
+        print("crear_superadmin: ANDES_ADMIN_USERNAME vacío — no se crea usuario.")
+        return
+    if not password:
+        print("crear_superadmin: ANDES_ADMIN_PASSWORD vacío — no se crea usuario.")
         return
 
-    # Evitar duplicar cuentas SuperAdmin si ya existe cualquiera (p. ej. albertadmin).
-    ya_super = (
-        Usuario.query.join(Rol, Rol.id == Usuario.rol_id)
-        .filter(Rol.nombre == "SuperAdmin")
-        .first()
-    )
-    if ya_super:
-        print("SuperAdmin ya existe (usuario:", ya_super.usuario, ") — no se crea otro.")
+    existing = Usuario.query.filter_by(usuario=username).first()
+    if existing:
+        print(f"crear_superadmin: usuario '{username}' ya existe — sin cambios.")
+        return
+
+    rol = Rol.query.filter_by(nombre="SuperAdmin").first()
+    if not rol:
+        print("crear_superadmin: rol SuperAdmin no encontrado.")
         return
 
     nuevo = Usuario(
-        nombre="Albert Castillo",
-        usuario="albert",
-        password_hash=generate_password_hash("123456"),
+        nombre="Administrador",
+        usuario=username,
+        correo=email or None,
+        password_hash=generate_password_hash(password),
         rol_id=rol.id,
-        activo=True
+        activo=True,
     )
 
     db.session.add(nuevo)
     db.session.commit()
 
-    print("SuperAdmin creado correctamente")
+    print(f"crear_superadmin: SuperAdmin '{username}' creado (correo: {email}).")
