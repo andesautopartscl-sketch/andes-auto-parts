@@ -1,3 +1,6 @@
+import hmac
+import os
+
 from flask import Blueprint, request, jsonify, render_template
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -308,3 +311,30 @@ def generar_hoja_etiquetas(codigo):
         barcode_img=barcode_base64,
         cantidad=cantidad
     )
+
+
+# ===============================
+# SYNC URLS CLOUDINARY (Render sin Shell)
+# ===============================
+
+
+@admin_bp.route("/sync-cloudinary-urls", methods=["GET"])
+def sync_cloudinary_urls():
+    """
+    Aplica scripts/sync_cloudinary_urls.sql en la BD de producción.
+    Protegido por ANDES_SYNC_TOKEN (query ?token=...). No requiere sesión.
+    """
+    expected = (os.environ.get("ANDES_SYNC_TOKEN") or "").strip()
+    if not expected:
+        return jsonify(ok=False, error="ANDES_SYNC_TOKEN no configurado en el servidor"), 503
+
+    provided = (request.args.get("token") or "").strip()
+    if not provided or not hmac.compare_digest(provided, expected):
+        return jsonify(ok=False, error="token inválido"), 403
+
+    from app.utils.cloudinary_url_sync import apply_cloudinary_url_sync
+
+    result = apply_cloudinary_url_sync()
+    body = result.to_dict()
+    status = 200 if result.ok else (500 if result.error else 207)
+    return jsonify(body), status

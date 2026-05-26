@@ -9,6 +9,7 @@ PUBLIC_AUTH_ENDPOINTS: frozenset[str] = frozenset(
         "auth.session_idle_status",
         "auth.password_reset_request",
         "seguridad.login",
+        "admin.sync_cloudinary_urls",
     }
 )
 _SAFE_NEXT_MAX = 2000
