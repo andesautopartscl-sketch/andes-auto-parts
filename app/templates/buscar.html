@@ -486,7 +486,7 @@ body.dark .pagination-info {
                         <span>{{ highlight_match(p.codigo, q) if q else p.codigo }}</span>
                     </span>
                 </td>
-                <td onclick="openDescModal(`{{ (p.descripcion or '')|replace('`','') }}`)">{{ highlight_match(p.descripcion, q) if q else p.descripcion }}</td>
+                <td class="td-desc" data-descripcion="{{ (p.descripcion or '')|e }}" onclick="openDescFromRow(this)">{{ highlight_match(p.descripcion, q) if q else p.descripcion }}</td>
                 <td>{{ p.modelo }}</td>
                 <td>{{ p.motor }}</td>
                 <td class="td-marca">{{ p.marca }}</td>
@@ -616,6 +616,10 @@ window.openFieldModal = function (title, text) {
         body.innerText = String(t);
     }
     document.getElementById("descModal").style.display = "flex";
+};
+window.openDescFromRow = function (el) {
+    if (!el) return;
+    openFieldModal("Descripción", el.dataset.descripcion || "");
 };
 window.openDescModal = function (text) {
     openFieldModal("Descripción", text);

@@ -192,6 +192,23 @@ def create_app():
     app = Flask(__name__)
     if not app.logger.handlers:
         logging.basicConfig(level=logging.INFO)
+
+    from app.extensions import limiter
+    from flask_limiter.errors import RateLimitExceeded
+
+    limiter.init_app(app)
+
+    @app.errorhandler(RateLimitExceeded)
+    def _handle_rate_limit_exceeded(_exc):
+        msg = "Demasiados intentos. Espera un momento."
+        if request.path.endswith("/login/password-reset-request"):
+            return jsonify(success=False, message=msg), 429
+        if request.endpoint == "auth.login" and request.method == "POST":
+            next_url = safe_next_path(
+                (request.values.get("next") or request.args.get("next") or "").strip() or None
+            )
+            return render_template("login.html", error=msg, next_url=next_url), 429
+        return jsonify(success=False, message=msg), 429
     # Render / reverse proxy: esquema y host correctos para cookies y redirects.
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
     app.jinja_env.filters["chile_datetime"] = chile_datetime_filter

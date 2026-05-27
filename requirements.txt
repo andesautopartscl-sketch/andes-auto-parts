@@ -15,6 +15,7 @@ google-api-python-client==2.111.0
 google-auth==2.27.0
 google-auth-httplib2
 google-auth-oauthlib
+Flask-Limiter
 
 # Optional (prod): only needed if deploying behind a WSGI server
 gunicorn

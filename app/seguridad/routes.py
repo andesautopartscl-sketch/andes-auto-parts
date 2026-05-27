@@ -479,8 +479,6 @@ def api_crear_usuario():
     try:
         data = request.get_json()
 
-        print("DATA RECIBIDA:", data)
-
         if not data:
             return jsonify({"success": False, "error": "Payload vacío"}), 400
 
@@ -588,7 +586,7 @@ def api_crear_usuario():
 
         db.session.commit()
 
-        print("USUARIO CREADO")
+        current_app.logger.info("Usuario creado: %s", nuevo.usuario)
 
         return jsonify({"success": True, "id": nuevo.id})
 

@@ -10,6 +10,7 @@ from app.models import Usuario as UsuarioLegacy, SessionDB
 from app.utils.csrf import rotate_csrf_token
 from app.utils.audit_log import record_audit_event
 from app.utils.login_wall import safe_next_path
+from app.extensions import limiter
 
 
 auth_bp = Blueprint("auth", __name__)
@@ -73,6 +74,7 @@ def home():
 # LOGIN
 # -----------------------------
 @auth_bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     error = None
     next_url = safe_next_path(
@@ -102,11 +104,10 @@ def login():
             # VALIDAR LOGIN (con bloqueo por intentos)
             # -----------------------------
             if user:
-                is_superadmin = bool(user.rol and user.rol.nombre == "SuperAdmin")
                 if not user.activo:
                     error = "Usuario inactivo. Contacta al administrador."
                     return render_template("login.html", error=error, next_url=next_url)
-                if user.bloqueado_seguridad and not is_superadmin:
+                if user.bloqueado_seguridad:
                     error = "Usuario bloqueado por seguridad. El administrador debe desbloquear tu cuenta."
                     return render_template("login.html", error=error, next_url=next_url)
 
@@ -157,17 +158,15 @@ def login():
 
             else:
                 if user:
-                    is_superadmin = bool(user.rol and user.rol.nombre == "SuperAdmin")
-                    if not is_superadmin:
-                        user.intentos_fallidos = int(user.intentos_fallidos or 0) + 1
-                        if user.intentos_fallidos >= 3:
-                            user.bloqueado_seguridad = True
-                            user.bloqueado_at = datetime.utcnow()
-                            user.en_linea = False
-                            db.session.commit()
-                            error = "Cuenta bloqueada por 3 intentos fallidos. Solicita desbloqueo al administrador."
-                            return render_template("login.html", error=error, next_url=next_url)
+                    user.intentos_fallidos = int(user.intentos_fallidos or 0) + 1
+                    if user.intentos_fallidos >= 3:
+                        user.bloqueado_seguridad = True
+                        user.bloqueado_at = datetime.utcnow()
+                        user.en_linea = False
                         db.session.commit()
+                        error = "Cuenta bloqueada por 3 intentos fallidos. Solicita desbloqueo al administrador."
+                        return render_template("login.html", error=error, next_url=next_url)
+                    db.session.commit()
 
                 if user is None:
                     # Legacy fallback: keep old 'usuarios' accounts accessible when present.
@@ -231,6 +230,7 @@ def session_idle_status():
 
 
 @auth_bp.route("/login/password-reset-request", methods=["POST"])
+@limiter.limit("3 per hour", methods=["POST"])
 def password_reset_request():
     payload = request.get_json(silent=True) if request.is_json else {}
     username = (request.form.get("username") or payload.get("username") or "").strip()

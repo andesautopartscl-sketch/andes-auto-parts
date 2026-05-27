@@ -44,7 +44,7 @@ def permission_required(permission_key: str):
                 return redirect(url_for("auth.login"))
 
             perms = get_user_permissions(session.get("user"), session.get("rol"))
-            if not perms.get(permission_key, True):
+            if not perms.get(permission_key, False):
                 if request.is_json or request.method == "POST":
                     return jsonify(success=False, message="Permiso denegado"), 403
                 return redirect(url_for("productos.buscar"))
