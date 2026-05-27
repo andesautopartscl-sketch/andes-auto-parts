@@ -3,7 +3,7 @@ from sqlalchemy import func, or_
 from . import seguridad_bp
 from .models import AuditEvent, Usuario, Rol, UsuarioPermiso, UsuarioPermisoDetalle
 from werkzeug.security import check_password_hash, generate_password_hash
-from app.extensions import db
+from app.extensions import db, limiter
 from app.utils.decorators import admin_required, login_required
 from app.seguridad.models import PasswordResetRequest
 from app.chat.models import ChatMessage
@@ -224,6 +224,7 @@ def _serialize_user_permission_payload(user: Usuario) -> dict:
 # LOGIN LIMPIO (FINAL)
 # -----------------------------
 @seguridad_bp.route("/login2", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     error = None
 
@@ -235,8 +236,7 @@ def login():
         user = Usuario.query.filter_by(usuario=username).first() if username else None
 
         if user and user.activo:
-            is_superadmin = bool(user.rol and user.rol.nombre == "SuperAdmin")
-            if user.bloqueado_seguridad and not is_superadmin:
+            if user.bloqueado_seguridad:
                 error = "Usuario bloqueado por seguridad. El administrador debe desbloquear tu cuenta."
                 return render_template("seguridad/login.html", error=error)
 
@@ -254,23 +254,21 @@ def login():
                 user.ultimo_ingreso = datetime.utcnow()
                 user.last_seen = datetime.utcnow()
                 user.en_linea = True
-                if not is_superadmin:
-                    user.intentos_fallidos = 0
-                    user.bloqueado_seguridad = False
-                    user.bloqueado_at = None
+                user.intentos_fallidos = 0
+                user.bloqueado_seguridad = False
+                user.bloqueado_at = None
                 db.session.commit()
 
                 return redirect(url_for("productos.buscar"))
-            if not is_superadmin:
-                user.intentos_fallidos = int(user.intentos_fallidos or 0) + 1
-                if user.intentos_fallidos >= 3:
-                    user.bloqueado_seguridad = True
-                    user.bloqueado_at = datetime.utcnow()
-                    user.en_linea = False
-                db.session.commit()
-                if user.bloqueado_seguridad:
-                    error = "Cuenta bloqueada por 3 intentos fallidos. Solicita desbloqueo al administrador."
-                    return render_template("seguridad/login.html", error=error)
+            user.intentos_fallidos = int(user.intentos_fallidos or 0) + 1
+            if user.intentos_fallidos >= 3:
+                user.bloqueado_seguridad = True
+                user.bloqueado_at = datetime.utcnow()
+                user.en_linea = False
+            db.session.commit()
+            if user.bloqueado_seguridad:
+                error = "Cuenta bloqueada por 3 intentos fallidos. Solicita desbloqueo al administrador."
+                return render_template("seguridad/login.html", error=error)
         else:
             pass
 
