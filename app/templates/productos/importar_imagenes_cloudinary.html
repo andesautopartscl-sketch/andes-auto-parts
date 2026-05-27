@@ -187,6 +187,24 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
     return stem.toUpperCase();
   }
 
+  function extFromMime(mime) {
+    var map = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
+    return map[mime] || 'jpg';
+  }
+
+  function ensureUploadFile(item) {
+    var name = (item.nombre || item.file.name || '').trim();
+    if (!/\.(jpe?g|png|webp|gif)$/i.test(name)) {
+      var ext = extFromMime(item.file.type || 'image/jpeg');
+      var base = (item.codigo || codigoFromFilename(name) || 'imagen').replace(/[^a-zA-Z0-9_\-]/g, '_');
+      name = base + '.' + ext;
+    }
+    item.nombre = name;
+    if (item.file.name === name) return item.file;
+    item.file = new File([item.file], name, { type: item.file.type || 'image/jpeg' });
+    return item.file;
+  }
+
   function isImageFile(file) {
     if (!file) return false;
     if (file.type && ALLOWED_MIME[file.type]) return true;
@@ -241,7 +259,7 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
         return '<span class="prod-warn">⚠️ Subida; sin producto en BD</span>';
       }
       if (item.uploadResult.estado === 'error') {
-        return '<span class="badge-err">❌ ' + (item.uploadResult.mensaje || 'Error') + '</span>';
+        return '<span class="badge-err">❌ ' + (item.uploadResult.mensaje || item.uploadResult.error || 'Error') + '</span>';
       }
     }
     if (item.producto && item.producto.found) {
@@ -276,7 +294,10 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
         '<div class="progress-bar"><span style="width:' + item.progress + '%"></span></div></div>';
     }
     if (item.status === 'done') return '<span class="badge-done">✅ Completado</span>';
-    if (item.status === 'error') return '<span class="badge-err">❌ Error</span>';
+    if (item.status === 'error') {
+      var errMsg = (item.uploadResult && (item.uploadResult.mensaje || item.uploadResult.error)) || 'Error';
+      return '<span class="badge-err">❌ ' + errMsg + '</span>';
+    }
     if (item.status === 'skipped') return '<span class="badge-skip">Omitido</span>';
     return '';
   }
@@ -378,6 +399,9 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
   function addFileToQueue(file, displayName) {
     if (!isImageFile(file)) return Promise.resolve();
     var nombre = displayName || file.name || 'imagen.jpg';
+    if (!/\.(jpe?g|png|webp|gif)$/i.test(nombre)) {
+      nombre = 'imagen.' + extFromMime(file.type || 'image/jpeg');
+    }
     var stem = codigoFromFilename(nombre);
     var preview = URL.createObjectURL(file);
     var item = {
@@ -543,10 +567,12 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
       item.status = 'uploading';
       item.progress = 5;
       refreshRow(item);
+      ensureUploadFile(item);
 
       var fd = new FormData();
       fd.append('imagen', item.file, item.nombre);
       fd.append('codigo', item.codigo);
+      fd.append('archivo_nombre', item.nombre);
 
       var xhr = new XMLHttpRequest();
       xhr.open('POST', subirUnoUrl, true);

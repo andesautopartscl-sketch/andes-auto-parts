@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
 from sqlalchemy import func, or_
+from werkzeug.utils import secure_filename
 
 from app.models import Producto, ProductoImagen
+
+logger = logging.getLogger(__name__)
+
+MIME_TO_EXT = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/pjpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/x-png": "png",
+}
 
 _MATCH_OEM = "oem"
 _MATCH_ALTERNATIVO = "alternativo"
@@ -261,6 +275,143 @@ def search_productos_for_assign(sess, q: str, *, limit: int = 12) -> list[dict]:
                 break
 
     return [_producto_search_item(p, mt) for p, mt in rows[:limit]]
+
+
+def ext_from_mime(mime: str | None) -> str:
+    m = (mime or "").split(";")[0].strip().lower()
+    return MIME_TO_EXT.get(m, "")
+
+
+def sniff_image_ext_from_stream(file_obj) -> str:
+    """Detecta extensión por magic bytes (útil si el archivo no trae nombre ni MIME fiable)."""
+    stream = getattr(file_obj, "stream", file_obj)
+    read_fn = getattr(stream, "read", None)
+    if not read_fn:
+        return ""
+    pos = stream.tell() if hasattr(stream, "tell") else None
+    try:
+        head = read_fn(16) or b""
+    except Exception:
+        return ""
+    finally:
+        if pos is not None and hasattr(stream, "seek"):
+            try:
+                stream.seek(pos)
+            except Exception:
+                pass
+    if len(head) >= 3 and head[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if len(head) >= 8 and head[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if len(head) >= 6 and head[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    if len(head) >= 12 and head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "webp"
+    return ""
+
+
+def resolve_upload_extension(
+    file_obj,
+    *,
+    fallback_filename: str = "",
+    allowed_exts: set[str] | None = None,
+) -> tuple[str, str]:
+    """
+    Resuelve extensión y nombre de archivo seguro para subir.
+    Imágenes arrastradas desde web suelen llegar sin extensión en el nombre.
+    """
+    allowed = allowed_exts or {"jpg", "jpeg", "png", "webp", "gif"}
+    raw_name = (
+        (getattr(file_obj, "filename", None) or "").strip()
+        or (fallback_filename or "").strip()
+        or "imagen.jpg"
+    )
+    safe = secure_filename(raw_name) or ""
+    ext = ""
+    if "." in safe:
+        ext = safe.rsplit(".", 1)[-1].lower()
+    if ext == "jpeg":
+        ext = "jpg"
+    if not ext or ext not in allowed:
+        ext = ext_from_mime(getattr(file_obj, "content_type", None) or getattr(file_obj, "mimetype", None))
+    if not ext or ext not in allowed:
+        ext = sniff_image_ext_from_stream(file_obj)
+    if not ext or ext not in allowed:
+        raise ValueError(
+            "Formato de imagen no permitido o no detectable. Use JPG, PNG, WEBP o GIF."
+        )
+    stem = Path(safe).stem if safe else ""
+    if not stem or stem.lower() in {"image", "img", "photo", "download", "blob", "imagen", "imagen_web"}:
+        stem = Path((fallback_filename or "imagen").strip()).stem or "imagen"
+        stem = re.sub(r"[^a-zA-Z0-9_\-]", "_", stem) or "imagen"
+    filename = f"{stem[:120]}.{ext}"
+    return ext, filename
+
+
+def describe_upload_file(file_obj, fallback_filename: str = "") -> dict:
+    """Metadatos para logging del archivo recibido."""
+    stream = getattr(file_obj, "stream", None)
+    size = None
+    if stream is not None and hasattr(stream, "seek") and hasattr(stream, "tell"):
+        try:
+            pos = stream.tell()
+            stream.seek(0, 2)
+            size = stream.tell()
+            stream.seek(pos)
+        except Exception:
+            size = None
+    return {
+        "type": type(file_obj).__name__,
+        "filename": getattr(file_obj, "filename", None),
+        "content_type": getattr(file_obj, "content_type", None) or getattr(file_obj, "mimetype", None),
+        "fallback_filename": fallback_filename or None,
+        "size_bytes": size,
+    }
+
+
+def download_image_from_url(url: str, *, max_bytes: int = 8 * 1024 * 1024) -> tuple[bytes, str, str]:
+    """Descarga bytes de imagen desde URL externa. Retorna (raw, ext, filename)."""
+    import mimetypes
+    import urllib.error
+    import urllib.request
+    from urllib.parse import unquote, urlparse
+
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (compatible; AndesAutoParts-ERP/1.0)",
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        },
+    )
+    logger.info("desde-url: descargando %s", url[:200])
+    with urllib.request.urlopen(req, timeout=25) as resp:
+        raw = resp.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            raise ValueError("Imagen demasiado grande.")
+        ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+
+    ext = ext_from_mime(ctype)
+    if not ext:
+        guess = mimetypes.guess_extension(ctype or "") or ""
+        ext = guess.lstrip(".").lower()
+        if ext == "jpeg":
+            ext = "jpg"
+    if not ext:
+        class _ByteStream:
+            def read(self, n=16):
+                return raw[:n]
+
+        ext = sniff_image_ext_from_stream(_ByteStream()) or ""
+    if ext not in {"jpg", "jpeg", "png", "webp", "gif"}:
+        raise ValueError(f"Formato no permitido (Content-Type: {ctype or 'desconocido'}).")
+
+    path = unquote(urlparse(url).path or "")
+    stem = Path(path).stem.strip() if path else "imagen_web"
+    if not stem or stem.lower() in {"image", "img", "photo", "download", "blob"}:
+        stem = "imagen_web"
+    filename = f"{stem[:80]}.{ext}"
+    logger.info("desde-url: ok bytes=%s ext=%s filename=%s", len(raw), ext, filename)
+    return raw, ext, filename
 
 
 def resolver_producto_por_codigo(sess, code: str) -> dict:

@@ -50,9 +50,12 @@ from ..utils.cloudinary_config import delete_image_by_url
 from ..utils.cloudinary_product_import import (
     cloudinary_storage_key,
     codigo_from_filename,
+    describe_upload_file,
+    download_image_from_url,
     find_producto_by_image_code,
     link_cloudinary_url_to_producto,
     producto_resolver_payload,
+    resolve_upload_extension,
     resolver_producto_por_codigo,
     search_productos_for_assign,
 )
@@ -322,18 +325,34 @@ def _upload_product_image_file(
     suffix: str,
     allowed_exts: set[str] | None = None,
     storage_codigo: str | None = None,
+    archivo_nombre: str = "",
 ) -> str | None:
     """
     Sube imagen a Cloudinary (si está configurado) o disco local.
     Retorna URL https o ruta relativa productos_img/...
     storage_codigo: nombre en Cloudinary/disco (p. ej. OEM); si no se indica, usa codigo.
     """
-    if not file_obj or not getattr(file_obj, "filename", None):
-        return None
-    try:
-        ext = _validate_image_upload(file_obj, allowed_exts=allowed_exts or {"jpg", "jpeg", "png", "webp"})
-    except ValueError:
-        return None
+    if not file_obj:
+        raise ValueError("No se recibió archivo de imagen")
+    allowed = allowed_exts or ALLOWED_IMAGE_EXTENSIONS
+    ext, _resolved_name = resolve_upload_extension(
+        file_obj,
+        fallback_filename=archivo_nombre or getattr(file_obj, "filename", None) or "",
+        allowed_exts=allowed,
+    )
+    # Validar tamaño (reutiliza lógica existente con nombre ya resuelto)
+    class _NamedProxy:
+        def __init__(self, inner, filename: str):
+            self._inner = inner
+            self.filename = filename
+            self.stream = getattr(inner, "stream", inner)
+            self.content_type = getattr(inner, "content_type", None) or getattr(inner, "mimetype", None)
+
+        def save(self, dst):
+            return self._inner.save(dst)
+
+    proxy = _NamedProxy(file_obj, _resolved_name)
+    _validate_image_upload(proxy, allowed_exts=allowed)
 
     stem = re.sub(r"[^a-zA-Z0-9_\-]", "_", (storage_codigo or codigo or "").strip().upper()) or "producto"
     target_name = f"{stem}{suffix}.{ext}"
@@ -353,7 +372,13 @@ def _upload_product_image_file(
             url = normalize_stored_image_ref(result.get("url"))
             if processed is not None and processed != tmp_path and processed.is_file():
                 processed.unlink(missing_ok=True)
-            return url or None
+            if not url:
+                raise ValueError("Cloudinary no devolvió URL de la imagen")
+            return url
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise ValueError(f"Error al subir a Cloudinary: {exc}") from exc
         finally:
             if tmp_path and tmp_path.is_file():
                 tmp_path.unlink(missing_ok=True)
@@ -3363,16 +3388,26 @@ def _procesar_subida_imagen_cloudinary(
     producto, match_type = find_producto_by_image_code(sess, codigo)
     storage_key = cloudinary_storage_key(producto, codigo)
 
-    stored = _upload_product_image_file(
-        file_obj,
-        codigo=codigo,
-        storage_codigo=storage_key,
-        suffix="",
-        allowed_exts=ALLOWED_IMAGE_EXTENSIONS,
-    )
+    try:
+        stored = _upload_product_image_file(
+            file_obj,
+            codigo=codigo,
+            storage_codigo=storage_key,
+            suffix="",
+            allowed_exts=ALLOWED_IMAGE_EXTENSIONS,
+            archivo_nombre=fname,
+        )
+    except ValueError as exc:
+        row["estado"] = "error"
+        row["mensaje"] = str(exc)
+        return row
+    except Exception as exc:
+        row["estado"] = "error"
+        row["mensaje"] = f"Error al subir: {exc}"
+        return row
     if not stored:
         row["estado"] = "error"
-        row["mensaje"] = "No se pudo subir (formato o Cloudinary)"
+        row["mensaje"] = "Cloudinary no devolvió URL"
         return row
 
     row["cloudinary_url"] = stored
@@ -3490,6 +3525,10 @@ def importar_imagenes_cloudinary_subir():
 @productos_bp.route("/productos/importar-imagenes-cloudinary/subir-uno", methods=["POST"])
 @admin_required
 def importar_imagenes_cloudinary_subir_uno():
+    import logging
+    import traceback
+
+    log = logging.getLogger(__name__)
     denied = _require_productos_crear_editar_json()
     if denied:
         return denied
@@ -3500,12 +3539,28 @@ def importar_imagenes_cloudinary_subir_uno():
 
     file_obj = request.files.get("imagen") or request.files.get("file")
     codigo = (request.form.get("codigo") or "").strip().upper()
-    if not file_obj or not getattr(file_obj, "filename", None):
-        return jsonify({"success": False, "error": "Falta archivo de imagen."}), 400
+    archivo_nombre = (request.form.get("archivo_nombre") or "").strip()
+
+    log.info(
+        "subir-uno: content_type=%s codigo=%s archivo_nombre=%s files=%s",
+        request.content_type,
+        codigo,
+        archivo_nombre,
+        list(request.files.keys()),
+    )
+    if file_obj:
+        log.info("subir-uno: file_meta=%s", describe_upload_file(file_obj, archivo_nombre))
+
+    if not file_obj:
+        return jsonify({"success": False, "error": "Falta archivo de imagen en la petición."}), 400
     if not codigo:
         return jsonify({"success": False, "error": "Falta código de producto."}), 400
 
-    fname = (file_obj.filename or "imagen.jpg").strip()
+    fname = (
+        archivo_nombre
+        or (getattr(file_obj, "filename", None) or "").strip()
+        or "imagen.jpg"
+    )
     sess = SessionDB()
     try:
         row = _procesar_subida_imagen_cloudinary(
@@ -3522,10 +3577,21 @@ def importar_imagenes_cloudinary_subir_uno():
                 metadata={"cloudinary_image_upload": True, "archivo": fname[:120]},
             )
         sess.commit()
-        return jsonify({"success": row.get("estado") != "error", **row})
+        ok = row.get("estado") != "error"
+        if not ok:
+            log.warning("subir-uno: fallo estado=%s mensaje=%s", row.get("estado"), row.get("mensaje"))
+        return jsonify({"success": ok, **row})
     except Exception as exc:
         sess.rollback()
-        return jsonify({"success": False, "error": str(exc)}), 500
+        log.error("subir-uno: excepción codigo=%s archivo=%s\n%s", codigo, fname, traceback.format_exc())
+        return jsonify(
+            {
+                "success": False,
+                "error": str(exc),
+                "estado": "error",
+                "mensaje": str(exc),
+            }
+        ), 500
     finally:
         sess.close()
 
@@ -3551,6 +3617,11 @@ def importar_imagenes_cloudinary_resolver():
 @admin_required
 def importar_imagenes_cloudinary_desde_url():
     """Obtiene imagen desde URL (drag desde web) sin descargar en el cliente."""
+    import base64
+    import logging
+    import traceback
+
+    log = logging.getLogger(__name__)
     denied = _require_productos_crear_editar_json()
     if denied:
         return denied
@@ -3559,52 +3630,23 @@ def importar_imagenes_cloudinary_desde_url():
     if not url.lower().startswith(("http://", "https://")):
         return jsonify({"success": False, "error": "URL inválida."}), 400
 
-    import base64
-    import mimetypes
-    import urllib.error
-    import urllib.request
-    from urllib.parse import unquote, urlparse
-
-    req = urllib.request.Request(
-        url,
-        headers={"User-Agent": "AndesAutoParts-ERP/1.0"},
-    )
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            raw = resp.read(MAX_IMAGE_UPLOAD_BYTES + 1)
-            if len(raw) > MAX_IMAGE_UPLOAD_BYTES:
-                return jsonify({"success": False, "error": "Imagen demasiado grande."}), 413
-            ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-        return jsonify({"success": False, "error": f"No se pudo obtener la imagen: {exc}"}), 400
-
-    ext_map = {
-        "image/jpeg": "jpg",
-        "image/png": "png",
-        "image/webp": "webp",
-        "image/gif": "gif",
-    }
-    ext = ext_map.get(ctype)
-    if not ext:
-        guess = mimetypes.guess_extension(ctype or "") or ""
-        ext = guess.lstrip(".") if guess else ""
-    if ext not in ALLOWED_IMAGE_EXTENSIONS:
-        return jsonify({"success": False, "error": "Formato no permitido (use JPG, PNG, WEBP o GIF)."}), 400
-
-    path = unquote(urlparse(url).path or "")
-    stem = Path(path).stem.strip() if path else "imagen_web"
-    if not stem or stem.lower() in {"image", "img", "photo", "download"}:
-        stem = "imagen_web"
-    filename = f"{stem[:80]}.{ext}"
-    b64 = base64.b64encode(raw).decode("ascii")
-    return jsonify(
-        {
-            "success": True,
-            "filename": filename,
-            "mime": ctype or f"image/{ext}",
-            "data_base64": b64,
-        }
-    )
+        raw, ext, filename = download_image_from_url(url, max_bytes=MAX_IMAGE_UPLOAD_BYTES)
+        b64 = base64.b64encode(raw).decode("ascii")
+        return jsonify(
+            {
+                "success": True,
+                "filename": filename,
+                "mime": f"image/{ext}",
+                "data_base64": b64,
+            }
+        )
+    except ValueError as exc:
+        log.warning("desde-url: rechazado url=%s error=%s", url[:120], exc)
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception as exc:
+        log.error("desde-url: excepción url=%s\n%s", url[:120], traceback.format_exc())
+        return jsonify({"success": False, "error": str(exc)}), 500
 
 
 @productos_bp.route("/productos/importar-imagenes-cloudinary/asignar", methods=["POST"])
