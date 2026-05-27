@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, render_template, jsonify
+from flask import Blueprint, render_template, jsonify, session
 from sqlalchemy import func
 
 from app.extensions import db
 from app.utils.decorators import login_required
+from app.utils.finance_visibility import redact_dashboard_sales, user_can_view_finanzas
 from app.ventas.models import DocumentoVenta, DocumentoVentaItem, Cliente
 from app.bodega.models import ProductoVarianteStock
 
@@ -150,6 +151,20 @@ def index():
     top_clientes = _top_clientes(10)
     stock_critico = _stock_critico(threshold=3, limit=15)
     chart_data = _ventas_ultimos_dias(30)
+    puede_ver_finanzas = user_can_view_finanzas(session.get("user"), session.get("rol"))
+    if not puede_ver_finanzas:
+        redacted = redact_dashboard_sales({
+            "ventas_hoy": ventas_hoy,
+            "ventas_mes": ventas_mes,
+            "chart_data": chart_data,
+            "top_clientes": top_clientes,
+            "top_productos": top_productos,
+        })
+        ventas_hoy = redacted["ventas_hoy"]
+        ventas_mes = redacted["ventas_mes"]
+        chart_data = redacted["chart_data"]
+        top_clientes = redacted["top_clientes"]
+        top_productos = redacted["top_productos"]
 
     return render_template(
         "dashboard/index.html",
@@ -161,6 +176,7 @@ def index():
         top_clientes=top_clientes,
         stock_critico=stock_critico,
         chart_data=chart_data,
+        puede_ver_finanzas=puede_ver_finanzas,
         active_page="dashboard",
     )
 
@@ -170,11 +186,14 @@ def index():
 def api_data():
     today = date.today()
     first_of_month = today.replace(day=1)
-    return jsonify({
+    payload = {
         "ventas_hoy": _ventas_periodo(today, today),
         "ventas_mes": _ventas_periodo(first_of_month, today),
         "top_productos": _top_productos(5),
         "top_clientes": _top_clientes(5),
         "stock_critico": _stock_critico(3, 10),
         "chart_data": _ventas_ultimos_dias(30),
-    })
+    }
+    if not user_can_view_finanzas(session.get("user"), session.get("rol")):
+        payload = redact_dashboard_sales(payload)
+    return jsonify(payload)

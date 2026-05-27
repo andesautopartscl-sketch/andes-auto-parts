@@ -132,6 +132,7 @@
       <div class="k">Venta total</div>
       <div class="v">${{ '{:,.0f}'.format(total_venta).replace(',', '.') }}</div>
     </div>
+    {% if puede_ver_finanzas %}
     <div class="um-card">
       <div class="k">Utilidad estimada</div>
       <div class="v">${{ '{:,.0f}'.format(total_utilidad).replace(',', '.') }}</div>
@@ -140,6 +141,16 @@
       <div class="k">Productos con costo ref.</div>
       <div class="v">{{ cobertura_costo }} / {{ productos|length }}</div>
     </div>
+    {% else %}
+    <div class="um-card">
+      <div class="k">Utilidad estimada</div>
+      <div class="v um-muted">—</div>
+    </div>
+    <div class="um-card">
+      <div class="k">Productos con costo ref.</div>
+      <div class="v um-muted">—</div>
+    </div>
+    {% endif %}
   </div>
 
   <div class="informes-table-wrap">
@@ -151,11 +162,15 @@
           <th>Descripción</th>
           <th>Origen</th>
           <th class="text-right">Unidades</th>
+          {% if puede_ver_finanzas %}
           <th class="text-right">Costo unit. ref.</th>
+          {% endif %}
           <th class="text-right">Venta unit. prom.</th>
+          {% if puede_ver_finanzas %}
           <th class="text-right">Utilidad unit.</th>
           <th class="text-right">Utilidad total</th>
           <th class="text-right">Margen %</th>
+          {% endif %}
           <th class="text-right">Venta total</th>
         </tr>
       </thead>
@@ -167,6 +182,7 @@
           <td>{{ p.descripcion[:60] }}</td>
           <td>{{ 'Importación' if p.origen_compra == 'importacion' else 'Nacional' }}</td>
           <td class="text-right">{{ p.qty }}</td>
+          {% if puede_ver_finanzas %}
           <td class="text-right">
             {% if p.costo_unit_ref is not none %}
               ${{ '{:,.2f}'.format(p.costo_unit_ref).replace(',', 'X').replace('.', ',').replace('X', '.') }}
@@ -174,7 +190,9 @@
               <span class="um-muted">—</span>
             {% endif %}
           </td>
+          {% endif %}
           <td class="text-right">${{ '{:,.2f}'.format(p.venta_unit).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+          {% if puede_ver_finanzas %}
           <td class="text-right">
             {% if p.utilidad_unit is not none %}
               ${{ '{:,.2f}'.format(p.utilidad_unit).replace(',', 'X').replace('.', ',').replace('X', '.') }}
@@ -196,10 +214,11 @@
               <span class="um-muted">—</span>
             {% endif %}
           </td>
+          {% endif %}
           <td class="text-right total-cell">${{ '{:,.0f}'.format(p.venta).replace(',', '.') }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="11" class="empty-row">Sin datos para los filtros seleccionados.</td></tr>
+        <tr><td colspan="{{ 11 if puede_ver_finanzas else 7 }}" class="empty-row">Sin datos para los filtros seleccionados.</td></tr>
         {% endfor %}
       </tbody>
     </table>

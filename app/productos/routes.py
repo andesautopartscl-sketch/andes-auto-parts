@@ -35,6 +35,7 @@ from app.bodega.models import (
 )
 from ..utils.decorators import login_required, admin_required
 from app.utils.permissions import DEFAULT_PERMISSIONS, get_user_permissions
+from app.utils.finance_visibility import redact_compra_historial_row, user_can_view_finanzas
 from ..import_excel import import_products_from_excel
 from ..utils.product_audit import build_diffs, register_product_audit, resolve_producto_audit_action_filter
 from ..utils.variante_comercial import merge_ingreso_ref_variante_overrides
@@ -2313,6 +2314,10 @@ def historial_producto(codigo):
                 }
             )
 
+        puede_ver_finanzas = user_can_view_finanzas(session.get("user"), session.get("rol"))
+        if not puede_ver_finanzas:
+            compras = [redact_compra_historial_row(c) for c in compras]
+
         return render_template(
             "productos/historial_producto.html",
             producto=producto,
@@ -2321,6 +2326,7 @@ def historial_producto(codigo):
             compras=compras,
             filtro=filtro,
             solo_mov=solo_mov,
+            puede_ver_finanzas=puede_ver_finanzas,
             online_users=_online_users(),
             active_page="productos_buscar",
             _partial=_wants_modal_fragment(),

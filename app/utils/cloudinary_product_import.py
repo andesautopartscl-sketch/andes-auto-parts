@@ -369,12 +369,17 @@ def describe_upload_file(file_obj, fallback_filename: str = "") -> dict:
     }
 
 
-def download_image_from_url(url: str, *, max_bytes: int = 8 * 1024 * 1024) -> tuple[bytes, str, str]:
+def download_image_from_url(url: str, *, max_bytes: int = 10 * 1024 * 1024) -> tuple[bytes, str, str]:
     """Descarga bytes de imagen desde URL externa. Retorna (raw, ext, filename)."""
     import mimetypes
     import urllib.error
     import urllib.request
     from urllib.parse import unquote, urlparse
+
+    from app.utils.url_safety import is_safe_external_url
+
+    if not is_safe_external_url(url):
+        raise ValueError("URL no permitida: apunta a red interna")
 
     req = urllib.request.Request(
         url,
@@ -384,10 +389,18 @@ def download_image_from_url(url: str, *, max_bytes: int = 8 * 1024 * 1024) -> tu
         },
     )
     logger.info("desde-url: descargando %s", url[:200])
-    with urllib.request.urlopen(req, timeout=25) as resp:
-        raw = resp.read(max_bytes + 1)
-        if len(raw) > max_bytes:
-            raise ValueError("Imagen demasiado grande.")
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = resp.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise ValueError("Imagen demasiado grande.")
+            chunks.append(chunk)
+        raw = b"".join(chunks)
         ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
 
     ext = ext_from_mime(ctype)

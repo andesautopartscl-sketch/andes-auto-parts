@@ -4,11 +4,15 @@ import csv
 import io
 from datetime import date, timedelta
 
-from flask import Blueprint, render_template, request, Response
+from flask import Blueprint, render_template, request, Response, session
 from sqlalchemy import func
 
 from app.extensions import db
 from app.utils.decorators import login_required
+from app.utils.finance_visibility import (
+    redact_utilidad_margen_row,
+    user_can_view_finanzas,
+)
 from app.ventas.models import DocumentoVenta, DocumentoVentaItem, Cliente, Proveedor
 from app.bodega.models import MovimientoStock, ProductoVarianteStock, IngresoDocumentoItem
 
@@ -252,6 +256,13 @@ def utilidad_margen():
         (total_utilidad / total_venta * 100.0) if total_venta and total_venta > 0 else None
     )
 
+    puede_ver_finanzas = user_can_view_finanzas(session.get("user"), session.get("rol"))
+    if not puede_ver_finanzas:
+        productos = [redact_utilidad_margen_row(p) for p in productos]
+        total_utilidad = 0
+        cobertura_costo = 0
+        margen_sobre_venta_pct = None
+
     if export in {"csv", "excel"}:
         headers = [
             "Codigo",
@@ -265,42 +276,75 @@ def utilidad_margen():
             "Margen pct",
             "Venta total",
         ]
+        if not puede_ver_finanzas:
+            headers = [
+                "Codigo",
+                "Descripcion",
+                "Origen",
+                "Unidades",
+                "Venta unit prom",
+                "Venta total",
+            ]
         if export == "csv":
             sio = io.StringIO()
             writer = csv.writer(sio)
             writer.writerow(headers)
             for p in productos:
-                writer.writerow([
-                    p["codigo"],
-                    p["descripcion"],
-                    p["origen_compra"],
-                    p["qty"],
-                    "" if p["costo_unit_ref"] is None else round(float(p["costo_unit_ref"]), 4),
-                    round(float(p["venta_unit"] or 0), 4),
-                    "" if p["utilidad_unit"] is None else round(float(p["utilidad_unit"]), 4),
-                    "" if p["utilidad_total"] is None else round(float(p["utilidad_total"]), 4),
-                    "" if p["margen_pct"] is None else round(float(p["margen_pct"]), 4),
-                    round(float(p["venta"] or 0), 4),
-                ])
+                if puede_ver_finanzas:
+                    writer.writerow([
+                        p["codigo"],
+                        p["descripcion"],
+                        p["origen_compra"],
+                        p["qty"],
+                        "" if p["costo_unit_ref"] is None else round(float(p["costo_unit_ref"]), 4),
+                        round(float(p["venta_unit"] or 0), 4),
+                        "" if p["utilidad_unit"] is None else round(float(p["utilidad_unit"]), 4),
+                        "" if p["utilidad_total"] is None else round(float(p["utilidad_total"]), 4),
+                        "" if p["margen_pct"] is None else round(float(p["margen_pct"]), 4),
+                        round(float(p["venta"] or 0), 4),
+                    ])
+                else:
+                    writer.writerow([
+                        p["codigo"],
+                        p["descripcion"],
+                        p["origen_compra"],
+                        p["qty"],
+                        round(float(p["venta_unit"] or 0), 4),
+                        round(float(p["venta"] or 0), 4),
+                    ])
             writer.writerow([])
-            writer.writerow([
-                "TOTALES",
-                "",
-                "",
-                total_unidades,
-                "",
-                "",
-                "",
-                round(float(total_utilidad), 2),
-                round(margen_sobre_venta_pct, 2) if margen_sobre_venta_pct is not None else "",
-                round(float(total_venta), 2),
-            ])
+            if puede_ver_finanzas:
+                writer.writerow([
+                    "TOTALES",
+                    "",
+                    "",
+                    total_unidades,
+                    "",
+                    "",
+                    "",
+                    round(float(total_utilidad), 2),
+                    round(margen_sobre_venta_pct, 2) if margen_sobre_venta_pct is not None else "",
+                    round(float(total_venta), 2),
+                ])
+            else:
+                writer.writerow([
+                    "TOTALES",
+                    "",
+                    "",
+                    total_unidades,
+                    "",
+                    round(float(total_venta), 2),
+                ])
             writer.writerow([
                 "Resumen",
                 (
                     f"Periodo {desde_str} a {hasta_str}; "
                     f"unidades {total_unidades}; "
-                    f"productos con costo ref {cobertura_costo} de {len(productos)}"
+                    + (
+                        f"productos con costo ref {cobertura_costo} de {len(productos)}"
+                        if puede_ver_finanzas
+                        else "sin datos de costo/margen"
+                    )
                 ),
                 "", "", "", "", "", "", "", "",
             ])
@@ -313,37 +357,61 @@ def utilidad_margen():
 
         lines = ["\t".join(headers)]
         for p in productos:
-            lines.append("\t".join([
-                str(p["codigo"] or ""),
-                str(p["descripcion"] or ""),
-                str(p["origen_compra"] or ""),
-                str(p["qty"] or 0),
-                "" if p["costo_unit_ref"] is None else str(round(float(p["costo_unit_ref"]), 4)),
-                str(round(float(p["venta_unit"] or 0), 4)),
-                "" if p["utilidad_unit"] is None else str(round(float(p["utilidad_unit"]), 4)),
-                "" if p["utilidad_total"] is None else str(round(float(p["utilidad_total"]), 4)),
-                "" if p["margen_pct"] is None else str(round(float(p["margen_pct"]), 4)),
-                str(round(float(p["venta"] or 0), 4)),
-            ]))
+            if puede_ver_finanzas:
+                lines.append("\t".join([
+                    str(p["codigo"] or ""),
+                    str(p["descripcion"] or ""),
+                    str(p["origen_compra"] or ""),
+                    str(p["qty"] or 0),
+                    "" if p["costo_unit_ref"] is None else str(round(float(p["costo_unit_ref"]), 4)),
+                    str(round(float(p["venta_unit"] or 0), 4)),
+                    "" if p["utilidad_unit"] is None else str(round(float(p["utilidad_unit"]), 4)),
+                    "" if p["utilidad_total"] is None else str(round(float(p["utilidad_total"]), 4)),
+                    "" if p["margen_pct"] is None else str(round(float(p["margen_pct"]), 4)),
+                    str(round(float(p["venta"] or 0), 4)),
+                ]))
+            else:
+                lines.append("\t".join([
+                    str(p["codigo"] or ""),
+                    str(p["descripcion"] or ""),
+                    str(p["origen_compra"] or ""),
+                    str(p["qty"] or 0),
+                    str(round(float(p["venta_unit"] or 0), 4)),
+                    str(round(float(p["venta"] or 0), 4)),
+                ]))
         lines.append("")
-        lines.append("\t".join([
-            "TOTALES",
-            "",
-            "",
-            str(total_unidades),
-            "",
-            "",
-            "",
-            str(round(float(total_utilidad), 2)),
-            "" if margen_sobre_venta_pct is None else str(round(margen_sobre_venta_pct, 2)),
-            str(round(float(total_venta), 2)),
-        ]))
+        if puede_ver_finanzas:
+            lines.append("\t".join([
+                "TOTALES",
+                "",
+                "",
+                str(total_unidades),
+                "",
+                "",
+                "",
+                str(round(float(total_utilidad), 2)),
+                "" if margen_sobre_venta_pct is None else str(round(margen_sobre_venta_pct, 2)),
+                str(round(float(total_venta), 2)),
+            ]))
+        else:
+            lines.append("\t".join([
+                "TOTALES",
+                "",
+                "",
+                str(total_unidades),
+                "",
+                str(round(float(total_venta), 2)),
+            ]))
         lines.append("\t".join([
             "Resumen",
             (
                 f"Periodo {desde_str} a {hasta_str}; "
                 f"unidades {total_unidades}; "
-                f"productos con costo ref {cobertura_costo} de {len(productos)}"
+                + (
+                    f"productos con costo ref {cobertura_costo} de {len(productos)}"
+                    if puede_ver_finanzas
+                    else "sin datos de costo/margen"
+                )
             ),
             "", "", "", "", "", "", "", "",
         ]))
@@ -360,6 +428,7 @@ def utilidad_margen():
         total_venta=total_venta,
         total_utilidad=total_utilidad,
         cobertura_costo=cobertura_costo,
+        puede_ver_finanzas=puede_ver_finanzas,
         filtros={
             "desde": desde_str,
             "hasta": hasta_str,

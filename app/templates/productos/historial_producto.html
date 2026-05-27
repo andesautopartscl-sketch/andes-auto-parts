@@ -254,9 +254,11 @@
                                 <th>Doc</th>
                                 <th>Marca</th>
                                 <th>Cant.</th>
+                                {% if puede_ver_finanzas %}
                                 <th>Costo</th>
                                 <th>P. neto</th>
                                 <th>Total neto</th>
+                                {% endif %}
                             </tr>
                         </thead>
                         <tbody id="historialComprasBody">
@@ -275,9 +277,11 @@
                                 </td>
                                 <td>{{ c.marca }}</td>
                                 <td>{{ c.cantidad }}</td>
+                                {% if puede_ver_finanzas %}
                                 <td>${{ '{:,.2f}'.format(c.costo_unitario).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                                 <td>{% if c.precio_venta_neto %}${{ '{:,.2f}'.format(c.precio_venta_neto).replace(',', 'X').replace('.', ',').replace('X', '.') }}{% else %}-{% endif %}</td>
                                 <td>${{ '{:,.2f}'.format(c.total_neto).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                {% endif %}
                             </tr>
                             {% endfor %}
                         </tbody>
