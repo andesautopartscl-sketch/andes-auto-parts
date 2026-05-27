@@ -79,7 +79,7 @@ def _sqlite_pragmas_on_connect(dbapi_connection, _connection_record):
 
 
 def _init_gdrive_backup_scheduler(app: Flask) -> None:
-    """Programa backup diario a Google Drive (02:00 hora Chile)."""
+    """Programa backup diario a Google Drive (10:00 hora Chile)."""
     folder_id = (os.environ.get("GDRIVE_FOLDER_ID") or "").strip()
     if not folder_id:
         app.logger.info("Backup GDrive: GDRIVE_FOLDER_ID vacío; scheduler no iniciado.")
@@ -107,7 +107,7 @@ def _init_gdrive_backup_scheduler(app: Flask) -> None:
         scheduler = BackgroundScheduler(timezone=CHILE_TZ)
         scheduler.add_job(
             _scheduled_backup,
-            trigger=CronTrigger(hour=2, minute=0),
+            trigger=CronTrigger(hour=10, minute=0),
             id="gdrive_daily_backup",
             replace_existing=True,
             max_instances=1,
@@ -115,7 +115,7 @@ def _init_gdrive_backup_scheduler(app: Flask) -> None:
         )
         scheduler.start()
         atexit.register(lambda: scheduler.shutdown(wait=False))
-        app.logger.info("Backup GDrive: programado diariamente a las 02:00 (America/Santiago).")
+        app.logger.info("Backup GDrive: programado diariamente a las 10:00 (America/Santiago).")
     except Exception as exc:
         app.logger.warning("No se pudo iniciar scheduler de backup GDrive: %s", exc)
 
