@@ -8,7 +8,7 @@ python-dotenv
 python-barcode
 qrcode
 Pillow
-cloudinary
+cloudinary==1.44.2
 requests
 
 # Optional (prod): only needed if deploying behind a WSGI server

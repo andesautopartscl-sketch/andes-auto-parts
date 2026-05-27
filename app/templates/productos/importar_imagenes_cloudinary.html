@@ -51,6 +51,10 @@ th { background:#1e3a8a; color:#fff; font-size:11px; position:sticky; top:0; z-i
   transition:width .2s ease;
 }
 .progress-label { font-size:10px; color:#64748b; }
+.progress-error {
+  font-size:10px; color:#991b1b; line-height:1.35; max-width:280px;
+  max-height:120px; overflow:auto; white-space:pre-wrap; word-break:break-word;
+}
 .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px; }
 .msg-inline { padding:10px 14px; border-radius:10px; font-size:13px; display:none; margin-top:10px; }
 .msg-inline.ok { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
@@ -227,6 +231,28 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
     }).then(function (r) { return r.json(); });
   }
 
+  function escapeHtml(text) {
+    return String(text || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function formatServerError(j, fallback) {
+    if (!j || typeof j !== 'object') return fallback || 'Error al subir';
+    var parts = [];
+    if (j.mensaje) parts.push(j.mensaje);
+    else if (j.message) parts.push(j.message);
+    else if (j.error) parts.push(j.error);
+    if (j.traceback) parts.push(j.traceback);
+    return parts.join('\n\n') || fallback || 'Error al subir';
+  }
+
+  function progressErrorHtml(j) {
+    return '<div class="progress-error">❌ ' + escapeHtml(formatServerError(j)) + '</div>';
+  }
+
   function formatProductoOk(prod) {
     var code = (prod && (prod.display_codigo || prod.oem || prod.codigo)) || '';
     var desc = (prod && prod.descripcion) ? ' — ' + prod.descripcion : '';
@@ -259,7 +285,7 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
         return '<span class="prod-warn">⚠️ Subida; sin producto en BD</span>';
       }
       if (item.uploadResult.estado === 'error') {
-        return '<span class="badge-err">❌ ' + (item.uploadResult.mensaje || item.uploadResult.error || 'Error') + '</span>';
+        return progressErrorHtml(item.uploadResult);
       }
     }
     if (item.producto && item.producto.found) {
@@ -295,8 +321,7 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
     }
     if (item.status === 'done') return '<span class="badge-done">✅ Completado</span>';
     if (item.status === 'error') {
-      var errMsg = (item.uploadResult && (item.uploadResult.mensaje || item.uploadResult.error)) || 'Error';
-      return '<span class="badge-err">❌ ' + errMsg + '</span>';
+      return progressErrorHtml(item.uploadResult || { mensaje: item.errorMessage });
     }
     if (item.status === 'skipped') return '<span class="badge-skip">Omitido</span>';
     return '';
@@ -573,10 +598,13 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
       fd.append('imagen', item.file, item.nombre);
       fd.append('codigo', item.codigo);
       fd.append('archivo_nombre', item.nombre);
+      var csrfTok = (typeof window.getCsrfToken === 'function') ? window.getCsrfToken() : '';
+      if (csrfTok) fd.append('csrf_token', csrfTok);
 
       var xhr = new XMLHttpRequest();
       xhr.open('POST', subirUnoUrl, true);
       xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+      if (csrfTok) xhr.setRequestHeader('X-CSRF-Token', csrfTok);
       xhr.upload.onprogress = function (ev) {
         if (ev.lengthComputable) {
           item.progress = Math.min(95, Math.round((ev.loaded / ev.total) * 90) + 5);
@@ -584,12 +612,22 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
         }
       };
       xhr.onload = function () {
-        var j;
-        try { j = JSON.parse(xhr.responseText); } catch (e) { j = {}; }
-        if (xhr.status >= 200 && xhr.status < 300 && j.success !== false && j.estado !== 'error') {
+        var j = {};
+        var raw = xhr.responseText || '';
+        try { j = JSON.parse(raw); } catch (e) {
+          j = {
+            ok: false,
+            success: false,
+            estado: 'error',
+            mensaje: 'Respuesta no JSON (HTTP ' + xhr.status + '): ' + raw.slice(0, 500),
+            error: 'Respuesta no JSON'
+          };
+        }
+        if (xhr.status >= 200 && xhr.status < 300 && j.success !== false && j.ok !== false && j.estado !== 'error') {
           item.status = 'done';
           item.progress = 100;
           item.uploadResult = j;
+          item.errorMessage = '';
           if (j.found || j.producto_codigo) {
             item.producto = {
               found: true,
@@ -602,14 +640,18 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
         } else {
           item.status = 'error';
           item.uploadResult = j;
+          item.errorMessage = formatServerError(j);
           refreshRow(item);
-          reject(new Error((j && (j.error || j.mensaje)) || 'Error al subir'));
+          console.error('subir-uno falló:', j);
+          reject(new Error(item.errorMessage));
         }
       };
       xhr.onerror = function () {
         item.status = 'error';
+        item.errorMessage = 'Error de red al contactar el servidor';
+        item.uploadResult = { mensaje: item.errorMessage, estado: 'error' };
         refreshRow(item);
-        reject(new Error('Error de red'));
+        reject(new Error(item.errorMessage));
       };
       xhr.send(fd);
     });
