@@ -1250,9 +1250,19 @@ body.ficha-tecnica-page {
   animation: ft-shimmer 1.15s ease-in-out infinite;
   border-radius: 10px;
 }
-.ft-skeleton--media { min-height: 220px; width: 100%; }
 .ft-skeleton--compat { min-height: 52px; width: 100%; margin-top: 4px; }
 .ft-skeleton--stock { min-height: 120px; width: 100%; margin-bottom: 8px; }
+.ft-media-skeleton-main {
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+}
+.ft-media-skeleton-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
 @keyframes ft-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
@@ -1295,9 +1305,18 @@ body.ficha-tecnica-page {
 
 <aside class="ft-col ft-col--media">
 
-<div id="ftMediaRoot">
 {% if lazy_ficha|default(false) %}
-<div class="ft-media-grow"><div class="ft-skeleton ft-skeleton--media" aria-hidden="true"></div></div>
+<div class="ft-media-grow" id="ftMediaRoot">
+<div class="ft-viewer">
+  <div class="ft-viewer-stage">
+    <div class="ft-skeleton ft-media-skeleton-main" aria-hidden="true"></div>
+  </div>
+</div>
+<div class="ft-thumb-row">
+  <div class="ft-skeleton ft-media-skeleton-thumb" aria-hidden="true"></div>
+  <div class="ft-skeleton ft-media-skeleton-thumb" aria-hidden="true"></div>
+</div>
+</div>
 {% elif imagenes %}
 <div class="ft-media-grow">
 <div class="ft-viewer">
@@ -1310,8 +1329,7 @@ body.ficha-tecnica-page {
 {% endfor %}
 ]'
        src="{{ imagenes[0] | product_image_src }}"
-       alt="{{ producto.descripcion or producto.codigo }}"
-       loading="lazy">
+       alt="{{ producto.descripcion or producto.codigo }}">
   </div>
 </div>
 
@@ -1320,13 +1338,12 @@ body.ficha-tecnica-page {
   <img class="miniatura"
        src="{{ img | product_image_src }}"
        alt=""
-       loading="lazy"
        onclick="volverImagenNormal(this.src)">
   {% endfor %}
   {% if imagenes_360 %}
   <div class="miniatura visor360-btn" onclick="activar360()" role="button" tabindex="0" aria-label="Vista 360°">
     <img src="{{ ('productos360/' + producto.codigo + '/' + imagenes_360[0]) | product_image_src }}"
-         class="mini360" alt="" loading="lazy">
+         class="mini360" alt="">
     <div class="badge360">360°</div>
     <div class="spin-icon">↻</div>
   </div>
@@ -1338,7 +1355,6 @@ body.ficha-tecnica-page {
 <div class="ft-placeholder">Sin imagen disponible</div>
 </div>
 {% endif %}
-</div>
 
 </aside>
 
@@ -2336,8 +2352,138 @@ window.activar360 = function () {
             window.__ftResizeIframeToContent();
         }
     }
-    var img = document.getElementById("imgPrincipal");
-    if (img) {
+
+    window.ftInitProductoImagenZoom = function (targetImg) {
+        var img = targetImg || document.getElementById("imgPrincipal");
+        if (!img || img.dataset.ftZoomBound === "1") return;
+        img.dataset.ftZoomBound = "1";
+
+        var FT_ZOOM = 1.35;
+        var panX = 0;
+        var panY = 0;
+        var drag = false;
+        var dragSX = 0;
+        var dragSY = 0;
+        var panSX = 0;
+        var panSY = 0;
+        var didPan = false;
+        var clickX = 0;
+        var clickY = 0;
+        var clickT = 0;
+
+        window.ftResetImgZoomPan = function (el) {
+            el = el || img;
+            if (!el) return;
+            panX = 0;
+            panY = 0;
+            drag = false;
+            didPan = false;
+            el.classList.remove("ft-img-main--zoomed");
+            el.classList.remove("ft-img-main--panning");
+            el.style.transform = "";
+        };
+
+        function clampPan() {
+            var stage = img.closest(".ft-viewer-stage");
+            if (!stage) return;
+            var w = stage.clientWidth;
+            var h = stage.clientHeight;
+            var maxX = (w * (FT_ZOOM - 1)) / 2;
+            var maxY = (h * (FT_ZOOM - 1)) / 2;
+            if (maxX < 0) maxX = 0;
+            if (maxY < 0) maxY = 0;
+            panX = Math.max(-maxX, Math.min(maxX, panX));
+            panY = Math.max(-maxY, Math.min(maxY, panY));
+        }
+
+        function applyZoomTransform() {
+            if (!img.classList.contains("ft-img-main--zoomed")) {
+                img.style.transform = "";
+                return;
+            }
+            img.style.transform =
+                "translate(" + panX + "px, " + panY + "px) scale(" + FT_ZOOM + ")";
+        }
+
+        function onPointerDown(e) {
+            if (e.button !== 0 && e.type === "mousedown") return;
+            if (img.classList.contains("ft-img-main--zoomed")) {
+                window.detener360Auto && window.detener360Auto();
+                window.__ft360Rotando = false;
+            }
+            if (window.interval360) return;
+            var cx = e.clientX != null ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+            var cy = e.clientY != null ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+            clickX = cx;
+            clickY = cy;
+            clickT = Date.now();
+            if (img.classList.contains("ft-img-main--zoomed")) {
+                drag = true;
+                didPan = false;
+                dragSX = cx;
+                dragSY = cy;
+                panSX = panX;
+                panSY = panY;
+                img.classList.add("ft-img-main--panning");
+                if (e.type === "touchstart") e.preventDefault();
+            }
+        }
+
+        function onPointerMove(e) {
+            if (!drag || !img.classList.contains("ft-img-main--zoomed")) return;
+            if (window.interval360) return;
+            if (e.type === "touchmove") e.preventDefault();
+            var cx = e.clientX != null ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+            var cy = e.clientY != null ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+            var dx = cx - dragSX;
+            var dy = cy - dragSY;
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didPan = true;
+            panX = panSX + dx;
+            panY = panSY + dy;
+            clampPan();
+            applyZoomTransform();
+        }
+
+        function onPointerUp() {
+            if (!drag) return;
+            drag = false;
+            img.classList.remove("ft-img-main--panning");
+        }
+
+        img.addEventListener("mousedown", onPointerDown);
+        document.addEventListener("mousemove", onPointerMove);
+        document.addEventListener("mouseup", onPointerUp);
+        img.addEventListener("touchstart", onPointerDown, { passive: false });
+        document.addEventListener("touchmove", onPointerMove, { passive: false });
+        document.addEventListener("touchend", onPointerUp);
+
+        img.addEventListener("click", function (e) {
+            if (e.button !== 0) return;
+            if (window.interval360) return;
+            if (Math.abs(e.clientX - clickX) > 10 || Math.abs(e.clientY - clickY) > 10) return;
+            if (Date.now() - clickT > 600) return;
+            if (img.classList.contains("ft-img-main--zoomed")) {
+                if (didPan) {
+                    didPan = false;
+                    return;
+                }
+                window.ftResetImgZoomPan(img);
+                return;
+            }
+            img.classList.add("ft-img-main--zoomed");
+            panX = 0;
+            panY = 0;
+            clampPan();
+            applyZoomTransform();
+        });
+
+        window.addEventListener("resize", function () {
+            if (img.classList.contains("ft-img-main--zoomed")) {
+                clampPan();
+                applyZoomTransform();
+            }
+        });
+
         function onFirstPaint() {
             requestAnimationFrame(ftReflowIframe);
             setTimeout(ftReflowIframe, 0);
@@ -2350,142 +2496,27 @@ window.activar360 = function () {
             img.addEventListener("load", onFirstPaint, { once: true });
             img.addEventListener("error", onFirstPaint, { once: true });
         }
+    };
+
+    if (!window.ftResetImgZoomPan) {
+        window.ftResetImgZoomPan = function (el) {
+            el = el || document.getElementById("imgPrincipal");
+            if (!el) return;
+            el.classList.remove("ft-img-main--zoomed");
+            el.classList.remove("ft-img-main--panning");
+            el.style.transform = "";
+        };
+    }
+
+    var imgAtLoad = document.getElementById("imgPrincipal");
+    if (imgAtLoad) {
+        window.ftInitProductoImagenZoom(imgAtLoad);
         window.addEventListener("load", function () {
             requestAnimationFrame(ftReflowIframe);
             setTimeout(ftReflowIframe, 0);
             setTimeout(ftReflowIframe, 120);
         });
     }
-    if (!img) {
-        window.ftResetImgZoomPan = function () {};
-        return;
-    }
-
-    var FT_ZOOM = 1.35;
-    var panX = 0;
-    var panY = 0;
-    var drag = false;
-    var dragSX = 0;
-    var dragSY = 0;
-    var panSX = 0;
-    var panSY = 0;
-    var didPan = false;
-    var clickX = 0;
-    var clickY = 0;
-    var clickT = 0;
-
-    window.ftResetImgZoomPan = function (el) {
-        el = el || img;
-        if (!el) return;
-        panX = 0;
-        panY = 0;
-        drag = false;
-        didPan = false;
-        el.classList.remove("ft-img-main--zoomed");
-        el.classList.remove("ft-img-main--panning");
-        el.style.transform = "";
-    };
-
-    function clampPan() {
-        var stage = img.closest(".ft-viewer-stage");
-        if (!stage) return;
-        var w = stage.clientWidth;
-        var h = stage.clientHeight;
-        var maxX = (w * (FT_ZOOM - 1)) / 2;
-        var maxY = (h * (FT_ZOOM - 1)) / 2;
-        if (maxX < 0) maxX = 0;
-        if (maxY < 0) maxY = 0;
-        panX = Math.max(-maxX, Math.min(maxX, panX));
-        panY = Math.max(-maxY, Math.min(maxY, panY));
-    }
-
-    function applyZoomTransform() {
-        if (!img.classList.contains("ft-img-main--zoomed")) {
-            img.style.transform = "";
-            return;
-        }
-        img.style.transform =
-            "translate(" + panX + "px, " + panY + "px) scale(" + FT_ZOOM + ")";
-    }
-
-    function onPointerDown(e) {
-        if (e.button !== 0 && e.type === "mousedown") return;
-        if (img.classList.contains("ft-img-main--zoomed")) {
-            window.detener360Auto && window.detener360Auto();
-            window.__ft360Rotando = false;
-        }
-        if (window.interval360) return;
-        var cx = e.clientX != null ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-        var cy = e.clientY != null ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
-        clickX = cx;
-        clickY = cy;
-        clickT = Date.now();
-        if (img.classList.contains("ft-img-main--zoomed")) {
-            drag = true;
-            didPan = false;
-            dragSX = cx;
-            dragSY = cy;
-            panSX = panX;
-            panSY = panY;
-            img.classList.add("ft-img-main--panning");
-            if (e.type === "touchstart") e.preventDefault();
-        }
-    }
-
-    function onPointerMove(e) {
-        if (!drag || !img.classList.contains("ft-img-main--zoomed")) return;
-        if (window.interval360) return;
-        if (e.type === "touchmove") e.preventDefault();
-        var cx = e.clientX != null ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-        var cy = e.clientY != null ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
-        var dx = cx - dragSX;
-        var dy = cy - dragSY;
-        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didPan = true;
-        panX = panSX + dx;
-        panY = panSY + dy;
-        clampPan();
-        applyZoomTransform();
-    }
-
-    function onPointerUp() {
-        if (!drag) return;
-        drag = false;
-        img.classList.remove("ft-img-main--panning");
-    }
-
-    img.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("mousemove", onPointerMove);
-    document.addEventListener("mouseup", onPointerUp);
-    img.addEventListener("touchstart", onPointerDown, { passive: false });
-    document.addEventListener("touchmove", onPointerMove, { passive: false });
-    document.addEventListener("touchend", onPointerUp);
-
-    img.addEventListener("click", function (e) {
-        if (e.button !== 0) return;
-        if (window.interval360) return;
-        if (Math.abs(e.clientX - clickX) > 10 || Math.abs(e.clientY - clickY) > 10) return;
-        if (Date.now() - clickT > 600) return;
-        if (img.classList.contains("ft-img-main--zoomed")) {
-            if (didPan) {
-                didPan = false;
-                return;
-            }
-            window.ftResetImgZoomPan(img);
-            return;
-        }
-        img.classList.add("ft-img-main--zoomed");
-        panX = 0;
-        panY = 0;
-        clampPan();
-        applyZoomTransform();
-    });
-
-    window.addEventListener("resize", function () {
-        if (img.classList.contains("ft-img-main--zoomed")) {
-            clampPan();
-            applyZoomTransform();
-        }
-    });
 })();
 </script>
 
@@ -2530,25 +2561,51 @@ window.activar360 = function () {
     if (!root) return;
     var imgs = data.imagenes || [];
     var imgs360 = data.imagenes_360 || [];
+    window.imagenes360 = imgs360.slice();
+
     if (!imgs.length) {
-      root.innerHTML = '<div class="ft-media-grow"><div class="ft-placeholder">Sin imagen disponible</div></div>';
+      root.innerHTML = '<div class="ft-placeholder">Sin imagen disponible</div>';
+      window.__ftResizeLastH = 0;
+      notifyResize();
       return;
     }
-    var data360 = JSON.stringify(imgs360);
-    var html = '<div class="ft-media-grow"><div class="ft-viewer"><div class="ft-viewer-stage">' +
-      '<img id="imgPrincipal" class="ft-img-main img-producto" data-360=\'' + data360.replace(/'/g, '&#39;') + '\' ' +
-      'src="' + esc(imgs[0]) + '" alt="' + esc(productoDesc) + '" loading="lazy"></div></div>' +
-      '<div class="ft-thumb-row">';
+
+    var data360Json = JSON.stringify(imgs360);
+    var html = '<div class="ft-viewer"><div class="ft-viewer-stage">' +
+      '<img id="imgPrincipal" class="ft-img-main img-producto" data-360=\'' +
+      data360Json.replace(/'/g, '&#39;') + '\' src="' + esc(imgs[0]) + '" alt="' + esc(productoDesc) + '">' +
+      '</div></div><div class="ft-thumb-row">';
     imgs.forEach(function (src) {
-      html += '<img class="miniatura" src="' + esc(src) + '" alt="" loading="lazy" onclick="volverImagenNormal(this.src)">';
+      html += '<img class="miniatura" src="' + esc(src) + '" alt="" onclick="volverImagenNormal(this.src)">';
     });
     if (imgs360.length) {
       html += '<div class="miniatura visor360-btn" onclick="activar360()" role="button" tabindex="0" aria-label="Vista 360°">' +
-        '<img src="' + esc(imgs360[0]) + '" class="mini360" alt="" loading="lazy">' +
+        '<img src="' + esc(imgs360[0]) + '" class="mini360" alt="">' +
         '<div class="badge360">360°</div><div class="spin-icon">↻</div></div>';
     }
-    html += '</div></div>';
+    html += '</div>';
     root.innerHTML = html;
+
+    var mainImg = document.getElementById('imgPrincipal');
+    window.__ftResizeLastH = 0;
+    if (mainImg && window.ftInitProductoImagenZoom) {
+      window.ftInitProductoImagenZoom(mainImg);
+    }
+    var reflowAfterMedia = function () {
+      window.__ftResizeLastH = 0;
+      notifyResize();
+      if (window.__ftResizeIframeToContent) {
+        window.__ftResizeIframeToContent();
+        setTimeout(window.__ftResizeIframeToContent, 80);
+        setTimeout(window.__ftResizeIframeToContent, 250);
+      }
+    };
+    if (mainImg && mainImg.complete && mainImg.naturalWidth) {
+      reflowAfterMedia();
+    } else if (mainImg) {
+      mainImg.addEventListener('load', reflowAfterMedia, { once: true });
+      mainImg.addEventListener('error', reflowAfterMedia, { once: true });
+    }
   }
 
   function renderStock(fs) {
@@ -2640,8 +2697,8 @@ window.activar360 = function () {
       setTimeout(function () { renderStock(data.ficha_stock); notifyResize(); }, 0);
     })
     .catch(function () {
-      var media = document.getElementById('ftMediaRoot');
-      if (media) media.innerHTML = '<div class="ft-media-grow"><div class="ft-placeholder">Sin imagen disponible</div></div>';
+      var root = document.getElementById('ftMediaRoot');
+      if (root) root.innerHTML = '<div class="ft-placeholder">Sin imagen disponible</div>';
     });
 })();
 </script>
