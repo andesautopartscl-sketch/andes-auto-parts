@@ -1025,6 +1025,11 @@ def create_app():
                 return response
         except Exception:
             return response
+        if request.endpoint in {
+            "productos.ver_producto",
+            "productos.historial_producto",
+        }:
+            return response
         if not response.mimetype or "html" not in response.mimetype:
             return response
         if response.direct_passthrough:

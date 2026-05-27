@@ -77,14 +77,52 @@ body.ficha-tecnica-page {
 
 /* Top bar */
 .ft-topbar {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 6px 10px;
-  padding: 6px 10px 5px;
+  padding: 6px 42px 5px 10px;
   background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
   border-bottom: 1px solid var(--ft-border);
+}
+
+.ft-btn-close {
+  display: none;
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 2;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.ft-btn-close:hover {
+  background: #cbd5e1;
+  transform: scale(1.05);
+}
+
+body.ft-in-iframe .ft-btn-close {
+  display: inline-flex;
+}
+
+/* Ficha en iframe: nunca mostrar chat flotante inyectado globalmente */
+#apchat-root {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 .ft-kicker {
@@ -1273,10 +1311,27 @@ body.ficha-tecnica-page {
 
 <body class="ficha-tecnica-page">
 
+<script>
+(function () {
+  if (window.self !== window.top) {
+    document.body.classList.add('ft-in-iframe');
+  }
+  window.cerrarFichaModal = function () {
+    try {
+      if (window.parent && typeof window.parent.closeAppModal === 'function') {
+        window.parent.closeAppModal();
+        return;
+      }
+    } catch (e) {}
+  };
+})();
+</script>
+
 <div class="ft-wrap">
 <div class="ft-card">
 
 <header class="ft-topbar">
+  <button type="button" class="ft-btn-close" onclick="cerrarFichaModal()" aria-label="Cerrar ficha" title="Cerrar">×</button>
   <div>
     <p class="ft-kicker">Catálogo</p>
     <div class="ft-title-row">

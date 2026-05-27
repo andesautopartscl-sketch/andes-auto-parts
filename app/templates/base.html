@@ -258,17 +258,6 @@ body.search-lite-app .content {
 	opacity: 1;
 }
 
-/* Ocultar FAB del chat cuando cualquier modal del ERP está abierto (clase en body + respaldo por hermanos). */
-body.app-modal-is-open #apchat-root {
-	display: none !important;
-	visibility: hidden !important;
-	pointer-events: none !important;
-	opacity: 0 !important;
-}
-#appModal.is-open ~ #apchat-root {
-	display: none !important;
-}
-
 @media print {
 	#apchat-root,
 	.sidebar-frame,
@@ -598,8 +587,31 @@ function toggleMenu(id) {
 		return window.location.pathname + window.location.search + window.location.hash;
 	}
 
+	var _apchatZIndexSaved = null;
+
+	function raiseChatAboveModal() {
+		var chatEl = document.getElementById('apchat-root');
+		if (!chatEl) return;
+		if (_apchatZIndexSaved === null) {
+			_apchatZIndexSaved = chatEl.style.zIndex || '';
+		}
+		chatEl.style.zIndex = '99999';
+	}
+
+	function restoreChatZIndex() {
+		var chatEl = document.getElementById('apchat-root');
+		if (!chatEl) return;
+		if (_apchatZIndexSaved !== null) {
+			chatEl.style.zIndex = _apchatZIndexSaved;
+			_apchatZIndexSaved = null;
+		} else {
+			chatEl.style.removeProperty('z-index');
+		}
+	}
+
 	function closeAppModal() {
 		window._andesResizeProductoIframe = null;
+		restoreChatZIndex();
 		var modal = document.getElementById('appModal');
 		var modalBody = document.getElementById('appModalBody');
 		var dlg = document.querySelector('#appModal .app-modal-dialog');
@@ -615,6 +627,7 @@ function toggleMenu(id) {
 	function openAppModal() {
 		var modal = document.getElementById('appModal');
 		if (!modal) return;
+		raiseChatAboveModal();
 		document.body.classList.add('app-modal-is-open');
 		modal.classList.add('is-open');
 		modal.setAttribute('aria-hidden', 'false');
