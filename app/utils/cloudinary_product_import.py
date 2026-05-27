@@ -9,7 +9,7 @@ from pathlib import Path
 from sqlalchemy import func, or_
 from werkzeug.utils import secure_filename
 
-from app.models import Producto, ProductoImagen
+from app.models import Producto, ProductoImagen, OemDespiece
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,160 @@ MIME_TO_EXT = {
 _MATCH_OEM = "oem"
 _MATCH_ALTERNATIVO = "alternativo"
 _MATCH_INTERNO = "interno"
+
+TIPO_IMAGEN_PRODUCTO = "producto"
+TIPO_IMAGEN_360 = "360"
+TIPO_IMAGEN_DESPIECE = "despiece"
+
+CLOUD_FOLDER_BY_TIPO = {
+    TIPO_IMAGEN_PRODUCTO: "andes_erp/productos",
+    TIPO_IMAGEN_360: "andes_erp/productos360",
+    TIPO_IMAGEN_DESPIECE: "andes_erp/epc_despiece",
+}
+
+
+def normalize_tipo_imagen(raw: str | None) -> str:
+    t = (raw or TIPO_IMAGEN_PRODUCTO).strip().lower()
+    if t in {TIPO_IMAGEN_360, "productos360", "360deg"}:
+        return TIPO_IMAGEN_360
+    if t in {TIPO_IMAGEN_DESPIECE, "epc", "epc_despiece", "despiece_epc"}:
+        return TIPO_IMAGEN_DESPIECE
+    return TIPO_IMAGEN_PRODUCTO
+
+
+def _norm_oem_despiece(value: str | None) -> str:
+    return (value or "").strip().upper() or ""
+
+
+def _synthetic_oem_norm_for_product_codigo(cod: str) -> str:
+    c = (cod or "").strip().upper()
+    if not c:
+        return "_INT_UNKNOWN"
+    return ("_INT_" + c)[:64]
+
+
+def link_cloudinary_url_to_360(
+    sess,
+    producto: Producto,
+    url: str,
+    *,
+    codigo_interno: str,
+    archivo_nombre: str,
+) -> str:
+    """Registra frame 360 en producto_imagenes y mapa estático en memoria."""
+    from app.utils.cloudinary_static_map import register_cloudinary_static_key
+
+    url = (url or "").strip()
+    codigo = (codigo_interno or producto.codigo or "").strip().upper()
+    basename = Path((archivo_nombre or "frame.jpg").strip()).name or "frame.jpg"
+    rel_key = f"productos360/{codigo}/{basename}"
+    register_cloudinary_static_key(rel_key, url)
+
+    codigo_p = (producto.codigo or codigo).strip().upper()
+    known = {(img.ruta or "").strip() for img in producto.imagenes or []}
+    if url not in known and rel_key not in known:
+        sess.add(
+            ProductoImagen(
+                producto_codigo=codigo_p,
+                ruta=url,
+                es_principal=False,
+            )
+        )
+    return rel_key
+
+
+def link_cloudinary_url_to_despiece(
+    sess,
+    producto: Producto | None,
+    codigo_asignado: str,
+    url: str,
+) -> tuple[bool, str]:
+    """Actualiza oem_despiece.imagen_static. Retorna (vinculado, oem_norm)."""
+    from datetime import datetime
+
+    url = (url or "").strip()
+    codigo = (codigo_asignado or "").strip().upper()
+    if not url:
+        return False, ""
+
+    row: OemDespiece | None = None
+    oem_norm = ""
+
+    if producto:
+        oem_norm = _norm_oem_despiece(producto.codigo_oem)
+        if oem_norm:
+            row = sess.query(OemDespiece).filter(OemDespiece.oem_norm == oem_norm).first()
+            if not row:
+                row = OemDespiece(
+                    oem_norm=oem_norm,
+                    producto_codigo=None,
+                    updated_at=datetime.utcnow(),
+                )
+                sess.add(row)
+        else:
+            pc = (producto.codigo or "").strip().upper()
+            row = sess.query(OemDespiece).filter(OemDespiece.producto_codigo == pc).first()
+            if not row:
+                oem_norm = _synthetic_oem_norm_for_product_codigo(pc)
+                row = OemDespiece(
+                    oem_norm=oem_norm,
+                    producto_codigo=pc,
+                    updated_at=datetime.utcnow(),
+                )
+                sess.add(row)
+            else:
+                oem_norm = (row.oem_norm or oem_norm or pc).strip().upper()
+    else:
+        row = sess.query(OemDespiece).filter(OemDespiece.oem_norm == codigo).first()
+        if not row:
+            row = sess.query(OemDespiece).filter(OemDespiece.producto_codigo == codigo).first()
+        if not row:
+            row = OemDespiece(
+                oem_norm=codigo,
+                producto_codigo=None,
+                updated_at=datetime.utcnow(),
+            )
+            sess.add(row)
+        oem_norm = (row.oem_norm or codigo).strip().upper()
+
+    if row is None:
+        return False, codigo
+
+    row.imagen_static = url
+    row.updated_at = datetime.utcnow()
+    return True, (row.oem_norm or oem_norm or codigo).strip().upper()
+
+
+def build_import_public_id(
+    tipo_imagen: str,
+    *,
+    storage_key: str,
+    producto_codigo_interno: str,
+    archivo_nombre: str,
+    suffix: str = "",
+) -> tuple[str, str | None]:
+    """
+    Retorna (public_id, local_subdir) para _upload_product_image_file.
+    local_subdir: productos360 | epc_despiece | None
+    """
+    tipo = normalize_tipo_imagen(tipo_imagen)
+    folder = CLOUD_FOLDER_BY_TIPO[tipo]
+    stem = re.sub(r"[^a-zA-Z0-9_\-]", "_", (storage_key or "").strip().upper()) or "producto"
+    ext = Path((archivo_nombre or "imagen.jpg").strip()).suffix or ".jpg"
+    target_stem = f"{stem}{suffix}" if suffix else stem
+
+    if tipo == TIPO_IMAGEN_360:
+        codigo_dir = re.sub(
+            r"[^a-zA-Z0-9_\-]", "_", (producto_codigo_interno or "").strip().upper()
+        ) or stem
+        frame_name = Path((archivo_nombre or f"{target_stem}{ext}").strip()).stem
+        frame_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", frame_name) or target_stem
+        return f"{folder}/{codigo_dir}/{frame_name}", "productos360"
+
+    if tipo == TIPO_IMAGEN_DESPIECE:
+        return f"{folder}/{Path(target_stem + ext).stem}", "epc_despiece"
+
+    return f"{folder}/{Path(target_stem + ext).stem}", None
 
 
 def codigo_from_filename(filename: str) -> str:

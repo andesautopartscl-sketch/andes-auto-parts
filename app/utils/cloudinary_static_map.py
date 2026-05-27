@@ -8,15 +8,30 @@ def _normalize_key(filename: str) -> str:
     return (filename or "").strip().replace("\\", "/").lstrip("/")
 
 
+_RUNTIME_OVERLAY: dict[str, str] = {}
+
+
+def register_cloudinary_static_key(key: str, url: str) -> None:
+    """Registra URL en memoria (p. ej. tras subir productos360 en importación)."""
+    k = _normalize_key(key)
+    u = (url or "").strip()
+    if k and u:
+        _RUNTIME_OVERLAY[k] = u
+
+
 def get_cloudinary_static() -> dict[str, str]:
     try:
         from app.utils import cloudinary_static_urls
 
         data = getattr(cloudinary_static_urls, "CLOUDINARY_STATIC", None)
         if isinstance(data, dict):
-            return data
+            merged = dict(data)
+            merged.update(_RUNTIME_OVERLAY)
+            return merged
     except ImportError:
         pass
+    if _RUNTIME_OVERLAY:
+        return dict(_RUNTIME_OVERLAY)
     return {}
 
 

@@ -54,11 +54,18 @@ from ..utils.cloudinary_product_import import (
     describe_upload_file,
     download_image_from_url,
     find_producto_by_image_code,
+    link_cloudinary_url_to_despiece,
+    link_cloudinary_url_to_360,
     link_cloudinary_url_to_producto,
+    build_import_public_id,
+    normalize_tipo_imagen,
     producto_resolver_payload,
     resolve_upload_extension,
     resolver_producto_por_codigo,
     search_productos_for_assign,
+    TIPO_IMAGEN_360,
+    TIPO_IMAGEN_DESPIECE,
+    TIPO_IMAGEN_PRODUCTO,
 )
 from ..utils.cloudinary_static_map import keys_with_prefix
 from ..utils.product_image_url import (
@@ -328,6 +335,9 @@ def _upload_product_image_file(
     allowed_exts: set[str] | None = None,
     storage_codigo: str | None = None,
     archivo_nombre: str = "",
+    cloud_folder: str = "andes_erp/productos",
+    public_id_path: str | None = None,
+    local_subdir: str | None = None,
 ) -> str | None:
     """
     Sube imagen a Cloudinary (si está configurado) o disco local.
@@ -369,7 +379,10 @@ def _upload_product_image_file(
                 tmp_path = Path(tmp.name)
             processed = process_uploaded_image(tmp_path)
             upload_path = processed if processed is not None else tmp_path
-            public_id = f"andes_erp/productos/{Path(target_name).stem}"
+            if public_id_path:
+                public_id = public_id_path
+            else:
+                public_id = f"{cloud_folder}/{Path(target_name).stem}"
             result = cloudinary_upload_image(upload_path, public_id=public_id)
             url = normalize_stored_image_ref(result.get("url"))
             if processed is not None and processed != tmp_path and processed.is_file():
@@ -386,13 +399,24 @@ def _upload_product_image_file(
                 tmp_path.unlink(missing_ok=True)
         return None
 
-    static_dir = STATIC_PRODUCTOS_IMG
+    if local_subdir == "productos360":
+        codigo_dir = re.sub(r"[^a-zA-Z0-9_\-]", "_", (codigo or "").strip().upper()) or "producto"
+        static_dir = STATIC_PRODUCTOS_IMG.parent / "productos360" / codigo_dir
+    elif local_subdir == "epc_despiece":
+        static_dir = STATIC_PRODUCTOS_IMG.parent / "epc_despiece"
+    else:
+        static_dir = STATIC_PRODUCTOS_IMG
     static_dir.mkdir(parents=True, exist_ok=True)
     target = static_dir / target_name
     file_obj.save(str(target))
     out = process_uploaded_image(target)
     if out is not None:
         target_name = out.name
+    if local_subdir == "productos360":
+        codigo_dir = re.sub(r"[^a-zA-Z0-9_\-]", "_", (codigo or "").strip().upper()) or "producto"
+        return f"productos360/{codigo_dir}/{target_name}"
+    if local_subdir == "epc_despiece":
+        return f"epc_despiece/{target_name}"
     return f"productos_img/{target_name}"
 
 
@@ -446,6 +470,29 @@ def _collect_imagenes_360(producto: Producto) -> list[str]:
             if low.endswith((".jpg", ".jpeg", ".png", ".webp")) and archivo not in seen:
                 seen.add(archivo)
                 out.append(archivo)
+
+    def _basename_from_360_ref(ref: str) -> str | None:
+        r = (ref or "").strip()
+        if not r:
+            return None
+        marker = f"productos360/{codigo}/"
+        if r.startswith(marker):
+            base = r[len(marker) :].split("?")[0].strip()
+            return base or None
+        if "productos360/" in r and f"/{codigo}/" in r:
+            tail = r.split(f"/{codigo}/", 1)[-1]
+            base = tail.split("?")[0].strip()
+            return base or None
+        return None
+
+    try:
+        for img in producto.imagenes or []:
+            base = _basename_from_360_ref(getattr(img, "ruta", None))
+            if base and base not in seen:
+                seen.add(base)
+                out.append(base)
+    except Exception:
+        pass
     return sorted(out, key=str.lower)
 
 
@@ -3474,13 +3521,16 @@ def _procesar_subida_imagen_cloudinary(
     *,
     codigo_asignado: str,
     archivo_nombre: str,
+    tipo_imagen: str = TIPO_IMAGEN_PRODUCTO,
 ) -> dict:
-    """Sube una imagen a Cloudinary y vincula al producto si existe."""
+    """Sube una imagen a Cloudinary y vincula al producto / 360 / despiece si aplica."""
     codigo = (codigo_asignado or "").strip().upper()
     fname = (archivo_nombre or getattr(file_obj, "filename", None) or "imagen.jpg").strip()
+    tipo = normalize_tipo_imagen(tipo_imagen)
     row = {
         "archivo": fname,
         "codigo_asignado": codigo,
+        "tipo_imagen": tipo,
         "producto_codigo": None,
         "producto_descripcion": None,
         "cloudinary_url": None,
@@ -3494,15 +3544,26 @@ def _procesar_subida_imagen_cloudinary(
 
     producto, match_type = find_producto_by_image_code(sess, codigo)
     storage_key = cloudinary_storage_key(producto, codigo)
+    codigo_interno = (producto.codigo or codigo).strip().upper() if producto else codigo
+
+    public_id_path, local_subdir = build_import_public_id(
+        tipo,
+        storage_key=storage_key,
+        producto_codigo_interno=codigo_interno,
+        archivo_nombre=fname,
+    )
 
     try:
         stored = _upload_product_image_file(
             file_obj,
-            codigo=codigo,
+            codigo=codigo_interno,
             storage_codigo=storage_key,
             suffix="",
             allowed_exts=ALLOWED_IMAGE_EXTENSIONS,
             archivo_nombre=fname,
+            cloud_folder=public_id_path.rsplit("/", 1)[0],
+            public_id_path=public_id_path,
+            local_subdir=local_subdir,
         )
     except ValueError as exc:
         row["estado"] = "error"
@@ -3520,19 +3581,61 @@ def _procesar_subida_imagen_cloudinary(
     row["cloudinary_url"] = stored
     row["cloudinary_name"] = storage_key
     row["match_type"] = match_type
-    if producto:
-        link_cloudinary_url_to_producto(sess, producto, stored)
+    row["cloud_folder"] = public_id_path.rsplit("/", 2)[0] if tipo == TIPO_IMAGEN_360 else public_id_path.rsplit("/", 1)[0]
+
+    if tipo == TIPO_IMAGEN_PRODUCTO:
+        if producto:
+            link_cloudinary_url_to_producto(sess, producto, stored)
+            info = producto_resolver_payload(producto, match_type or "interno")
+            row["producto_codigo"] = info["codigo"]
+            row["producto_descripcion"] = info["descripcion"]
+            row["producto_oem"] = info.get("oem") or ""
+            row["display_codigo"] = info["display_codigo"]
+            row["estado"] = "vinculado"
+            row["mensaje"] = "Vinculado (producto)"
+        else:
+            row["display_codigo"] = codigo
+            row["estado"] = "sin_producto"
+            row["mensaje"] = "Subida a Cloudinary; producto no encontrado en BD"
+        return row
+
+    if tipo == TIPO_IMAGEN_360:
+        if not producto:
+            row["display_codigo"] = codigo
+            row["estado"] = "sin_producto"
+            row["mensaje"] = "Subida a Cloudinary; producto no encontrado (360 requiere producto)"
+            return row
+        rel_key = link_cloudinary_url_to_360(
+            sess,
+            producto,
+            stored,
+            codigo_interno=codigo_interno,
+            archivo_nombre=fname,
+        )
         info = producto_resolver_payload(producto, match_type or "interno")
         row["producto_codigo"] = info["codigo"]
         row["producto_descripcion"] = info["descripcion"]
-        row["producto_oem"] = info.get("oem") or ""
         row["display_codigo"] = info["display_codigo"]
+        row["static_key"] = rel_key
         row["estado"] = "vinculado"
-        row["mensaje"] = "Vinculado"
+        row["mensaje"] = "Vinculado (360°)"
+        return row
+
+    linked, oem_norm = link_cloudinary_url_to_despiece(sess, producto, codigo, stored)
+    row["oem_norm"] = oem_norm
+    if producto:
+        info = producto_resolver_payload(producto, match_type or "interno")
+        row["producto_codigo"] = info["codigo"]
+        row["producto_descripcion"] = info["descripcion"]
+        row["display_codigo"] = info["display_codigo"]
     else:
         row["display_codigo"] = codigo
+    if linked:
+        row["estado"] = "vinculado"
+        row["mensaje"] = "Vinculado (despiece EPC)"
+    else:
         row["estado"] = "sin_producto"
-        row["mensaje"] = "Subida a Cloudinary; producto no encontrado en BD"
+        row["mensaje"] = "Subida a Cloudinary; no se pudo vincular despiece"
     return row
 
 
@@ -3653,6 +3756,7 @@ def importar_imagenes_cloudinary_subir_uno():
         file_obj = request.files.get("imagen") or request.files.get("file")
         codigo = (request.form.get("codigo") or "").strip().upper()
         archivo_nombre = (request.form.get("archivo_nombre") or "").strip()
+        tipo_imagen = normalize_tipo_imagen(request.form.get("tipo_imagen"))
 
         log.info(
             "subir-uno: content_type=%s codigo=%s archivo_nombre=%s files=%s",
@@ -3693,7 +3797,11 @@ def importar_imagenes_cloudinary_subir_uno():
         sess = SessionDB()
         try:
             row = _procesar_subida_imagen_cloudinary(
-                sess, file_obj, codigo_asignado=codigo, archivo_nombre=fname
+                sess,
+                file_obj,
+                codigo_asignado=codigo,
+                archivo_nombre=fname,
+                tipo_imagen=tipo_imagen,
             )
             if row.get("estado") == "vinculado":
                 register_product_audit(
@@ -3703,7 +3811,7 @@ def importar_imagenes_cloudinary_subir_uno():
                     action="update",
                     modulo="productos",
                     req=request,
-                    metadata={"cloudinary_image_upload": True, "archivo": fname[:120]},
+                    metadata={"cloudinary_image_upload": True, "archivo": fname[:120], "tipo_imagen": tipo_imagen},
                 )
             sess.commit()
             ok = row.get("estado") != "error"
