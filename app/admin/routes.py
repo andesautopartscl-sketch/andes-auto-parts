@@ -1,9 +1,18 @@
-from flask import Blueprint, request, jsonify, render_template
+from flask import Blueprint, request, jsonify, render_template, send_file
 from datetime import datetime, timedelta
 from pathlib import Path
+import io
 from ..models import SessionDB, Producto
 from ..extensions import db
 from ..utils.decorators import admin_required
+from ..utils.gdrive_backup import (
+    download_drive_file,
+    get_backup_config,
+    list_drive_backups,
+    load_last_status,
+    run_gdrive_backup,
+)
+from ..utils.csrf import validate_csrf_request
 from ..models import Etiqueta
 from app.seguridad.models import Usuario
 from app.import_excel import import_products_from_excel
@@ -308,3 +317,59 @@ def generar_hoja_etiquetas(codigo):
         barcode_img=barcode_base64,
         cantidad=cantidad
     )
+
+
+# ===============================
+# BACKUPS GOOGLE DRIVE
+# ===============================
+
+@admin_bp.route("/backups")
+@admin_required
+def backups_view():
+    cfg = get_backup_config()
+    backups = []
+    list_error = None
+    try:
+        backups = list_drive_backups()
+    except Exception as exc:
+        list_error = str(exc)
+
+    return render_template(
+        "admin/backups.html",
+        backups=backups,
+        last_status=load_last_status(),
+        list_error=list_error,
+        configured=bool(cfg["folder_id"]),
+        active_page="admin_backups",
+    )
+
+
+@admin_bp.route("/backups/run", methods=["POST"])
+@admin_required
+def backups_run_now():
+    if not validate_csrf_request():
+        return jsonify(success=False, message="Token CSRF inválido"), 403
+
+    result = run_gdrive_backup()
+    return jsonify(
+        success=result.success,
+        message=result.message,
+        filename=result.filename,
+        size_bytes=result.size_bytes,
+        ran_at=result.ran_at,
+    )
+
+
+@admin_bp.route("/backups/download/<file_id>")
+@admin_required
+def backups_download(file_id):
+    try:
+        data, filename = download_drive_file(file_id)
+        return send_file(
+            io.BytesIO(data),
+            mimetype="application/zip",
+            as_attachment=True,
+            download_name=filename,
+        )
+    except Exception as exc:
+        return jsonify(success=False, message=str(exc)), 500

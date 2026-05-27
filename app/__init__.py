@@ -78,6 +78,48 @@ def _sqlite_pragmas_on_connect(dbapi_connection, _connection_record):
         pass
 
 
+def _init_gdrive_backup_scheduler(app: Flask) -> None:
+    """Programa backup diario a Google Drive (02:00 hora Chile)."""
+    folder_id = (os.environ.get("GDRIVE_FOLDER_ID") or "").strip()
+    if not folder_id:
+        app.logger.info("Backup GDrive: GDRIVE_FOLDER_ID vacío; scheduler no iniciado.")
+        return
+
+    if app.debug and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    try:
+        import atexit
+
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.cron import CronTrigger
+
+        from app.utils.datetime_utils import CHILE_TZ
+        from app.utils.gdrive_backup import run_gdrive_backup
+
+        def _scheduled_backup():
+            with app.app_context():
+                try:
+                    run_gdrive_backup(logger_instance=app.logger)
+                except Exception:
+                    app.logger.exception("Backup programado a Google Drive falló")
+
+        scheduler = BackgroundScheduler(timezone=CHILE_TZ)
+        scheduler.add_job(
+            _scheduled_backup,
+            trigger=CronTrigger(hour=2, minute=0),
+            id="gdrive_daily_backup",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+        scheduler.start()
+        atexit.register(lambda: scheduler.shutdown(wait=False))
+        app.logger.info("Backup GDrive: programado diariamente a las 02:00 (America/Santiago).")
+    except Exception as exc:
+        app.logger.warning("No se pudo iniciar scheduler de backup GDrive: %s", exc)
+
+
 def _runtime_reportlab_diagnostics() -> tuple[bool, str]:
     try:
         import reportlab  # noqa: F401
@@ -1088,8 +1130,14 @@ def create_app():
                 {"Content-Type": "text/plain; charset=utf-8"},
             )
 
+    if _app_mode != "search_lite":
+        _init_gdrive_backup_scheduler(app)
+
     return app
 
 
 # Compatibilidad de despliegue: soporta start command legado "gunicorn app:app".
-app = create_app()
+if (os.environ.get("ANDES_SKIP_AUTO_CREATE_APP") or "").strip().lower() in {"1", "true", "yes"}:
+    app = None
+else:
+    app = create_app()

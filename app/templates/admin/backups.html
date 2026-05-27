@@ -1,0 +1,203 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Backups Google Drive | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<style>
+  .backup-card {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: #fff;
+    border: 1px solid var(--line, #e2e8f0);
+    border-radius: 16px;
+    padding: 18px 20px;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+  }
+  .backup-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .backup-subtitle {
+    margin: 6px 0 0;
+    color: var(--muted, #64748b);
+    font-size: 13px;
+  }
+  .backup-status {
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+    font-size: 13px;
+  }
+  .backup-status.ok {
+    background: #ecfdf3;
+    border: 1px solid #86efac;
+    color: #166534;
+  }
+  .backup-status.error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+  }
+  .backup-status.neutral {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+  }
+  .backup-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .backup-table-wrap {
+    overflow: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+  }
+  .backup-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .backup-table th,
+  .backup-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #edf2f7;
+    text-align: left;
+  }
+  .backup-table th {
+    background: #f8fafc;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .backup-table tr:hover td {
+    background: #f8fbff;
+  }
+  .backup-empty {
+    padding: 18px;
+    color: var(--muted, #64748b);
+    font-size: 13px;
+  }
+  .backup-msg {
+    margin-top: 10px;
+    font-size: 13px;
+    min-height: 18px;
+  }
+  .backup-msg.error { color: #b91c1c; }
+  .backup-msg.ok { color: #15803d; }
+</style>
+
+<div class="backup-card">
+  <div class="backup-header">
+    <div>
+      <h1 class="page-title" style="margin:0;">Backups Google Drive</h1>
+      <p class="backup-subtitle">Copias automáticas diarias de la base de datos (02:00 AM). Retención configurable por variable de entorno.</p>
+    </div>
+    <div class="backup-actions">
+      <button type="button" class="btn" id="btnBackupNow">Hacer backup ahora</button>
+    </div>
+  </div>
+
+  {% if not configured %}
+  <div class="backup-status error">
+    GDRIVE_FOLDER_ID no está configurado. Revisa el archivo <code>.env</code>.
+  </div>
+  {% elif last_status %}
+  <div class="backup-status {{ 'ok' if last_status.success else 'error' }}">
+    <strong>Último backup:</strong>
+    {% if last_status.success %}
+      éxito
+    {% else %}
+      error
+    {% endif %}
+    {% if last_status.ran_at %} · {{ last_status.ran_at|chile_datetime }}{% endif %}
+    {% if last_status.filename %} · {{ last_status.filename }}{% endif %}
+    {% if last_status.size_bytes %} · {{ last_status.size_bytes }} bytes{% endif %}
+    {% if not last_status.success and last_status.message %} · {{ last_status.message }}{% endif %}
+  </div>
+  {% else %}
+  <div class="backup-status neutral">Aún no hay registro de backups en este servidor.</div>
+  {% endif %}
+
+  {% if list_error %}
+  <div class="backup-status error">No se pudo listar backups: {{ list_error }}</div>
+  {% endif %}
+
+  <div id="backupRunMsg" class="backup-msg" aria-live="polite"></div>
+
+  <div class="backup-table-wrap">
+    {% if backups %}
+    <table class="backup-table">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Fecha</th>
+          <th>Tamaño</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in backups %}
+        <tr>
+          <td>{{ item.name }}</td>
+          <td>{{ item.created_at|chile_datetime }}</td>
+          <td>{{ item.size_display }}</td>
+          <td>
+            <a class="btn outline" href="{{ url_for('admin.backups_download', file_id=item.id) }}">Descargar</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="backup-empty">No hay backups en Google Drive todavía.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+(function () {
+  var btn = document.getElementById('btnBackupNow');
+  var msg = document.getElementById('backupRunMsg');
+  if (!btn) return;
+
+  btn.addEventListener('click', function () {
+    btn.disabled = true;
+    msg.textContent = 'Ejecutando backup…';
+    msg.className = 'backup-msg';
+
+    fetch('{{ url_for("admin.backups_run_now") }}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-Token': '{{ csrf_token }}'
+      },
+      body: '{}'
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success) {
+          msg.textContent = data.message + (data.filename ? ' (' + data.filename + ')' : '');
+          msg.className = 'backup-msg ok';
+          setTimeout(function () { window.location.reload(); }, 1200);
+        } else {
+          msg.textContent = data.message || 'Error al ejecutar backup';
+          msg.className = 'backup-msg error';
+        }
+      })
+      .catch(function () {
+        msg.textContent = 'Error de red al ejecutar backup';
+        msg.className = 'backup-msg error';
+      })
+      .finally(function () {
+        btn.disabled = false;
+      });
+  });
+})();
+</script>
+{% endblock %}
