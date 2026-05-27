@@ -1244,6 +1244,20 @@ body.ficha-tecnica-page {
   font-family: var(--ft-font);
 }
 
+.ft-skeleton {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: ft-shimmer 1.15s ease-in-out infinite;
+  border-radius: 10px;
+}
+.ft-skeleton--media { min-height: 220px; width: 100%; }
+.ft-skeleton--compat { min-height: 52px; width: 100%; margin-top: 4px; }
+.ft-skeleton--stock { min-height: 120px; width: 100%; margin-bottom: 8px; }
+@keyframes ft-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 </style>
 </head>
 
@@ -1281,7 +1295,10 @@ body.ficha-tecnica-page {
 
 <aside class="ft-col ft-col--media">
 
-{% if imagenes %}
+<div id="ftMediaRoot">
+{% if lazy_ficha|default(false) %}
+<div class="ft-media-grow"><div class="ft-skeleton ft-skeleton--media" aria-hidden="true"></div></div>
+{% elif imagenes %}
 <div class="ft-media-grow">
 <div class="ft-viewer">
   <div class="ft-viewer-stage">
@@ -1293,7 +1310,8 @@ body.ficha-tecnica-page {
 {% endfor %}
 ]'
        src="{{ imagenes[0] | product_image_src }}"
-       alt="{{ producto.descripcion or producto.codigo }}">
+       alt="{{ producto.descripcion or producto.codigo }}"
+       loading="lazy">
   </div>
 </div>
 
@@ -1302,12 +1320,13 @@ body.ficha-tecnica-page {
   <img class="miniatura"
        src="{{ img | product_image_src }}"
        alt=""
+       loading="lazy"
        onclick="volverImagenNormal(this.src)">
   {% endfor %}
   {% if imagenes_360 %}
   <div class="miniatura visor360-btn" onclick="activar360()" role="button" tabindex="0" aria-label="Vista 360°">
     <img src="{{ ('productos360/' + producto.codigo + '/' + imagenes_360[0]) | product_image_src }}"
-         class="mini360" alt="">
+         class="mini360" alt="" loading="lazy">
     <div class="badge360">360°</div>
     <div class="spin-icon">↻</div>
   </div>
@@ -1319,6 +1338,7 @@ body.ficha-tecnica-page {
 <div class="ft-placeholder">Sin imagen disponible</div>
 </div>
 {% endif %}
+</div>
 
 </aside>
 
@@ -1366,9 +1386,11 @@ body.ficha-tecnica-page {
   </div>
 </div>
 
-<div class="ft-compat-block">
+<div class="ft-compat-block" id="ftCompatRoot">
   <h2 class="ft-section-title">Homologados / compatibilidad</h2>
-  {% if homologados_raw %}
+  {% if lazy_ficha|default(false) %}
+  <div class="ft-skeleton ft-skeleton--compat" aria-hidden="true"></div>
+  {% elif homologados_raw %}
   <p class="ft-homologados-text">{{ homologados_raw }}</p>
   {% elif homologados_items %}
   <div class="homologados-chips">
@@ -1381,8 +1403,15 @@ body.ficha-tecnica-page {
   {% endif %}
 </div>
 
-<div class="ft-stock-card">
+<div class="ft-stock-card" id="ftStockRoot">
   <h3 class="ft-stock-card-title">Repuestos disponibles</h3>
+  {% if lazy_ficha|default(false) %}
+  <div class="ft-skeleton ft-skeleton--stock" aria-hidden="true"></div>
+  <div class="ft-stock-line ft-stock-line--total">
+    <span class="ft-stock-line-label">Total inventario (aprox.)</span>
+    <span class="ft-stock-line-val">{{ fs.stotal }}</span>
+  </div>
+  {% else %}
   {% for b in fs.bodegas %}
     {% if b.lineas|length > 1 %}
     <details class="ft-stock-details">
@@ -1417,6 +1446,7 @@ body.ficha-tecnica-page {
     <span class="ft-stock-line-label">Total inventario</span>
     <span class="ft-stock-line-val">{{ fs.stotal }}</span>
   </div>
+  {% endif %}
 </div>
 
 </section>
@@ -2475,6 +2505,147 @@ window.activar360 = function () {
   });
 })();
 </script>
+
+{% if lazy_ficha|default(false) %}
+<script>
+(function () {
+  var extrasUrl = {{ url_for('productos.ver_producto_ficha_extras', codigo=producto.codigo) | tojson }};
+  var productoCodigo = {{ producto.codigo | tojson }};
+  var productoDesc = {{ (producto.descripcion or producto.codigo) | tojson }};
+
+  function notifyResize() {
+    try {
+      if (window.parent && typeof window.parent._andesResizeProductoIframe === 'function') {
+        requestAnimationFrame(function () { window.parent._andesResizeProductoIframe(); });
+      }
+    } catch (e) {}
+  }
+
+  function esc(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function renderMedia(data) {
+    var root = document.getElementById('ftMediaRoot');
+    if (!root) return;
+    var imgs = data.imagenes || [];
+    var imgs360 = data.imagenes_360 || [];
+    if (!imgs.length) {
+      root.innerHTML = '<div class="ft-media-grow"><div class="ft-placeholder">Sin imagen disponible</div></div>';
+      return;
+    }
+    var data360 = JSON.stringify(imgs360);
+    var html = '<div class="ft-media-grow"><div class="ft-viewer"><div class="ft-viewer-stage">' +
+      '<img id="imgPrincipal" class="ft-img-main img-producto" data-360=\'' + data360.replace(/'/g, '&#39;') + '\' ' +
+      'src="' + esc(imgs[0]) + '" alt="' + esc(productoDesc) + '" loading="lazy"></div></div>' +
+      '<div class="ft-thumb-row">';
+    imgs.forEach(function (src) {
+      html += '<img class="miniatura" src="' + esc(src) + '" alt="" loading="lazy" onclick="volverImagenNormal(this.src)">';
+    });
+    if (imgs360.length) {
+      html += '<div class="miniatura visor360-btn" onclick="activar360()" role="button" tabindex="0" aria-label="Vista 360°">' +
+        '<img src="' + esc(imgs360[0]) + '" class="mini360" alt="" loading="lazy">' +
+        '<div class="badge360">360°</div><div class="spin-icon">↻</div></div>';
+    }
+    html += '</div></div>';
+    root.innerHTML = html;
+  }
+
+  function renderStock(fs) {
+    var root = document.getElementById('ftStockRoot');
+    if (!root || !fs) return;
+    var html = '<h3 class="ft-stock-card-title">Repuestos disponibles</h3>';
+    (fs.bodegas || []).forEach(function (b) {
+      if ((b.lineas || []).length > 1) {
+        html += '<details class="ft-stock-details"><summary class="ft-stock-details-summary">' +
+          '<span class="ft-stock-details-label">' + esc(b.nombre) + '</span>' +
+          '<span class="ft-stock-details-total">' + esc(b.subtotal) + '</span></summary><div class="ft-stock-details-body">';
+        b.lineas.forEach(function (L) {
+          html += '<div class="ft-stock-subline"><span class="ft-stock-subline-marca">' + esc(L.marca) +
+            '</span><span class="ft-stock-subline-qty">' + esc(L.stock) + '</span></div>';
+        });
+        html += '</div></details>';
+      } else {
+        var line = (b.lineas && b.lineas[0]) ? b.lineas[0] : { marca: '—', stock: 0 };
+        html += '<div class="ft-stock-line"><span class="ft-stock-line-label">' + esc(b.nombre) + ' · ' + esc(line.marca) +
+          '</span><span class="ft-stock-line-val">' + esc(line.stock) + '</span></div>';
+      }
+    });
+    (fs.otras_lineas || []).forEach(function (o) {
+      html += '<div class="ft-stock-line"><span class="ft-stock-line-label">' + esc(o.bodega) + ' · ' + esc(o.marca) +
+        '</span><span class="ft-stock-line-val">' + esc(o.stock) + '</span></div>';
+    });
+    html += '<div class="ft-stock-line"><span class="ft-stock-line-label">En tránsito</span><span class="ft-stock-line-val">' +
+      esc(fs.s6) + '</span></div>';
+    html += '<div class="ft-stock-line ft-stock-line--total"><span class="ft-stock-line-label">Total inventario</span>' +
+      '<span class="ft-stock-line-val">' + esc(fs.stotal) + '</span></div>';
+    root.innerHTML = html;
+    root.querySelectorAll('.ft-stock-details').forEach(function (el) {
+      el.addEventListener('toggle', notifyResize);
+    });
+  }
+
+  function renderCompat(data) {
+    var root = document.getElementById('ftCompatRoot');
+    if (!root) return;
+    var html = '<h2 class="ft-section-title">Homologados / compatibilidad</h2>';
+    if (data.homologados_raw) {
+      html += '<p class="ft-homologados-text">' + esc(data.homologados_raw) + '</p>';
+    } else if (data.homologados_items && data.homologados_items.length) {
+      html += '<div class="homologados-chips">';
+      data.homologados_items.forEach(function (h) {
+        html += '<span class="chip-hom" title="' + esc(h.descripcion) + '">' + esc(h.codigo) + '</span>';
+      });
+      html += '</div>';
+    } else {
+      html += '<p class="ft-spec-dd" style="margin:0;">—</p>';
+    }
+    root.innerHTML = html;
+  }
+
+  function applyDespiece(d) {
+    if (!d) return;
+    var cfgEl = document.getElementById('epc-despiece-config');
+    if (cfgEl) {
+      cfgEl.textContent = JSON.stringify({
+        partes: d.despiece_partes || [],
+        oem_match: d.despiece_oem_match || '',
+        erp_precio: d.erp_precio,
+        erp_mayor: d.erp_precio_mayor
+      });
+    }
+    var titleEl = document.querySelector('.epc-despiece-head__title');
+    if (titleEl && d.despiece_titulo) {
+      titleEl.textContent = d.despiece_titulo;
+    }
+    if (d.despiece_imagen_src) {
+      var img = document.getElementById('epcDespieceImg');
+      if (img) {
+        img.src = d.despiece_imagen_src;
+      }
+    }
+  }
+
+  fetch(extrasUrl, {
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!data || !data.success) return;
+      renderMedia(data);
+      renderCompat(data);
+      applyDespiece(data.despiece);
+      notifyResize();
+      setTimeout(function () { renderStock(data.ficha_stock); notifyResize(); }, 0);
+    })
+    .catch(function () {
+      var media = document.getElementById('ftMediaRoot');
+      if (media) media.innerHTML = '<div class="ft-media-grow"><div class="ft-placeholder">Sin imagen disponible</div></div>';
+    });
+})();
+</script>
+{% endif %}
 
 </body>
 </html>

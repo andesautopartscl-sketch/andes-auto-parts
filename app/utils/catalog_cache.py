@@ -12,13 +12,14 @@ _lock = Lock()
 _store: dict[str, dict[str, Any]] = {}
 
 
-def _get_cached(key: str) -> Any | None:
+def _get_cached(key: str, ttl_seconds: int | None = None) -> Any | None:
+    ttl = _TTL_SECONDS if ttl_seconds is None else ttl_seconds
     now = time.time()
     with _lock:
         entry = _store.get(key)
         if not entry:
             return None
-        if now - entry["ts"] > _TTL_SECONDS:
+        if now - entry["ts"] > ttl:
             _store.pop(key, None)
             return None
         return entry["data"]
@@ -31,6 +32,15 @@ def _set_cached(key: str, data: Any) -> None:
 
 def get_or_load(key: str, loader: Callable[[], T]) -> T:
     cached = _get_cached(key)
+    if cached is not None:
+        return cached
+    data = loader()
+    _set_cached(key, data)
+    return data
+
+
+def get_or_load_ttl(key: str, loader: Callable[[], T], ttl_seconds: int) -> T:
+    cached = _get_cached(key, ttl_seconds=ttl_seconds)
     if cached is not None:
         return cached
     data = loader()

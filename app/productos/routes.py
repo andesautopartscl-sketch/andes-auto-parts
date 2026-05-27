@@ -43,7 +43,7 @@ from ..utils.categoria_autodetect import (
     bulk_auto_asignar_categorias_faltantes,
 )
 from ..utils.product_image_postprocess import process_uploaded_image
-from ..utils.catalog_cache import get_or_load, invalidate_taxonomia
+from ..utils.catalog_cache import get_or_load, get_or_load_ttl, invalidate_taxonomia
 from ..utils.cloudinary_config import is_configured as cloudinary_is_configured
 from ..utils.cloudinary_config import upload_image as cloudinary_upload_image
 from ..utils.cloudinary_config import delete_image_by_url
@@ -63,6 +63,7 @@ from ..utils.cloudinary_static_map import keys_with_prefix
 from ..utils.product_image_url import (
     is_remote_image_url,
     normalize_stored_image_ref,
+    product_image_src,
     static_filename_from_ref,
 )
 
@@ -1809,37 +1810,149 @@ def _ficha_stock_repuestos(producto: Producto) -> dict:
     }
 
 
+FICHA_CACHE_TTL = 600
+
+
+def _ficha_stock_quick(producto: Producto) -> dict:
+    """Stock resumido desde columnas del producto (sin consultar variantes)."""
+    s6 = int(float(producto.stock_transito or 0))
+    marca_catalogo = (producto.marca or "").strip() or "—"
+    stocks = [
+        int(float(producto.stock_10jul or 0)),
+        int(float(producto.stock_brasil or 0)),
+        int(float(producto.stock_g_avenida or 0)),
+        int(float(producto.stock_orientales or 0)),
+        int(float(producto.stock_b20_outlet or 0)),
+    ]
+    bodegas = []
+    for idx, sn in enumerate(stocks, start=1):
+        bodegas.append(
+            {
+                "nombre": f"Bodega {idx}",
+                "lineas": [{"marca": marca_catalogo, "stock": sn}],
+                "subtotal": int(sn),
+            }
+        )
+    return {
+        "bodegas": bodegas,
+        "otras_lineas": [],
+        "s6": s6,
+        "otras": 0,
+        "stotal": sum(stocks) + s6,
+        "partial": True,
+    }
+
+
+def _ficha_homologados_payload(db, producto: Producto, normalized: str) -> dict:
+    def loader() -> dict:
+        homologados_raw = (producto.homologados or "").strip()
+        items: list[dict] = []
+        if not homologados_raw:
+            forward_products = _forward_productos_homologados(db, producto, normalized)
+            reverse_products = _reverse_products_listing_homologado(db, normalized)
+            merged = _merge_by_codigo(list(forward_products) + list(reverse_products))
+            items = [
+                {
+                    "codigo": (p.codigo or "").strip(),
+                    "descripcion": (p.descripcion or "").strip(),
+                }
+                for p in merged
+            ]
+        return {"homologados_raw": homologados_raw, "homologados_items": items}
+
+    return get_or_load_ttl(f"ficha_homologados:{normalized}", loader, FICHA_CACHE_TTL)
+
+
+def _ficha_despiece_payload(db, producto: Producto) -> dict:
+    normalized = (producto.codigo or "").strip().upper()
+
+    def loader() -> dict:
+        despiece_row = None
+        despiece_partes: list = []
+        despiece_imagen_url = None
+        despiece_titulo = ""
+        despiece_notas = ""
+        despiece_partes_texto = ""
+        try:
+            despiece_row = _find_oem_despiece_for_producto(db, producto)
+        except Exception:
+            despiece_row = None
+        if despiece_row:
+            despiece_titulo = (despiece_row.titulo or "").strip()
+            despiece_notas = (despiece_row.notas or "").strip()
+            img_rel = (despiece_row.imagen_static or "").strip()
+            if img_rel:
+                despiece_imagen_url = img_rel
+            else:
+                img_fallback_rel = _find_shared_despiece_image_fallback(db, producto)
+                if img_fallback_rel:
+                    despiece_imagen_url = img_fallback_rel
+            if despiece_row.partes_json:
+                try:
+                    parsed = json.loads(despiece_row.partes_json)
+                    if isinstance(parsed, list):
+                        despiece_partes = parsed
+                except Exception:
+                    despiece_partes = []
+                try:
+                    despiece_partes_texto = json.dumps(
+                        json.loads(despiece_row.partes_json),
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+                except Exception:
+                    despiece_partes_texto = (despiece_row.partes_json or "").strip()
+        if not despiece_imagen_url:
+            fb_name = _find_epc_despiece_archivo_en_static(producto)
+            if fb_name:
+                despiece_imagen_url = f"epc_despiece/{fb_name}"
+        oem_match = _norm_oem_despiece(getattr(producto, "codigo_oem", None))
+        return {
+            "despiece_titulo": despiece_titulo,
+            "despiece_imagen_url": despiece_imagen_url,
+            "despiece_imagen_src": product_image_src(despiece_imagen_url) if despiece_imagen_url else "",
+            "despiece_partes": despiece_partes,
+            "despiece_notas": despiece_notas,
+            "despiece_partes_texto": despiece_partes_texto,
+            "despiece_oem_match": oem_match,
+        }
+
+    return get_or_load_ttl(f"ficha_despiece:{normalized}", loader, FICHA_CACHE_TTL)
+
+
+def _get_producto_ficha(db, normalized: str) -> Producto | None:
+    return (
+        db.query(Producto)
+        .options(
+            joinedload(Producto.categoria_rel),
+            joinedload(Producto.subcategoria_rel),
+        )
+        .filter(Producto.activo.is_(True))
+        .filter(
+            or_(
+                Producto.codigo == normalized,
+                func.upper(func.trim(Producto.codigo)) == normalized,
+            )
+        )
+        .first()
+    )
+
+
 # =========================================
 # VER PRODUCTO (FICHA TECNICA)
 # =========================================
 @productos_bp.route("/producto/<codigo>")
 @login_required
 def ver_producto(codigo):
-
+    t0 = time.time()
     normalized = (codigo or "").strip().upper()
     db = SessionDB()
     user_perms = get_user_permissions(session.get("user"), session.get("rol"))
     producto = None
     categoria_txt = ""
     subcategoria_txt = ""
-    homologados_items: list = []
-    homologados_raw = ""
     try:
-        producto = (
-            db.query(Producto)
-            .options(
-                joinedload(Producto.categoria_rel),
-                joinedload(Producto.subcategoria_rel),
-            )
-            .filter(Producto.activo.is_(True))
-            .filter(
-                or_(
-                    Producto.codigo == normalized,
-                    func.upper(func.trim(Producto.codigo)) == normalized,
-                )
-            )
-            .first()
-        )
+        producto = _get_producto_ficha(db, normalized)
         if producto:
             _auto_asignar_categoria_si_vacio(db, producto)
             db.refresh(producto)
@@ -1847,16 +1960,6 @@ def ver_producto(codigo):
                 categoria_txt = (producto.categoria_rel.nombre or "").strip()
             if producto.subcategoria_rel:
                 subcategoria_txt = (producto.subcategoria_rel.nombre or "").strip()
-
-            homologados_raw = (producto.homologados or "").strip()
-            # Modal ficha: prioridad al texto de modelos (campo HOMOLOGADOS). Solo buscar ítems
-            # relacionados por OEM si no hay texto (evita chips de códigos cuando hay lista larga).
-            if not homologados_raw:
-                forward_products = _forward_productos_homologados(db, producto, normalized)
-                reverse_products = _reverse_products_listing_homologado(db, normalized)
-                homologados_items = _merge_by_codigo(
-                    list(forward_products) + list(reverse_products)
-                )
             try:
                 register_product_audit(
                     db,
@@ -1874,101 +1977,99 @@ def ver_producto(codigo):
         if not producto:
             return "Producto no encontrado"
 
-        # =============================
-        # BUSCAR IMÁGENES DEL PRODUCTO
-        # (mientras la sesión sigue abierta; si se cerrara antes, producto queda detached)
-        # =============================
-
-        imagenes = _collect_imagenes_producto(producto)
-
-        # =============================
-        # BUSCAR IMÁGENES 360 POR CARPETA
-        # =============================
-
-        imagenes_360 = _collect_imagenes_360(producto)
-
-        despiece_row = None
-        despiece_partes: list = []
-        despiece_imagen_url = None
-        despiece_titulo = ""
-        despiece_notas = ""
-        despiece_partes_texto = ""
-        has_despiece_panel = True
-        if producto:
-            try:
-                despiece_row = _find_oem_despiece_for_producto(db, producto)
-            except Exception:
-                despiece_row = None
-            if despiece_row:
-                despiece_titulo = (despiece_row.titulo or "").strip()
-                despiece_notas = (despiece_row.notas or "").strip()
-                img_rel = (despiece_row.imagen_static or "").strip()
-                if img_rel:
-                    despiece_imagen_url = img_rel
-                else:
-                    # Si el registro OEM compartido aún no tiene imagen, usar respaldo legado.
-                    img_fallback_rel = _find_shared_despiece_image_fallback(db, producto)
-                    if img_fallback_rel:
-                        despiece_imagen_url = img_fallback_rel
-                if despiece_row.partes_json:
-                    try:
-                        parsed = json.loads(despiece_row.partes_json)
-                        if isinstance(parsed, list):
-                            despiece_partes = parsed
-                    except Exception:
-                        despiece_partes = []
-                    try:
-                        despiece_partes_texto = json.dumps(
-                            json.loads(despiece_row.partes_json),
-                            indent=2,
-                            ensure_ascii=False,
-                        )
-                    except Exception:
-                        despiece_partes_texto = (despiece_row.partes_json or "").strip()
-
-            if not despiece_imagen_url and producto:
-                fb_name = _find_epc_despiece_archivo_en_static(producto)
-                if fb_name:
-                    despiece_imagen_url = f"epc_despiece/{fb_name}"
-
-        oem_match = _norm_oem_despiece(getattr(producto, "codigo_oem", None)) if producto else ""
-        despiece_erp_precio = getattr(producto, "p_publico", None) if producto else None
-        despiece_erp_precio_mayor = (
-            getattr(producto, "prec_mayor", None)
-            if (producto and bool(user_perms.get("ver_precio_mayor", True)))
-            else None
-        )
-
         es_admin = "admin" in (session.get("rol") or "").strip().lower()
-
-        ficha_stock = _ficha_stock_repuestos(producto)
+        ficha_stock = _ficha_stock_quick(producto)
 
         html = render_template(
             "modal_producto.html",
             producto=producto,
             ficha_stock=ficha_stock,
-            imagenes=imagenes,
-            imagenes_360=imagenes_360,
+            imagenes=[],
+            imagenes_360=[],
             categoria_txt=categoria_txt,
             subcategoria_txt=subcategoria_txt,
-            homologados_items=homologados_items,
-            homologados_raw=homologados_raw,
-            has_despiece_panel=has_despiece_panel,
+            homologados_items=[],
+            homologados_raw="",
+            has_despiece_panel=True,
             es_admin=es_admin,
-            despiece_titulo=despiece_titulo,
-            despiece_imagen_url=despiece_imagen_url,
-            despiece_partes=despiece_partes,
-            despiece_notas=despiece_notas,
-            despiece_partes_texto=despiece_partes_texto,
-            despiece_oem_match=oem_match,
-            despiece_erp_precio=despiece_erp_precio,
-            despiece_erp_precio_mayor=despiece_erp_precio_mayor,
+            despiece_titulo="",
+            despiece_imagen_url=None,
+            despiece_partes=[],
+            despiece_notas="",
+            despiece_partes_texto="",
+            despiece_oem_match=_norm_oem_despiece(getattr(producto, "codigo_oem", None)),
+            despiece_erp_precio=getattr(producto, "p_publico", None),
+            despiece_erp_precio_mayor=(
+                getattr(producto, "prec_mayor", None)
+                if bool(user_perms.get("ver_precio_mayor", True))
+                else None
+            ),
             can_view_precio_mayor=bool(user_perms.get("ver_precio_mayor", True)),
+            lazy_ficha=True,
         )
         resp = make_response(html)
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         resp.headers["Pragma"] = "no-cache"
+        current_app.logger.info(
+            "Modal producto %s: %.3fs",
+            normalized,
+            time.time() - t0,
+        )
         return resp
+    finally:
+        db.close()
+
+
+@productos_bp.route("/producto/<codigo>/ficha/extras")
+@login_required
+def ver_producto_ficha_extras(codigo):
+    """Carga diferida: imágenes, stock detallado, homologados y despiece."""
+    t0 = time.time()
+    normalized = (codigo or "").strip().upper()
+    db = SessionDB()
+    user_perms = get_user_permissions(session.get("user"), session.get("rol"))
+    try:
+        producto = _get_producto_ficha(db, normalized)
+        if not producto:
+            return jsonify(success=False, message="Producto no encontrado"), 404
+
+        imagenes = _collect_imagenes_producto(producto)
+        imagenes_360 = _collect_imagenes_360(producto)
+        codigo_dir = (producto.codigo or "").strip()
+        imagenes_urls = [product_image_src(img) for img in imagenes]
+        imagenes_360_urls = [
+            product_image_src(f"productos360/{codigo_dir}/{name}") for name in imagenes_360
+        ]
+
+        hom = _ficha_homologados_payload(db, producto, normalized)
+        desp = _ficha_despiece_payload(db, producto)
+        ficha_stock = _ficha_stock_repuestos(producto)
+
+        elapsed = time.time() - t0
+        current_app.logger.info(
+            "Modal producto %s extras: %.3fs",
+            normalized,
+            elapsed,
+        )
+        return jsonify(
+            success=True,
+            codigo=producto.codigo,
+            imagenes=imagenes_urls,
+            imagenes_360=imagenes_360_urls,
+            ficha_stock=ficha_stock,
+            homologados_raw=hom["homologados_raw"],
+            homologados_items=hom["homologados_items"],
+            despiece={
+                **desp,
+                "erp_precio": getattr(producto, "p_publico", None),
+                "erp_precio_mayor": (
+                    getattr(producto, "prec_mayor", None)
+                    if bool(user_perms.get("ver_precio_mayor", True))
+                    else None
+                ),
+            },
+            timing_s=round(elapsed, 3),
+        )
     finally:
         db.close()
 
@@ -3529,71 +3630,120 @@ def importar_imagenes_cloudinary_subir_uno():
     import traceback
 
     log = logging.getLogger(__name__)
-    denied = _require_productos_crear_editar_json()
-    if denied:
-        return denied
-    if not cloudinary_is_configured():
-        return jsonify(
-            {"success": False, "error": "Cloudinary no está configurado (variables CLOUDINARY_*)."}
-        ), 503
-
-    file_obj = request.files.get("imagen") or request.files.get("file")
-    codigo = (request.form.get("codigo") or "").strip().upper()
-    archivo_nombre = (request.form.get("archivo_nombre") or "").strip()
-
-    log.info(
-        "subir-uno: content_type=%s codigo=%s archivo_nombre=%s files=%s",
-        request.content_type,
-        codigo,
-        archivo_nombre,
-        list(request.files.keys()),
-    )
-    if file_obj:
-        log.info("subir-uno: file_meta=%s", describe_upload_file(file_obj, archivo_nombre))
-
-    if not file_obj:
-        return jsonify({"success": False, "error": "Falta archivo de imagen en la petición."}), 400
-    if not codigo:
-        return jsonify({"success": False, "error": "Falta código de producto."}), 400
-
-    fname = (
-        archivo_nombre
-        or (getattr(file_obj, "filename", None) or "").strip()
-        or "imagen.jpg"
-    )
-    sess = SessionDB()
     try:
-        row = _procesar_subida_imagen_cloudinary(
-            sess, file_obj, codigo_asignado=codigo, archivo_nombre=fname
+        denied = _require_productos_crear_editar_json()
+        if denied:
+            return denied
+        if not cloudinary_is_configured():
+            return jsonify(
+                {
+                    "ok": False,
+                    "success": False,
+                    "error": "Cloudinary no está configurado (variables CLOUDINARY_*).",
+                    "mensaje": "Cloudinary no está configurado (variables CLOUDINARY_*).",
+                }
+            ), 503
+
+        file_obj = request.files.get("imagen") or request.files.get("file")
+        codigo = (request.form.get("codigo") or "").strip().upper()
+        archivo_nombre = (request.form.get("archivo_nombre") or "").strip()
+
+        log.info(
+            "subir-uno: content_type=%s codigo=%s archivo_nombre=%s files=%s",
+            request.content_type,
+            codigo,
+            archivo_nombre,
+            list(request.files.keys()),
         )
-        if row.get("estado") == "vinculado":
-            register_product_audit(
-                sess,
-                actor=_actor_usuario(),
-                producto_codigo=row.get("producto_codigo"),
-                action="update",
-                modulo="productos",
-                req=request,
-                metadata={"cloudinary_image_upload": True, "archivo": fname[:120]},
+        if file_obj:
+            log.info("subir-uno: file_meta=%s", describe_upload_file(file_obj, archivo_nombre))
+
+        if not file_obj:
+            return jsonify(
+                {
+                    "ok": False,
+                    "success": False,
+                    "error": "Falta archivo de imagen en la petición.",
+                    "mensaje": "Falta archivo de imagen en la petición.",
+                    "estado": "error",
+                }
+            ), 400
+        if not codigo:
+            return jsonify(
+                {
+                    "ok": False,
+                    "success": False,
+                    "error": "Falta código de producto.",
+                    "mensaje": "Falta código de producto.",
+                    "estado": "error",
+                }
+            ), 400
+
+        fname = (
+            archivo_nombre
+            or (getattr(file_obj, "filename", None) or "").strip()
+            or "imagen.jpg"
+        )
+        sess = SessionDB()
+        try:
+            row = _procesar_subida_imagen_cloudinary(
+                sess, file_obj, codigo_asignado=codigo, archivo_nombre=fname
             )
-        sess.commit()
-        ok = row.get("estado") != "error"
-        if not ok:
-            log.warning("subir-uno: fallo estado=%s mensaje=%s", row.get("estado"), row.get("mensaje"))
-        return jsonify({"success": ok, **row})
-    except Exception as exc:
-        sess.rollback()
-        log.error("subir-uno: excepción codigo=%s archivo=%s\n%s", codigo, fname, traceback.format_exc())
+            if row.get("estado") == "vinculado":
+                register_product_audit(
+                    sess,
+                    actor=_actor_usuario(),
+                    producto_codigo=row.get("producto_codigo"),
+                    action="update",
+                    modulo="productos",
+                    req=request,
+                    metadata={"cloudinary_image_upload": True, "archivo": fname[:120]},
+                )
+            sess.commit()
+            ok = row.get("estado") != "error"
+            if not ok:
+                log.warning(
+                    "subir-uno: fallo estado=%s mensaje=%s codigo=%s archivo=%s",
+                    row.get("estado"),
+                    row.get("mensaje"),
+                    codigo,
+                    fname,
+                )
+            return jsonify({"ok": ok, "success": ok, **row})
+        except Exception as exc:
+            sess.rollback()
+            tb = traceback.format_exc()
+            log.error(
+                "subir-uno: excepción codigo=%s archivo=%s\n%s",
+                codigo,
+                fname,
+                tb,
+            )
+            return jsonify(
+                {
+                    "ok": False,
+                    "success": False,
+                    "error": str(exc),
+                    "mensaje": str(exc),
+                    "traceback": tb,
+                    "estado": "error",
+                }
+            ), 500
+        finally:
+            sess.close()
+    except Exception as e:
+        tb = traceback.format_exc()
+        log.error("subir-uno: error fatal\n%s", tb)
         return jsonify(
             {
+                "ok": False,
                 "success": False,
-                "error": str(exc),
+                "mensaje": str(e),
+                "error": str(e),
+                "traceback": tb,
                 "estado": "error",
-                "mensaje": str(exc),
             }
         ), 500
-    finally:
-        sess.close()
 
 
 @productos_bp.route("/productos/importar-imagenes-cloudinary/resolver")

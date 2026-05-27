@@ -221,6 +221,43 @@ body.search-lite-app .content {
 	height: auto;
 }
 
+.app-ficha-shell {
+	position: relative;
+	min-height: 420px;
+}
+.app-ficha-shell-skeleton {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	padding: 12px;
+	background: #f8fafc;
+	border-radius: 14px;
+	pointer-events: none;
+	transition: opacity 0.2s ease;
+}
+.app-ficha-shell-skeleton.is-hidden {
+	opacity: 0;
+}
+.app-ficha-sk {
+	background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+	background-size: 200% 100%;
+	animation: app-ficha-shimmer 1.15s ease-in-out infinite;
+	border-radius: 10px;
+}
+.app-ficha-sk--title { height: 28px; width: 45%; margin-bottom: 14px; }
+.app-ficha-sk--body { height: 320px; width: 100%; }
+@keyframes app-ficha-shimmer {
+	0% { background-position: 200% 0; }
+	100% { background-position: -200% 0; }
+}
+.app-ficha-shell .app-modal-iframe--producto {
+	opacity: 0;
+	transition: opacity 0.2s ease;
+}
+.app-ficha-shell.is-ready .app-modal-iframe--producto {
+	opacity: 1;
+}
+
 /* Ocultar FAB del chat cuando cualquier modal del ERP está abierto (clase en body + respaldo por hermanos). */
 body.app-modal-is-open #apchat-root {
 	display: none !important;
@@ -596,8 +633,13 @@ function toggleMenu(id) {
 			var srcNoHash = (url || '').split('#')[0];
 			var sep = srcNoHash.indexOf('?') === -1 ? '?' : '&';
 			var src = srcNoHash + sep + '_v=' + Date.now();
-			modalBody.innerHTML = '<iframe class="app-modal-iframe app-modal-iframe--producto" title="Ficha del producto" src="' +
-				src.replace(/"/g, '&quot;') + '"></iframe>';
+			modalBody.innerHTML =
+				'<div class="app-ficha-shell">' +
+				'<div class="app-ficha-shell-skeleton" aria-hidden="true">' +
+				'<div class="app-ficha-sk app-ficha-sk--title"></div>' +
+				'<div class="app-ficha-sk app-ficha-sk--body"></div></div>' +
+				'<iframe class="app-modal-iframe app-modal-iframe--producto" title="Ficha del producto" src="' +
+				src.replace(/"/g, '&quot;') + '"></iframe></div>';
 			var dlg = document.querySelector('#appModal .app-modal-dialog');
 			if (dlg) dlg.classList.add('app-modal-dialog--producto-ficha');
 			var modalEl = document.getElementById('appModal');
@@ -629,6 +671,10 @@ function toggleMenu(id) {
 			window._andesResizeProductoIframe = resizeProductoIframe;
 			if (iframe) {
 				iframe.onload = function () {
+					var shell = modalBody.querySelector('.app-ficha-shell');
+					var sk = modalBody.querySelector('.app-ficha-shell-skeleton');
+					if (shell) shell.classList.add('is-ready');
+					if (sk) sk.classList.add('is-hidden');
 					resizeProductoIframe();
 					try {
 						var doc = iframe.contentDocument || iframe.contentWindow.document;
