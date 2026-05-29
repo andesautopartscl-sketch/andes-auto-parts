@@ -698,6 +698,137 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
         gap: 6px 8px;
     }
 }
+.ingreso-doc-num-row {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+}
+.ingreso-doc-num-row input {
+    flex: 1;
+    min-width: 0;
+}
+.ingreso-factura-scan-btn {
+    flex-shrink: 0;
+    width: 36px;
+    min-height: 30px;
+    padding: 0;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    background: #f8fafc;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    color: #334155;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.ingreso-factura-scan-btn:hover {
+    background: #eff6ff;
+    border-color: #93c5fd;
+}
+.ingreso-factura-auto-badge {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #166534;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+}
+.ingreso-factura-modal-card {
+    width: min(920px, 100%);
+    max-height: min(90vh, 820px);
+}
+.ingreso-factura-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.ingreso-factura-preview-wrap {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+    min-height: 120px;
+    max-height: 36vh;
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+}
+.ingreso-factura-preview-img {
+    max-width: 100%;
+    max-height: 34vh;
+    object-fit: contain;
+    display: block;
+}
+.ingreso-factura-preview-pdf {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 16px;
+    color: #475569;
+    font-size: 13px;
+}
+.ingreso-factura-preview-pdf-icon {
+    font-size: 32px;
+}
+.ingreso-factura-scan-status {
+    font-size: 12px;
+    line-height: 1.4;
+}
+.ingreso-factura-scan-status.is-loading {
+    color: #1d4ed8;
+}
+.ingreso-factura-scan-status.is-error {
+    color: #b91c1c;
+}
+.ingreso-factura-extracted-title {
+    margin: 0 0 6px;
+    font-size: 13px;
+    color: #0f172a;
+}
+.ingreso-factura-dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: minmax(120px, 34%) 1fr;
+    gap: 4px 10px;
+    font-size: 12px;
+}
+.ingreso-factura-dl dt {
+    margin: 0;
+    color: #64748b;
+    font-weight: 600;
+}
+.ingreso-factura-dl dd {
+    margin: 0;
+    color: #0f172a;
+    word-break: break-word;
+}
+.ingreso-factura-dl .ingreso-factura-auto-tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #166534;
+    background: #dcfce7;
+    vertical-align: middle;
+}
+.ingreso-factura-modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 4px;
+}
+.ingreso-auto-filled {
+    outline: 2px solid #86efac;
+    outline-offset: 1px;
+    background: #f0fdf4 !important;
+}
 .ingreso-product-modal {
     position: fixed;
     inset: 0;
@@ -819,6 +950,7 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
     <form method="post" id="ingresoForm"
           data-marcas-url="{{ url_for('bodega.ingreso_marcas_por_codigo') }}"
           data-product-search-url="{{ url_for('ventas.api_productos_search') }}"
+          data-analizar-factura-url="{{ url_for('bodega.api_analizar_factura') }}"
           data-codigo-prov-url="/bodega/ingreso/codigo_interno_por_proveedor"
           data-bodegas='{{ bodegas_opciones | tojson }}'
           data-default-bodega="{{ default_bodega }}"
@@ -838,9 +970,19 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
                 <label for="fecha_documento">Fecha</label>
                 <input id="fecha_documento" name="fecha_documento" type="date" value="{{ form_data.fecha_documento }}" required>
             </div>
-            <div class="field">
+            <div class="field ingreso-doc-num-field">
                 <label for="numero_documento" title="Número de factura o guía (requerido)">N° documento</label>
-                <input id="numero_documento" name="numero_documento" value="{{ form_data.numero_documento }}" placeholder="Factura / guía" required>
+                <div class="ingreso-doc-num-row">
+                    <input id="numero_documento" name="numero_documento" value="{{ form_data.numero_documento }}" placeholder="Factura / guía" required>
+                    <button type="button" class="ingreso-factura-scan-btn" id="btnFacturaScan"
+                            title="Tomar foto o subir factura (JPG, PNG, WEBP)"
+                            aria-label="Escanear factura"
+                            data-analizar-url="{{ url_for('bodega.api_analizar_factura') }}">📷</button>
+                </div>
+                <input type="file" id="ingresoFacturaFileInput" class="ingreso-factura-file-input"
+                       accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                       capture="environment" hidden>
+                <span id="ingresoFacturaAutoBadge" class="ingreso-factura-auto-badge" hidden aria-live="polite"></span>
             </div>
             <div class="field">
                 <label for="ingresoMetodoPago" title="Cómo pagaste esta factura al proveedor">Método de pago</label>
@@ -1095,6 +1237,34 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
             </div>
             <div id="ingresoProductSearchStatus" class="muted" style="margin-bottom:8px;">Escribe para buscar productos.</div>
             <div id="ingresoProductResults" class="ingreso-product-results"></div>
+        </div>
+    </div>
+</div>
+
+<div id="ingresoFacturaScanModal" class="ingreso-product-modal ingreso-factura-modal" aria-hidden="true">
+    <div class="ingreso-product-modal-card ingreso-factura-modal-card" role="dialog" aria-modal="true" aria-labelledby="ingresoFacturaScanTitle">
+        <div class="ingreso-product-modal-head">
+            <h3 id="ingresoFacturaScanTitle">Analizar factura</h3>
+            <button type="button" class="btn" id="ingresoFacturaScanClose">Cerrar</button>
+        </div>
+        <div class="ingreso-product-modal-body ingreso-factura-modal-body">
+            <div class="ingreso-factura-preview-wrap">
+                <img id="ingresoFacturaPreviewImg" class="ingreso-factura-preview-img" alt="Vista previa de la factura" hidden>
+                <div id="ingresoFacturaPreviewPdf" class="ingreso-factura-preview-pdf" hidden>
+                    <span class="ingreso-factura-preview-pdf-icon" aria-hidden="true">📄</span>
+                    <span id="ingresoFacturaPreviewPdfName">documento.pdf</span>
+                </div>
+            </div>
+            <div id="ingresoFacturaScanStatus" class="ingreso-factura-scan-status muted">Seleccioná una imagen y presioná «Analizar factura».</div>
+            <div id="ingresoFacturaExtracted" class="ingreso-factura-extracted" hidden>
+                <h4 class="ingreso-factura-extracted-title">Datos detectados</h4>
+                <dl class="ingreso-factura-dl" id="ingresoFacturaExtractedList"></dl>
+            </div>
+            <div class="ingreso-factura-modal-actions">
+                <button type="button" class="btn btn-primary" id="ingresoFacturaAnalyzeBtn">Analizar factura</button>
+                <button type="button" class="btn btn-success" id="ingresoFacturaApplyBtn" disabled>Aplicar datos</button>
+                <button type="button" class="btn" id="ingresoFacturaCancelBtn">Cancelar</button>
+            </div>
         </div>
     </div>
 </div>

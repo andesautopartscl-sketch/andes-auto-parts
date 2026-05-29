@@ -1653,6 +1653,419 @@
             });
         }
 
+        (function initIngresoFacturaScan() {
+            var btnScan = document.getElementById("btnFacturaScan");
+            var fileInput = document.getElementById("ingresoFacturaFileInput");
+            var modal = document.getElementById("ingresoFacturaScanModal");
+            if (!btnScan || !fileInput || !modal) return;
+
+            var analizarUrl =
+                (btnScan.getAttribute("data-analizar-url") || form.getAttribute("data-analizar-factura-url") || "").trim();
+            var modalClose = document.getElementById("ingresoFacturaScanClose");
+            var btnCancel = document.getElementById("ingresoFacturaCancelBtn");
+            var btnAnalyze = document.getElementById("ingresoFacturaAnalyzeBtn");
+            var btnApply = document.getElementById("ingresoFacturaApplyBtn");
+            var previewImg = document.getElementById("ingresoFacturaPreviewImg");
+            var previewPdf = document.getElementById("ingresoFacturaPreviewPdf");
+            var previewPdfName = document.getElementById("ingresoFacturaPreviewPdfName");
+            var statusEl = document.getElementById("ingresoFacturaScanStatus");
+            var extractedBox = document.getElementById("ingresoFacturaExtracted");
+            var extractedList = document.getElementById("ingresoFacturaExtractedList");
+            var autoBadge = document.getElementById("ingresoFacturaAutoBadge");
+            var numeroDocInput = form.querySelector("#numero_documento");
+            var fechaInput = form.querySelector("#fecha_documento");
+            var metodoPagoSel = form.querySelector("#ingresoMetodoPago");
+
+            var pendingFile = null;
+            var pendingBase64 = "";
+            var pendingMediaType = "image/jpeg";
+            var extractedData = null;
+
+            function getCsrfToken() {
+                var meta = document.querySelector('meta[name="csrf-token"]');
+                return meta && meta.content ? String(meta.content).trim() : "";
+            }
+
+            function openModal() {
+                modal.classList.add("open");
+                modal.setAttribute("aria-hidden", "false");
+            }
+
+            function closeModal() {
+                modal.classList.remove("open");
+                modal.setAttribute("aria-hidden", "true");
+            }
+
+            function setStatus(msg, kind) {
+                if (!statusEl) return;
+                statusEl.textContent = msg || "";
+                statusEl.classList.remove("is-loading", "is-error", "muted");
+                if (kind === "loading") statusEl.classList.add("is-loading");
+                else if (kind === "error") statusEl.classList.add("is-error");
+                else statusEl.classList.add("muted");
+            }
+
+            function resetPreview() {
+                if (previewImg) {
+                    previewImg.hidden = true;
+                    previewImg.removeAttribute("src");
+                }
+                if (previewPdf) previewPdf.hidden = true;
+                if (extractedBox) extractedBox.hidden = true;
+                if (extractedList) extractedList.innerHTML = "";
+                if (btnApply) btnApply.disabled = true;
+                extractedData = null;
+            }
+
+            function showFilePreview(file) {
+                resetPreview();
+                pendingFile = file;
+                pendingMediaType = (file.type || "image/jpeg").toLowerCase();
+                if (pendingMediaType === "image/jpg") pendingMediaType = "image/jpeg";
+
+                if (pendingMediaType === "application/pdf") {
+                    if (previewImg) previewImg.hidden = true;
+                    if (previewPdf) {
+                        previewPdf.hidden = false;
+                        if (previewPdfName) previewPdfName.textContent = file.name || "documento.pdf";
+                    }
+                } else if (previewImg) {
+                    previewImg.hidden = false;
+                    try {
+                        previewImg.src = URL.createObjectURL(file);
+                    } catch (e) {
+                        previewImg.removeAttribute("src");
+                    }
+                    if (previewPdf) previewPdf.hidden = true;
+                }
+                setStatus("Archivo listo. Presioná «Analizar factura».", null);
+                openModal();
+            }
+
+            function readFileAsBase64(file) {
+                return new Promise(function (resolve, reject) {
+                    var reader = new FileReader();
+                    reader.onload = function () {
+                        var result = String(reader.result || "");
+                        var idx = result.indexOf(",");
+                        resolve(idx >= 0 ? result.slice(idx + 1) : result);
+                    };
+                    reader.onerror = function () {
+                        reject(new Error("No se pudo leer el archivo"));
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            function dlRow(label, value) {
+                if (value === null || value === undefined || value === "") return "";
+                var dt = document.createElement("dt");
+                dt.textContent = label;
+                var dd = document.createElement("dd");
+                dd.appendChild(document.createTextNode(String(value)));
+                var tag = document.createElement("span");
+                tag.className = "ingreso-factura-auto-tag";
+                tag.textContent = "Auto";
+                dd.appendChild(document.createTextNode(" "));
+                dd.appendChild(tag);
+                extractedList.appendChild(dt);
+                extractedList.appendChild(dd);
+            }
+
+            function renderExtractedPreview(data) {
+                if (!extractedList || !extractedBox) return;
+                extractedList.innerHTML = "";
+                dlRow("RUT proveedor", data.rut_proveedor);
+                dlRow("N° documento", data.numero_documento);
+                dlRow("Fecha", data.fecha);
+                dlRow("Método de pago", data.metodo_pago);
+                if (data.total != null) dlRow("Total", data.total);
+                if (data.iva != null) dlRow("IVA", data.iva);
+                var prods = data.productos || [];
+                if (prods.length) {
+                    dlRow("Productos", prods.length + " línea(s)");
+                    prods.slice(0, 8).forEach(function (p, i) {
+                        var desc = (p.descripcion || p.codigo_proveedor || "Ítem " + (i + 1));
+                        var extra = [];
+                        if (p.cantidad != null) extra.push("cant. " + p.cantidad);
+                        if (p.valor_neto != null) extra.push("neto " + p.valor_neto);
+                        dlRow("  · " + desc, extra.join(" · ") || "—");
+                    });
+                    if (prods.length > 8) {
+                        dlRow("…", "+" + (prods.length - 8) + " más");
+                    }
+                }
+                extractedBox.hidden = false;
+            }
+
+            function mapMetodoPago(raw) {
+                var m = String(raw || "").trim().toLowerCase();
+                if (!m) return "";
+                if (m.indexOf("credito") !== -1 || m.indexOf("crédito") !== -1) return "Crédito proveedor";
+                if (m.indexOf("cheque") !== -1) return "Cheque al día";
+                if (m.indexOf("transfer") !== -1) return "Transferencia bancaria";
+                if (m.indexOf("contado") !== -1 || m.indexOf("efectivo") !== -1) return "Efectivo";
+                return "";
+            }
+
+            function fechaToInputValue(fechaRaw) {
+                var s = String(fechaRaw || "").trim();
+                if (!s) return "";
+                var m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+                if (!m) return "";
+                var d = parseInt(m[1], 10);
+                var mo = parseInt(m[2], 10);
+                var y = parseInt(m[3], 10);
+                if (y < 100) y += 2000;
+                if (d < 1 || d > 31 || mo < 1 || mo > 12) return "";
+                var pad = function (n) {
+                    return n < 10 ? "0" + n : String(n);
+                };
+                return y + "-" + pad(mo) + "-" + pad(d);
+            }
+
+            function formatMontoInput(n) {
+                if (n === null || n === undefined || n === "") return "";
+                var v = Number(n);
+                if (isNaN(v)) return String(n);
+                try {
+                    return v.toLocaleString("es-CL", { maximumFractionDigits: 2 });
+                } catch (e) {
+                    return String(v);
+                }
+            }
+
+            function isIngresoRowEmpty(row) {
+                if (!row) return true;
+                var code = row.querySelector("input[name='codigo_producto[]']");
+                var prov = row.querySelector("input[name='codigo_proveedor_producto[]']");
+                var cant = row.querySelector("input[name='cantidad_producto[]']");
+                var hasCode = code && String(code.value || "").trim();
+                var hasProv = prov && String(prov.value || "").trim();
+                var hasCant = cant && String(cant.value || "").trim();
+                return !hasCode && !hasProv && !hasCant;
+            }
+
+            function fillIngresoRowFromProduct(row, prod) {
+                if (!row || !prod) return 0;
+                var n = 0;
+                var inpProv = row.querySelector("input[name='codigo_proveedor_producto[]']");
+                var inpCant = row.querySelector("input[name='cantidad_producto[]']");
+                var inpVN = row.querySelector("input[name='valor_neto_producto[]']");
+                var inpPV = row.querySelector("input.ingreso-precio-venta-input");
+                var inpNota = row.querySelector("input[name='nota_producto[]']");
+                if (inpProv && prod.codigo_proveedor) {
+                    inpProv.value = String(prod.codigo_proveedor).trim();
+                    n++;
+                }
+                if (inpCant && prod.cantidad != null && prod.cantidad !== "") {
+                    inpCant.value = String(Math.max(1, parseInt(prod.cantidad, 10) || 1));
+                    n++;
+                }
+                if (inpVN && prod.valor_neto != null && prod.valor_neto !== "") {
+                    inpVN.value = formatMontoInput(prod.valor_neto);
+                    n++;
+                }
+                if (inpPV && prod.precio_venta != null && prod.precio_venta !== "") {
+                    inpPV.value = formatMontoInput(prod.precio_venta);
+                    n++;
+                }
+                if (inpNota && prod.descripcion) {
+                    inpNota.value = String(prod.descripcion).trim();
+                    n++;
+                }
+                return n;
+            }
+
+            function markAutoFilled(el) {
+                if (!el) return;
+                el.classList.add("ingreso-auto-filled");
+                window.setTimeout(function () {
+                    el.classList.remove("ingreso-auto-filled");
+                }, 4000);
+            }
+
+            function applyExtractedData(data) {
+                if (!data) return 0;
+                var count = 0;
+
+                if (data.rut_proveedor && rutInput) {
+                    var rutRaw = String(data.rut_proveedor).trim();
+                    rutInput.value =
+                        window.RutUtils && window.RutUtils.format
+                            ? window.RutUtils.format(rutRaw)
+                            : rutRaw;
+                    markAutoFilled(rutInput);
+                    searchSupplier(true);
+                    count++;
+                }
+                if (data.numero_documento && numeroDocInput) {
+                    numeroDocInput.value = String(data.numero_documento).trim();
+                    markAutoFilled(numeroDocInput);
+                    count++;
+                }
+                if (data.fecha && fechaInput) {
+                    var fv = fechaToInputValue(data.fecha);
+                    if (fv) {
+                        fechaInput.value = fv;
+                        markAutoFilled(fechaInput);
+                        count++;
+                    }
+                }
+                if (metodoPagoSel && data.metodo_pago) {
+                    var mp = mapMetodoPago(data.metodo_pago);
+                    if (mp) {
+                        metodoPagoSel.value = mp;
+                        markAutoFilled(metodoPagoSel);
+                        count++;
+                    }
+                }
+                if (inpTotalFactura && data.total != null && data.total !== "") {
+                    inpTotalFactura.value = formatMontoInput(data.total);
+                    markAutoFilled(inpTotalFactura);
+                    count++;
+                }
+
+                var productos = Array.isArray(data.productos) ? data.productos : [];
+                if (productos.length) {
+                    var rows = itemsBody.querySelectorAll("tr.item-row");
+                    productos.forEach(function (prod, idx) {
+                        var row;
+                        if (idx === 0 && rows[0] && isIngresoRowEmpty(rows[0])) {
+                            row = rows[0];
+                        } else {
+                            addRow();
+                            var all = itemsBody.querySelectorAll("tr.item-row");
+                            row = all[all.length - 1];
+                        }
+                        count += fillIngresoRowFromProduct(row, prod);
+                    });
+                    refreshIngresoItemNumbers();
+                    updateIngresoTotals();
+                }
+
+                if (autoBadge) {
+                    if (count > 0) {
+                        autoBadge.hidden = false;
+                        autoBadge.textContent = "✅ " + count + " campo(s) completado(s) automáticamente";
+                    } else {
+                        autoBadge.hidden = true;
+                        autoBadge.textContent = "";
+                    }
+                }
+                return count;
+            }
+
+            function runAnalyze() {
+                if (!pendingFile) {
+                    setStatus("Seleccioná una imagen primero.", "error");
+                    return;
+                }
+                if (!analizarUrl) {
+                    setStatus("URL de análisis no configurada.", "error");
+                    return;
+                }
+                if (btnAnalyze) btnAnalyze.disabled = true;
+                if (btnApply) btnApply.disabled = true;
+                setStatus("Analizando factura (Google Vision OCR)…", "loading");
+
+                readFileAsBase64(pendingFile)
+                    .then(function (b64) {
+                        pendingBase64 = b64;
+                        return fetch(analizarUrl, {
+                            method: "POST",
+                            credentials: "same-origin",
+                            headers: {
+                                "Content-Type": "application/json",
+                                "X-Requested-With": "XMLHttpRequest",
+                                "X-CSRF-Token": getCsrfToken(),
+                                Accept: "application/json",
+                            },
+                            body: JSON.stringify({
+                                image_base64: b64,
+                                media_type: pendingMediaType,
+                            }),
+                        });
+                    })
+                    .then(function (res) {
+                        return res.text().then(function (t) {
+                            var body = null;
+                            try {
+                                body = JSON.parse(t);
+                            } catch (e) {}
+                            return { res: res, body: body, text: t };
+                        });
+                    })
+                    .then(function (pack) {
+                        if (!pack.body || !pack.res.ok || !pack.body.success) {
+                            var msg =
+                                (pack.body && pack.body.message) ||
+                                "No se pudo analizar la factura.";
+                            throw new Error(msg);
+                        }
+                        extractedData = pack.body.data || {};
+                        renderExtractedPreview(extractedData);
+                        if (btnApply) btnApply.disabled = false;
+                        setStatus("Análisis listo. Revisá los datos y presioná «Aplicar datos».", null);
+                    })
+                    .catch(function (err) {
+                        console.log("analizar-factura error", err);
+                        setStatus(err.message || "Error al analizar la factura.", "error");
+                    })
+                    .finally(function () {
+                        if (btnAnalyze) btnAnalyze.disabled = false;
+                    });
+            }
+
+            btnScan.addEventListener("click", function () {
+                fileInput.value = "";
+                fileInput.click();
+            });
+
+            fileInput.addEventListener("change", function () {
+                var f = fileInput.files && fileInput.files[0];
+                if (!f) return;
+                var okType =
+                    /^image\/(jpeg|png|webp)$/i.test(f.type) ||
+                    /\.(jpe?g|png|webp)$/i.test(f.name || "");
+                if (!okType) {
+                    setStatus("Formato no válido. Use JPG, PNG o WEBP.", "error");
+                    openModal();
+                    return;
+                }
+                if (f.size > 12 * 1024 * 1024) {
+                    setStatus("El archivo supera 12 MB.", "error");
+                    openModal();
+                    return;
+                }
+                showFilePreview(f);
+            });
+
+            if (btnAnalyze) btnAnalyze.addEventListener("click", runAnalyze);
+            if (btnApply) {
+                btnApply.addEventListener("click", function () {
+                    if (!extractedData) return;
+                    applyExtractedData(extractedData);
+                    setStatus("Datos aplicados al formulario.", null);
+                    closeModal();
+                });
+            }
+            function cancelScan() {
+                closeModal();
+                pendingFile = null;
+                pendingBase64 = "";
+                resetPreview();
+            }
+            if (modalClose) modalClose.addEventListener("click", cancelScan);
+            if (btnCancel) btnCancel.addEventListener("click", cancelScan);
+            modal.addEventListener("click", function (ev) {
+                if (ev.target === modal) cancelScan();
+            });
+            document.addEventListener("keydown", function (ev) {
+                if (ev.key === "Escape" && modal.classList.contains("open")) cancelScan();
+            });
+        })();
+
         if (form.dataset.supplierFound === "1") {
             updateSupplierSummary();
             collapseSupplierSection();

@@ -1952,6 +1952,32 @@ def ingreso_proveedor_por_rut():
     return jsonify({"success": True, "found": True, "proveedor": _proveedor_json_ingreso(proveedor)})
 
 
+@bodega_bp.route("/api/analizar-factura", methods=["POST"])
+@admin_required
+def api_analizar_factura():
+    """Analiza imagen de factura chilena con Google Cloud Vision OCR y devuelve JSON estructurado."""
+    if not has_permission(session.get("user"), session.get("rol"), "bodega_ingreso"):
+        return jsonify(success=False, message="No tienes permiso para registrar ingresos."), 403
+
+    payload = request.get_json(silent=True) or {}
+    image_b64 = (payload.get("image_base64") or payload.get("image") or "").strip()
+    media_type = (payload.get("media_type") or "image/jpeg").strip().lower()
+
+    if not image_b64:
+        return jsonify(success=False, message="Debe enviar la imagen en base64."), 400
+
+    try:
+        from app.utils.invoice_vision import analizar_factura
+
+        data = analizar_factura(image_b64, media_type)
+        return jsonify(success=True, data=data)
+    except ValueError as exc:
+        return jsonify(success=False, message=str(exc)), 400
+    except Exception:
+        current_app.logger.exception("api_analizar_factura")
+        return jsonify(success=False, message="Error al analizar la factura."), 500
+
+
 @bodega_bp.route("/ingreso/proveedor/guardar", methods=["POST"])
 @admin_required
 def ingreso_guardar_proveedor():
