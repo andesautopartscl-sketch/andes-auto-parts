@@ -53,6 +53,37 @@ def invalidate_taxonomia() -> None:
         _store.pop("taxonomia_productos", None)
 
 
+def invalidate_ficha_despiece(producto_codigo: str) -> None:
+    """Limpia caché de despiece en ficha (p. ej. tras subir imagen EPC compartida por OEM)."""
+    key = f"ficha_despiece:{(producto_codigo or '').strip().upper()}"
+    if not key or key == "ficha_despiece:":
+        return
+    with _lock:
+        _store.pop(key, None)
+
+
+def invalidate_ficha_despiece_for_oem(sess, oem_norm: str) -> None:
+    """Invalida caché de ficha para todos los productos con el mismo OEM."""
+    from sqlalchemy import func
+
+    from app.models import Producto
+
+    oem = (oem_norm or "").strip().upper()
+    if not oem:
+        return
+    try:
+        rows = (
+            sess.query(Producto.codigo)
+            .filter(func.upper(func.trim(Producto.codigo_oem)) == oem)
+            .all()
+        )
+        for row in rows:
+            codigo = (row[0] if isinstance(row, tuple) else getattr(row, "codigo", "") or "")
+            invalidate_ficha_despiece(codigo)
+    except Exception:
+        pass
+
+
 def invalidate_all() -> None:
     with _lock:
         _store.clear()

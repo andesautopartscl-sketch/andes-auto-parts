@@ -44,7 +44,13 @@ from ..utils.categoria_autodetect import (
     bulk_auto_asignar_categorias_faltantes,
 )
 from ..utils.product_image_postprocess import process_uploaded_image
-from ..utils.catalog_cache import get_or_load, get_or_load_ttl, invalidate_taxonomia
+from ..utils.catalog_cache import (
+    get_or_load,
+    get_or_load_ttl,
+    invalidate_ficha_despiece,
+    invalidate_ficha_despiece_for_oem,
+    invalidate_taxonomia,
+)
 from ..utils.cloudinary_config import is_configured as cloudinary_is_configured
 from ..utils.cloudinary_config import upload_image as cloudinary_upload_image
 from ..utils.cloudinary_config import delete_image_by_url
@@ -128,29 +134,22 @@ def _synthetic_oem_norm_for_product_codigo(cod: str) -> str:
 
 
 def _find_oem_despiece_for_producto(db, producto: Producto) -> OemDespiece | None:
-    """Busca despiece por OEM compartido y mantiene fallback a fila por código interno."""
+    """Busca despiece por OEM del producto (compartido) y luego por código interno."""
     cod = (getattr(producto, "codigo", None) or "").strip().upper()
     oem = _norm_oem_despiece(getattr(producto, "codigo_oem", None))
-    row_codigo = None
-    if cod:
-        try:
-            row_codigo = db.query(OemDespiece).filter(OemDespiece.producto_codigo == cod).first()
-        except Exception:
-            row_codigo = None
     if oem:
         try:
             row_oem = db.query(OemDespiece).filter(OemDespiece.oem_norm == oem).first()
             if row_oem:
-                # Si existe catálogo OEM compartido, priorizarlo por encima de filas sintéticas antiguas (_INT_*).
-                if not row_codigo:
-                    return row_oem
-                codigo_norm = (row_codigo.oem_norm or "").strip().upper()
-                if codigo_norm.startswith("_INT_"):
-                    return row_oem
-                return row_codigo
+                return row_oem
         except Exception:
             pass
-    return row_codigo
+    if cod:
+        try:
+            return db.query(OemDespiece).filter(OemDespiece.producto_codigo == cod).first()
+        except Exception:
+            pass
+    return None
 
 
 def _find_shared_despiece_image_fallback(db, producto: Producto) -> str | None:
@@ -2239,6 +2238,11 @@ def guardar_despiece_producto(codigo):
         except Exception:
             pass
         db.commit()
+        try:
+            invalidate_ficha_despiece(normalized)
+            invalidate_ficha_despiece_for_oem(db, row.oem_norm or "")
+        except Exception:
+            pass
 
         return jsonify(success=True)
     except Exception as exc:

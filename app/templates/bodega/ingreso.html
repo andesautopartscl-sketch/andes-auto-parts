@@ -818,6 +818,38 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
     background: #dcfce7;
     vertical-align: middle;
 }
+.ingreso-factura-extracted-products {
+    margin-top: 10px;
+}
+.ingreso-factura-products-wrap {
+    overflow-x: auto;
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+}
+.ingreso-factura-products-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.ingreso-factura-products-table th,
+.ingreso-factura-products-table td {
+    padding: 5px 8px;
+    text-align: left;
+    border-bottom: 1px solid #f1f5f9;
+}
+.ingreso-factura-products-table th {
+    background: #f8fafc;
+    color: #64748b;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+}
+.ingreso-factura-products-table td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
 .ingreso-factura-modal-actions {
     display: flex;
     flex-wrap: wrap;
@@ -975,12 +1007,12 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
                 <div class="ingreso-doc-num-row">
                     <input id="numero_documento" name="numero_documento" value="{{ form_data.numero_documento }}" placeholder="Factura / guía" required>
                     <button type="button" class="ingreso-factura-scan-btn" id="btnFacturaScan"
-                            title="Tomar foto o subir factura (JPG, PNG, WEBP)"
+                            title="Tomar foto o subir factura (JPG, PNG, WEBP, PDF)"
                             aria-label="Escanear factura"
                             data-analizar-url="{{ url_for('bodega.api_analizar_factura') }}">📷</button>
                 </div>
                 <input type="file" id="ingresoFacturaFileInput" class="ingreso-factura-file-input"
-                       accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                       accept="image/jpg,image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
                        capture="environment" hidden>
                 <span id="ingresoFacturaAutoBadge" class="ingreso-factura-auto-badge" hidden aria-live="polite"></span>
             </div>
@@ -1248,17 +1280,32 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
             <button type="button" class="btn" id="ingresoFacturaScanClose">Cerrar</button>
         </div>
         <div class="ingreso-product-modal-body ingreso-factura-modal-body">
-            <div class="ingreso-factura-preview-wrap">
+            <div class="ingreso-factura-preview-wrap" hidden>
                 <img id="ingresoFacturaPreviewImg" class="ingreso-factura-preview-img" alt="Vista previa de la factura" hidden>
                 <div id="ingresoFacturaPreviewPdf" class="ingreso-factura-preview-pdf" hidden>
                     <span class="ingreso-factura-preview-pdf-icon" aria-hidden="true">📄</span>
                     <span id="ingresoFacturaPreviewPdfName">documento.pdf</span>
                 </div>
             </div>
-            <div id="ingresoFacturaScanStatus" class="ingreso-factura-scan-status muted">Seleccioná una imagen y presioná «Analizar factura».</div>
+            <div id="ingresoFacturaScanStatus" class="ingreso-factura-scan-status muted" hidden></div>
             <div id="ingresoFacturaExtracted" class="ingreso-factura-extracted" hidden>
                 <h4 class="ingreso-factura-extracted-title">Datos detectados</h4>
                 <dl class="ingreso-factura-dl" id="ingresoFacturaExtractedList"></dl>
+                <div id="ingresoFacturaExtractedProducts" class="ingreso-factura-extracted-products" hidden>
+                    <h4 class="ingreso-factura-extracted-title" id="ingresoFacturaExtractedProductsTitle">Productos detectados</h4>
+                    <div class="ingreso-factura-products-wrap">
+                        <table class="ingreso-factura-products-table">
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Cant.</th>
+                                    <th>V. Neto</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ingresoFacturaExtractedProductsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
             <div class="ingreso-factura-modal-actions">
                 <button type="button" class="btn btn-primary" id="ingresoFacturaAnalyzeBtn">Analizar factura</button>

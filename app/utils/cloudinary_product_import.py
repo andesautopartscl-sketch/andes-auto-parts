@@ -88,6 +88,16 @@ def link_cloudinary_url_to_360(
     return rel_key
 
 
+def resolve_despiece_oem_norm(producto: Producto | None, codigo_asignado: str) -> str:
+    """Clave OEM compartida: prioriza codigo_oem del producto; si no, el código asignado en importación."""
+    assigned = _norm_oem_despiece(codigo_asignado)
+    if producto:
+        po = _norm_oem_despiece(producto.codigo_oem)
+        if po:
+            return po
+    return assigned
+
+
 def link_cloudinary_url_to_despiece(
     sess,
     producto: Producto | None,
@@ -97,57 +107,40 @@ def link_cloudinary_url_to_despiece(
     """Actualiza oem_despiece.imagen_static. Retorna (vinculado, oem_norm)."""
     from datetime import datetime
 
+    from app.utils.catalog_cache import invalidate_ficha_despiece, invalidate_ficha_despiece_for_oem
+
     url = (url or "").strip()
     codigo = (codigo_asignado or "").strip().upper()
     if not url:
         return False, ""
 
-    row: OemDespiece | None = None
-    oem_norm = ""
-
-    if producto:
-        oem_norm = _norm_oem_despiece(producto.codigo_oem)
-        if oem_norm:
-            row = sess.query(OemDespiece).filter(OemDespiece.oem_norm == oem_norm).first()
-            if not row:
-                row = OemDespiece(
-                    oem_norm=oem_norm,
-                    producto_codigo=None,
-                    updated_at=datetime.utcnow(),
-                )
-                sess.add(row)
-        else:
-            pc = (producto.codigo or "").strip().upper()
-            row = sess.query(OemDespiece).filter(OemDespiece.producto_codigo == pc).first()
-            if not row:
-                oem_norm = _synthetic_oem_norm_for_product_codigo(pc)
-                row = OemDespiece(
-                    oem_norm=oem_norm,
-                    producto_codigo=pc,
-                    updated_at=datetime.utcnow(),
-                )
-                sess.add(row)
-            else:
-                oem_norm = (row.oem_norm or oem_norm or pc).strip().upper()
-    else:
-        row = sess.query(OemDespiece).filter(OemDespiece.oem_norm == codigo).first()
-        if not row:
-            row = sess.query(OemDespiece).filter(OemDespiece.producto_codigo == codigo).first()
-        if not row:
-            row = OemDespiece(
-                oem_norm=codigo,
-                producto_codigo=None,
-                updated_at=datetime.utcnow(),
-            )
-            sess.add(row)
-        oem_norm = (row.oem_norm or codigo).strip().upper()
-
-    if row is None:
+    oem_norm = resolve_despiece_oem_norm(producto, codigo)
+    if not oem_norm:
         return False, codigo
+
+    row = sess.query(OemDespiece).filter(OemDespiece.oem_norm == oem_norm).first()
+    if not row:
+        pc = (producto.codigo or "").strip().upper() if producto else ""
+        row = OemDespiece(
+            oem_norm=oem_norm,
+            producto_codigo=None,
+            updated_at=datetime.utcnow(),
+        )
+        sess.add(row)
+    elif producto and (row.producto_codigo or "").strip().upper().startswith("_INT_"):
+        row.producto_codigo = None
 
     row.imagen_static = url
     row.updated_at = datetime.utcnow()
-    return True, (row.oem_norm or oem_norm or codigo).strip().upper()
+    sess.flush()
+
+    try:
+        invalidate_ficha_despiece_for_oem(sess, oem_norm)
+    except Exception:
+        if producto and producto.codigo:
+            invalidate_ficha_despiece(producto.codigo)
+
+    return True, (row.oem_norm or oem_norm).strip().upper()
 
 
 def build_import_public_id(

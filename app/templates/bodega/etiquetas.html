@@ -736,6 +736,13 @@ html[data-print-mode="thermal"] .barcode img {
         column-gap: var(--print-col-gap, 3mm);
     }
 
+    html[data-print-mode="thermal"] .sheet {
+        width: auto;
+        grid-template-columns: none;
+        row-gap: 0;
+        column-gap: 0;
+    }
+
     .label {
         width: var(--print-label-width, 280px);
         max-width: 100%;
@@ -749,7 +756,7 @@ html[data-print-mode="thermal"] .barcode img {
     }
 
     /* Carta 4×5 @ 100%: compactar contenido; min+max = cupo para ocupar todo el alto de página */
-    html:not([data-print-mode="thermal"]) .label {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .label {
         padding: 5px 6px;
         gap: 3px;
         border-radius: 8px;
@@ -758,104 +765,104 @@ html[data-print-mode="thermal"] .barcode img {
         justify-content: flex-start;
     }
 
-    html:not([data-print-mode="thermal"]) .label-body {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .label-body {
         flex: 1 1 auto;
         min-height: 0;
         justify-content: center;
     }
 
-    html:not([data-print-mode="thermal"]) .label-header {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .label-header {
         padding-bottom: 3px;
     }
 
-    html:not([data-print-mode="thermal"]) .brand-row {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .brand-row {
         margin-bottom: 1px;
         gap: 4px;
     }
 
-    html:not([data-print-mode="thermal"]) .logo-wrap {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .logo-wrap {
         width: 18px;
         height: 18px;
     }
 
-    html:not([data-print-mode="thermal"]) .empresa {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .empresa {
         font-size: 8px;
         letter-spacing: 0.08em;
     }
 
-    html:not([data-print-mode="thermal"]) .contacto,
-    html:not([data-print-mode="thermal"]) .correo {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .contacto,
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .correo {
         font-size: 7px;
         line-height: 1.15;
     }
 
-    html:not([data-print-mode="thermal"]) .label-body {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .label-body {
         gap: 3px;
     }
 
-    html:not([data-print-mode="thermal"]) .codigo {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .codigo {
         font-size: 15px;
         margin-top: 0;
     }
 
-    html:not([data-print-mode="thermal"]) .descripcion {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .descripcion {
         font-size: 10px;
         line-height: 1.2;
         min-height: 0;
     }
 
-    html:not([data-print-mode="thermal"]) .descripcion.name-sm,
-    html:not([data-print-mode="thermal"]) .descripcion.name-xs {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .descripcion.name-sm,
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .descripcion.name-xs {
         font-size: 9px;
     }
 
-    html:not([data-print-mode="thermal"]) .modelo {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .modelo {
         font-size: 9px;
         min-height: 0;
     }
 
-    html:not([data-print-mode="thermal"]) .label-footer {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .label-footer {
         gap: 3px;
         margin-top: auto;
         flex-shrink: 0;
     }
 
-    html:not([data-print-mode="thermal"]) .meta-row {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .meta-row {
         grid-template-columns: minmax(0, 1fr) 50px;
         gap: 4px;
         align-items: center;
     }
 
-    html:not([data-print-mode="thermal"]) .fp-card {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .fp-card {
         padding: 3px 5px;
         border-radius: 6px;
     }
 
-    html:not([data-print-mode="thermal"]) .fp-label {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .fp-label {
         font-size: 6px;
     }
 
-    html:not([data-print-mode="thermal"]) .fp-value {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .fp-value {
         font-size: 11px;
     }
 
-    html:not([data-print-mode="thermal"]) .qr {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .qr {
         width: 50px;
         height: 50px;
         border-radius: 8px;
     }
 
-    html:not([data-print-mode="thermal"]) .qr img {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .qr img {
         width: 48px;
         height: 48px;
     }
 
-    html:not([data-print-mode="thermal"]) .barcode {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .barcode {
         min-height: 34px;
         padding-top: 2px;
     }
 
-    html:not([data-print-mode="thermal"]) .barcode img {
+    html:not([data-print-mode="thermal"]):not([data-print-mode="thermal_100x150"]) .barcode img {
         height: 32px;
     }
 
@@ -980,6 +987,188 @@ html[data-print-mode="thermal"] .barcode img {
     html[data-print-mode="thermal"] .barcode img {
         height: 8mm;
     }
+
+    html[data-print-mode="thermal_100x150"],
+    html[data-print-mode="thermal_100x150"] body,
+    html[data-print-mode="thermal_100x150"] .layout,
+    html[data-print-mode="thermal_100x150"] .content {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 91mm !important;
+        min-width: 91mm !important;
+        max-width: 91mm !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Cada bloque de 6 etiquetas = una hoja física de 144mm útiles. */
+    html[data-print-mode="thermal_100x150"] #sheet,
+    html[data-print-mode="thermal_100x150"] .sheet {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 91mm !important;
+        max-width: 91mm !important;
+        height: auto !important;
+        max-height: none !important;
+        box-sizing: border-box !important;
+        display: grid !important;
+        grid-template-columns: repeat(2, calc((91mm - 1mm) / 2)) !important;
+        grid-auto-rows: 47mm !important;
+        column-gap: 1mm !important;
+        row-gap: 1mm !important;
+        align-content: start !important;
+        justify-content: start !important;
+    }
+
+    html[data-print-mode="thermal_100x150"] .label {
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        padding: 1.8mm 2mm;
+        margin: 0;
+        min-height: 0;
+        box-shadow: none;
+        border: 0.2mm solid #222;
+        border-radius: 1mm;
+        break-inside: avoid;
+        page-break-inside: avoid;
+        overflow: hidden;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 0;
+    }
+
+    html[data-print-mode="thermal_100x150"] .label-header {
+        flex-shrink: 0;
+        padding-bottom: 1mm;
+        border-bottom: 0.15mm dashed #d1d5db;
+        opacity: 1;
+        line-height: 1.15;
+    }
+
+    html[data-print-mode="thermal_100x150"] .brand-row {
+        margin-bottom: 0.4mm;
+        gap: 1mm;
+    }
+
+    html[data-print-mode="thermal_100x150"] .logo-wrap {
+        width: 5mm;
+        height: 5mm;
+    }
+
+    html[data-print-mode="thermal_100x150"] .empresa {
+        font-size: 2.3mm;
+        letter-spacing: 0.06em;
+    }
+
+    html[data-print-mode="thermal_100x150"] .contacto {
+        font-size: 1.9mm;
+    }
+
+    html[data-print-mode="thermal_100x150"] .correo {
+        font-size: 1.7mm;
+    }
+
+    html[data-print-mode="thermal_100x150"] .label-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-around;
+        gap: 1mm;
+        overflow: hidden;
+        padding: 0.8mm 0;
+    }
+
+    html[data-print-mode="thermal_100x150"] .codigo {
+        font-size: 3.6mm;
+        font-weight: 700;
+        margin-top: 0.6mm;
+        line-height: 1.05;
+    }
+
+    html[data-print-mode="thermal_100x150"] .descripcion,
+    html[data-print-mode="thermal_100x150"] .descripcion.name-sm,
+    html[data-print-mode="thermal_100x150"] .descripcion.name-xs {
+        font-size: 2.1mm;
+        font-weight: 400;
+        line-height: 1.18;
+        min-height: 0;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+    }
+
+    html[data-print-mode="thermal_100x150"] .modelo {
+        font-size: 2.1mm;
+        min-height: 0;
+        line-height: 1.15;
+        max-height: 3mm;
+    }
+
+    html[data-print-mode="thermal_100x150"] .label-footer {
+        margin-top: auto;
+        flex-shrink: 0;
+        gap: 1.4mm;
+    }
+
+    html[data-print-mode="thermal_100x150"] .meta-row {
+        grid-template-columns: minmax(0, 1fr) 9.5mm;
+        gap: 3mm;
+        align-items: center;
+    }
+
+    html[data-print-mode="thermal_100x150"] .fp-card {
+        padding: 0.8mm 1mm;
+        border-radius: 1mm;
+        gap: 0.15mm;
+    }
+
+    html[data-print-mode="thermal_100x150"] .fp-label {
+        font-size: 1.6mm;
+    }
+
+    html[data-print-mode="thermal_100x150"] .fp-value {
+        font-size: 2.6mm;
+        line-height: 1.05;
+    }
+
+    html[data-print-mode="thermal_100x150"] .qr {
+        width: 9.5mm;
+        height: 9.5mm;
+        border-radius: 1mm;
+        border-width: 0.15mm;
+        box-shadow: none;
+    }
+
+    html[data-print-mode="thermal_100x150"] .qr img {
+        width: 8.7mm;
+        height: 8.7mm;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+
+    html[data-print-mode="thermal_100x150"] .barcode {
+        min-height: 0;
+        padding-top: 0.6mm;
+        border-top: 0.15mm solid #e2e8f0;
+    }
+
+    html[data-print-mode="thermal_100x150"] .barcode img {
+        height: 9mm;
+        width: 100%;
+        object-fit: contain;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+
+    /* Sin saltos forzados: las 6 filas (3 por hoja) paginan solas. Forzar un salto
+       cada 6 metía una hoja en blanco. break-inside:avoid (en .label) evita cortar etiquetas. */
 }
 </style>
 
@@ -1007,7 +1196,11 @@ html[data-print-mode="thermal"] .barcode img {
         <select id="printMode" aria-label="Modo de impresion">
             <option value="a4">A4</option>
             <option value="thermal">Térmica</option>
+            <option value="thermal_100x150">Térmica 100×150mm (6 etiq.)</option>
         </select>
+        <p id="thermal100x150Hint" class="search-help no-print" hidden style="margin-top:6px;max-width:36rem;">
+            Impresora LABEL: papel <strong>100×150 mm</strong>, escala <strong>100%</strong> y desactivá «Encabezado y pie de página».
+        </p>
     </div>
     <form id="labelsForm" method="get" novalidate>
         <input type="hidden" id="fp_por_codigo_json" name="fp_por_codigo_json" value="{{ (fp_por_codigo_json|default(''))|e }}">
@@ -1611,24 +1804,43 @@ html[data-print-mode="thermal"] .barcode img {
         });
     }
 
-    function ensureThermalPageStyle(enabled) {
-        const existing = document.getElementById(THERMAL_PAGE_STYLE_ID);
-        if (!enabled) {
-            if (existing) existing.remove();
-            return;
+    function normalizePrintMode(mode) {
+        if (mode === 'thermal' || mode === 'thermal_100x150') return mode;
+        return 'a4';
+    }
+
+    function thermalPageStyleRule(mode) {
+        if (mode === 'thermal') {
+            return '@media print { @page { size: 60mm 40mm; margin: 0; } }';
         }
-        if (existing) return;
+        if (mode === 'thermal_100x150') {
+            // margen: arriba derecha abajo izquierda. Más a la izquierda para correr las
+            // etiquetas a la derecha (la impresora recorta el borde izquierdo).
+            return '@media print { @page { size: 100mm 150mm; margin: 3mm 2mm 3mm 7mm; } }';
+        }
+        return '';
+    }
+
+    function ensureThermalPageStyle(mode) {
+        const existing = document.getElementById(THERMAL_PAGE_STYLE_ID);
+        if (existing) existing.remove();
+        const rule = thermalPageStyleRule(mode);
+        if (!rule) return;
         const style = document.createElement('style');
         style.id = THERMAL_PAGE_STYLE_ID;
-        style.textContent = '@media print { @page { size: 60mm 40mm; margin: 0; } }';
-        document.head.appendChild(style);
+        style.textContent = rule;
+        // Debe ir al final del <body> (después del <style> con @page letter del bloque
+        // content) para que esta regla @page sea la última en el orden del documento y gane.
+        document.body.appendChild(style);
     }
 
     function applyPrintMode(mode) {
-        const normalized = mode === 'thermal' ? 'thermal' : 'a4';
+        const normalized = normalizePrintMode(mode);
         document.documentElement.setAttribute('data-print-mode', normalized);
         if (printModeSelect) printModeSelect.value = normalized;
-        ensureThermalPageStyle(normalized === 'thermal');
+        ensureThermalPageStyle(normalized === 'a4' ? null : normalized);
+        const thermalHint = document.getElementById('thermal100x150Hint');
+        if (thermalHint) thermalHint.hidden = normalized !== 'thermal_100x150';
         try {
             localStorage.setItem('etiquetas_print_mode', normalized);
         } catch (e) {}
@@ -1647,6 +1859,15 @@ html[data-print-mode="thermal"] .barcode img {
             rootThermal.style.setProperty('--print-col-gap', '0');
             rootThermal.style.setProperty('--print-row-gap', '0');
             rootThermal.style.setProperty('--print-justify', 'start');
+            return;
+        }
+        if (mode === 'thermal_100x150') {
+            const rootSheet = document.documentElement;
+            rootSheet.style.removeProperty('--print-label-width');
+            rootSheet.style.removeProperty('--print-label-max-height');
+            rootSheet.style.removeProperty('--print-col-gap');
+            rootSheet.style.removeProperty('--print-row-gap');
+            rootSheet.style.removeProperty('--print-justify');
             return;
         }
 
@@ -2343,6 +2564,8 @@ html[data-print-mode="thermal"] .barcode img {
     refreshPreviewAfterFpSync();
     window.addEventListener('resize', optimizePrintGrid);
     window.addEventListener('beforeprint', function () {
+        const mode = document.documentElement.getAttribute('data-print-mode') || 'a4';
+        ensureThermalPageStyle(mode === 'a4' ? null : mode);
         optimizePrintGrid({ forPrint: true });
         registerPrintHistory();
     });

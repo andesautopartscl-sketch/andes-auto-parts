@@ -1,5 +1,5 @@
 -- Generado por scripts/sync_oem_despiece.py --generate
--- Aplicar: GET /admin/sync-oem-despiece?token=... o python scripts/sync_oem_despiece.py --apply
+-- Aplicar: python scripts/sync_oem_despiece.py --apply
 BEGIN TRANSACTION;
 
 -- oem_norm=10046260

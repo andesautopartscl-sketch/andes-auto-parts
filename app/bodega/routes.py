@@ -1970,6 +1970,15 @@ def api_analizar_factura():
         from app.utils.invoice_vision import analizar_factura
 
         data = analizar_factura(image_b64, media_type)
+        current_app.logger.info("Resultado análisis: %s", data)
+        print("=== TEXTO OCR ===", flush=True)
+        print(data.get("ocr_texto_crudo", "NO HAY TEXTO"), flush=True)
+        print("=== FIN ===", flush=True)
+        print("=== RESULTADO COMPLETO (analizar-factura) ===", flush=True)
+        print(repr(data), flush=True)
+        print("=== productos ===", flush=True)
+        print(data.get("productos"), flush=True)
+        print("=== FIN RESULTADO ===", flush=True)
         return jsonify(success=True, data=data)
     except ValueError as exc:
         return jsonify(success=False, message=str(exc)), 400

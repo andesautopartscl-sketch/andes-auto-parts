@@ -134,7 +134,7 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
   </div>
   <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Zona para arrastrar imágenes">
     <div class="dropzone-icon" aria-hidden="true">🖼️</div>
-    <p class="dropzone-title">Arrastra imágenes aquí o haz click para seleccionar</p>
+    <p class="dropzone-title">Arrastra imágenes aquí, haz click para seleccionar o pega con Ctrl+V</p>
     <p class="dropzone-hint" id="dropzone-folder-hint">
       Desde explorador de archivos, otra pestaña del navegador o una imagen en cualquier sitio web.
       Formatos: JPG, PNG, WEBP, GIF · Carpeta: <code id="dropzone-folder-code">andes_erp/productos</code>
@@ -202,6 +202,7 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
   var nextId = 1;
   var uploadingAll = false;
   var globalTipo = 'producto';
+  var pastedCount = 0;
 
   var TIPO_FOLDERS = {
     producto: 'andes_erp/productos',
@@ -287,6 +288,13 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
     msg.textContent = text;
     msg.className = 'msg-inline ' + (ok ? 'ok' : 'err');
     msg.style.display = 'block';
+  }
+
+  function showMsgAutoHide(text, ok, ms) {
+    showMsg(text, ok);
+    setTimeout(function () {
+      if (msg) msg.style.display = 'none';
+    }, ms || 1800);
   }
 
   function codigoFromFilename(name) {
@@ -571,6 +579,33 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
     });
   }
 
+  function addPastedImageToQueue(file) {
+    if (!file) return Promise.resolve();
+    pastedCount += 1;
+    var ext = extFromMime(file.type || 'image/png');
+    var nombre = 'imagen_pegada_' + pastedCount + '.' + ext;
+    var preview = URL.createObjectURL(file);
+    var item = {
+      id: nextId++,
+      file: file,
+      nombre: nombre,
+      preview: preview,
+      codigo: '',
+      tipoImagen: globalTipo,
+      producto: null,
+      status: 'pending',
+      progress: 0,
+      uploadResult: null,
+      detectMatchType: 'sin'
+    };
+    queue.push(item);
+    renderRow(item);
+    updateColaResumen();
+    refreshNombreBadge(item);
+    showMsgAutoHide('📋 Imagen pegada desde portapapeles', true, 1800);
+    return Promise.resolve();
+  }
+
   function refreshNombreBadge(it) {
     var tr = tbody.querySelector('tr[data-id="' + it.id + '"]');
     if (tr) tr.querySelector('.td-nombre').innerHTML = nombreCellHtml(it);
@@ -822,6 +857,30 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
     secResumen.hidden = true;
     msg.style.display = 'none';
     updateColaResumen();
+  });
+
+  document.addEventListener('paste', function (e) {
+    try {
+      var items = e && e.clipboardData && e.clipboardData.items;
+      if (!items || !items.length) return;
+      var found = false;
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        if (it && it.type && it.type.indexOf('image/') === 0) {
+          var f = it.getAsFile ? it.getAsFile() : null;
+          if (f) {
+            found = true;
+            addPastedImageToQueue(f);
+          }
+        }
+      }
+      if (found) {
+        // Evitar que el paste termine en inputs cuando queremos capturar imagen
+        e.preventDefault();
+      }
+    } catch (err) {
+      // no-op: no bloquear la página por fallos del portapapeles
+    }
   });
 })();
 </script>
