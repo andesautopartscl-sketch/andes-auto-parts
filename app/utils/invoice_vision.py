@@ -356,6 +356,18 @@ _THERMAL_CODE_TOKEN_RE = re.compile(
     r"\b([A-Z0-9]{3,15}-[A-Z0-9]{2,12})\b",
     re.IGNORECASE,
 )
+# OCR térmico: "M604 15-BOSCH" → unir en "M60415-BOSCH"
+_THERMAL_OCR_SPLIT_CODE_RE = re.compile(
+    r"\b([A-Z0-9]+)\s+(\d+-[A-Z]{2,10})\b",
+    re.IGNORECASE,
+)
+
+
+def _fix_thermal_ocr_split_codes(texto: str) -> str:
+    """Elimina espacios OCR dentro del código proveedor (M604 15-BOSCH → M60415-BOSCH)."""
+    if not (texto or "").strip():
+        return texto
+    return _THERMAL_OCR_SPLIT_CODE_RE.sub(r"\1\2", texto)
 
 
 def _is_plausible_supplier_code(code: str) -> bool:
@@ -921,6 +933,7 @@ def _extract_productos_termico(
     """
     if seen is None:
         seen = set()
+    texto = _fix_thermal_ocr_split_codes(texto)
     lines = [ln.strip() for ln in texto.splitlines() if ln.strip()]
     productos: list[dict[str, Any]] = []
 
@@ -1137,13 +1150,17 @@ def _extract_producto_regex_simple(texto: str) -> list[dict[str, Any]]:
 def garantizar_producto_factura(data: dict[str, Any]) -> dict[str, Any]:
     """Asegura productos[] y campos planos para la UI (preview + aplicar)."""
     productos = list(data.get("productos") or [])
-    if not productos:
-        texto = (data.get("ocr_texto_crudo") or "").strip()
-        if texto:
+    texto = (data.get("ocr_texto_crudo") or "").strip()
+
+    if not productos and texto:
+        texto_norm = _normalize_ocr_text(texto)
+        productos = _extract_productos_termico(texto_norm)
+        if not productos:
+            productos = _extract_productos_fitalia_fallback(texto_norm)
+        if not productos:
             productos = (
-                _extract_productos(texto)
-                or _extract_productos_fitalia_fallback(texto)
-                or _extract_producto_regex_simple(texto)
+                _extract_productos(texto_norm)
+                or _extract_producto_regex_simple(texto_norm)
             )
 
     if productos:
@@ -1153,7 +1170,7 @@ def garantizar_producto_factura(data: dict[str, Any]) -> dict[str, Any]:
         data["producto_cantidad"] = p0.get("cantidad")
         data["producto_valor_neto"] = p0.get("valor_neto")
     else:
-        data.setdefault("productos", [])
+        data["productos"] = []
 
     return data
 
@@ -1184,6 +1201,7 @@ def parsear_factura_chilena(texto: str) -> dict[str, Any]:
     if not (texto or "").strip():
         return resultado
 
+    resultado["ocr_texto_crudo"] = texto
     texto_parse = _normalize_ocr_text(texto)
 
     resultado["rut_proveedor"] = _extract_rut_emisor(texto_parse)

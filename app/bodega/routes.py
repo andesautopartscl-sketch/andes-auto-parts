@@ -303,6 +303,8 @@ def _parse_valor_neto_chile(raw: str) -> float | None:
         return None
     if "," in s:
         s = s.replace(".", "").replace(",", ".")
+    elif re.fullmatch(r"\d{1,3}(\.\d{3})+", s):
+        s = s.replace(".", "")
     try:
         v = float(s)
     except (TypeError, ValueError):
@@ -1969,8 +1971,13 @@ def api_analizar_factura():
     try:
         from app.utils.invoice_vision import analizar_factura, garantizar_producto_factura
 
-        data = garantizar_producto_factura(analizar_factura(image_b64, media_type))
-        current_app.logger.info("Resultado análisis: %s", data)
+        resultado = analizar_factura(image_b64, media_type)
+        data = garantizar_producto_factura(resultado)
+        current_app.logger.info(
+            "analizar-factura productos=%s producto_codigo=%s",
+            len(data.get("productos") or []),
+            data.get("producto_codigo"),
+        )
         return jsonify(success=True, data=data)
     except ValueError as exc:
         return jsonify(success=False, message=str(exc)), 400

@@ -1950,35 +1950,76 @@
                 ];
             }
 
-            function ensureFacturaProductos(data) {
-                if (!data) {
-                    return [];
-                }
+            /** DOM del preview de factura (consulta en vivo; evita refs obsoletos tras SPA). */
+            function getFacturaPreviewDom() {
+                return {
+                    extractedBox: document.getElementById("ingresoFacturaExtracted"),
+                    extractedList: document.getElementById("ingresoFacturaExtractedList"),
+                    productsBox: document.getElementById("ingresoFacturaExtractedProducts"),
+                    productsTitle: document.getElementById("ingresoFacturaExtractedProductsTitle"),
+                    productsBody: document.getElementById("ingresoFacturaExtractedProductsBody"),
+                };
+            }
+
+            /**
+             * Unifica productos desde productos[], campos planos u OCR crudo.
+             * Mundo Repuestos suele traer productos[] con varios ítems (PDF/columnas).
+             * Fitalia suele traer 1 ítem térmico + producto_codigo/producto_cantidad planos.
+             */
+            function collectFacturaProductosList(data) {
+                if (!data) return [];
+
                 var prods = normalizeFacturaProductos(data.productos);
                 if (prods.length) {
                     data.productos = prods;
                     return prods;
                 }
+
+                if (data.producto_codigo) {
+                    var flat = {
+                        codigo_proveedor: String(data.producto_codigo).trim(),
+                        cantidad: data.producto_cantidad,
+                        valor_neto: data.producto_valor_neto,
+                    };
+                    if (flat.codigo_proveedor) {
+                        data.productos = [flat];
+                        return [flat];
+                    }
+                }
+
                 var fromCrudo = parseProductosFromOcrCrudo(data.ocr_texto_crudo);
                 if (fromCrudo.length) {
-                    data.productos = fromCrudo;
+                    prods = normalizeFacturaProductos(fromCrudo);
+                    if (prods.length) {
+                        data.productos = prods;
+                        return prods;
+                    }
                 }
-                prods = normalizeFacturaProductos(data.productos);
-                return prods;
+
+                data.productos = [];
+                return [];
+            }
+
+            function ensureFacturaProductos(data) {
+                return collectFacturaProductosList(data);
             }
 
             /** Dibuja filas en #ingresoFacturaExtractedProductsBody */
             function renderFacturaProductosRows(prods) {
-                if (!extractedProductsBody || !extractedProductsBox) {
+                var dom = getFacturaPreviewDom();
+                var productsBody = dom.productsBody;
+                var productsBox = dom.productsBox;
+                var productsTitle = dom.productsTitle;
+                if (!productsBody || !productsBox) {
                     return;
                 }
-                extractedProductsBody.innerHTML = "";
+                productsBody.innerHTML = "";
                 if (!prods || !prods.length) {
-                    extractedProductsBox.hidden = true;
+                    productsBox.hidden = true;
                     return;
                 }
-                if (extractedProductsTitle) {
-                    extractedProductsTitle.textContent =
+                if (productsTitle) {
+                    productsTitle.textContent =
                         "Productos detectados (" + prods.length + ")";
                 }
                 prods.forEach(function (p) {
@@ -1998,16 +2039,24 @@
                     tr.appendChild(tdCode);
                     tr.appendChild(tdCant);
                     tr.appendChild(tdNeto);
-                    extractedProductsBody.appendChild(tr);
+                    productsBody.appendChild(tr);
                 });
-                extractedProductsBox.hidden = false;
+                productsBox.hidden = false;
             }
 
             function renderExtractedPreview(data) {
-                if (!extractedList || !extractedBox) return;
+                var dom = getFacturaPreviewDom();
+                if (!dom.extractedList || !dom.extractedBox) return;
+                var prods = collectFacturaProductosList(data);
+                extractedList = dom.extractedList;
+                extractedBox = dom.extractedBox;
+                extractedProductsBox = dom.productsBox;
+                extractedProductsTitle = dom.productsTitle;
+                extractedProductsBody = dom.productsBody;
+
                 extractedList.innerHTML = "";
-                if (extractedProductsBody) extractedProductsBody.innerHTML = "";
-                if (extractedProductsBox) extractedProductsBox.hidden = true;
+                if (dom.productsBody) dom.productsBody.innerHTML = "";
+                if (dom.productsBox) dom.productsBox.hidden = true;
 
                 dlRow("RUT proveedor", data.rut_proveedor);
                 dlRow("N° documento", data.numero_documento);
@@ -2017,19 +2066,7 @@
                 if (data.total != null) dlRow("Total", data.total);
                 if (data.iva != null) dlRow("IVA", data.iva);
 
-                var prods = ensureFacturaProductos(data);
                 var p0 = prods[0] || null;
-                if (!p0 && (data.producto_codigo || data.producto_cantidad != null)) {
-                    p0 = {
-                        codigo_proveedor: data.producto_codigo || "",
-                        cantidad: data.producto_cantidad,
-                        valor_neto: data.producto_valor_neto,
-                    };
-                    if (p0.codigo_proveedor) {
-                        data.productos = [p0];
-                        prods = [p0];
-                    }
-                }
                 if (p0 && p0.codigo_proveedor) {
                     dlRow("Código producto", p0.codigo_proveedor);
                 }
@@ -2039,15 +2076,17 @@
                 if (p0 && p0.valor_neto != null && p0.valor_neto !== "") {
                     dlRow("V. neto unit.", p0.valor_neto);
                 }
-                renderFacturaProductosRows(prods);
                 extractedBox.hidden = false;
-                try {
-                    document.dispatchEvent(
-                        new CustomEvent("ingreso:factura-analizada", { detail: data })
-                    );
-                } catch (evErr) {
-                    /* ignore */
-                }
+                window.setTimeout(function () {
+                    renderFacturaProductosRows(prods);
+                    try {
+                        document.dispatchEvent(
+                            new CustomEvent("ingreso:factura-analizada", { detail: data })
+                        );
+                    } catch (evErr) {
+                        /* ignore */
+                    }
+                }, 0);
             }
 
             function mapMetodoPago(raw) {
@@ -2284,7 +2323,6 @@
                             throw new Error(msg);
                         }
                         var apiBody = pack.body || {};
-                        // Copia profunda: no compartir referencia con pack.body.data
                         extractedData = JSON.parse(JSON.stringify(apiBody.data || {}));
                         hydrateProductosFromFlatFields(extractedData);
                         if (
@@ -2300,13 +2338,9 @@
                             var coerced = coerceFacturaProductosArray(
                                 extractedData.productos
                             );
-                            if (coerced.length) {
-                                extractedData.productos = coerced;
-                            } else {
-                                extractedData.productos = [];
-                            }
+                            extractedData.productos = coerced.length ? coerced : [];
                         }
-                        ensureFacturaProductos(extractedData);
+                        collectFacturaProductosList(extractedData);
                         if (previewImg && extractedData.preview_base64) {
                             previewImg.hidden = false;
                             previewImg.src = extractedData.preview_base64;
