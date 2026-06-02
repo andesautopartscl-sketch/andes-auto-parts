@@ -338,9 +338,110 @@ _OLD_PRODUCT_LINE_RE = re.compile(
 #   CANTIDAD,00UN X
 #   PRECIO_UNIT
 #   0= TOTAL
-_THERMAL_CODE_RE = re.compile(r"^\s*([A-Z0-9]{3,15}-[A-Z]{2,10})\s+(.+)$", re.IGNORECASE)
-_THERMAL_QTY_RE = re.compile(r"^\s*(\d+),\d+\s*UN\b", re.IGNORECASE)
+_THERMAL_CODE_DESC_RE = re.compile(
+    r"^\s*([A-Z0-9]{3,15}-[A-Z0-9]{2,12})\s+(.+)$",
+    re.IGNORECASE,
+)
+_THERMAL_CODE_ONLY_RE = re.compile(
+    r"^\s*([A-Z0-9]{3,15}-[A-Z0-9]{2,12})\s*$",
+    re.IGNORECASE,
+)
+_THERMAL_QTY_LINE_RE = re.compile(
+    r"^\s*(\d+),\d+\s*UN(?:\s*(?:X|x)\s*([\d.,]+))?",
+    re.IGNORECASE,
+)
 _THERMAL_PRICE_RE = re.compile(r"^[\$]?\s*([\d.,]+)\s*$")
+_THERMAL_LINE_TOTAL_RE = re.compile(r"^\s*0\s*=\s*([\d.,]+)\s*$", re.IGNORECASE)
+_THERMAL_CODE_TOKEN_RE = re.compile(
+    r"\b([A-Z0-9]{3,15}-[A-Z0-9]{2,12})\b",
+    re.IGNORECASE,
+)
+
+
+def _is_plausible_supplier_code(code: str) -> bool:
+    """Código proveedor real (ej. M60415-BOSCH), no fragmentos de descripción (XUV-GENIO)."""
+    c = (code or "").strip().upper()
+    if "-" not in c:
+        return False
+    head, _, tail = c.partition("-")
+    if not head or not tail:
+        return False
+    # Fitalia y similares: prefijo con al menos un dígito (M60415-BOSCH, 40043-GSP).
+    return any(ch.isdigit() for ch in head)
+
+
+def _collect_plausible_thermal_codes(text: str) -> list[str]:
+    """Tokens CODIGO-MARCA válidos; ignora líneas que empiezan con '-' (-XUV-GENIO)."""
+    found: list[str] = []
+
+    def add(code: str) -> None:
+        c = (code or "").strip().upper()
+        if _is_plausible_supplier_code(c) and c not in found:
+            found.append(c)
+
+    for m in _THERMAL_CODE_TOKEN_RE.finditer(text):
+        if m.start() > 0 and text[m.start() - 1] == "-":
+            continue
+        add(m.group(1))
+
+    # OCR a veces separa: "M60415 BOSCH" en lugar de "M60415-BOSCH"
+    for m in re.finditer(r"\b([A-Z]\d{4,6})\s+([A-Z]{2,12})\b", text, re.IGNORECASE):
+        add(f"{m.group(1)}-{m.group(2)}")
+
+    # Sin espacio: "M60415BOSCH" -> M60415-BOSCH (solo si el prefijo tiene dígitos)
+    for m in re.finditer(r"\b([A-Z]\d{5,6})([A-Z]{4,12})\b", text, re.IGNORECASE):
+        add(f"{m.group(1)}-{m.group(2)}")
+
+    return found
+
+
+def _thermal_qty_from_text(texto: str) -> int | None:
+    """Cantidad desde TOT.UNIDADES o línea '2,00UN'."""
+    m_tot = re.search(r"TOT\.?\s*UNIDADES\s*:?\s*(\d+)(?:,\d+)?", texto, re.IGNORECASE)
+    if m_tot:
+        return int(m_tot.group(1))
+    m_un = re.search(r"(\d+),\d+\s*UN", texto, re.IGNORECASE)
+    if m_un:
+        return int(m_un.group(1))
+    return None
+
+
+def _thermal_unit_price_from_text(texto: str, codigo: str, qty: int) -> int | None:
+    """Precio unitario: 'UN X 8.500' cerca del código o neto/cantidad."""
+    head = codigo.split("-", 1)[0]
+    pos = texto.upper().find(head.upper())
+    chunk = texto[pos : pos + 500] if pos >= 0 else texto
+
+    m_px = re.search(r"(\d+),\d+\s*UN\s*(?:X|x)\s*([\d.,]+)", chunk, re.IGNORECASE)
+    if m_px:
+        val = _parse_monto_chileno(m_px.group(2))
+        if val is not None and val > 0:
+            return val
+
+    for m in _THERMAL_PRICE_RE.finditer(chunk):
+        val = _parse_monto_chileno(m.group(1))
+        if val is not None and 100 <= val <= 50_000_000:
+            return val
+
+    neto, _, _ = _extract_montos(texto)
+    if neto is not None and qty > 0:
+        return int(round(neto / qty))
+    return None
+
+
+def _build_producto_termico(codigo: str, texto: str, qty: int | None = None) -> dict[str, Any] | None:
+    if qty is None:
+        qty = _thermal_qty_from_text(texto)
+    if not qty or qty <= 0 or qty > 99999:
+        return None
+    precio = _thermal_unit_price_from_text(texto, codigo, qty)
+    if precio is None:
+        return None
+    return {
+        "codigo_proveedor": codigo.upper(),
+        "cantidad": qty,
+        "valor_neto": precio,
+    }
 
 
 _CODE_STOPWORDS = frozenset(
@@ -397,6 +498,8 @@ def _normalize_ocr_text(texto: str) -> str:
         if not line:
             continue
         line = re.sub(r"^[\|\s]+", "", line)
+        for ch in ("\u2013", "\u2014", "\u2212"):
+            line = line.replace(ch, "-")
         lines.append(line)
     return "\n".join(lines)
 
@@ -582,47 +685,6 @@ def _extract_precios_valor_seccion(lines: list[str], indices: dict[str, int]) ->
     return precios
 
 
-def _log_precios_tras_header(
-    lines: list[str], header_label: str, start_idx: int | None
-) -> list[tuple[str, int | None]]:
-    """Debug: líneas tras Valor / Precio Unit y monto parseado (si aplica)."""
-    parsed: list[tuple[str, int | None]] = []
-    if start_idx is None:
-        print(f"  [{header_label}] header no encontrado", flush=True)
-        return parsed
-
-    print(f"  [{header_label}] header en linea {start_idx + 1}: {lines[start_idx]!r}", flush=True)
-    for offset, line in enumerate(lines[start_idx + 1 :], start=1):
-        line_no = start_idx + 1 + offset
-        low = line.lower().strip().strip(":").strip()
-        if any(low.startswith(p) for p in _SECTION_STOP_PREFIXES):
-            print(f"    L{line_no:03d}| STOP ({low}) -> {line!r}", flush=True)
-            break
-        if re.fullmatch(r"(?:neto|total)\s*:?\s*", low, re.IGNORECASE):
-            print(f"    L{line_no:03d}| STOP (neto/total) -> {line!r}", flush=True)
-            break
-        m = _PRICE_LINE_RE.match(line)
-        if m:
-            val = _parse_monto_chileno(m.group(1))
-            ok = val is not None and val >= 50
-            parsed.append((line, val if ok else None))
-            print(
-                f"    L{line_no:03d}| PRECIO raw={line!r} parsed={val} usable={ok}",
-                flush=True,
-            )
-        else:
-            print(f"    L{line_no:03d}| skip -> {line!r}", flush=True)
-    return parsed
-
-
-def _find_precio_unit_index(lines: list[str]) -> int | None:
-    for idx, line in enumerate(lines):
-        low = line.lower().strip().strip(":").strip()
-        if low.startswith("precio unit"):
-            return idx
-    return None
-
-
 def _extract_productos_columnas(lines: list[str]) -> list[dict[str, Any]]:
     """PDF/imagen con columnas en bloques: Código, Cantidad, Descripción, Valor."""
     indices = _section_header_indices(lines)
@@ -635,24 +697,10 @@ def _extract_productos_columnas(lines: list[str]) -> list[dict[str, Any]]:
 
     cantidades = _extract_cantidades_seccion(lines, indices)
     precios_raw = _extract_precios_valor_seccion(lines, indices)
-    precio_unit_idx = _find_precio_unit_index(lines)
-
-    print("=== _extract_productos_columnas DEBUG ===", flush=True)
-    print(f"  indices seccion: {indices}", flush=True)
-    print(f"  codigos ({len(codigos)}): {codigos}", flush=True)
-    print(f"  cantidades ({len(cantidades)}): {cantidades}", flush=True)
-    print("  --- precios tras header Valor ---", flush=True)
-    _log_precios_tras_header(lines, "Valor", indices.get("valor"))
-    print("  --- precios tras header Precio Unit ---", flush=True)
-    _log_precios_tras_header(lines, "Precio Unit", precio_unit_idx)
-    print(f"  precios_raw (bloque Valor): {precios_raw}", flush=True)
     if not precios_raw:
         precios_raw = _extract_precios_candidatos(lines, codigos)
-        print(f"  precios_raw (fallback candidatos): {precios_raw}", flush=True)
 
     unit_prices = _select_unit_prices(precios_raw, cantidades)
-    print(f"  unit_prices seleccionados: {unit_prices}", flush=True)
-    print("=== FIN _extract_productos_columnas DEBUG ===", flush=True)
 
     n = min(len(codigos), len(cantidades), len(unit_prices))
     if n <= 0:
@@ -822,17 +870,54 @@ def _extract_productos_inline(texto: str) -> list[dict[str, Any]]:
     return productos
 
 
+def _is_thermal_desc_continuation(line: str) -> bool:
+    """Línea de descripción multilínea (ej. '-XUV-GENIO') antes de cantidad/precio."""
+    s = (line or "").strip()
+    if not s or len(s) < 2:
+        return False
+    low = s.lower()
+    if low.startswith("total") or low.startswith("monto total"):
+        return False
+    if _THERMAL_CODE_DESC_RE.match(s) or _THERMAL_CODE_ONLY_RE.match(s):
+        return False
+    if _THERMAL_QTY_LINE_RE.match(s) or _THERMAL_LINE_TOTAL_RE.match(s):
+        return False
+    if _THERMAL_PRICE_RE.match(s):
+        return False
+    return bool(re.search(r"[A-Za-zÁÉÍÓÚáéíóúÑñ]", s))
+
+
+def _parse_thermal_qty_line(line: str) -> tuple[int | None, int | None]:
+    """Cantidad y precio unitario opcional en '2,00UN X 8.500'."""
+    mq = _THERMAL_QTY_LINE_RE.match(line)
+    if not mq:
+        return None, None
+    try:
+        qty = int(mq.group(1))
+    except ValueError:
+        return None, None
+    precio = None
+    if mq.group(2):
+        precio = _parse_monto_chileno(mq.group(2))
+    return qty, precio
+
+
 def _extract_productos_termico(
     texto: str, seen: set[str] | None = None
 ) -> list[dict[str, Any]]:
     """Parser para boletas térmicas con el ítem repartido en líneas separadas.
 
     Tolera líneas de ruido OCR entre el código y la cantidad/precio (ej. teclas
-    del laptop capturadas en la foto). Estructura esperada:
+    del laptop capturadas en la foto). Formatos:
         CODIGO-MARCA DESCRIPCION
         CANTIDAD,00UN X
         PRECIO_UNIT
         0= TOTAL
+    o (PDF / OCR en columnas):
+        CODIGO-MARCA
+        DESCRIPCION
+        -continuacion
+        CANTIDAD,00UN X 8.500
     """
     if seen is None:
         seen = set()
@@ -840,38 +925,69 @@ def _extract_productos_termico(
     productos: list[dict[str, Any]] = []
 
     for i, line in enumerate(lines):
-        mc = _THERMAL_CODE_RE.match(line)
-        if not mc:
+        if line.strip().startswith("-"):
             continue
-        codigo = mc.group(1).strip().upper()
-        if codigo in seen:
-            continue
-        descripcion = mc.group(2).strip()
 
-        # Busca la cantidad ("2,00UN X") más adelante, saltando ruido.
-        qty = None
-        qty_idx = None
-        for j in range(i + 1, min(len(lines), i + 20)):
-            mq = _THERMAL_QTY_RE.match(lines[j])
-            if mq:
-                try:
-                    qty = int(mq.group(1))
-                except ValueError:
-                    qty = None
+        codigo: str | None = None
+        descripcion = ""
+
+        mc = _THERMAL_CODE_DESC_RE.match(line)
+        if mc:
+            codigo = mc.group(1).strip().upper()
+            descripcion = mc.group(2).strip()
+            desc_parts: list[str] = []
+            for j in range(i + 1, min(len(lines), i + 12)):
+                if _THERMAL_QTY_LINE_RE.match(lines[j]):
+                    break
+                if _is_thermal_desc_continuation(lines[j]):
+                    desc_parts.append(lines[j].strip())
+            if desc_parts:
+                descripcion = (descripcion + " " + " ".join(desc_parts)).strip()
+        else:
+            mo = _THERMAL_CODE_ONLY_RE.match(line)
+            if not mo:
+                continue
+            codigo = mo.group(1).strip().upper()
+            desc_parts = []
+            for j in range(i + 1, min(len(lines), i + 12)):
+                if _THERMAL_QTY_LINE_RE.match(lines[j]):
+                    break
+                if _is_thermal_desc_continuation(lines[j]):
+                    desc_parts.append(lines[j].strip())
+            descripcion = " ".join(desc_parts).strip()
+
+        if not codigo or not _is_plausible_supplier_code(codigo) or codigo in seen:
+            continue
+
+        qty: int | None = None
+        qty_idx: int | None = None
+        precio: int | None = None
+        for j in range(i + 1, min(len(lines), i + 22)):
+            q, p_inline = _parse_thermal_qty_line(lines[j])
+            if q is not None:
+                qty = q
                 qty_idx = j
+                precio = p_inline
                 break
+
         if not qty or qty <= 0 or qty > 99999 or qty_idx is None:
             continue
 
-        # Precio unitario: primer número en las líneas siguientes a la cantidad.
-        precio = None
-        for k in range(qty_idx + 1, min(len(lines), qty_idx + 8)):
-            mp = _THERMAL_PRICE_RE.match(lines[k])
-            if mp:
-                val = _parse_monto_chileno(mp.group(1))
-                if val is not None and val > 0:
-                    precio = val
+        if precio is None:
+            for k in range(qty_idx + 1, min(len(lines), qty_idx + 8)):
+                mt = _THERMAL_LINE_TOTAL_RE.match(lines[k])
+                if mt:
+                    total_line = _parse_monto_chileno(mt.group(1))
+                    if total_line is not None and qty:
+                        precio = int(round(total_line / qty))
                     break
+                mp = _THERMAL_PRICE_RE.match(lines[k])
+                if mp:
+                    val = _parse_monto_chileno(mp.group(1))
+                    if val is not None and val > 0:
+                        precio = val
+                    break
+
         if precio is None:
             continue
 
@@ -888,14 +1004,39 @@ def _extract_productos_termico(
     return productos
 
 
+def _extract_productos_fitalia_fallback(texto: str) -> list[dict[str, Any]]:
+    """Respaldo boleta térmica: último CODIGO-MARCA antes de totales + cantidad TOT.UNIDADES."""
+    if not re.search(
+        r"factura\s+electronica|numero\s*:\s*0*\d+|total\s+neto|monto\s+total",
+        texto,
+        re.IGNORECASE,
+    ):
+        return []
+
+    before_totals = texto
+    m_neto = re.search(r"total\s+neto", texto, re.IGNORECASE)
+    if m_neto:
+        before_totals = texto[: m_neto.start()]
+
+    codes = _collect_plausible_thermal_codes(before_totals)
+    if not codes:
+        codes = _collect_plausible_thermal_codes(texto)
+    if not codes:
+        return []
+
+    prod = _build_producto_termico(codes[-1], texto)
+    return [prod] if prod else []
+
+
 def _extract_productos(texto: str) -> list[dict[str, Any]]:
     """Extrae productos cuando Vision OCR separa columnas en bloques distintos."""
     texto_norm = _normalize_ocr_text(texto)
     lines = [ln.strip() for ln in texto_norm.splitlines() if ln.strip()]
-    print("=== OCR NORMALIZADO (primeras 50 lineas) ===", flush=True)
-    for i, ln in enumerate(lines[:50], start=1):
-        print(f"{i:02d}|{ln}", flush=True)
-    print("=== FIN OCR NORMALIZADO ===", flush=True)
+
+    # Boleta térmica (Fitalia, etc.): priorizar ítems multilínea antes que columnas.
+    termico = _extract_productos_termico(texto_norm)
+    if termico:
+        return termico
 
     codigos = _extract_codigos_producto(lines)
     cantidades = _extract_cantidades_descripciones(lines)
@@ -920,7 +1061,101 @@ def _extract_productos(texto: str) -> list[dict[str, Any]]:
     if productos:
         return productos
 
-    return _extract_productos_inline(texto)
+    productos = _extract_productos_inline(texto_norm)
+    if productos:
+        return productos
+
+    fallback = _extract_productos_fitalia_fallback(texto_norm)
+    if fallback:
+        return fallback
+
+    # Último recurso: regex multilínea en todo el OCR (PDF con texto desordenado).
+    m_block = re.search(
+        r"\b([A-Z]\d{4,6}-[A-Z0-9]{2,12})\b[\s\S]{0,500}?(\d+),\d+\s*UN",
+        texto_norm,
+        re.IGNORECASE,
+    )
+    if m_block:
+        codigo = m_block.group(1).upper()
+        if _is_plausible_supplier_code(codigo):
+            prod = _build_producto_termico(codigo, texto_norm, int(m_block.group(2)))
+            if prod:
+                return [prod]
+
+    return []
+
+
+def _extract_producto_regex_simple(texto: str) -> list[dict[str, Any]]:
+    """Extracción directa en todo el OCR: código + '2,00UN x 8.500' (mismo renglón)."""
+    if not (texto or "").strip():
+        return []
+
+    m = re.search(
+        r"\b([A-Z]\d{4,6}-[A-Z0-9]{2,12})\b[\s\S]{0,800}?(\d+),\d+\s*UN\s*(?:X|x)\s*([\d.,]+)",
+        texto,
+        re.IGNORECASE,
+    )
+    codigo: str | None = None
+    qty: int | None = None
+    precio: int | None = None
+
+    if m:
+        codigo = m.group(1).upper()
+        qty = int(m.group(2))
+        precio = _parse_monto_chileno(m.group(3))
+    else:
+        m2 = re.search(
+            r"\b([A-Z]\d{4,6})\s+([A-Z]{2,12})\b[\s\S]{0,800}?(\d+),\d+\s*UN\s*(?:X|x)\s*([\d.,]+)",
+            texto,
+            re.IGNORECASE,
+        )
+        if m2:
+            codigo = f"{m2.group(1).upper()}-{m2.group(2).upper()}"
+            qty = int(m2.group(3))
+            precio = _parse_monto_chileno(m2.group(4))
+
+    if not codigo or not _is_plausible_supplier_code(codigo):
+        return []
+    if qty is None:
+        qty = _thermal_qty_from_text(texto)
+    if not qty or qty <= 0:
+        return []
+    if precio is None:
+        precio = _thermal_unit_price_from_text(texto, codigo, qty)
+    if precio is None:
+        return []
+
+    return [
+        {
+            "codigo_proveedor": codigo,
+            "cantidad": qty,
+            "valor_neto": precio,
+        }
+    ]
+
+
+def garantizar_producto_factura(data: dict[str, Any]) -> dict[str, Any]:
+    """Asegura productos[] y campos planos para la UI (preview + aplicar)."""
+    productos = list(data.get("productos") or [])
+    if not productos:
+        texto = (data.get("ocr_texto_crudo") or "").strip()
+        if texto:
+            productos = (
+                _extract_productos(texto)
+                or _extract_productos_fitalia_fallback(texto)
+                or _extract_producto_regex_simple(texto)
+            )
+
+    if productos:
+        data["productos"] = productos
+        p0 = productos[0]
+        data["producto_codigo"] = p0.get("codigo_proveedor")
+        data["producto_cantidad"] = p0.get("cantidad")
+        data["producto_valor_neto"] = p0.get("valor_neto")
+    else:
+        data.setdefault("productos", [])
+
+    return data
 
 
 def parsear_factura_chilena(texto: str) -> dict[str, Any]:
@@ -935,7 +1170,6 @@ def parsear_factura_chilena(texto: str) -> dict[str, Any]:
             logger.info(ocr_log)
     except Exception:
         logger.info(ocr_log)
-    print(ocr_log, flush=True)
 
     resultado: dict[str, Any] = {
         "rut_proveedor": None,
@@ -971,7 +1205,18 @@ def parsear_factura_chilena(texto: str) -> dict[str, Any]:
     resultado["iva"] = iva
     resultado["total"] = total
     resultado["productos"] = _extract_productos(texto_parse)
+    if not resultado["productos"]:
+        resultado["productos"] = _extract_productos_fitalia_fallback(texto_parse)
     logger.info("Productos extraídos: %s", resultado["productos"])
+    if not resultado["productos"]:
+        resultado["productos"] = _extract_producto_regex_simple(texto_parse)
+
+    garantizar_producto_factura(resultado)
+
+    if not resultado["productos"]:
+        logger.warning(
+            "OCR sin productos detectados (revisar codigo/cantidad en texto crudo)"
+        )
 
     return resultado
 
@@ -1086,9 +1331,6 @@ def analizar_factura(image_base64: str, media_type: str) -> dict[str, Any]:
         raise ValueError("La imagen generada desde el PDF es demasiado grande (máx. 12 MB)")
 
     texto = _vision_ocr_text(image_bytes, cred_path).strip()
-    print(texto, flush=True)
-    if mt == "application/pdf":
-        print("=== OCR PDF ===", texto[:3000], flush=True)
     if not texto:
         raise ValueError("No se detectó texto en el documento. Pruebe con mejor calidad.")
 

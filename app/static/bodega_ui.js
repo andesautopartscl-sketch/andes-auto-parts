@@ -28,8 +28,8 @@
 
     function initIngresoView(root) {
         var form = root.querySelector("#ingresoForm");
-        if (!form || form.dataset.bodegaUiBound === "1") return;
-        form.dataset.bodegaUiBound = "1";
+        if (!form || form.dataset.bodegaUiBound === "20260603") return;
+        form.dataset.bodegaUiBound = "20260603";
 
         var itemsBody = form.querySelector("#itemsBody");
         var addRowBtn = form.querySelector("#btnAddRow");
@@ -1822,6 +1822,187 @@
                 extractedList.appendChild(dd);
             }
 
+            function coerceFacturaProductosArray(raw) {
+                if (Array.isArray(raw)) return raw;
+                if (raw && typeof raw === "object") {
+                    if (raw.codigo_proveedor || raw.codigo || raw.code) return [raw];
+                    if (typeof raw.length === "number") {
+                        try {
+                            return Array.prototype.slice.call(raw);
+                        } catch (sliceErr) {
+                            /* ignore */
+                        }
+                    }
+                }
+                if (typeof raw === "string" && raw.trim()) {
+                    try {
+                        return coerceFacturaProductosArray(JSON.parse(raw));
+                    } catch (parseErr) {
+                        /* ignore */
+                    }
+                }
+                return [];
+            }
+
+            function normalizeFacturaProductos(raw) {
+                var list = coerceFacturaProductosArray(raw);
+                var out = [];
+                list.forEach(function (p) {
+                    if (!p || typeof p !== "object") {
+                        return;
+                    }
+                    var codigoRaw =
+                        p.codigo_proveedor != null
+                            ? p.codigo_proveedor
+                            : p.codigo != null
+                              ? p.codigo
+                              : p.code;
+                    var codigo = String(codigoRaw == null ? "" : codigoRaw).trim();
+                    var item = {
+                        codigo_proveedor: codigo,
+                        cantidad: p.cantidad != null ? p.cantidad : p.qty,
+                        valor_neto: p.valor_neto != null ? p.valor_neto : p.precio,
+                        descripcion: String(p.descripcion || ""),
+                    };
+                    if (codigo) out.push(item);
+                });
+                return out;
+            }
+
+            function parseMontoFacturaOcr(raw) {
+                if (raw == null) return null;
+                var t = String(raw).trim().replace(/\s/g, "");
+                if (!t) return null;
+                if (t.indexOf(",") >= 0) {
+                    t = t.replace(/\./g, "").replace(",", ".");
+                } else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
+                    t = t.replace(/\./g, "");
+                }
+                var v = parseFloat(t);
+                return isNaN(v) ? null : v;
+            }
+
+            /** Si el servidor devolvió productos vacíos, extrae del OCR crudo (Fitalia: 2,00UN x 8.500). */
+            function parseProductosFromOcrCrudo(crudo) {
+                var t = String(crudo || "")
+                    .replace(/\u2013/g, "-")
+                    .replace(/\u2014/g, "-")
+                    .replace(/\u2212/g, "-");
+                if (!t.trim()) return [];
+
+                var codes = [];
+                var reCode = /\b([A-Z]\d{4,6}-[A-Z0-9]{2,12})\b/gi;
+                var m;
+                while ((m = reCode.exec(t)) !== null) {
+                    if (m.index > 0 && t.charAt(m.index - 1) === "-") continue;
+                    var head = m[1].split("-")[0] || "";
+                    if (!/\d/.test(head)) continue;
+                    var c = m[1].toUpperCase();
+                    if (codes.indexOf(c) < 0) codes.push(c);
+                }
+                if (!codes.length) {
+                    var mSp = t.match(/\b([A-Z]\d{4,6})\s+([A-Z]{2,12})\b/i);
+                    if (mSp && /\d/.test(mSp[1])) {
+                        codes.push(mSp[1].toUpperCase() + "-" + mSp[2].toUpperCase());
+                    }
+                }
+                if (!codes.length) return [];
+
+                var codigo = codes[codes.length - 1];
+                var qty = null;
+                var mTot = t.match(/TOT\.?\s*UNIDADES\s*:?\s*(\d+)/i);
+                var mUn = t.match(/(\d+),\d+\s*UN/i);
+                if (mTot) qty = parseInt(mTot[1], 10);
+                else if (mUn) qty = parseInt(mUn[1], 10);
+                if (!qty || qty < 1 || qty > 99999) return [];
+
+                var precio = null;
+                var mPx = t.match(/(\d+),\d+\s*UN\s*(?:X|x)\s*([\d.,]+)/i);
+                if (mPx) precio = parseMontoFacturaOcr(mPx[2]);
+                if (precio == null) {
+                    var mNeto = t.match(/TOTAL\s+NETO\s*:?\s*([\d.,]+)/i);
+                    if (mNeto) {
+                        var neto = parseMontoFacturaOcr(mNeto[1]);
+                        if (neto != null && qty) precio = Math.round(neto / qty);
+                    }
+                }
+                if (precio == null || precio <= 0) return [];
+
+                return [
+                    {
+                        codigo_proveedor: codigo,
+                        cantidad: qty,
+                        valor_neto: Math.round(precio),
+                    },
+                ];
+            }
+
+            function hydrateProductosFromFlatFields(data) {
+                if (!data) return;
+                if (Array.isArray(data.productos) && data.productos.length) return;
+                if (!data.producto_codigo) return;
+                data.productos = [
+                    {
+                        codigo_proveedor: String(data.producto_codigo).trim(),
+                        cantidad: data.producto_cantidad,
+                        valor_neto: data.producto_valor_neto,
+                    },
+                ];
+            }
+
+            function ensureFacturaProductos(data) {
+                if (!data) {
+                    return [];
+                }
+                var prods = normalizeFacturaProductos(data.productos);
+                if (prods.length) {
+                    data.productos = prods;
+                    return prods;
+                }
+                var fromCrudo = parseProductosFromOcrCrudo(data.ocr_texto_crudo);
+                if (fromCrudo.length) {
+                    data.productos = fromCrudo;
+                }
+                prods = normalizeFacturaProductos(data.productos);
+                return prods;
+            }
+
+            /** Dibuja filas en #ingresoFacturaExtractedProductsBody */
+            function renderFacturaProductosRows(prods) {
+                if (!extractedProductsBody || !extractedProductsBox) {
+                    return;
+                }
+                extractedProductsBody.innerHTML = "";
+                if (!prods || !prods.length) {
+                    extractedProductsBox.hidden = true;
+                    return;
+                }
+                if (extractedProductsTitle) {
+                    extractedProductsTitle.textContent =
+                        "Productos detectados (" + prods.length + ")";
+                }
+                prods.forEach(function (p) {
+                    var tr = document.createElement("tr");
+                    var tdCode = document.createElement("td");
+                    tdCode.textContent = p.codigo_proveedor || "—";
+                    var tdCant = document.createElement("td");
+                    tdCant.className = "num";
+                    tdCant.textContent =
+                        p.cantidad != null && p.cantidad !== "" ? String(p.cantidad) : "—";
+                    var tdNeto = document.createElement("td");
+                    tdNeto.className = "num";
+                    tdNeto.textContent =
+                        p.valor_neto != null && p.valor_neto !== ""
+                            ? formatMontoInput(p.valor_neto)
+                            : "—";
+                    tr.appendChild(tdCode);
+                    tr.appendChild(tdCant);
+                    tr.appendChild(tdNeto);
+                    extractedProductsBody.appendChild(tr);
+                });
+                extractedProductsBox.hidden = false;
+            }
+
             function renderExtractedPreview(data) {
                 if (!extractedList || !extractedBox) return;
                 extractedList.innerHTML = "";
@@ -1836,35 +2017,37 @@
                 if (data.total != null) dlRow("Total", data.total);
                 if (data.iva != null) dlRow("IVA", data.iva);
 
-                var prods = Array.isArray(data.productos) ? data.productos : [];
-                console.log("[factura-scan] productos detectados", prods.length, prods);
-                if (prods.length && extractedProductsBody && extractedProductsBox) {
-                    if (extractedProductsTitle) {
-                        extractedProductsTitle.textContent =
-                            "Productos detectados (" + prods.length + ")";
+                var prods = ensureFacturaProductos(data);
+                var p0 = prods[0] || null;
+                if (!p0 && (data.producto_codigo || data.producto_cantidad != null)) {
+                    p0 = {
+                        codigo_proveedor: data.producto_codigo || "",
+                        cantidad: data.producto_cantidad,
+                        valor_neto: data.producto_valor_neto,
+                    };
+                    if (p0.codigo_proveedor) {
+                        data.productos = [p0];
+                        prods = [p0];
                     }
-                    prods.forEach(function (p) {
-                        var tr = document.createElement("tr");
-                        var tdCode = document.createElement("td");
-                        tdCode.textContent = p.codigo_proveedor || "—";
-                        var tdCant = document.createElement("td");
-                        tdCant.className = "num";
-                        tdCant.textContent =
-                            p.cantidad != null && p.cantidad !== "" ? String(p.cantidad) : "—";
-                        var tdNeto = document.createElement("td");
-                        tdNeto.className = "num";
-                        tdNeto.textContent =
-                            p.valor_neto != null && p.valor_neto !== ""
-                                ? formatMontoInput(p.valor_neto)
-                                : "—";
-                        tr.appendChild(tdCode);
-                        tr.appendChild(tdCant);
-                        tr.appendChild(tdNeto);
-                        extractedProductsBody.appendChild(tr);
-                    });
-                    extractedProductsBox.hidden = false;
                 }
+                if (p0 && p0.codigo_proveedor) {
+                    dlRow("Código producto", p0.codigo_proveedor);
+                }
+                if (p0 && p0.cantidad != null && p0.cantidad !== "") {
+                    dlRow("Cantidad", p0.cantidad);
+                }
+                if (p0 && p0.valor_neto != null && p0.valor_neto !== "") {
+                    dlRow("V. neto unit.", p0.valor_neto);
+                }
+                renderFacturaProductosRows(prods);
                 extractedBox.hidden = false;
+                try {
+                    document.dispatchEvent(
+                        new CustomEvent("ingreso:factura-analizada", { detail: data })
+                    );
+                } catch (evErr) {
+                    /* ignore */
+                }
             }
 
             function mapMetodoPago(raw) {
@@ -1955,7 +2138,6 @@
                     inpVN.value = formatMontoInput(prod.valor_neto);
                     filled.valor_neto = inpVN.value;
                 }
-                console.log("[factura-scan] fillIngresoRowFromProduct", filled, prod);
                 return Object.keys(filled).length;
             }
 
@@ -1967,20 +2149,46 @@
                 }, 4000);
             }
 
+            function applyProductsFromFactura(productos) {
+                if (!itemsBody || !productos.length) return 0;
+                var filledCount = 0;
+                productos.forEach(function (prod, idx) {
+                    var row;
+                    if (idx === 0) {
+                        row = itemsBody.querySelector("tr.item-row");
+                        if (!row) {
+                            addRow();
+                            row = itemsBody.querySelector("tr.item-row");
+                        }
+                    } else {
+                        addRow();
+                        var all = itemsBody.querySelectorAll("tr.item-row");
+                        row = all[all.length - 1];
+                    }
+                    if (!row) return;
+                    filledCount += fillIngresoRowFromProduct(row, prod);
+                    var inpProv =
+                        row.querySelector("input.ingreso-codigo-proveedor-input") ||
+                        row.querySelector("input[name='codigo_proveedor_producto[]']");
+                    var inpCant = row.querySelector("input[name='cantidad_producto[]']");
+                    var inpVN = row.querySelector("input[name='valor_neto_producto[]']");
+                    if (inpProv && prod.codigo_proveedor) markAutoFilled(inpProv);
+                    if (inpCant && prod.cantidad != null && prod.cantidad !== "") {
+                        markAutoFilled(inpCant);
+                    }
+                    if (inpVN && prod.valor_neto != null && prod.valor_neto !== "") {
+                        markAutoFilled(inpVN);
+                    }
+                });
+                refreshIngresoItemNumbers();
+                updateIngresoTotals();
+                return filledCount;
+            }
+
             function applyExtractedData(data) {
                 if (!data) return 0;
                 var count = 0;
 
-                if (data.rut_proveedor && rutInput) {
-                    var rutRaw = String(data.rut_proveedor).trim();
-                    rutInput.value =
-                        window.RutUtils && window.RutUtils.format
-                            ? window.RutUtils.format(rutRaw)
-                            : rutRaw;
-                    markAutoFilled(rutInput);
-                    searchSupplier(true);
-                    count++;
-                }
                 if (data.numero_documento && numeroDocInput) {
                     numeroDocInput.value = String(data.numero_documento).trim();
                     markAutoFilled(numeroDocInput);
@@ -2008,41 +2216,23 @@
                     count++;
                 }
 
-                var productos = Array.isArray(data.productos) ? data.productos : [];
-                if (productos.length && itemsBody) {
-                    var productFieldCount = 0;
-                    productos.forEach(function (prod, idx) {
-                        window.setTimeout(function () {
-                            var row;
-                            if (idx === 0) {
-                                var existing = itemsBody.querySelectorAll("tr.item-row");
-                                row = existing[0];
-                                if (!row) {
-                                    addRow();
-                                    row = itemsBody.querySelectorAll("tr.item-row")[0];
-                                }
-                            } else {
-                                addRow();
-                                var all = itemsBody.querySelectorAll("tr.item-row");
-                                row = all[all.length - 1];
-                            }
-                            productFieldCount += fillIngresoRowFromProduct(row, prod);
-                            if (idx === productos.length - 1) {
-                                refreshIngresoItemNumbers();
-                                updateIngresoTotals();
-                                showFacturaAutoBadge(count + productFieldCount);
-                            }
-                        }, idx * 100);
-                    });
+                if (data.rut_proveedor && rutInput) {
+                    var rutRaw = String(data.rut_proveedor).trim();
+                    rutInput.value =
+                        window.RutUtils && window.RutUtils.format
+                            ? window.RutUtils.format(rutRaw)
+                            : rutRaw;
+                    markAutoFilled(rutInput);
+                    count++;
                 }
 
-                if (productos.length) {
-                    if (count > 0) {
-                        showFacturaAutoBadge(count);
-                    }
-                } else {
-                    showFacturaAutoBadge(count);
+                count += applyProductsFromFactura(ensureFacturaProductos(data));
+
+                if (data.rut_proveedor && rutInput) {
+                    searchSupplier(true);
                 }
+
+                showFacturaAutoBadge(count);
                 return count;
             }
 
@@ -2093,8 +2283,30 @@
                                 "No se pudo analizar la factura.";
                             throw new Error(msg);
                         }
-                        extractedData = pack.body.data || {};
-                        console.log("[OCR texto]", extractedData.ocr_texto_crudo);
+                        var apiBody = pack.body || {};
+                        // Copia profunda: no compartir referencia con pack.body.data
+                        extractedData = JSON.parse(JSON.stringify(apiBody.data || {}));
+                        hydrateProductosFromFlatFields(extractedData);
+                        if (
+                            (!extractedData.productos || !extractedData.productos.length) &&
+                            Array.isArray(apiBody.productos) &&
+                            apiBody.productos.length
+                        ) {
+                            extractedData.productos = JSON.parse(
+                                JSON.stringify(apiBody.productos)
+                            );
+                        }
+                        if (!Array.isArray(extractedData.productos)) {
+                            var coerced = coerceFacturaProductosArray(
+                                extractedData.productos
+                            );
+                            if (coerced.length) {
+                                extractedData.productos = coerced;
+                            } else {
+                                extractedData.productos = [];
+                            }
+                        }
+                        ensureFacturaProductos(extractedData);
                         if (previewImg && extractedData.preview_base64) {
                             previewImg.hidden = false;
                             previewImg.src = extractedData.preview_base64;
@@ -2106,7 +2318,6 @@
                         setStatus("Análisis listo. Revisá los datos y presioná «Aplicar datos».", null);
                     })
                     .catch(function (err) {
-                        console.log("analizar-factura error", err);
                         setStatus(err.message || "Error al analizar la factura.", "error");
                     })
                     .finally(function () {
