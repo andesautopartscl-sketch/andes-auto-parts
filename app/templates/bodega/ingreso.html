@@ -725,6 +725,11 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
     background: #eff6ff;
     border-color: #93c5fd;
 }
+.ingreso-factura-scan-btn.is-dragover {
+    background: #dbeafe;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+}
 .ingreso-factura-auto-badge {
     display: inline-block;
     margin-top: 4px;
@@ -1007,8 +1012,8 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
                 <div class="ingreso-doc-num-row">
                     <input id="numero_documento" name="numero_documento" value="{{ form_data.numero_documento }}" placeholder="Factura / guía" required>
                     <button type="button" class="ingreso-factura-scan-btn" id="btnFacturaScan"
-                            title="Tomar foto o subir factura (JPG, PNG, WEBP, PDF)"
-                            aria-label="Escanear factura"
+                            title="Escanear factura o arrastrar PDF/imagen aquí (JPG, PNG, WEBP, PDF)"
+                            aria-label="Escanear factura o soltar archivo"
                             data-analizar-url="{{ url_for('bodega.api_analizar_factura') }}">📷</button>
                 </div>
                 <input type="file" id="ingresoFacturaFileInput" class="ingreso-factura-file-input"

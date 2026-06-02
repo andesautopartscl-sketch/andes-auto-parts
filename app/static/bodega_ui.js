@@ -329,6 +329,85 @@
             return v;
         }
 
+        /** Valor neto unitario para POST: sin separador de miles (evita 8.500 → 8.5 en Python). */
+        function valorNetoToRawString(n) {
+            if (n === null || n === undefined || n === "") {
+                return "";
+            }
+            var v = Number(n);
+            if (isNaN(v)) {
+                return String(n).trim();
+            }
+            if (Math.abs(v - Math.round(v)) < 1e-9) {
+                return String(Math.round(v));
+            }
+            return String(v);
+        }
+
+        function readValorNetoIngresoInput(inp) {
+            if (!inp) {
+                return 0;
+            }
+            var raw = inp.getAttribute("data-raw");
+            if (raw != null && raw !== "") {
+                return parseValorNetoLine(raw);
+            }
+            return parseValorNetoLine(inp.value || "");
+        }
+
+        function bindValorNetoIngresoInput(inp) {
+            if (!inp || inp.dataset.valorNetoBound === "1") {
+                return;
+            }
+            inp.dataset.valorNetoBound = "1";
+            inp.addEventListener("focus", function () {
+                var raw = inp.getAttribute("data-raw");
+                if (raw != null && raw !== "") {
+                    inp.value = raw;
+                }
+            });
+            inp.addEventListener("blur", function () {
+                var parsed = parseValorNetoLine(inp.value);
+                if (parsed > 0) {
+                    var rawStr = valorNetoToRawString(parsed);
+                    inp.setAttribute("data-raw", rawStr);
+                    try {
+                        inp.value = Number(rawStr).toLocaleString("es-CL", {
+                            maximumFractionDigits: 2,
+                        });
+                    } catch (fmtErr) {
+                        inp.value = rawStr;
+                    }
+                } else {
+                    inp.removeAttribute("data-raw");
+                }
+            });
+        }
+
+        function setValorNetoIngresoRaw(inp, n) {
+            if (!inp) {
+                return;
+            }
+            bindValorNetoIngresoInput(inp);
+            var raw = valorNetoToRawString(n);
+            if (!raw) {
+                inp.value = "";
+                inp.removeAttribute("data-raw");
+                return;
+            }
+            inp.setAttribute("data-raw", raw);
+            inp.value = raw;
+        }
+
+        function syncValorNetoInputsForSubmit() {
+            itemsBody.querySelectorAll("input[name='valor_neto_producto[]']").forEach(function (inp) {
+                var raw = inp.getAttribute("data-raw");
+                if (raw != null && raw !== "") {
+                    inp.value = raw;
+                }
+            });
+        }
+
         /** Margen % en línea: vacío/ inválido -> null; debe ser 0 <= m < 100. */
         function parseMargenPctIngreso(raw) {
             var s = (raw || "").trim().replace(/%/g, "").replace(/\s/g, "");
@@ -451,7 +530,7 @@
                 var inpValor = row.querySelector("input[name='valor_neto_producto[]']");
                 var inpPv = row.querySelector("input.ingreso-precio-venta-input");
                 var inpCantidad = row.querySelector("input[name='cantidad_producto[]']");
-                var valorUnitario = parseValorNetoLine(inpValor ? inpValor.value : "");
+                var valorUnitario = readValorNetoIngresoInput(inpValor);
                 if (valorUnitario <= 0 && inpPv) {
                     var pv = parseValorNetoLine(inpPv.value || "");
                     if (pv > 0) {
@@ -763,7 +842,7 @@
             if (!pvInp || !mgInp) return;
             var mgRaw = (mgInp.value || "").trim();
             if (!mgRaw) return;
-            var vn = parseChileFloat((vnInp && vnInp.value) || "");
+            var vn = readValorNetoIngresoInput(vnInp);
             var mg = parseChileFloat(mgRaw);
             if (vn == null || vn <= 0 || mg == null) return;
             if (mg >= 100) return;
@@ -796,19 +875,16 @@
                 inpCant.setAttribute("data-ingreso-prev-cant", String(newC));
                 return;
             }
-            var vnStr = (vnInp.value || "").trim();
+            var vn = readValorNetoIngresoInput(vnInp);
             if (
-                vnStr &&
+                vn > 0 &&
                 !isNaN(prev) &&
                 prev > 0 &&
                 newC > 0 &&
                 prev !== newC
             ) {
-                var vn = parseChileFloat(vnStr);
-                if (vn != null && vn > 0) {
-                    var scaled = vn * (newC / prev);
-                    vnInp.value = String(Math.round(scaled * 100) / 100);
-                }
+                var scaled = vn * (newC / prev);
+                setValorNetoIngresoRaw(vnInp, Math.round(scaled * 100) / 100);
             }
             inpCant.setAttribute("data-ingreso-prev-cant", String(newC));
         }
@@ -824,7 +900,7 @@
                 mgInp.value = "";
                 return;
             }
-            var vn = parseChileFloat((vnInp && vnInp.value) || "");
+            var vn = readValorNetoIngresoInput(vnInp);
             var pv = parseChileFloat(pvRaw);
             if (vn == null || vn <= 0 || pv == null || pv <= 0) {
                 return;
@@ -1032,6 +1108,7 @@
             inpVN.title = "Costo neto unitario según documento del proveedor, opcional";
             inpVN.setAttribute("autocomplete", "off");
             inpVN.setAttribute("aria-label", "Valor neto costo");
+            bindValorNetoIngresoInput(inpVN);
             tdValorNeto.appendChild(inpVN);
 
             var tdMargen = document.createElement("td");
@@ -1548,6 +1625,7 @@
                 promises.push(validateCodigoInterno(row));
             });
             if (promises.length === 0) {
+                syncValorNetoInputsForSubmit();
                 form.dataset.ingresoSubmitting = "1";
                 form.submit();
                 return;
@@ -1566,10 +1644,13 @@
                     }
                     return;
                 }
+                syncValorNetoInputsForSubmit();
                 form.dataset.ingresoSubmitting = "1";
                 form.submit();
             });
         });
+
+        itemsBody.querySelectorAll("input[name='valor_neto_producto[]']").forEach(bindValorNetoIngresoInput);
 
         addRowBtn.addEventListener("click", addRow);
         btnBuscar.addEventListener("click", function () {
@@ -1864,7 +1945,12 @@
                         valor_neto: p.valor_neto != null ? p.valor_neto : p.precio,
                         descripcion: String(p.descripcion || ""),
                     };
-                    if (codigo) out.push(item);
+                    var hasData =
+                        codigo ||
+                        item.descripcion ||
+                        (item.cantidad != null && item.cantidad !== "") ||
+                        (item.valor_neto != null && item.valor_neto !== "");
+                    if (hasData) out.push(item);
                 });
                 return out;
             }
@@ -2174,8 +2260,8 @@
                     filled.cantidad = inpCant.value;
                 }
                 if (inpVN && prod.valor_neto != null && prod.valor_neto !== "") {
-                    inpVN.value = formatMontoInput(prod.valor_neto);
-                    filled.valor_neto = inpVN.value;
+                    setValorNetoIngresoRaw(inpVN, prod.valor_neto);
+                    filled.valor_neto = inpVN.getAttribute("data-raw") || inpVN.value;
                 }
                 return Object.keys(filled).length;
             }
@@ -2359,14 +2445,10 @@
                     });
             }
 
-            btnScan.addEventListener("click", function () {
-                fileInput.value = "";
-                fileInput.click();
-            });
-
-            fileInput.addEventListener("change", function () {
-                var f = fileInput.files && fileInput.files[0];
-                if (!f) return;
+            function acceptFacturaFile(f) {
+                if (!f) {
+                    return false;
+                }
                 var okType =
                     /^image\/(jpeg|png|webp)$/i.test(f.type) ||
                     f.type === "application/pdf" ||
@@ -2374,14 +2456,59 @@
                 if (!okType) {
                     setStatus("Formato no válido. Use JPG, PNG, WEBP o PDF.", "error");
                     openModal();
-                    return;
+                    return false;
                 }
                 if (f.size > 12 * 1024 * 1024) {
                     setStatus("El archivo supera 12 MB.", "error");
                     openModal();
-                    return;
+                    return false;
                 }
                 showFilePreview(f);
+                return true;
+            }
+
+            btnScan.addEventListener("click", function () {
+                fileInput.value = "";
+                fileInput.click();
+            });
+
+            fileInput.addEventListener("change", function () {
+                acceptFacturaFile(fileInput.files && fileInput.files[0]);
+            });
+
+            var facturaScanDragDepth = 0;
+            btnScan.addEventListener("dragenter", function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                facturaScanDragDepth += 1;
+                btnScan.classList.add("is-dragover");
+            });
+            btnScan.addEventListener("dragover", function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                if (ev.dataTransfer) {
+                    ev.dataTransfer.dropEffect = "copy";
+                }
+            });
+            btnScan.addEventListener("dragleave", function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                facturaScanDragDepth -= 1;
+                if (facturaScanDragDepth <= 0) {
+                    facturaScanDragDepth = 0;
+                    btnScan.classList.remove("is-dragover");
+                }
+            });
+            btnScan.addEventListener("drop", function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                facturaScanDragDepth = 0;
+                btnScan.classList.remove("is-dragover");
+                var f =
+                    ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+                if (f) {
+                    acceptFacturaFile(f);
+                }
             });
 
             if (btnAnalyze) btnAnalyze.addEventListener("click", runAnalyze);

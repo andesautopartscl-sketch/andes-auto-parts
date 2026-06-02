@@ -152,6 +152,34 @@ def _extract_fecha_emision(texto: str) -> str | None:
         if m.group(1) and m.group(2) and m.group(3):
             add(int(m.group(1)), int(m.group(2)), int(m.group(3)), 130)
 
+    _meses_es = (
+        "enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|"
+        "octubre|noviembre|diciembre"
+    )
+    for m in re.finditer(
+        rf"(\d{{1,2}})\s+de\s+({_meses_es})\s+del?\s+(\d{{4}})",
+        texto,
+        re.IGNORECASE,
+    ):
+        meses_map = {
+            "enero": 1,
+            "febrero": 2,
+            "marzo": 3,
+            "abril": 4,
+            "mayo": 5,
+            "junio": 6,
+            "julio": 7,
+            "agosto": 8,
+            "septiembre": 9,
+            "setiembre": 9,
+            "octubre": 10,
+            "noviembre": 11,
+            "diciembre": 12,
+        }
+        mo = meses_map.get(m.group(2).lower())
+        if mo:
+            add(int(m.group(1)), mo, int(m.group(3)), 135)
+
     for m in re.finditer(r"(\d{4})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})\b", texto):
         add(int(m.group(3)), int(m.group(2)), int(m.group(1)), 85)
 
@@ -173,6 +201,8 @@ def _extract_numero_documento(texto: str) -> str | None:
     priority_patterns = [
         r"NUMERO\s*:?\s*0*(\d+)",
         r"N[°º]?\s*FACTURA\s*:?\s*0*(\d+)",
+        r"FACTURA\s+ELECTR[OÓ]NICA[\s\S]{0,50}?N[°º]?\s*0*(\d{3,6})\b",
+        r"(?:^|\s)N[°º]?(\d{3,6})\b",
     ]
     for pat in priority_patterns:
         m = re.search(pat, texto, re.IGNORECASE)
@@ -331,6 +361,16 @@ _OLD_PRODUCT_LINE_RE = re.compile(
     r"^\s*([A-Z0-9]{4,10})\s+(\d{1,5})\s+(.+?)\s+([\d.,]+)\s+([\d.,]+)\s*$",
     re.IGNORECASE,
 )
+# Facturas sin código (Xinwang, RC SAP): "- DESC CANT PU PT" o bloque multilínea.
+_SIN_CODIGO_INLINE_DASH_RE = re.compile(
+    r"^-\s+(.+?)\s+(\d{1,5})\s+([\d.,]+)\s+([\d.,]+)\s*$",
+    re.IGNORECASE,
+)
+_SIN_CODIGO_INLINE_DESC_RE = re.compile(
+    r"^(.+?)\s+(\d{1,5})\s+(\d{1,5})\s+([\d.,]+)\s*$",
+    re.IGNORECASE,
+)
+_EMPTY_CODIGO_LINE_RE = re.compile(r"^[\s\-—|\.]+$", re.IGNORECASE)
 
 # Boleta térmica (ej: Fitalia): el ítem viene en líneas separadas, con posible
 # ruido OCR entre el header y la fila real:
@@ -846,6 +886,665 @@ def _select_unit_prices(precios: list[int], cantidades: list[int]) -> list[int]:
     return units
 
 
+def _is_price_only_line(line: str) -> bool:
+    """True si la línea es un monto (no cantidad 1-99 ni fragmento numérico de descripción)."""
+    s = (line or "").strip()
+    if re.fullmatch(r"\d{1,2}", s):
+        return False
+    m = _PRICE_LINE_RE.match(s)
+    if not m:
+        return False
+    token = m.group(1)
+    if "," in token or "." in token:
+        val = _parse_monto_chileno(token)
+        return val is not None and val >= 50
+    if re.fullmatch(r"\d{3,8}", token):
+        return False
+    val = _parse_monto_chileno(token)
+    return val is not None and val >= 500
+
+
+def _is_sin_codigo_marker_line(line: str) -> bool:
+    s = (line or "").strip()
+    if not s:
+        return True
+    if _EMPTY_CODIGO_LINE_RE.match(s):
+        return True
+    return s.upper() in ("-", "—", "|", ".", "N/A", "NA", "S/C", "SIN CODIGO", "SIN CÓDIGO")
+
+
+def _is_codigo_column_header(line: str) -> bool:
+    low = (line or "").lower().strip().strip(":").strip()
+    if low in ("codigo", "código"):
+        return True
+    return bool(re.match(r"^c[oó]digo\s*$", low))
+
+
+def _find_xinwang_codigo_index(lines: list[str]) -> int | None:
+    for i, line in enumerate(lines):
+        if _is_codigo_column_header(line):
+            return i
+    return None
+
+
+def _xinwang_zone_stop_line(line: str) -> bool:
+    low = (line or "").lower().strip()
+    if low.startswith("forma de pago"):
+        return True
+    if low.startswith("timbre"):
+        return True
+    if low.startswith("referencias"):
+        return True
+    return False
+
+
+def _xinwang_product_zone_slice(lines: list[str]) -> tuple[int, int] | None:
+    """Índices [start, end) del bloque de ítems entre Codigo y Forma de Pago."""
+    codigo_idx = _find_xinwang_codigo_index(lines)
+    if codigo_idx is None:
+        return None
+    start = codigo_idx + 1
+    end = len(lines)
+    for i in range(start, len(lines)):
+        if _xinwang_zone_stop_line(lines[i]):
+            end = i
+            break
+    return start, end
+
+
+def _xinwang_uses_stacked_descriptions(lines: list[str]) -> bool:
+    """True si las descripciones van apiladas bajo Codigo (layout ANDESS86900)."""
+    zone = _xinwang_product_zone_slice(lines)
+    if zone is None:
+        return False
+    start, end = zone
+    for line in lines[start:end]:
+        s = (line or "").strip()
+        if not s:
+            continue
+        low = s.lower().strip().strip(":").strip()
+        if _looks_like_xinwang_descripcion(s) and not re.match(r"^\d", s):
+            return True
+        if low in (
+            "descripcion",
+            "descripción",
+            "cantidad",
+            "precio",
+            "valor",
+        ):
+            return False
+    return False
+
+
+def _xinwang_interleaved_data_start(lines: list[str], zone_start: int, zone_end: int) -> int:
+    """En layout intercalado, los ítems empiezan tras la fila de encabezado Valor."""
+    for i in range(zone_start, zone_end):
+        low = (lines[i] or "").lower().strip().strip(":").strip()
+        if low == "valor":
+            return i + 1
+    return zone_start
+
+
+def _is_xinwang_zone_skip_line(line: str) -> bool:
+    """Encabezados de columna, cantidad y montos (no descripción de producto)."""
+    s = (line or "").strip()
+    if not s:
+        return True
+    low = s.lower().strip().strip(":").strip()
+    if low in (
+        "descripcion",
+        "descripción",
+        "cantidad",
+        "precio",
+        "valor",
+        "codigo",
+        "código",
+    ):
+        return True
+    if low.startswith("%impto") or low.startswith("%desc"):
+        return True
+    if low.startswith("adic") or re.match(r"^adic\.?\*?$", low):
+        return True
+    if _is_sin_codigo_marker_line(s):
+        return True
+    if _is_xinwang_qty_line(s):
+        return True
+    if _is_price_only_line(s):
+        return True
+    return False
+
+
+def _is_xinwang_interleaved_desc_line(line: str) -> bool:
+    s = (line or "").strip()
+    if not s or len(s) < 4 or re.match(r"^\d", s):
+        return False
+    low = s.lower().strip()
+    if low.startswith("adic") or "*" in s and len(s) < 12:
+        return False
+    return _looks_like_xinwang_descripcion(s)
+
+
+def _collect_xinwang_descripciones_from_zone(zone_lines: list[str]) -> list[str]:
+    descs: list[str] = []
+    for line in zone_lines:
+        s = line.strip()
+        if _is_xinwang_zone_skip_line(s):
+            continue
+        if _is_xinwang_interleaved_desc_line(s):
+            descs.append(s)
+    return descs
+
+
+def _collect_xinwang_prices_from_zone(zone_lines: list[str]) -> list[int]:
+    prices: list[int] = []
+    for line in zone_lines:
+        s = line.strip()
+        if not s:
+            continue
+        if _is_price_only_line(s):
+            val = _parse_monto_chileno(s)
+            if val is not None:
+                prices.append(val)
+    return prices
+
+
+def _pair_xinwang_unit_prices(prices: list[int], n: int) -> list[int]:
+    """Empareja N descripciones con M montos (M=2N → unitario; M=N → directo)."""
+    if n <= 0 or not prices:
+        return []
+    m = len(prices)
+    if m == 2 * n:
+        return [prices[i * 2] for i in range(n)]
+    if m == n:
+        return prices[:n]
+    if m > n:
+        step = max(1, m // n)
+        return [prices[i * step] for i in range(n)]
+    return prices[:n]
+
+
+def _xinwang_interleaved_data_lines(lines: list[str]) -> list[str]:
+    zone = _xinwang_product_zone_slice(lines)
+    if zone is None:
+        return []
+    start, end = zone
+    data_start = _xinwang_interleaved_data_start(lines, start, end)
+    return lines[data_start:end]
+
+
+def _extract_xinwang_descripciones_interleaved(lines: list[str]) -> list[str]:
+    return _collect_xinwang_descripciones_from_zone(_xinwang_interleaved_data_lines(lines))
+
+
+def _extract_xinwang_all_prices_interleaved(lines: list[str]) -> list[int]:
+    return _collect_xinwang_prices_from_zone(_xinwang_interleaved_data_lines(lines))
+
+
+def _extract_xinwang_units_qty_aligned(
+    data_lines: list[str], n_descs: int
+) -> list[int]:
+    """Asigna el 1.er monto tras cada cantidad; si hay desc. sin precio antes del bloque, toma N montos."""
+    units: list[int] = []
+    desc_seen = 0
+    i = 0
+    while i < len(data_lines) and len(units) < n_descs:
+        line = data_lines[i].strip()
+        if _is_xinwang_interleaved_desc_line(line):
+            desc_seen += 1
+            i += 1
+            continue
+        if not _is_xinwang_qty_line(line):
+            i += 1
+            continue
+        unpriced = desc_seen - len(units)
+        if unpriced <= 0:
+            i += 1
+            continue
+        j = i + 1
+        prices: list[int] = []
+        while j < len(data_lines):
+            s = data_lines[j].strip()
+            if not s:
+                j += 1
+                continue
+            if _is_xinwang_qty_line(s):
+                break
+            if _is_xinwang_interleaved_desc_line(s):
+                j += 1
+                continue
+            if _is_price_only_line(s):
+                val = _parse_monto_chileno(s)
+                if val is not None:
+                    prices.append(val)
+                j += 1
+                continue
+            break
+        if prices:
+            take = min(unpriced, len(prices), n_descs - len(units))
+            units.extend(prices[:take])
+        i += 1
+    return units
+
+
+def _extract_xinwang_unit_prices_sequential(
+    lines: list[str], descs: list[str]
+) -> list[int]:
+    """Precio unitario = 1.er monto tras cada línea de cantidad (1 1 / 11)."""
+    zone = _xinwang_product_zone_slice(lines)
+    if zone is None:
+        return []
+    start, end = zone
+    start = _xinwang_interleaved_data_start(lines, start, end)
+    units: list[int] = []
+    i = start
+    while i < end and len(units) < len(descs):
+        line = lines[i].strip()
+        if _is_xinwang_zone_skip_line(line) and not _is_xinwang_qty_line(line):
+            i += 1
+            continue
+        if not _is_xinwang_qty_line(line):
+            i += 1
+            continue
+        j = i + 1
+        while j < end:
+            s = lines[j].strip()
+            if not s:
+                j += 1
+                continue
+            if _is_xinwang_qty_line(s):
+                break
+            if _is_xinwang_interleaved_desc_line(s):
+                break
+            if _is_price_only_line(s):
+                val = _parse_monto_chileno(s)
+                if val is not None:
+                    units.append(val)
+                i = j + 1
+                break
+            j += 1
+        else:
+            i += 1
+    return units
+
+
+def _has_xinwang_column_layout(lines: list[str]) -> bool:
+    """Xinwang: columna Codigo; ítems apilados o filas intercaladas."""
+    has_codigo = any(_is_codigo_column_header(ln) for ln in lines)
+    has_cols = any(ln.lower().strip() == "cantidad" for ln in lines) and any(
+        ln.lower().strip() == "valor" for ln in lines
+    )
+    if not (has_codigo and has_cols):
+        return False
+    if len(_extract_xinwang_descripciones(lines)) >= 1:
+        return True
+    data_lines = _xinwang_interleaved_data_lines(lines)
+    if not data_lines:
+        return False
+    descs = _collect_xinwang_descripciones_from_zone(data_lines)
+    prices = _collect_xinwang_prices_from_zone(data_lines)
+    return len(descs) >= 1 and len(prices) >= len(descs)
+
+
+def _has_sin_codigo_layout(lines: list[str]) -> bool:
+    """Layout tipo Xinwang / SAP: CODIGO/CANTIDAD + ITEM/PRECIO + TOTAL."""
+    if _has_xinwang_column_layout(lines):
+        return True
+    joined = "\n".join(lines).lower().replace(" ", "")
+    if "codigo/cantidad" in joined or "código/cantidad" in joined:
+        return True
+    if "item/precio" in joined:
+        for i, line in enumerate(lines):
+            if line.strip().lower() == "total" and i > 0:
+                prev = lines[i - 1].lower()
+                if "precio" in prev or "item" in prev:
+                    return True
+    return False
+
+
+def _xinwang_desc_stop_line(line: str) -> bool:
+    low = (line or "").lower().strip()
+    if low.startswith("forma de pago"):
+        return True
+    if low in ("descripcion", "descripción", "cantidad", "precio", "valor"):
+        return True
+    if low.startswith("ciudad:"):
+        return True
+    if low.startswith("%impto") or low.startswith("%desc"):
+        return True
+    return False
+
+
+def _looks_like_xinwang_descripcion(line: str) -> bool:
+    s = (line or "").strip()
+    if not s or len(s) < 4:
+        return False
+    if _is_sin_codigo_marker_line(s):
+        return False
+    if not re.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}", s):
+        return False
+    low = s.lower().strip().strip(":").strip()
+    if low in _PRODUCT_HEADER_WORDS or low in ("codigo", "código"):
+        return False
+    if low.startswith(("forma de pago", "fecha ", "r.u.t", "giro:", "direccion", "dirección")):
+        return False
+    return True
+
+
+def _extract_xinwang_descripciones(lines: list[str]) -> list[str]:
+    """Descripciones verticales bajo encabezado Codigo (hasta Forma de Pago / bloque numérico)."""
+    start: int | None = None
+    for i, line in enumerate(lines):
+        if _is_codigo_column_header(line):
+            start = i + 1
+            break
+    if start is None:
+        return []
+
+    descs: list[str] = []
+    for line in lines[start:]:
+        if _xinwang_desc_stop_line(line):
+            break
+        s = line.strip()
+        if _looks_like_xinwang_descripcion(s):
+            descs.append(s)
+    return descs
+
+
+def _find_xinwang_numeric_start(lines: list[str]) -> int | None:
+    """Primera línea de datos tras encabezados Cantidad/Precio/Valor."""
+    valor_idx: int | None = None
+    for i, line in enumerate(lines):
+        low = line.lower().strip().strip(":").strip()
+        if low == "valor":
+            valor_idx = i
+    if valor_idx is not None:
+        return valor_idx + 1
+    for i, line in enumerate(lines):
+        low = line.lower()
+        if "desc" in low and "%" in line:
+            return i + 1
+    for i, line in enumerate(lines):
+        if line.lower().strip() == "cantidad" and i + 1 < len(lines):
+            nxt = lines[i + 1].lower().strip()
+            if nxt == "precio":
+                j = i + 2
+                while j < len(lines) and lines[j].lower().strip() not in ("valor",):
+                    j += 1
+                if j < len(lines):
+                    return j + 1
+    return None
+
+
+def _is_xinwang_qty_line(line: str) -> bool:
+    """Cantidad Xinwang: '1 1' (2.º dígito = % imp. adic.) o '11' (mismo código)."""
+    s = (line or "").strip()
+    if re.fullmatch(r"1\s+1", s):
+        return True
+    if re.fullmatch(r"11", s):
+        return True
+    return False
+
+
+def _extract_xinwang_unit_prices(lines: list[str]) -> list[int]:
+    """Precio unitario por ítem: 1.ª línea de monto tras cada línea de cantidad."""
+    start = _find_xinwang_numeric_start(lines)
+    if start is None:
+        return []
+
+    units: list[int] = []
+    i = start
+    while i < len(lines):
+        line = lines[i].strip()
+        if _is_detalle_producto_stop_line(line) or line.lower().startswith("timbre"):
+            break
+        if not _is_xinwang_qty_line(line):
+            i += 1
+            continue
+        j = i + 1
+        while j < len(lines):
+            s = lines[j].strip()
+            if not s:
+                j += 1
+                continue
+            if _is_detalle_producto_stop_line(s) or s.lower().startswith("timbre"):
+                break
+            if _is_xinwang_qty_line(s):
+                break
+            if _is_price_only_line(s):
+                val = _parse_monto_chileno(s)
+                if val is not None:
+                    units.append(val)
+                if j + 1 < len(lines) and _is_price_only_line(lines[j + 1].strip()):
+                    i = j + 2
+                else:
+                    i = j + 1
+                break
+            j += 1
+        else:
+            i += 1
+    return units
+
+
+def _extract_productos_sin_codigo_xinwang(lines: list[str]) -> list[dict[str, Any]]:
+    if _xinwang_uses_stacked_descriptions(lines):
+        descs = _extract_xinwang_descripciones(lines)
+        units = _extract_xinwang_unit_prices(lines)
+    else:
+        descs = _extract_xinwang_descripciones_interleaved(lines)
+        data_lines = _xinwang_interleaved_data_lines(lines)
+        units = _extract_xinwang_units_qty_aligned(data_lines, len(descs))
+        if len(units) != len(descs):
+            prices = _extract_xinwang_all_prices_interleaved(lines)
+            units = _pair_xinwang_unit_prices(prices, len(descs))
+        if len(units) != len(descs):
+            seq = _extract_xinwang_unit_prices_sequential(lines, descs)
+            if len(seq) == len(descs):
+                units = seq
+    if not descs or not units:
+        return []
+    n = min(len(descs), len(units))
+    return [_producto_sin_codigo(descs[i], 1, units[i]) for i in range(n)]
+
+
+def _is_detalle_producto_stop_line(line: str) -> bool:
+    low = (line or "").lower().strip()
+    if low.startswith(("referencias", "son ", "timbre", "tipo doc", "monto neto", "monto iva")):
+        return True
+    if re.match(r"^monto\s", low):
+        return True
+    if low in ("pesos", "monto exento", "monto total"):
+        return True
+    return False
+
+
+def _looks_like_product_description(line: str) -> bool:
+    s = (line or "").strip()
+    if not s or len(s) < 3:
+        return False
+    if _is_sin_codigo_marker_line(s):
+        return False
+    if _PRICE_LINE_RE.match(s):
+        return False
+    if _CODE_LINE_RE.match(s) and _is_product_code_token(s):
+        return False
+    if re.fullmatch(r"\d{1,5}", s):
+        return False
+    if not re.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]", s):
+        return False
+    low = s.lower().strip().strip(":").strip()
+    if low in _PRODUCT_HEADER_WORDS:
+        return False
+    if low in ("receptor", "giro", "direccion", "dirección", "comuna", "ciudad", "forma de pago"):
+        return False
+    if low.startswith("fecha de"):
+        return False
+    return True
+
+
+def _producto_sin_codigo(desc: str, qty: int, valor_neto: int) -> dict[str, Any]:
+    desc_norm = re.sub(r"\s+", " ", (desc or "").strip())[:255]
+    return {
+        "codigo_proveedor": "",
+        "descripcion": desc_norm,
+        "cantidad": qty,
+        "valor_neto": valor_neto,
+    }
+
+
+def _find_sin_codigo_detalle_start(lines: list[str]) -> int | None:
+    for i, line in enumerate(lines):
+        if line.strip().lower() == "total" and i > 0:
+            prev = lines[i - 1].lower()
+            if "precio" in prev or "item" in prev:
+                return i + 1
+    for i, line in enumerate(lines):
+        low = line.lower()
+        if "codigo" in low and "cantidad" in low:
+            j = i + 1
+            while j < len(lines) and j < i + 8:
+                if lines[j].strip().lower() == "total":
+                    return j + 1
+                if _looks_like_product_description(lines[j]):
+                    return j
+                j += 1
+    return None
+
+
+def _extract_productos_sin_codigo_inline(lines: list[str]) -> list[dict[str, Any]]:
+    productos: list[dict[str, Any]] = []
+    for line in lines:
+        s = line.strip()
+        if not s:
+            continue
+        m_dash = _SIN_CODIGO_INLINE_DASH_RE.match(s)
+        if m_dash:
+            qty = int(m_dash.group(2))
+            unit = _parse_monto_chileno(m_dash.group(3))
+            if unit and 0 < qty <= 99999:
+                productos.append(_producto_sin_codigo(m_dash.group(1), qty, unit))
+            continue
+        m_desc = _SIN_CODIGO_INLINE_DESC_RE.match(s)
+        if m_desc and re.search(r"[A-Za-zÁÉÍÓÚÑ]", m_desc.group(1)):
+            qty = int(m_desc.group(2))
+            unit = _parse_monto_chileno(m_desc.group(4))
+            if unit and 0 < qty <= 99999:
+                productos.append(_producto_sin_codigo(m_desc.group(1), qty, unit))
+    return productos
+
+
+def _extract_productos_sin_codigo_bloque(lines: list[str]) -> list[dict[str, Any]]:
+    """Ítems en bloques verticales (descripción, cantidad, precios) sin columna código."""
+    start = _find_sin_codigo_detalle_start(lines)
+    if start is None:
+        return []
+
+    productos: list[dict[str, Any]] = []
+    desc_parts: list[str] = []
+    qty: int | None = None
+    prices: list[int] = []
+
+    def flush() -> None:
+        nonlocal desc_parts, qty, prices
+        if not desc_parts or qty is None or not prices:
+            desc_parts = []
+            qty = None
+            prices = []
+            return
+        unit = prices[0]
+        if len(prices) >= 2 and qty > 1 and prices[0] * qty == prices[-1]:
+            unit = prices[0]
+        elif len(prices) >= 2 and prices[0] == prices[-1]:
+            unit = prices[0]
+        productos.append(_producto_sin_codigo(" ".join(desc_parts), qty, unit))
+        desc_parts = []
+        qty = None
+        prices = []
+
+    for line in lines[start:]:
+        if _is_detalle_producto_stop_line(line):
+            break
+        s = line.strip()
+        if not s or _is_sin_codigo_marker_line(s):
+            continue
+
+        m_dash = _SIN_CODIGO_INLINE_DASH_RE.match(s)
+        if m_dash:
+            flush()
+            q = int(m_dash.group(2))
+            pu = _parse_monto_chileno(m_dash.group(3))
+            if pu and 0 < q <= 99999:
+                productos.append(_producto_sin_codigo(m_dash.group(1), q, pu))
+            continue
+
+        m_desc = _SIN_CODIGO_INLINE_DESC_RE.match(s)
+        if m_desc and re.search(r"[A-Za-zÁÉÍÓÚÑ]", m_desc.group(1)):
+            flush()
+            q = int(m_desc.group(2))
+            pu = _parse_monto_chileno(m_desc.group(4))
+            if pu and 0 < q <= 99999:
+                productos.append(_producto_sin_codigo(m_desc.group(1), q, pu))
+            continue
+
+        m_qty = re.fullmatch(r"(\d{1,2})", s)
+        if m_qty and desc_parts and qty is None:
+            qty = int(m_qty.group(1))
+            continue
+
+        if _is_price_only_line(s):
+            val = _parse_monto_chileno(s)
+            if val is not None:
+                prices.append(val)
+                if desc_parts and qty is not None and len(prices) >= 2:
+                    flush()
+            continue
+
+        if _looks_like_product_description(s):
+            if prices and desc_parts and qty is not None:
+                flush()
+            desc_parts.append(s)
+            continue
+
+        if desc_parts and qty is None and re.fullmatch(r"[A-Z0-9]{3,12}", s, re.IGNORECASE):
+            desc_parts.append(s)
+            continue
+
+    flush()
+    return productos
+
+
+def _extract_productos_sin_codigo(texto: str, lines: list[str] | None = None) -> list[dict[str, Any]]:
+    if lines is None:
+        lines = [ln.strip() for ln in _normalize_ocr_text(texto).splitlines() if ln.strip()]
+
+    if _has_xinwang_column_layout(lines):
+        xinwang = _extract_productos_sin_codigo_xinwang(lines)
+        if xinwang:
+            return xinwang
+
+    inline = _extract_productos_sin_codigo_inline(lines)
+    if inline and not _has_sin_codigo_layout(lines):
+        return inline
+
+    if not _has_sin_codigo_layout(lines):
+        return []
+
+    bloque = _extract_productos_sin_codigo_bloque(lines)
+    productos = inline if len(inline) >= len(bloque) else bloque
+    if not productos:
+        productos = inline or bloque
+
+    # No usar si hay códigos reales en bloque Código (evitar pisar Mundo Repuestos, etc.)
+    indices = _section_header_indices(lines)
+    codigos = _extract_codigos_seccion(lines, indices) if indices else []
+    if not codigos:
+        codigos = _extract_codigos_producto(lines)
+    real_codes = [c for c in codigos if not _is_sin_codigo_marker_line(c)]
+    if real_codes and productos:
+        return []
+
+    return productos
+
+
 def _extract_productos_inline(texto: str) -> list[dict[str, Any]]:
     """Respaldo: línea continua código + cantidad + descripción + precios."""
     productos: list[dict[str, Any]] = []
@@ -1081,6 +1780,10 @@ def _extract_productos(texto: str) -> list[dict[str, Any]]:
     fallback = _extract_productos_fitalia_fallback(texto_norm)
     if fallback:
         return fallback
+
+    sin_codigo = _extract_productos_sin_codigo(texto_norm, lines)
+    if sin_codigo:
+        return sin_codigo
 
     # Último recurso: regex multilínea en todo el OCR (PDF con texto desordenado).
     m_block = re.search(

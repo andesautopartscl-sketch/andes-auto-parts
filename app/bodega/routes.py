@@ -1508,7 +1508,7 @@ def index():
 def ingreso():
     if request.method == "POST" and not has_permission(session.get("user"), session.get("rol"), "bodega_ingreso"):
         return _deny_bodega_perm("No tienes permiso para registrar ingresos de stock.")
-    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    today_str = datetime.now(CHILE_TZ).strftime("%Y-%m-%d")
     form_data = {
         "supplier_rut": _normalize_rut(request.form.get("supplier_rut") or ""),
         "supplier_name": (request.form.get("supplier_name") or "").strip(),

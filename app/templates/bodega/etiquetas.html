@@ -994,9 +994,9 @@ html[data-print-mode="thermal"] .barcode img {
     html[data-print-mode="thermal_100x150"] .content {
         margin: 0 !important;
         padding: 0 !important;
-        width: 91mm !important;
-        min-width: 91mm !important;
-        max-width: 91mm !important;
+        width: 100mm !important;
+        min-width: 100mm !important;
+        max-width: 100mm !important;
         height: auto !important;
         min-height: 0 !important;
         max-height: none !important;
@@ -1004,30 +1004,31 @@ html[data-print-mode="thermal"] .barcode img {
         box-sizing: border-box !important;
     }
 
-    /* Cada bloque de 6 etiquetas = una hoja física de 144mm útiles. */
+    /* Cada bloque de 6 etiquetas = 2×47mm + 1mm gap ≈ 95×145mm, centrado en 100×150mm. */
     html[data-print-mode="thermal_100x150"] #sheet,
     html[data-print-mode="thermal_100x150"] .sheet {
-        margin: 0 !important;
+        margin: 0 auto !important;
         padding: 0 !important;
-        width: 91mm !important;
-        max-width: 91mm !important;
+        width: 95mm !important;
+        max-width: 95mm !important;
         height: auto !important;
         max-height: none !important;
         box-sizing: border-box !important;
         display: grid !important;
-        grid-template-columns: repeat(2, calc((91mm - 1mm) / 2)) !important;
-        grid-auto-rows: 47mm !important;
+        grid-template-columns: repeat(2, 47mm) !important;
+        grid-template-rows: repeat(3, 47mm) !important;
         column-gap: 1mm !important;
         row-gap: 1mm !important;
         align-content: start !important;
-        justify-content: start !important;
+        justify-content: center !important;
+        justify-items: center !important;
     }
 
     html[data-print-mode="thermal_100x150"] .label {
-        width: 100% !important;
-        height: 100% !important;
-        max-width: none !important;
-        max-height: none !important;
+        width: 47mm !important;
+        height: 47mm !important;
+        max-width: 47mm !important;
+        max-height: 47mm !important;
         padding: 1.8mm 2mm;
         margin: 0;
         min-height: 0;
@@ -1814,9 +1815,8 @@ html[data-print-mode="thermal"] .barcode img {
             return '@media print { @page { size: 60mm 40mm; margin: 0; } }';
         }
         if (mode === 'thermal_100x150') {
-            // margen: arriba derecha abajo izquierda. Más a la izquierda para correr las
-            // etiquetas a la derecha (la impresora recorta el borde izquierdo).
-            return '@media print { @page { size: 100mm 150mm; margin: 3mm 2mm 3mm 7mm; } }';
+            /* 1mm por lado: grilla 95×145mm centrada en 100×150mm. */
+            return '@media print { @page { size: 100mm 150mm; margin: 1mm; } }';
         }
         return '';
     }
