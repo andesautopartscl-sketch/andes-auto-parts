@@ -314,6 +314,13 @@ def _parse_valor_neto_chile(raw: str) -> float | None:
     return v
 
 
+def _ingreso_total_con_iva(total_factura: float | None, total_neto: float) -> float:
+    """Total con IVA para historial/edición: manual si existe, si no neto × 1.19."""
+    if total_factura is not None:
+        return round(float(total_factura), 2)
+    return round(float(total_neto or 0) * 1.19, 2)
+
+
 def _parse_margen_pct(raw: str) -> float | None:
     s = (raw or "").strip().replace("%", "").replace(",", ".").replace(" ", "")
     if not s:
@@ -2171,6 +2178,14 @@ def ingreso_historial():
             )
         codigos_proveedor_por_doc = {doc_id: sorted(vals, key=str.upper) for doc_id, vals in tmp_codigos_doc.items() if vals}
 
+    totales_con_iva_por_doc: dict[int, float] = {
+        int(r.id): _ingreso_total_con_iva(
+            float(r.total_factura) if getattr(r, "total_factura", None) is not None else None,
+            totales_por_doc.get(int(r.id), 0.0),
+        )
+        for r in rows
+    }
+
     return render_template(
         "bodega/ingreso_historial.html",
         **_base_context(
@@ -2183,6 +2198,7 @@ def ingreso_historial():
             total=total,
             total_pages=total_pages,
             totales_por_doc=totales_por_doc,
+            totales_con_iva_por_doc=totales_con_iva_por_doc,
             codigos_proveedor_por_doc=codigos_proveedor_por_doc,
             detalles_items_por_doc=detalles_items_por_doc,
             codigos_internos_por_doc=codigos_internos_por_doc,
@@ -2534,10 +2550,9 @@ def ingreso_editar(doc_id: int):
         .scalar()
         or 0
     )
-    total_con_iva = (
-        float(doc.total_factura)
-        if getattr(doc, "total_factura", None) is not None
-        else float(total_neto or 0) * 1.19
+    total_con_iva = _ingreso_total_con_iva(
+        float(doc.total_factura) if getattr(doc, "total_factura", None) is not None else None,
+        float(total_neto or 0),
     )
     iva_referencia = (
         float(doc.iva_factura)

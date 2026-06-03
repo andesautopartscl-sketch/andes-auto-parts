@@ -741,32 +741,72 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
     background: #dcfce7;
     border: 1px solid #86efac;
 }
-.ingreso-factura-modal-card {
-    width: min(920px, 100%);
-    max-height: min(90vh, 820px);
-}
 .ingreso-factura-modal-body {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 .ingreso-factura-preview-wrap {
     border: 1px solid #e2e8f0;
     border-radius: 10px;
     background: #f8fafc;
-    min-height: 120px;
-    max-height: 36vh;
+    min-height: 70vh;
+    flex: 1 1 auto;
     overflow: auto;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 8px;
+    padding: 12px;
+    width: 100%;
+    box-sizing: border-box;
+}
+.ingreso-factura-preview-wrap > [hidden] {
+    display: none !important;
+}
+.ingreso-factura-preview-pdf-rendered {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: 100%;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-height: 0;
+    justify-content: center;
+}
+.ingreso-factura-preview-pdf-rendered[hidden] {
+    display: none !important;
+}
+.ingreso-factura-preview-pdf-rendered-name {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #64748b;
+    text-align: center;
+    word-break: break-word;
 }
 .ingreso-factura-preview-img {
     max-width: 100%;
     max-height: 34vh;
     object-fit: contain;
+}
+.ingreso-factura-preview-img[hidden] {
+    display: none !important;
+}
+#ingresoFacturaPreviewPdfCanvas,
+.ingreso-factura-preview-pdf-canvas {
     display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-sizing: border-box;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 .ingreso-factura-preview-pdf {
     display: flex;
@@ -889,6 +929,27 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+}
+.ingreso-product-modal-card.ingreso-factura-modal-card {
+    width: 95%;
+    max-width: 500px;
+    max-height: 95vh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+.ingreso-factura-modal-card .ingreso-factura-preview-wrap {
+    width: 100%;
+    box-sizing: border-box;
+    flex: 1 1 auto;
+}
+.ingreso-factura-modal-body .ingreso-factura-preview-wrap {
+    align-self: stretch;
+}
+.ingreso-factura-modal-card .ingreso-factura-preview-img {
+    margin-left: auto;
+    margin-right: auto;
 }
 .ingreso-product-modal-head {
     display: flex;
@@ -1286,7 +1347,11 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
         </div>
         <div class="ingreso-product-modal-body ingreso-factura-modal-body">
             <div class="ingreso-factura-preview-wrap" hidden>
-                <img id="ingresoFacturaPreviewImg" class="ingreso-factura-preview-img" alt="Vista previa de la factura" hidden>
+                <img id="ingresoFacturaPreviewImg" class="ingreso-factura-preview-img" alt="" hidden>
+                <div id="ingresoFacturaPreviewPdfRendered" class="ingreso-factura-preview-pdf-rendered" hidden>
+                    <canvas id="ingresoFacturaPreviewPdfCanvas" class="ingreso-factura-preview-pdf-canvas"></canvas>
+                    <p id="ingresoFacturaPreviewPdfRenderedName" class="ingreso-factura-preview-pdf-rendered-name">documento.pdf</p>
+                </div>
                 <div id="ingresoFacturaPreviewPdf" class="ingreso-factura-preview-pdf" hidden>
                     <span class="ingreso-factura-preview-pdf-icon" aria-hidden="true">📄</span>
                     <span id="ingresoFacturaPreviewPdfName">documento.pdf</span>

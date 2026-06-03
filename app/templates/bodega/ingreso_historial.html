@@ -525,6 +525,7 @@ body.ingreso-hist-etiq-bar-pad {
         <tbody>
             {% for row in rows %}
             {% set total_neto = totales_por_doc.get(row.id, 0) %}
+            {% set total_con_iva = totales_con_iva_por_doc.get(row.id, 0) %}
             <tr>
                 <td>#{{ row.id }}</td>
                 <td><strong>{{ row.numero_documento or ('ING-' ~ row.id) }}</strong></td>
@@ -554,15 +555,7 @@ body.ingreso-hist-etiq-bar-pad {
                     {% endif %}
                 </td>
                 <td>${{ '{:,.0f}'.format(total_neto).replace(',', '.') }}</td>
-                <td>
-                    {% if row.total_factura is not none %}
-                    {% set _tf = (row.total_factura + 1e-9)|round(2) %}
-                    {% set _tfs = (_tf|string).replace('.', ',') %}
-                    ${{ _tfs }}
-                    {% else %}
-                    <span class="muted">—</span>
-                    {% endif %}
-                </td>
+                <td>${{ '{:,.0f}'.format(total_con_iva).replace(',', '.') }}</td>
                 <td>
                     {% if row.anulado %}
                     <span class="status-badge bad">Anulado</span>

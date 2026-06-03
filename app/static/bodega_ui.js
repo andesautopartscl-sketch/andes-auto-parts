@@ -34,6 +34,7 @@
         var itemsBody = form.querySelector("#itemsBody");
         var addRowBtn = form.querySelector("#btnAddRow");
         var rutInput = form.querySelector("#supplier_rut");
+        var rutRow = form.querySelector(".ingreso-rut-row");
         var btnBuscar = form.querySelector("#btnBuscarProveedor");
         var rutStatus = form.querySelector("#rutStatus");
         var supplierFormWrap = form.querySelector("#supplierFormWrap");
@@ -56,9 +57,82 @@
         rutInput.readOnly = false;
         rutInput.disabled = false;
 
+        function showSupplierRutField() {
+            if (rutRow) rutRow.style.display = "";
+            if (rutInput) {
+                rutInput.setAttribute("required", "required");
+                rutInput.dataset.rutRequired = "1";
+            }
+        }
+
+        function hideSupplierRutFieldForSummary() {
+            if (rutRow) rutRow.style.display = "none";
+            if (rutInput) {
+                rutInput.removeAttribute("required");
+                rutInput.dataset.rutRequired = "0";
+                rutInput.setCustomValidity("");
+            }
+        }
+
+        function dispatchRutInputEvents() {
+            if (!rutInput) return;
+            try {
+                rutInput.dispatchEvent(new InputEvent("input", { bubbles: true }));
+            } catch (e0) {
+                rutInput.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+            rutInput.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+        function syncSupplierRutValidity() {
+            if (!rutInput) return;
+            var raw = (rutInput.value || "").trim();
+            if (!raw) {
+                if (supplierSummary.classList.contains("is-visible")) {
+                    rutInput.setCustomValidity("");
+                }
+                return;
+            }
+            var normalized =
+                window.RutUtils && window.RutUtils.clean
+                    ? window.RutUtils.clean(raw)
+                    : raw;
+            if (
+                window.RutUtils &&
+                window.RutUtils.isValid &&
+                !window.RutUtils.isValid(normalized)
+            ) {
+                return;
+            }
+            rutInput.setCustomValidity("");
+        }
+
+        function setIngresoSupplierRut(rutRaw, opts) {
+            opts = opts || {};
+            if (!rutInput || rutRaw == null || String(rutRaw).trim() === "") {
+                return false;
+            }
+            var formatted =
+                window.RutUtils && window.RutUtils.format
+                    ? window.RutUtils.format(String(rutRaw).trim())
+                    : String(rutRaw).trim();
+            if (!formatted) return false;
+            rutInput.readOnly = false;
+            rutInput.disabled = false;
+            rutInput.value = formatted;
+            dispatchRutInputEvents();
+            syncSupplierRutValidity();
+            updateSupplierSummary();
+            if (opts.search) {
+                searchSupplier(true);
+            }
+            return true;
+        }
+
         function collapseSupplierSection() {
             supplierFormWrap.classList.add("is-collapsed");
             supplierSummary.classList.add("is-visible");
+            hideSupplierRutFieldForSummary();
             if (supplierCard) {
                 supplierCard.classList.add("ingreso-supplier-card--hidden");
                 supplierCard.style.display = "none";
@@ -68,6 +142,7 @@
         function expandSupplierSection() {
             supplierFormWrap.classList.remove("is-collapsed");
             supplierSummary.classList.remove("is-visible");
+            showSupplierRutField();
             if (supplierCard) {
                 supplierCard.classList.remove("ingreso-supplier-card--hidden");
                 supplierCard.style.display = "";
@@ -76,6 +151,7 @@
 
         function hideSupplierRegistrationCard() {
             supplierSummary.classList.remove("is-visible");
+            showSupplierRutField();
             if (supplierCard) {
                 supplierCard.classList.add("ingreso-supplier-card--hidden");
                 supplierCard.style.display = "none";
@@ -1435,6 +1511,7 @@
                     if (data.found && data.proveedor) {
                         fillSupplier(data.proveedor);
                         updateSupplierSummary();
+                        syncSupplierRutValidity();
                         collapseSupplierSection();
                         rutInput.readOnly = false;
                         rutInput.disabled = false;
@@ -1770,8 +1847,21 @@
             var btnAnalyze = document.getElementById("ingresoFacturaAnalyzeBtn");
             var btnApply = document.getElementById("ingresoFacturaApplyBtn");
             var previewImg = document.getElementById("ingresoFacturaPreviewImg");
+            var previewPdfRendered = document.getElementById(
+                "ingresoFacturaPreviewPdfRendered"
+            );
+            var previewPdfCanvas = document.getElementById("ingresoFacturaPreviewPdfCanvas");
+            var previewPdfRenderedName = document.getElementById(
+                "ingresoFacturaPreviewPdfRenderedName"
+            );
             var previewPdf = document.getElementById("ingresoFacturaPreviewPdf");
             var previewPdfName = document.getElementById("ingresoFacturaPreviewPdfName");
+            var localPreviewObjectUrl = null;
+            var pdfJsModulePromise = null;
+            var PDFJS_MODULE_URL =
+                "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs";
+            var PDFJS_WORKER_URL =
+                "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs";
             var statusEl = document.getElementById("ingresoFacturaScanStatus");
             var previewWrap = modal.querySelector(".ingreso-factura-preview-wrap");
             var extractedBox = document.getElementById("ingresoFacturaExtracted");
@@ -1825,52 +1915,298 @@
                 else statusEl.classList.add("muted");
             }
 
-            function resetPreview() {
-                setPreviewWrapVisible(false);
-                if (previewImg) {
-                    previewImg.hidden = true;
-                    previewImg.removeAttribute("src");
+            function revokeLocalPreviewUrl() {
+                if (!localPreviewObjectUrl) return;
+                try {
+                    URL.revokeObjectURL(localPreviewObjectUrl);
+                } catch (e) {}
+                localPreviewObjectUrl = null;
+            }
+
+            var facturaPreviewImgAlt = "Vista previa de la factura";
+
+            function hidePreviewImg() {
+                if (!previewImg) return;
+                previewImg.hidden = true;
+                previewImg.removeAttribute("src");
+                previewImg.alt = "";
+                previewImg.style.display = "none";
+            }
+
+            function showPreviewImg(src) {
+                if (!previewImg || !src) return;
+                previewImg.src = src;
+                previewImg.alt = facturaPreviewImgAlt;
+                previewImg.hidden = false;
+                previewImg.style.display = "block";
+            }
+
+            function hidePreviewPdf() {
+                if (!previewPdf) return;
+                previewPdf.hidden = true;
+                previewPdf.style.display = "none";
+            }
+
+            function showPreviewPdf(file) {
+                if (!previewPdf) return;
+                previewPdf.hidden = false;
+                previewPdf.style.display = "flex";
+                if (previewPdfName) {
+                    previewPdfName.textContent =
+                        (file && file.name) || "documento.pdf";
                 }
-                if (previewPdf) previewPdf.hidden = true;
+            }
+
+            function setPdfRenderedFileName(file) {
+                var name = (file && file.name) || "documento.pdf";
+                if (previewPdfRenderedName) {
+                    previewPdfRenderedName.textContent = name;
+                }
+            }
+
+            function hidePreviewPdfCanvas() {
+                if (previewPdfRendered) {
+                    previewPdfRendered.hidden = true;
+                    previewPdfRendered.style.display = "none";
+                }
+                if (previewPdfCanvas) {
+                    try {
+                        var ctx = previewPdfCanvas.getContext("2d");
+                        if (ctx) {
+                            ctx.clearRect(
+                                0,
+                                0,
+                                previewPdfCanvas.width,
+                                previewPdfCanvas.height
+                            );
+                        }
+                    } catch (e) {}
+                }
+            }
+
+            function showPreviewPdfCanvas(file) {
+                if (!previewPdfCanvas || !previewPdfRendered) return;
+                hidePreviewPdf();
+                hidePreviewImg();
+                setPdfRenderedFileName(file || pendingFile);
+                previewPdfRendered.hidden = false;
+                previewPdfRendered.style.display = "";
+            }
+
+            function loadPdfJs() {
+                if (pdfJsModulePromise) return pdfJsModulePromise;
+                pdfJsModulePromise = import(PDFJS_MODULE_URL)
+                    .then(function (pdfjsLib) {
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+                        return pdfjsLib;
+                    })
+                    .catch(function (err) {
+                        pdfJsModulePromise = null;
+                        throw err;
+                    });
+                return pdfJsModulePromise;
+            }
+
+            function preparePdfPreviewForMeasure() {
+                setPreviewWrapVisible(true);
+                hidePreviewImg();
+                hidePreviewPdf();
+                if (previewPdfRendered) {
+                    previewPdfRendered.hidden = false;
+                    previewPdfRendered.style.display = "";
+                }
+            }
+
+            function measurePdfPreviewContainerWidth() {
+                var canvas = previewPdfCanvas;
+                var parent = canvas && canvas.parentElement;
+                var containerWidth = parent ? parent.clientWidth : 0;
+                if (containerWidth > 0) return containerWidth;
+                if (previewWrap && previewWrap.clientWidth > 0) {
+                    return Math.max(120, previewWrap.clientWidth - 24);
+                }
+                return 440;
+            }
+
+            function renderPdfFirstPageLocal(file) {
+                if (!previewPdfCanvas || !file) return;
+                loadPdfJs()
+                    .then(function (pdfjsLib) {
+                        return file.arrayBuffer().then(function (buf) {
+                            return pdfjsLib.getDocument({ data: buf }).promise;
+                        });
+                    })
+                    .then(function (pdf) {
+                        return pdf.getPage(1);
+                    })
+                    .then(function (page) {
+                        if (pendingFile !== file) return;
+                        preparePdfPreviewForMeasure();
+                        var canvas = previewPdfCanvas;
+                        var parent = canvas.parentElement;
+                        var containerWidth = parent
+                            ? parent.clientWidth
+                            : measurePdfPreviewContainerWidth();
+                        if (containerWidth <= 0) {
+                            containerWidth = measurePdfPreviewContainerWidth();
+                        }
+                        var baseViewport = page.getViewport({ scale: 1 });
+                        var baseScale = containerWidth / baseViewport.width;
+                        if (!isFinite(baseScale) || baseScale <= 0) {
+                            baseScale = 1.5;
+                        }
+                        baseScale = Math.min(baseScale, 3);
+                        var renderScale = baseScale * 2;
+                        var viewport = page.getViewport({ scale: renderScale });
+                        var ctx = canvas.getContext("2d");
+                        canvas.width = Math.floor(viewport.width);
+                        canvas.height = Math.floor(viewport.height);
+                        return page
+                            .render({ canvasContext: ctx, viewport: viewport })
+                            .promise.then(function () {
+                                if (pendingFile !== file) return;
+                                showPreviewPdfCanvas(file);
+                                setPreviewWrapVisible(true);
+                            });
+                    })
+                    .catch(function () {
+                        if (pendingFile !== file) return;
+                        hidePreviewPdfCanvas();
+                        showPreviewPdf(file);
+                    });
+            }
+
+            function hideAllPreviewLayers() {
+                hidePreviewImg();
+                hidePreviewPdf();
+                hidePreviewPdfCanvas();
+            }
+
+            function isFacturaPdfFile(file) {
+                var name = String((file && file.name) || "").toLowerCase();
+                var t = String((file && file.type) || "").toLowerCase();
+                return t === "application/pdf" || /\.pdf$/i.test(name);
+            }
+
+            function isFacturaImageFile(file) {
+                if (isFacturaPdfFile(file)) return false;
+                var t = String((file && file.type) || "").toLowerCase();
+                var name = String((file && file.name) || "").toLowerCase();
+                if (/^image\//i.test(t)) return true;
+                return /\.(jpe?g|png|webp)$/i.test(name);
+            }
+
+            function guessFacturaMediaType(file) {
+                if (isFacturaPdfFile(file)) return "application/pdf";
+                var name = String((file && file.name) || "").toLowerCase();
+                var t = String((file && file.type) || "").toLowerCase();
+                if (t === "image/jpg") t = "image/jpeg";
+                if (/\.png$/i.test(name) || t === "image/png") return "image/png";
+                if (/\.webp$/i.test(name) || t === "image/webp") return "image/webp";
+                if (/\.(jpe?g)$/i.test(name) || /^image\/jpe?g$/i.test(t)) {
+                    return "image/jpeg";
+                }
+                if (/^image\//i.test(t)) return t;
+                return "image/jpeg";
+            }
+
+            function showPdfPlaceholder(file) {
+                revokeLocalPreviewUrl();
+                if (previewImg) {
+                    previewImg.src = "";
+                    previewImg.hidden = true;
+                    previewImg.style.display = "none";
+                    previewImg.alt = "";
+                }
+                hidePreviewPdfCanvas();
+                showPreviewPdf(file);
+                renderPdfFirstPageLocal(file);
+            }
+
+            function showLocalImagePreview(file) {
+                revokeLocalPreviewUrl();
+                hidePreviewPdfCanvas();
+                if (previewPdf) {
+                    previewPdf.hidden = true;
+                    previewPdf.style.display = "none";
+                }
+                if (!previewImg) return;
+                try {
+                    localPreviewObjectUrl = URL.createObjectURL(file);
+                    previewImg.src = localPreviewObjectUrl;
+                    previewImg.alt = facturaPreviewImgAlt;
+                    previewImg.hidden = false;
+                    previewImg.style.display = "";
+                } catch (e) {
+                    var reader = new FileReader();
+                    reader.onload = function () {
+                        if (pendingFile !== file || !previewImg) return;
+                        if (previewPdf) {
+                            previewPdf.hidden = true;
+                            previewPdf.style.display = "none";
+                        }
+                        previewImg.src = String(reader.result || "");
+                        previewImg.alt = facturaPreviewImgAlt;
+                        previewImg.hidden = false;
+                        previewImg.style.display = "";
+                        setPreviewWrapVisible(true);
+                    };
+                    reader.onerror = function () {
+                        hidePreviewImg();
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }
+
+            function applyBackendPreviewImage(src) {
+                if (!src) return;
+                revokeLocalPreviewUrl();
+                hidePreviewPdf();
+                hidePreviewPdfCanvas();
+                hidePreviewImg();
+                showPreviewImg(src);
+                setPreviewWrapVisible(true);
+            }
+
+            function clearExtractedResults() {
                 if (extractedBox) extractedBox.hidden = true;
                 if (extractedList) extractedList.innerHTML = "";
                 if (extractedProductsBox) extractedProductsBox.hidden = true;
                 if (extractedProductsBody) extractedProductsBody.innerHTML = "";
-                if (extractedProductsTitle) extractedProductsTitle.textContent = "Productos detectados";
+                if (extractedProductsTitle) {
+                    extractedProductsTitle.textContent = "Productos detectados";
+                }
                 if (btnApply) btnApply.disabled = true;
                 extractedData = null;
             }
 
+            function resetPreview() {
+                revokeLocalPreviewUrl();
+                hideAllPreviewLayers();
+                setPreviewWrapVisible(false);
+                clearExtractedResults();
+            }
+
             function showFilePreview(file) {
-                resetPreview();
+                clearExtractedResults();
                 pendingFile = file;
-                pendingMediaType = (file.type || "image/jpeg").toLowerCase();
-                if (pendingMediaType === "image/jpg") pendingMediaType = "image/jpeg";
-                if (
-                    !pendingMediaType &&
-                    /\.pdf$/i.test(file.name || "")
-                ) {
+                pendingBase64 = "";
+
+                if (isFacturaPdfFile(file)) {
                     pendingMediaType = "application/pdf";
+                    showPdfPlaceholder(file);
+                } else if (isFacturaImageFile(file)) {
+                    pendingMediaType = guessFacturaMediaType(file);
+                    showLocalImagePreview(file);
+                } else {
+                    pendingMediaType = guessFacturaMediaType(file);
+                    showPdfPlaceholder(file);
                 }
 
-                if (pendingMediaType === "application/pdf") {
-                    if (previewImg) previewImg.hidden = true;
-                    if (previewPdf) {
-                        previewPdf.hidden = false;
-                        if (previewPdfName) previewPdfName.textContent = file.name || "documento.pdf";
-                    }
-                } else if (previewImg) {
-                    previewImg.hidden = false;
-                    try {
-                        previewImg.src = URL.createObjectURL(file);
-                    } catch (e) {
-                        previewImg.removeAttribute("src");
-                    }
-                    if (previewPdf) previewPdf.hidden = true;
-                }
                 setPreviewWrapVisible(true);
-                setStatus("Archivo listo. Presioná «Analizar factura».", null);
                 openModal();
+                if (btnAnalyze) btnAnalyze.disabled = false;
+                setStatus("Archivo listo. Presioná «Analizar factura».", null);
             }
 
             function readFileAsBase64(file) {
@@ -2341,21 +2677,12 @@
                     count++;
                 }
 
-                if (data.rut_proveedor && rutInput) {
-                    var rutRaw = String(data.rut_proveedor).trim();
-                    rutInput.value =
-                        window.RutUtils && window.RutUtils.format
-                            ? window.RutUtils.format(rutRaw)
-                            : rutRaw;
+                if (data.rut_proveedor && setIngresoSupplierRut(data.rut_proveedor, { search: true })) {
                     markAutoFilled(rutInput);
                     count++;
                 }
 
                 count += applyProductsFromFactura(ensureFacturaProductos(data));
-
-                if (data.rut_proveedor && rutInput) {
-                    searchSupplier(true);
-                }
 
                 showFacturaAutoBadge(count);
                 return count;
@@ -2427,11 +2754,8 @@
                             extractedData.productos = coerced.length ? coerced : [];
                         }
                         collectFacturaProductosList(extractedData);
-                        if (previewImg && extractedData.preview_base64) {
-                            previewImg.hidden = false;
-                            previewImg.src = extractedData.preview_base64;
-                            if (previewPdf) previewPdf.hidden = true;
-                            setPreviewWrapVisible(true);
+                        if (extractedData.preview_base64) {
+                            applyBackendPreviewImage(extractedData.preview_base64);
                         }
                         renderExtractedPreview(extractedData);
                         if (btnApply) btnApply.disabled = false;
