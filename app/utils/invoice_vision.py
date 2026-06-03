@@ -846,12 +846,39 @@ def _select_unit_prices(precios: list[int], cantidades: list[int]) -> list[int]:
     if len(precios) == n:
         return precios[:n]
 
+    # PDF columnas (Mundo Repuestos, etc.): N ítems → 2N montos (unitario, total línea).
+    if len(precios) >= 2 * n:
+        units: list[int] = []
+        for i in range(n):
+            unit = precios[i * 2]
+            qty = max(1, int(cantidades[i] or 1))
+            total_idx = i * 2 + 1
+            if total_idx < len(precios):
+                line_total = precios[total_idx]
+                if unit * qty == line_total:
+                    units.append(unit)
+                    continue
+                if line_total % qty == 0:
+                    implied = line_total // qty
+                    if abs(implied - unit) <= max(5, int(round(unit * 0.01))):
+                        units.append(implied)
+                        continue
+            units.append(unit)
+        return units
+
     price_set = set(precios)
     used_idx: set[int] = set()
     units: list[int] = []
 
     def is_line_total(val: int) -> bool:
-        return any(val == pu * q for pu in precios for q in cantidades if q > 1)
+        for pu in precios:
+            for q in cantidades:
+                if q <= 1:
+                    continue
+                expected = pu * q
+                if val == expected or abs(val - expected) <= max(5, int(round(pu * 0.01))):
+                    return True
+        return False
 
     for qty in cantidades:
         chosen: int | None = None
@@ -860,7 +887,11 @@ def _select_unit_prices(precios: list[int], cantidades: list[int]) -> list[int]:
             for idx, p in enumerate(precios):
                 if idx in used_idx:
                     continue
-                if p * qty in price_set:
+                product = p * qty
+                if any(
+                    product == other or abs(product - other) <= max(5, int(round(p * 0.01)))
+                    for other in price_set
+                ):
                     chosen = p
                     chosen_idx = idx
                     break
