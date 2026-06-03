@@ -374,8 +374,101 @@ table.ingreso-items-table .btnRemove:focus-visible {
     align-items: stretch;
     gap: 0;
 }
-.products-card .cell-marca .ingreso-marca-input {
+.ingreso-marca-wrap {
+    position: relative;
     width: 100%;
+    display: block;
+}
+table.ingreso-items-table .ingreso-marca-wrap .ingreso-marca-input {
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.2;
+    color: #0f172a;
+    min-height: 30px;
+    width: 100%;
+    padding: 4px 34px 4px 6px !important;
+    box-sizing: border-box;
+}
+.ingreso-marca-wrap .ingreso-marca-dropdown-btn {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    min-width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    border: 0;
+    background: transparent;
+    color: #475569;
+    font-size: 13px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 2;
+    flex-shrink: 0;
+}
+.ingreso-marca-wrap .ingreso-marca-dropdown-btn:hover {
+    background: #eef6ff;
+    color: #1d4ed8;
+}
+table.ingreso-items-table td.cell-marca {
+    overflow: visible;
+    position: relative;
+}
+.ingreso-marca-menu {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    margin-top: 2px;
+    max-height: 200px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #dbe3ef;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+    z-index: 30;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.2;
+    color: #0f172a;
+}
+.ingreso-marca-menu.is-dropup {
+    top: auto;
+    bottom: 100%;
+    margin-top: 0;
+    margin-bottom: 2px;
+}
+.ingreso-marca-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    padding: 4px 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.2;
+    color: #0f172a;
+}
+.ingreso-marca-menu-item:hover {
+    background: #f1f5f9;
+}
+.ingreso-marca-menu-item.is-selected {
+    background: #eef6ff;
+    color: #1d4ed8;
+    font-weight: 600;
+}
+.ingreso-marca-menu-empty {
+    padding: 4px 6px;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.2;
+    color: #64748b;
 }
 .products-card .ingreso-marca-hint {
     margin-top: 6px;
@@ -1219,9 +1312,12 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
                         </td>
                         <td class="cell-marca">
                             <div class="cell-marca-stack">
-                                <datalist class="ingreso-marca-datalist" id="ingreso-marca-dl-{{ loop.index0 }}"></datalist>
-                                <input name="marca_producto[]" class="ingreso-marca-input" value="{{ row.marca }}" placeholder="Marca / variante" list="ingreso-marca-dl-{{ loop.index0 }}" autocomplete="off" aria-label="Marca o variante">
-                                <small class="ingreso-marca-hint" style="display:none;">Marcas ya registradas para este código: desplegá el campo o escribí otra.</small>
+                                <div class="ingreso-marca-wrap">
+                                    <input name="marca_producto[]" class="ingreso-marca-input" value="{{ row.marca }}" placeholder="Marca / variante" autocomplete="off" aria-label="Marca o variante">
+                                    <button type="button" class="ingreso-marca-dropdown-btn" title="Ver todas las variantes" aria-label="Ver todas las variantes" aria-haspopup="listbox" aria-expanded="false">&#9662;</button>
+                                    <div class="ingreso-marca-menu" role="listbox" aria-label="Variantes de marca" hidden></div>
+                                </div>
+                                <small class="ingreso-marca-hint" style="display:none;">Marcas ya registradas para este código: usá la flecha para elegir otra.</small>
                             </div>
                         </td>
                         <td>

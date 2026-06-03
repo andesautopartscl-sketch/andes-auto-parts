@@ -1004,7 +1004,7 @@ html[data-print-mode="thermal"] .barcode img {
         box-sizing: border-box !important;
     }
 
-    /* Cada bloque de 6 etiquetas = 2×47mm + 1mm gap × 3×49mm filas ≈ 95×149mm en 100×150mm. */
+    /* 6 etiquetas: 2×47mm + gap; 3×48mm filas + 2×1mm gap = 146mm (área útil ≈147.5mm con @page 2mm arriba). */
     html[data-print-mode="thermal_100x150"] #sheet,
     html[data-print-mode="thermal_100x150"] .sheet {
         margin: 0 auto !important;
@@ -1016,7 +1016,7 @@ html[data-print-mode="thermal"] .barcode img {
         box-sizing: border-box !important;
         display: grid !important;
         grid-template-columns: repeat(2, 47mm) !important;
-        grid-template-rows: repeat(3, 49mm) !important;
+        grid-template-rows: repeat(3, 48mm) !important;
         column-gap: 1mm !important;
         row-gap: 1mm !important;
         align-content: start !important;
@@ -1026,9 +1026,9 @@ html[data-print-mode="thermal"] .barcode img {
 
     html[data-print-mode="thermal_100x150"] .label {
         width: 47mm !important;
-        height: 49mm !important;
+        height: 48mm !important;
         max-width: 47mm !important;
-        max-height: 49mm !important;
+        max-height: 48mm !important;
         padding: 1.8mm 2mm;
         margin: 0;
         min-height: 0;
@@ -1815,8 +1815,8 @@ html[data-print-mode="thermal"] .barcode img {
             return '@media print { @page { size: 60mm 40mm; margin: 0; } }';
         }
         if (mode === 'thermal_100x150') {
-            /* 0.5mm por lado: grilla 95×149mm centrada en 100×150mm. */
-            return '@media print { @page { size: 100mm 150mm; margin: 0.5mm; } }';
+            /* 2mm arriba evita cortar el borde superior; grilla 95×146mm cabe en área útil ~99×147.5mm. */
+            return '@media print { @page { size: 100mm 150mm; margin: 2mm 0.5mm 0.5mm 0.5mm; } }';
         }
         return '';
     }

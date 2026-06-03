@@ -96,6 +96,54 @@ body.dark .note { color:#9ca3af; }
 body.dark .dropzone { background:#111827; border-color:#4b5563; }
 body.dark .dropzone-title { color:#f8fafc; }
 body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
+.cola-action-cell {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+.cola-action-cell .btn-subir-uno {
+  flex-shrink: 0;
+}
+.btn-remove-cola {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color .12s ease, color .12s ease, background .12s ease;
+}
+.btn-remove-cola:hover:not(:disabled) {
+  border-color: #fecaca;
+  background: #fff5f5;
+  color: #b91c1c;
+}
+.btn-remove-cola:focus-visible {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+}
+.btn-remove-cola:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+th.th-action,
+td.td-action {
+  white-space: nowrap;
+  vertical-align: middle;
+}
 </style>
 {% endblock %}
 
@@ -156,7 +204,7 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
           <th>Código a asignar</th>
           <th>Producto encontrado</th>
           <th>Progreso</th>
-          <th>Acción</th>
+          <th class="th-action">Acción</th>
         </tr>
       </thead>
       <tbody id="tbody-cola"></tbody>
@@ -448,6 +496,24 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
     secAsign.hidden = queue.length === 0;
   }
 
+  function removeFromQueue(item) {
+    if (!item) return;
+    if (item.status === 'uploading') return;
+    var idx = queue.indexOf(item);
+    if (idx >= 0) queue.splice(idx, 1);
+    if (item.preview) {
+      try { URL.revokeObjectURL(item.preview); } catch (e) {}
+      item.preview = null;
+    }
+    var tr = tbody.querySelector('tr[data-id="' + item.id + '"]');
+    if (tr) tr.remove();
+    updateColaResumen();
+    if (!queue.length) {
+      secResumen.hidden = true;
+      msg.style.display = 'none';
+    }
+  }
+
   function bindCodigoInput(item, input, suggestUl) {
     var debounceSearch = null;
     var debounceResolve = null;
@@ -516,7 +582,10 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
       '<td class="td-codigo"><div class="codigo-wrap"><input type="text" autocomplete="off" spellcheck="false" placeholder="Código OEM o interno" value="' + (item.codigo || '') + '"><ul class="codigo-suggest" hidden></ul></div></td>' +
       '<td class="td-producto"></td>' +
       '<td class="td-progress"></td>' +
-      '<td class="td-action"><button type="button" class="btn btn-primary btn-subir-uno">Subir</button></td>';
+      '<td class="td-action"><div class="cola-action-cell">' +
+      '<button type="button" class="btn btn-primary btn-subir-uno">Subir</button>' +
+      '<button type="button" class="btn-remove-cola" title="Quitar de la lista" aria-label="Quitar de la lista">&#10005;</button>' +
+      '</div></td>';
     tbody.appendChild(tr);
     tr.querySelector('.td-nombre').innerHTML = nombreCellHtml(item);
     bindTipoCell(item, tr.querySelector('.td-tipo'));
@@ -526,6 +595,10 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
     tr.querySelector('.btn-subir-uno').addEventListener('click', function () {
       uploadItem(item);
     });
+    tr.querySelector('.btn-remove-cola').addEventListener('click', function () {
+      removeFromQueue(item);
+    });
+    refreshRow(item);
   }
 
   function refreshRow(item) {
@@ -536,6 +609,10 @@ body.dark .codigo-suggest { background:#1f2937; border-color:#374151; }
     var btn = tr.querySelector('.btn-subir-uno');
     btn.disabled = item.status === 'uploading' || !(item.codigo || '').trim() || item.status === 'done';
     if (item.status === 'done') btn.textContent = 'Listo';
+    var rmBtn = tr.querySelector('.btn-remove-cola');
+    if (rmBtn) {
+      rmBtn.disabled = item.status === 'uploading' || item.status === 'done';
+    }
   }
 
   function addFileToQueue(file, displayName) {

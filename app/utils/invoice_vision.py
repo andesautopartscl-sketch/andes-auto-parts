@@ -737,11 +737,193 @@ def _extract_precios_valor_seccion(lines: list[str], indices: dict[str, int]) ->
     return precios
 
 
+_COLUMNAS_SECTION_END_PREFIXES = (
+    "son:",
+    "timbre electr",
+    "timbre electron",
+)
+
+
+def _find_columnas_section_bounds(lines: list[str]) -> tuple[int, int] | None:
+    """Rango [start, end) entre encabezados de ítems y Son:/Timbre."""
+    hdr_idx = -1
+    for idx, line in enumerate(lines):
+        if _line_section_header(line) or _is_codigo_header(line):
+            hdr_idx = idx
+        low = line.lower().strip().strip(":").strip()
+        if low.startswith("precio unit"):
+            hdr_idx = idx
+    if hdr_idx < 0:
+        return None
+
+    start = hdr_idx + 1
+    end = len(lines)
+    for idx in range(start, len(lines)):
+        low = lines[idx].lower().strip().strip(":").strip()
+        if any(low.startswith(p) for p in _COLUMNAS_SECTION_END_PREFIXES):
+            end = idx
+            break
+    if start >= end:
+        return None
+    return start, end
+
+
+def _line_is_catalog_number_not_price(line: str) -> bool:
+    """6-7 dígitos sin separador de miles (ej. 9974535) son código, no precio."""
+    m = _PRICE_LINE_RE.match((line or "").strip())
+    if not m:
+        return False
+    token = m.group(1).strip()
+    if "." in token or "," in token:
+        return False
+    if not re.fullmatch(r"\d{6,7}", token):
+        return False
+    try:
+        return int(token) >= 100_000
+    except ValueError:
+        return False
+
+
+def _is_chilean_price_line(line: str) -> bool:
+    """Monto con formato chileno; excluye líneas que parecen código numérico."""
+    s = (line or "").strip()
+    if not s or _line_is_catalog_number_not_price(s):
+        return False
+    if _QTY_DESC_RE.match(s) or (_CODE_LINE_RE.match(s) and _is_product_code_token(s)):
+        return False
+    m = _PRICE_LINE_RE.match(s)
+    if not m:
+        return False
+    token = m.group(1).strip()
+    if "." in token or "," in token:
+        val = _parse_monto_chileno(token)
+        return val is not None and val >= 50
+    if re.fullmatch(r"\d{3,8}", token):
+        val = _parse_monto_chileno(token)
+        return val is not None and 50 <= val < 100_000
+    return False
+
+
+def _collect_codigos_columnas_zone(lines: list[str], start: int, end: int) -> list[str]:
+    """Códigos solo-línea en orden de aparición (layout largo intercalado)."""
+    codigos: list[str] = []
+    seen: set[str] = set()
+    for line in lines[start:end]:
+        if _line_section_header(line):
+            continue
+        low = line.lower().strip().strip(":").strip()
+        if low in _PRODUCT_HEADER_WORDS:
+            continue
+        m = _CODE_LINE_RE.match(line)
+        if not m:
+            continue
+        code = m.group(1).upper()
+        if not _is_product_code_token(code) or code in seen:
+            continue
+        seen.add(code)
+        codigos.append(code)
+    return codigos
+
+
+def _collect_cantidades_columnas_zone(lines: list[str], start: int, end: int) -> list[int]:
+    """Cantidades desde líneas 'N DESCRIPCIÓN EN MAYÚSCULAS'."""
+    cantidades: list[int] = []
+    for line in lines[start:end]:
+        if _line_section_header(line):
+            continue
+        m = _QTY_DESC_RE.match(line)
+        if not m:
+            continue
+        qty = int(m.group(1))
+        if 1 <= qty <= 99:
+            cantidades.append(qty)
+    return cantidades
+
+
+def _collect_precios_columnas_zone(lines: list[str], start: int, end: int) -> list[int]:
+    """Montos chilenos en orden; omite códigos numéricos tipo 9974535."""
+    precios: list[int] = []
+    for line in lines[start:end]:
+        if _line_section_header(line):
+            continue
+        if not _is_chilean_price_line(line):
+            continue
+        m = _PRICE_LINE_RE.match(line.strip())
+        if not m:
+            continue
+        val = _parse_monto_chileno(m.group(1))
+        if val is not None and val >= 50:
+            precios.append(val)
+    return precios
+
+
+def _cantidad_from_precio_par(
+    unit: int, total: int | None, cantidad_ocr: int | None
+) -> int:
+    """Cantidad por fila: OCR si cuadra con total; si no, total/unitario."""
+    if cantidad_ocr is not None and 1 <= cantidad_ocr <= 99:
+        if total is not None and unit > 0:
+            esperado = unit * cantidad_ocr
+            tol = max(5, int(round(unit * 0.02)))
+            if abs(esperado - total) <= tol:
+                return cantidad_ocr
+        elif total is None:
+            return cantidad_ocr
+    if total is not None and unit > 0:
+        return max(1, int(round(total / unit)))
+    return cantidad_ocr if cantidad_ocr and cantidad_ocr >= 1 else 1
+
+
 def _extract_productos_columnas(lines: list[str]) -> list[dict[str, Any]]:
-    """PDF/imagen con columnas en bloques: Código, Cantidad, Descripción, Valor."""
+    """PDF/imagen con columnas: bloques verticales o layout largo intercalado."""
     indices = _section_header_indices(lines)
     if "descripcion" not in indices and "codigo" not in indices:
         return []
+
+    bounds = _find_columnas_section_bounds(lines)
+    if bounds is not None:
+        start, end = bounds
+        codigos_zone = _collect_codigos_columnas_zone(lines, start, end)
+        cantidades_zone = _collect_cantidades_columnas_zone(lines, start, end)
+        precios_zone = _collect_precios_columnas_zone(lines, start, end)
+        if len(codigos_zone) >= 2:
+            n = len(codigos_zone)
+            if len(precios_zone) >= 2 * n:
+                productos: list[dict[str, Any]] = []
+                for i in range(n):
+                    unit = precios_zone[i * 2]
+                    total = (
+                        precios_zone[i * 2 + 1]
+                        if i * 2 + 1 < len(precios_zone)
+                        else None
+                    )
+                    qty_ocr = (
+                        cantidades_zone[i]
+                        if i < len(cantidades_zone)
+                        else None
+                    )
+                    productos.append(
+                        {
+                            "codigo_proveedor": codigos_zone[i],
+                            "cantidad": _cantidad_from_precio_par(
+                                unit, total, qty_ocr
+                            ),
+                            "valor_neto": unit,
+                        }
+                    )
+                return productos
+            if cantidades_zone and precios_zone:
+                unit_prices = _select_unit_prices(precios_zone, cantidades_zone)
+                n = min(len(codigos_zone), len(cantidades_zone), len(unit_prices))
+                if n > 0:
+                    return [
+                        {
+                            "codigo_proveedor": codigos_zone[i],
+                            "cantidad": cantidades_zone[i],
+                            "valor_neto": unit_prices[i],
+                        }
+                        for i in range(n)
+                    ]
 
     codigos = _extract_codigos_seccion(lines, indices)
     if not codigos:

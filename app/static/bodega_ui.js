@@ -358,6 +358,7 @@
         var productSearchUrl = (form.getAttribute("data-product-search-url") || "").trim();
         var codigoProvUrl = (form.getAttribute("data-codigo-prov-url") || "").trim();
         var marcaTimers = new WeakMap();
+        var marcaOptionsByRow = new WeakMap();
         var outIvaResumen = document.getElementById("ingresoIvaResumen") || form.querySelector("#ingresoIvaResumen");
         var outTotalResumen = document.getElementById("ingresoTotalResumen") || form.querySelector("#ingresoTotalResumen");
         var inpTotalFactura = document.getElementById("ingresoTotalFactura") || form.querySelector("#ingresoTotalFactura");
@@ -693,12 +694,286 @@
             return sel;
         }
 
-        function clearMarcaSuggestions(row) {
-            var dl = row.querySelector("datalist.ingreso-marca-datalist");
-            var hint = row.querySelector(".ingreso-marca-hint");
-            if (dl) {
-                dl.innerHTML = "";
+        function closeMarcaMenu(row) {
+            if (!row) {
+                return;
             }
+            var menu = row.querySelector(".ingreso-marca-menu");
+            var btn = row.querySelector(".ingreso-marca-dropdown-btn");
+            if (menu) {
+                menu.hidden = true;
+                menu.classList.remove("is-dropup");
+                menu.style.maxHeight = "";
+            }
+            if (btn) {
+                btn.setAttribute("aria-expanded", "false");
+            }
+        }
+
+        function closeAllMarcaMenus() {
+            itemsBody.querySelectorAll("tr.item-row").forEach(closeMarcaMenu);
+        }
+
+        function marcaMenuFilterText(row, menuOpts) {
+            menuOpts = menuOpts || {};
+            if (menuOpts.showAll) {
+                return "";
+            }
+            if (menuOpts.filter != null) {
+                return String(menuOpts.filter).trim().toUpperCase();
+            }
+            var marcaInput = row.querySelector("input.ingreso-marca-input");
+            return marcaInput ? (marcaInput.value || "").trim().toUpperCase() : "";
+        }
+
+        function marcaOptionMatchesFilter(mu, filterText) {
+            if (!filterText) {
+                return true;
+            }
+            return mu.indexOf(filterText) >= 0;
+        }
+
+        function renderMarcaMenu(row, menuOpts) {
+            var menu = row.querySelector(".ingreso-marca-menu");
+            var marcaInput = row.querySelector("input.ingreso-marca-input");
+            if (!menu || !marcaInput) {
+                return;
+            }
+            var opts = marcaOptionsByRow.get(row) || [];
+            var current = (marcaInput.value || "").trim().toUpperCase();
+            var filterText = marcaMenuFilterText(row, menuOpts);
+            menu.innerHTML = "";
+            if (!opts.length) {
+                var emptyNoOpts = document.createElement("div");
+                emptyNoOpts.className = "ingreso-marca-menu-empty";
+                emptyNoOpts.textContent = "Sin variantes para este código";
+                menu.appendChild(emptyNoOpts);
+                return;
+            }
+            var shown = 0;
+            opts.forEach(function (m) {
+                var mu = (m || "").trim().toUpperCase();
+                if (!mu || !marcaOptionMatchesFilter(mu, filterText)) {
+                    return;
+                }
+                shown += 1;
+                var item = document.createElement("button");
+                item.type = "button";
+                item.className = "ingreso-marca-menu-item";
+                item.setAttribute("role", "option");
+                item.textContent = mu;
+                if (current && mu === current) {
+                    item.classList.add("is-selected");
+                    item.setAttribute("aria-selected", "true");
+                } else {
+                    item.setAttribute("aria-selected", "false");
+                }
+                item.addEventListener("mousedown", function (ev) {
+                    ev.preventDefault();
+                });
+                item.addEventListener("click", function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    marcaInput.value = mu;
+                    marcaInput.dispatchEvent(new Event("input", { bubbles: true }));
+                    marcaInput.dispatchEvent(new Event("change", { bubbles: true }));
+                    closeMarcaMenu(row);
+                    marcaInput.focus();
+                });
+                menu.appendChild(item);
+            });
+            if (!shown) {
+                var emptyMatch = document.createElement("div");
+                emptyMatch.className = "ingreso-marca-menu-empty";
+                emptyMatch.textContent = filterText
+                    ? "Sin coincidencias"
+                    : "Sin variantes para este código";
+                menu.appendChild(emptyMatch);
+            }
+        }
+
+        function positionMarcaMenu(row) {
+            var wrap = row.querySelector(".ingreso-marca-wrap");
+            var menu = row.querySelector(".ingreso-marca-menu");
+            if (!wrap || !menu || menu.hidden) {
+                return;
+            }
+            menu.classList.remove("is-dropup");
+            menu.style.maxHeight = "";
+            var rect = wrap.getBoundingClientRect();
+            var maxDefault = 200;
+            var gap = 8;
+            var spaceBelow = window.innerHeight - rect.bottom - gap;
+            var spaceAbove = rect.top - gap;
+            menu.hidden = false;
+            var natural = menu.scrollHeight;
+            var menuHeight = Math.min(maxDefault, natural || maxDefault);
+            var preferDropup = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+            if (preferDropup) {
+                menu.classList.add("is-dropup");
+                menu.style.maxHeight = Math.min(maxDefault, Math.max(72, spaceAbove - 4)) + "px";
+            } else {
+                menu.style.maxHeight = Math.min(maxDefault, Math.max(72, spaceBelow - 4)) + "px";
+            }
+        }
+
+        function openMarcaMenu(row, menuOpts) {
+            if (!row || !row.querySelector(".ingreso-marca-wrap")) {
+                return;
+            }
+            closeAllMarcaMenus();
+            renderMarcaMenu(row, menuOpts);
+            var menu = row.querySelector(".ingreso-marca-menu");
+            var btn = row.querySelector(".ingreso-marca-dropdown-btn");
+            if (menu) {
+                menu.hidden = false;
+            }
+            if (btn) {
+                btn.setAttribute("aria-expanded", "true");
+            }
+            requestAnimationFrame(function () {
+                positionMarcaMenu(row);
+            });
+        }
+
+        function updateMarcaMenuFromInput(row) {
+            var marcaInput = row.querySelector("input.ingreso-marca-input");
+            var menu = row.querySelector(".ingreso-marca-menu");
+            var btn = row.querySelector(".ingreso-marca-dropdown-btn");
+            if (!marcaInput || !menu) {
+                return;
+            }
+            closeAllMarcaMenus();
+            var codeInput = row.querySelector("input[name='codigo_producto[]']");
+            var code = codeInput ? (codeInput.value || "").trim() : "";
+            if (!code) {
+                closeMarcaMenu(row);
+                return;
+            }
+            var opts = marcaOptionsByRow.get(row);
+            if (!opts || !opts.length) {
+                loadMarcasForRow(row, function () {
+                    updateMarcaMenuFromInput(row);
+                });
+                return;
+            }
+            renderMarcaMenu(row, { filter: marcaInput.value });
+            menu.hidden = false;
+            if (btn) {
+                btn.setAttribute("aria-expanded", "true");
+            }
+            requestAnimationFrame(function () {
+                positionMarcaMenu(row);
+            });
+        }
+
+        function ensureMarcaCombobox(row) {
+            if (!row) {
+                return;
+            }
+            if (row.querySelector(".ingreso-marca-wrap")) {
+                row.dataset.marcaCombobox = "1";
+                return;
+            }
+            if (row.dataset.marcaCombobox === "1") {
+                return;
+            }
+            var stack = row.querySelector(".cell-marca-stack");
+            var marcaInput = row.querySelector("input.ingreso-marca-input");
+            if (!stack || !marcaInput) {
+                return;
+            }
+            var dl = row.querySelector("datalist.ingreso-marca-datalist");
+            if (dl) {
+                dl.remove();
+            }
+            marcaInput.removeAttribute("list");
+
+            var wrap = document.createElement("div");
+            wrap.className = "ingreso-marca-wrap";
+            stack.insertBefore(wrap, marcaInput);
+            wrap.appendChild(marcaInput);
+
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "ingreso-marca-dropdown-btn";
+            btn.title = "Ver todas las variantes";
+            btn.setAttribute("aria-label", "Ver todas las variantes");
+            btn.setAttribute("aria-haspopup", "listbox");
+            btn.setAttribute("aria-expanded", "false");
+            btn.innerHTML = "&#9662;";
+            wrap.appendChild(btn);
+
+            var menu = document.createElement("div");
+            menu.className = "ingreso-marca-menu";
+            menu.setAttribute("role", "listbox");
+            menu.setAttribute("aria-label", "Variantes de marca");
+            menu.hidden = true;
+            wrap.appendChild(menu);
+
+            row.dataset.marcaCombobox = "1";
+        }
+
+        function bindMarcaCombobox(row) {
+            ensureMarcaCombobox(row);
+            var wrap = row.querySelector(".ingreso-marca-wrap");
+            var btn = row.querySelector(".ingreso-marca-dropdown-btn");
+            var marcaInput = row.querySelector("input.ingreso-marca-input");
+            if (!wrap) {
+                return;
+            }
+            if (marcaInput && marcaInput.dataset.marcaInputBound !== "1") {
+                marcaInput.dataset.marcaInputBound = "1";
+                marcaInput.addEventListener("input", function () {
+                    var text = (marcaInput.value || "").trim();
+                    if (!text) {
+                        closeMarcaMenu(row);
+                        return;
+                    }
+                    updateMarcaMenuFromInput(row);
+                });
+                marcaInput.addEventListener("keydown", function (ev) {
+                    if (ev.key === "Escape") {
+                        closeMarcaMenu(row);
+                    }
+                });
+            }
+            if (!btn || btn.dataset.bound === "1") {
+                return;
+            }
+            btn.dataset.bound = "1";
+            btn.addEventListener("click", function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                var menu = row.querySelector(".ingreso-marca-menu");
+                if (menu && !menu.hidden) {
+                    closeMarcaMenu(row);
+                    return;
+                }
+                var codeInput = row.querySelector("input[name='codigo_producto[]']");
+                var code = codeInput ? (codeInput.value || "").trim() : "";
+                if (!code) {
+                    return;
+                }
+                var opts = marcaOptionsByRow.get(row);
+                if (!opts || !opts.length) {
+                    loadMarcasForRow(row, function () {
+                        openMarcaMenu(row, { showAll: true });
+                    });
+                    return;
+                }
+                openMarcaMenu(row, { showAll: true });
+            });
+        }
+
+        function clearMarcaSuggestions(row) {
+            marcaOptionsByRow.set(row, []);
+            var menu = row.querySelector(".ingreso-marca-menu");
+            if (menu) {
+                menu.innerHTML = "";
+                menu.hidden = true;
+            }
+            var hint = row.querySelector(".ingreso-marca-hint");
             if (hint) {
                 hint.style.display = "none";
             }
@@ -770,20 +1045,28 @@
                 });
         }
 
-        function loadMarcasForRow(row) {
+        function loadMarcasForRow(row, onDone) {
             if (!marcasUrl) {
+                if (onDone) {
+                    onDone();
+                }
                 return;
             }
             var codeInput = row.querySelector("input[name='codigo_producto[]']");
-            var dl = row.querySelector("datalist.ingreso-marca-datalist");
             var marcaInput = row.querySelector("input.ingreso-marca-input");
             var hint = row.querySelector(".ingreso-marca-hint");
-            if (!codeInput || !dl || !marcaInput) {
+            if (!codeInput || !marcaInput) {
+                if (onDone) {
+                    onDone();
+                }
                 return;
             }
             var code = (codeInput.value || "").trim().toUpperCase();
             if (!code) {
                 clearMarcaSuggestions(row);
+                if (onDone) {
+                    onDone();
+                }
                 return;
             }
             fetch(marcasUrl + "?codigo=" + encodeURIComponent(code), {
@@ -797,19 +1080,24 @@
                         clearMarcaSuggestions(row);
                         return;
                     }
-                    dl.innerHTML = "";
-                    data.marcas.forEach(function (m) {
-                        var o = document.createElement("option");
-                        o.value = m;
-                        dl.appendChild(o);
+                    var marcas = data.marcas.map(function (m) {
+                        return (m || "").trim().toUpperCase();
                     });
+                    marcaOptionsByRow.set(row, marcas);
+                    var menu = row.querySelector(".ingreso-marca-menu");
+                    if (menu && !menu.hidden) {
+                        renderMarcaMenu(row, { filter: marcaInput.value });
+                        requestAnimationFrame(function () {
+                            positionMarcaMenu(row);
+                        });
+                    }
                     if (hint) {
                         var regs = Array.isArray(data.marcas_registradas) ? data.marcas_registradas : [];
                         if (regs.length > 0) {
                             hint.textContent =
                                 "Variantes ya registradas para este código: " +
                                 regs.length +
-                                " (aparecen primero). También podés escribir una nueva.";
+                                " (usá la flecha para elegir otra). También podés escribir una nueva.";
                         } else {
                             hint.textContent =
                                 "Sin variantes previas para este código: elegí una sugerencia o escribí una nueva.";
@@ -819,6 +1107,11 @@
                 })
                 .catch(function () {
                     clearMarcaSuggestions(row);
+                })
+                .finally(function () {
+                    if (onDone) {
+                        onDone();
+                    }
                 });
         }
 
@@ -1075,6 +1368,7 @@
                     updateIngresoTotals();
                 });
             }
+            bindMarcaCombobox(row);
             scheduleMarcasFetch(row);
             bindCodigoProveedorLookup(row);
         }
@@ -1089,10 +1383,6 @@
                     span.textContent = String(i + 1);
                 }
             });
-        }
-
-        function nextIngresoMarcaDlId() {
-            return "ingreso-marca-dl-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
         }
 
         function addRow() {
@@ -1140,19 +1430,32 @@
             tdMarca.className = "cell-marca";
             var marcaStack = document.createElement("div");
             marcaStack.className = "cell-marca-stack";
-            var dlId = nextIngresoMarcaDlId();
-            var dlMarca = document.createElement("datalist");
-            dlMarca.className = "ingreso-marca-datalist";
-            dlMarca.id = dlId;
-            marcaStack.appendChild(dlMarca);
+            var marcaWrap = document.createElement("div");
+            marcaWrap.className = "ingreso-marca-wrap";
             var inpMarca = document.createElement("input");
             inpMarca.name = "marca_producto[]";
             inpMarca.className = "ingreso-marca-input";
             inpMarca.placeholder = "Marca / variante";
             inpMarca.setAttribute("autocomplete", "off");
             inpMarca.setAttribute("aria-label", "Marca o variante");
-            inpMarca.setAttribute("list", dlId);
-            marcaStack.appendChild(inpMarca);
+            marcaWrap.appendChild(inpMarca);
+            var btnMarcaDrop = document.createElement("button");
+            btnMarcaDrop.type = "button";
+            btnMarcaDrop.className = "ingreso-marca-dropdown-btn";
+            btnMarcaDrop.title = "Ver todas las variantes";
+            btnMarcaDrop.setAttribute("aria-label", "Ver todas las variantes");
+            btnMarcaDrop.setAttribute("aria-haspopup", "listbox");
+            btnMarcaDrop.setAttribute("aria-expanded", "false");
+            btnMarcaDrop.innerHTML = "&#9662;";
+            marcaWrap.appendChild(btnMarcaDrop);
+            var menuMarca = document.createElement("div");
+            menuMarca.className = "ingreso-marca-menu";
+            menuMarca.setAttribute("role", "listbox");
+            menuMarca.setAttribute("aria-label", "Variantes de marca");
+            menuMarca.hidden = true;
+            marcaWrap.appendChild(menuMarca);
+            marcaStack.appendChild(marcaWrap);
+            tr.dataset.marcaCombobox = "1";
             var hint = document.createElement("small");
             hint.className = "ingreso-marca-hint";
             hint.style.display = "none";
@@ -1743,6 +2046,54 @@
         itemsBody.querySelectorAll(".item-row").forEach(bindIngresoProductRow);
         refreshIngresoItemNumbers();
         syncOrigenSelectsFromSupplier();
+
+        if (form.dataset.marcaMenuCloseBound !== "1") {
+            form.dataset.marcaMenuCloseBound = "1";
+            document.addEventListener("click", function (ev) {
+                if (ev.target.closest(".ingreso-marca-dropdown-btn")) {
+                    return;
+                }
+                if (ev.target.closest(".ingreso-marca-menu")) {
+                    return;
+                }
+                if (ev.target.closest(".ingreso-marca-input")) {
+                    return;
+                }
+                closeAllMarcaMenus();
+            });
+            document.addEventListener("keydown", function (ev) {
+                if (ev.key === "Escape") {
+                    closeAllMarcaMenus();
+                }
+            });
+            window.addEventListener(
+                "resize",
+                function () {
+                    itemsBody.querySelectorAll("tr.item-row").forEach(function (row) {
+                        var menu = row.querySelector(".ingreso-marca-menu");
+                        if (menu && !menu.hidden) {
+                            positionMarcaMenu(row);
+                        }
+                    });
+                },
+                { passive: true }
+            );
+            var itemsTableWrap = form.querySelector(".ingreso-items-table-wrap");
+            if (itemsTableWrap) {
+                itemsTableWrap.addEventListener(
+                    "scroll",
+                    function () {
+                        itemsBody.querySelectorAll("tr.item-row").forEach(function (row) {
+                            var menu = row.querySelector(".ingreso-marca-menu");
+                            if (menu && !menu.hidden) {
+                                positionMarcaMenu(row);
+                            }
+                        });
+                    },
+                    { passive: true }
+                );
+            }
+        }
 
         if (supplierCountryInput) {
             supplierCountryInput.addEventListener("change", syncOrigenSelectsFromSupplier);
