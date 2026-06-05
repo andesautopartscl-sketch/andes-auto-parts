@@ -8,11 +8,44 @@
 </a>
 
 <article class="m-product">
-  <div class="m-product__media">
-    {% if p.imagen %}
-    <img src="{{ p.imagen | product_image_src }}" alt="{{ p.descripcion }}" class="m-product__img" loading="lazy" decoding="async">
+  <div id="m-product-gallery" class="m-gallery" data-360='{{ p.imagenes_360_urls | tojson }}'>
+    {% if p.galeria or p.tiene_360 %}
+    <div class="m-gallery__track">
+      {% for item in p.galeria %}
+      <div class="m-gallery__slide">
+        <button type="button" class="m-gallery__zoom" data-gallery-zoom
+                data-src="{{ item.url }}" data-alt="{{ p.descripcion }}">
+          <img src="{{ item.url }}" alt="{{ p.descripcion }}" class="m-gallery__img" loading="lazy" decoding="async">
+          {% if item.tipo == 'despiece' %}
+          <span class="m-gallery__badge">Despiece</span>
+          {% endif %}
+        </button>
+      </div>
+      {% endfor %}
+      {% if p.tiene_360 %}
+      <div class="m-gallery__slide">
+        <button type="button" class="m-gallery__zoom m-gallery__zoom--360" data-gallery-360
+                aria-label="Abrir vista 360°">
+          <img src="{{ p.imagenes_360_urls[0] }}" alt="Vista 360° {{ p.codigo }}" class="m-gallery__img" loading="lazy" decoding="async">
+          <span class="m-gallery__badge m-gallery__badge--360">360°</span>
+        </button>
+      </div>
+      {% endif %}
+    </div>
+    {% if (p.galeria|length + (1 if p.tiene_360 else 0)) > 1 %}
+    <div class="m-gallery__dots" aria-hidden="true">
+      {% for item in p.galeria %}
+      <span class="m-gallery__dot{% if loop.first %} m-gallery__dot--active{% endif %}"></span>
+      {% endfor %}
+      {% if p.tiene_360 %}
+      <span class="m-gallery__dot"></span>
+      {% endif %}
+    </div>
+    {% endif %}
     {% else %}
-    <div class="m-product__img m-product__img--empty">Sin imagen</div>
+    <div class="m-product__media">
+      <div class="m-product__img m-product__img--empty">Sin imagen</div>
+    </div>
     {% endif %}
   </div>
 
@@ -90,8 +123,25 @@
     {% endif %}
   </section>
 
-  <button type="button" class="m-btn m-btn--secondary m-btn--disabled" disabled title="Fase 4">
-    Ajustar stock (próximamente)
-  </button>
+  <a href="{{ url_for('mobile.ajustar_stock', codigo=p.codigo) }}" class="m-btn m-btn--secondary m-btn--block">
+    Ajustar stock
+  </a>
 </article>
+
+<div id="m-gallery-lightbox" class="m-gallery-lightbox" hidden>
+  <button type="button" class="m-gallery-lightbox__close" data-gallery-close aria-label="Cerrar">✕</button>
+  <img id="m-gallery-lightbox-img" class="m-gallery-lightbox__img" alt="" loading="eager">
+  <div class="m-gallery-lightbox__backdrop" data-gallery-close></div>
+</div>
+
+<div id="m-gallery-360" class="m-gallery-360" hidden>
+  <button type="button" class="m-gallery-360__close" data-gallery-close aria-label="Cerrar 360°">✕</button>
+  <p class="m-gallery-360__hint">Arrastra para rotar · Vista 360°</p>
+  <img id="m-gallery-360-img" class="m-gallery-360__img" alt="Vista 360°" loading="eager">
+  <div class="m-gallery-360__backdrop" data-gallery-close></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='mobile/producto_gallery.js') }}" defer></script>
 {% endblock %}

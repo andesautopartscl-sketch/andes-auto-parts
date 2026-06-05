@@ -17,10 +17,13 @@ from app.dashboard.routes import _count_documentos_periodo, _ventas_periodo
 from app.extensions import db
 from app.models import Producto
 from app.productos.routes import (
+    _collect_imagenes_360,
     _collect_imagenes_producto,
+    _ficha_despiece_payload,
     _ficha_stock_repuestos,
     _find_producto_by_codigo,
 )
+from app.utils.product_image_url import product_image_src
 from app.utils.format_currency_cl import format_precio_publico_con_iva
 from app.utils.stock_control import get_available_stock
 from app.ventas.models import DocumentoVenta, DocumentoVentaItem
@@ -479,6 +482,27 @@ def producto_detalle(codigo_raw: str) -> dict | None:
         return None
     codigo = (producto.codigo or "").strip().upper()
     imagenes = _collect_imagenes_producto(producto)
+    imagenes_urls = [product_image_src(img) for img in imagenes if img]
+    imagenes_360 = _collect_imagenes_360(producto)
+    imagenes_360_urls = [
+        product_image_src(f"productos360/{codigo}/{name}") for name in imagenes_360
+    ]
+    desp = _ficha_despiece_payload(db.session, producto)
+    despiece_src = (desp.get("despiece_imagen_src") or "").strip()
+    galeria: list[dict] = []
+    seen_urls: set[str] = set()
+
+    def _add_galeria(url: str, tipo: str, label: str = "") -> None:
+        u = (url or "").strip()
+        if not u or u in seen_urls:
+            return
+        seen_urls.add(u)
+        galeria.append({"url": u, "tipo": tipo, "label": label})
+
+    for url in imagenes_urls:
+        _add_galeria(url, "foto", "Producto")
+    if despiece_src:
+        _add_galeria(despiece_src, "despiece", "Despiece")
     ficha_stock = _ficha_stock_repuestos(producto)
     ref = _ultimo_ingreso_ref(codigo, (producto.marca or "").strip().upper() or None, "Bodega 1")
     precio_neto = float(producto.p_publico or 0)
@@ -519,7 +543,12 @@ def producto_detalle(codigo_raw: str) -> dict | None:
         "modelo": (producto.modelo or "").strip(),
         "codigo_oem": (producto.codigo_oem or "").strip(),
         "codigos_proveedor": codigos_proveedor,
-        "imagen": imagenes[0] if imagenes else None,
+        "imagen": imagenes_urls[0] if imagenes_urls else None,
+        "imagenes_urls": imagenes_urls,
+        "imagenes_360_urls": imagenes_360_urls,
+        "tiene_360": bool(imagenes_360_urls),
+        "despiece_imagen_src": despiece_src or None,
+        "galeria": galeria,
         "precio_neto": precio_neto,
         "precio_venta_fmt": format_precio_publico_con_iva(precio_neto) if precio_neto > 0 else "—",
         "ficha_stock": ficha_stock,

@@ -25,6 +25,7 @@
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
   data-sw-url="{{ url_for('mobile.service_worker') }}"
+  data-pwa-version="v2026.06.05-v9"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
     <img
@@ -75,14 +76,60 @@
   <div id="mobile-mas-menu" class="m-mas-menu" hidden>
     <div class="m-mas-menu__backdrop" data-mas-close></div>
     <nav class="m-mas-menu__panel" aria-label="Más opciones">
-      <h2 class="m-mas-menu__title">Más</h2>
-      <a href="{{ url_for('mobile.dashboard') }}" class="m-mas-menu__link">Dashboard</a>
-      <a href="{{ url_for('mobile.ingresos') }}" class="m-mas-menu__link">Ingresos</a>
-      <a href="{{ url_for('mobile.stock_critico') }}" class="m-mas-menu__link">Stock crítico</a>
-      <a href="{{ url_for('mobile.reportes') }}" class="m-mas-menu__link">Reportes</a>
+      <header class="m-mas-menu__header">
+        <h2 class="m-mas-menu__title">Más opciones</h2>
+        <p class="m-mas-menu__subtitle">Accesos rápidos del ERP móvil</p>
+      </header>
+      <div class="m-mas-menu__list">
+        <a href="{{ url_for('mobile.dashboard') }}" class="m-mas-item">
+          <span class="m-mas-item__icon m-mas-item__icon--dashboard" aria-hidden="true">📊</span>
+          <span class="m-mas-item__body">
+            <span class="m-mas-item__title">Dashboard</span>
+            <span class="m-mas-item__desc">Ventas e ingresos del día</span>
+          </span>
+          <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+        </a>
+        <a href="{{ url_for('mobile.ingresos') }}" class="m-mas-item">
+          <span class="m-mas-item__icon m-mas-item__icon--ingresos" aria-hidden="true">📥</span>
+          <span class="m-mas-item__body">
+            <span class="m-mas-item__title">Ingresos</span>
+            <span class="m-mas-item__desc">Últimos documentos de compra</span>
+          </span>
+          <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+        </a>
+        <a href="{{ url_for('mobile.stock_critico') }}" class="m-mas-item">
+          <span class="m-mas-item__icon m-mas-item__icon--stock" aria-hidden="true">⚠️</span>
+          <span class="m-mas-item__body">
+            <span class="m-mas-item__title">Stock crítico</span>
+            <span class="m-mas-item__desc">Productos bajo mínimo</span>
+          </span>
+          <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+        </a>
+        <a href="{{ url_for('mobile.reportes') }}" class="m-mas-item">
+          <span class="m-mas-item__icon m-mas-item__icon--reportes" aria-hidden="true">📈</span>
+          <span class="m-mas-item__body">
+            <span class="m-mas-item__title">Reportes</span>
+            <span class="m-mas-item__desc">Semana, mes y rankings</span>
+          </span>
+          <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+        </a>
+        <form method="post" action="{{ url_for('auth.logout') }}" class="m-mas-item m-mas-item--logout">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="m-mas-item__btn">
+            <span class="m-mas-item__icon m-mas-item__icon--logout" aria-hidden="true">🚪</span>
+            <span class="m-mas-item__body">
+              <span class="m-mas-item__title">Cerrar sesión</span>
+              <span class="m-mas-item__desc">Salir de la cuenta actual</span>
+            </span>
+            <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+          </button>
+        </form>
+      </div>
       <button type="button" class="m-mas-menu__close" data-mas-close>Cerrar</button>
     </nav>
   </div>
+
+  <span id="mobile-version-badge" class="mobile-version-badge" aria-hidden="true"></span>
 
   <nav class="mobile-nav" aria-label="Navegación principal">
     <a href="{{ url_for('mobile.home') }}" class="mobile-nav__item{% if active_nav == 'inicio' %} mobile-nav__item--active{% endif %}" aria-label="Inicio">

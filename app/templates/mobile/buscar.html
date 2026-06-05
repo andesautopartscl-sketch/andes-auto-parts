@@ -25,9 +25,7 @@
 <div id="mobile-search-results" class="m-results" data-api="{{ url_for('mobile.api_buscar') }}">
   {% if q and not resultados %}
   <p class="m-empty">Sin resultados para «{{ q }}».</p>
-  {% elif not q %}
-  <p class="m-hint">Escribe al menos 2 caracteres para buscar.</p>
-  {% else %}
+  {% elif q %}
   <ul class="m-card-list">
     {% for r in resultados %}
     <li>
@@ -42,12 +40,11 @@
     </li>
     {% endfor %}
   </ul>
+  {% else %}
+  <div class="m-search-empty" id="mobile-search-empty">
+    <span class="m-search-empty__icon" aria-hidden="true">🔍</span>
+    <p class="m-search-empty__text">Escribe al menos 2 caracteres para buscar productos</p>
+  </div>
   {% endif %}
-</div>
-
-<div id="mobile-search-skeleton" class="m-skeleton-list" hidden aria-hidden="true">
-  {% for _ in range(4) %}
-  <div class="m-skeleton m-skeleton--card"></div>
-  {% endfor %}
 </div>
 {% endblock %}

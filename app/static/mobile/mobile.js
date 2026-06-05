@@ -10,17 +10,25 @@
       menu.hidden = false;
       toggle.setAttribute("aria-expanded", "true");
       document.body.classList.add("m-mas-open");
+      requestAnimationFrame(function () {
+        menu.classList.add("m-mas-menu--visible");
+      });
     }
 
     function closeMenu() {
-      menu.hidden = true;
+      menu.classList.remove("m-mas-menu--visible");
       toggle.setAttribute("aria-expanded", "false");
       document.body.classList.remove("m-mas-open");
+      window.setTimeout(function () {
+        if (!menu.classList.contains("m-mas-menu--visible")) {
+          menu.hidden = true;
+        }
+      }, 280);
     }
 
     toggle.addEventListener("click", function (e) {
       e.preventDefault();
-      if (menu.hidden) openMenu();
+      if (menu.hidden || !menu.classList.contains("m-mas-menu--visible")) openMenu();
       else closeMenu();
     });
 
@@ -29,10 +37,15 @@
     });
   }
 
+  function initVersionBadge() {
+    var version = document.body.getAttribute("data-pwa-version") || "";
+    var badge = document.getElementById("mobile-version-badge");
+    if (badge && version) badge.textContent = version;
+  }
+
   function initSearchDebounce() {
     var input = document.getElementById("mobile-search-input");
     var results = document.getElementById("mobile-search-results");
-    var skeleton = document.getElementById("mobile-search-skeleton");
     if (!input || !results) return;
 
     var api = results.getAttribute("data-api");
@@ -79,11 +92,25 @@
       results.innerHTML = html;
     }
 
+    var EMPTY_HTML =
+      '<div class="m-search-empty">' +
+      '<span class="m-search-empty__icon" aria-hidden="true">🔍</span>' +
+      '<p class="m-search-empty__text">Escribe al menos 2 caracteres para buscar productos</p>' +
+      "</div>";
+
+    var SKELETON_HTML =
+      '<div class="m-skeleton-list" aria-hidden="true">' +
+      '<div class="m-skeleton m-skeleton--card"></div>'.repeat(4) +
+      "</div>";
+
+    function showEmptyState() {
+      results.innerHTML = EMPTY_HTML;
+    }
+
     function setLoading(on) {
-      if (!skeleton) return;
-      skeleton.hidden = !on;
-      if (on) results.classList.add("m-results--loading");
-      else results.classList.remove("m-results--loading");
+      if (on) {
+        results.innerHTML = SKELETON_HTML;
+      }
     }
 
     function fetchLocal(q) {
@@ -91,47 +118,71 @@
       return AndesOfflineDb.searchLocal(q, 30);
     }
 
+    function normalizeLocalItem(row) {
+      return {
+        codigo: row.codigo,
+        descripcion: row.descripcion,
+        stock: row.stock,
+        precio_fmt: row.precio_fmt || "—",
+      };
+    }
+
     function fetchResults(q) {
       if (q.length < 2) {
-        results.innerHTML = '<p class="m-hint">Escribe al menos 2 caracteres para buscar.</p>';
+        showEmptyState();
         return;
       }
       setLoading(true);
-      var offline = !navigator.onLine;
-      var request = offline
-        ? fetchLocal(q).then(function (items) {
-            return { items: items, offline: true };
-          })
-        : fetch(api + "?q=" + encodeURIComponent(q), {
+
+      fetchLocal(q).then(function (localItems) {
+        if (input.value.trim() !== q) return;
+        if (localItems.length) {
+          renderItems(localItems.map(normalizeLocalItem));
+          results.insertAdjacentHTML(
+            "afterbegin",
+            '<p class="m-hint m-hint--cache">Búsqueda instantánea (catálogo local)</p>'
+          );
+        }
+      });
+
+      var networkPromise = navigator.onLine
+        ? fetch(api + "?q=" + encodeURIComponent(q), {
             headers: { "X-Requested-With": "XMLHttpRequest" },
           })
             .then(function (res) {
               return res.json();
             })
-            .catch(function () {
-              return fetchLocal(q).then(function (items) {
-                return { items: items, offline: true };
-              });
-            });
+        : Promise.reject(new Error("offline"));
 
-      request
+      networkPromise
         .then(function (data) {
           if (input.value.trim() !== q) return;
           var items = (data && data.items) || [];
           renderItems(items);
-          if (data && data.offline && items.length) {
+        })
+        .catch(function () {
+          if (input.value.trim() !== q) return;
+          return fetchLocal(q).then(function (localItems) {
+            if (!localItems.length) {
+              results.innerHTML = '<p class="m-empty">Sin conexión y sin resultados locales.</p>';
+              return;
+            }
+            renderItems(localItems.map(normalizeLocalItem));
             results.insertAdjacentHTML(
               "afterbegin",
               '<p class="m-hint m-hint--offline">Resultados desde catálogo offline.</p>'
             );
-          }
+          });
         })
         .catch(function () {
-          results.innerHTML = '<p class="m-empty">Error al buscar. Intenta de nuevo.</p>';
-        })
-        .finally(function () {
-          setLoading(false);
+          if (input.value.trim() === q) {
+            results.innerHTML = '<p class="m-empty">Error al buscar. Intenta de nuevo.</p>';
+          }
         });
+    }
+
+    if (!input.value.trim()) {
+      showEmptyState();
     }
 
     input.addEventListener("input", function () {
@@ -327,6 +378,7 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     initPwaAutoUpdate();
+    initVersionBadge();
     initMasMenu();
     initSearchDebounce();
     initPullToRefresh();

@@ -1134,6 +1134,7 @@ def create_app():
                 "camera=(self), microphone=(self), geolocation=(self)"
             )
             response.headers["Feature-Policy"] = "camera 'self'"
+            response.headers["Vary"] = "Accept-Encoding"
         except Exception:
             pass
         return response
