@@ -1,9 +1,25 @@
-{% extends 'base_content.html' if _partial else 'ventas/base.html' %}
+{% extends 'ventas/base_partial.html' if _partial else 'ventas/base.html' %}
 
 {% block title %}{{ form_title }} | Andes Auto Parts{% endblock %}
 
 {% block extra_head %}
 <style>
+.cliente-validation-alert {
+    margin: 0 0 14px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+    font-size: 13px;
+}
+.cliente-validation-alert ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+}
+.cliente-validation-alert li + li {
+    margin-top: 4px;
+}
 .form-shell {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(200px, 240px);
@@ -278,11 +294,22 @@ label.mayorista-check-lbl {
 </style>
 {% endblock %}
 
-{% block content %}
+{% block ventas_inner %}
 <div class="form-shell">
     <section class="panel form-card">
         <h2>{{ form_title }}</h2>
         <p>Datos tributarios y ubicación para cotizaciones y ventas.</p>
+
+        {% if validation_errors %}
+        <div class="cliente-validation-alert" role="alert">
+            <strong>Revise los siguientes campos:</strong>
+            <ul>
+                {% for err in validation_errors %}
+                <li>{{ err }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
 
         <form method="post" id="clienteForm">
             <div class="group-title">Datos comerciales</div>

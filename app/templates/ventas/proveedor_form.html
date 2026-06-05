@@ -1,4 +1,4 @@
-{% extends 'base_content.html' if _partial else 'ventas/base.html' %}
+{% extends 'ventas/base_partial.html' if _partial else 'ventas/base.html' %}
 
 {% block title %}{{ form_title }} | Andes Auto Parts{% endblock %}
 
@@ -236,7 +236,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block ventas_inner %}
 <div class="form-shell">
     <section class="panel form-card">
         <h2>{{ form_title }}</h2>

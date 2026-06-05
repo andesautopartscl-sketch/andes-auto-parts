@@ -242,6 +242,11 @@ body.erp-shell-standalone {
   color: #1d4ed8;
   border-color: #93c5fd;
 }
+.flash-msg.warning {
+  background: #fef9c3;
+  color: #a16207;
+  border-color: #fde047;
+}
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

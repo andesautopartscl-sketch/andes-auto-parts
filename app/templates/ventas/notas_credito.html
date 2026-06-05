@@ -1,4 +1,4 @@
-{% extends 'base_content.html' if _partial else 'ventas/base.html' %}
+{% extends 'ventas/base_partial.html' if _partial else 'ventas/base.html' %}
 
 {% block title %}Notas de crédito | Andes Auto Parts{% endblock %}
 
@@ -64,7 +64,7 @@ td { font-size: 12px; color: #0f172a; }
 </style>
 {% endblock %}
 
-{% block content %}
+{% block ventas_inner %}
 <div class="page-stack">
     <section class="panel hero-card">
         <div class="hero-copy">

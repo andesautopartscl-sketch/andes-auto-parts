@@ -1,4 +1,4 @@
-{% extends 'base_content.html' if _partial else 'ventas/base.html' %}
+{% extends 'ventas/base_partial.html' if _partial else 'ventas/base.html' %}
 
 {% block title %}Nota {{ nota.numero or nota.id }} | Andes Auto Parts{% endblock %}
 
@@ -20,7 +20,7 @@ th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spa
 </style>
 {% endblock %}
 
-{% block content %}
+{% block ventas_inner %}
 <div class="detail-shell">
     <section class="panel panel-card">
         <h2 style="margin:0 0 8px;">Nota de crédito {{ nota.numero or ('#' ~ nota.id) }}</h2>

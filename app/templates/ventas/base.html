@@ -1,1 +1,6 @@
 {% extends 'base.html' %}
+
+{% block content %}
+{% include 'ventas/_flash_messages.html' %}
+{% block ventas_inner %}{% endblock %}
+{% endblock %}

@@ -1,4 +1,4 @@
-{% extends 'base_content.html' if _partial else 'ventas/base.html' %}
+{% extends 'ventas/base_partial.html' if _partial else 'ventas/base.html' %}
 
 {% block title %}Historial Cliente | Andes Auto Parts{% endblock %}
 
@@ -505,7 +505,7 @@ textarea.sf-input {
 </style>
 {% endblock %}
 
-{% block content %}
+{% block ventas_inner %}
 <div class="history-shell">
     <div class="history-back-bar">
         <a class="history-back-link" href="{{ url_for('ventas.clientes') }}">← Volver a clientes</a>

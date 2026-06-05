@@ -3004,8 +3004,10 @@ def cliente_nuevo():
         return _deny_perm_response("No tienes permiso para crear clientes.")
     chile_geo = _load_chile_geo()
     form_data = _cliente_form_data(request.form if request.method == "POST" else None)
+    validation_errors = []
     if request.method == "POST":
         errors = _validate_cliente_data(form_data)
+        validation_errors = errors
         if not errors:
             cliente = _hydrate_cliente(Cliente(), form_data)
             db.session.add(cliente)
@@ -3019,6 +3021,7 @@ def cliente_nuevo():
         form_title="Nuevo cliente",
         submit_label="Crear cliente",
         cliente=form_data,
+        validation_errors=validation_errors,
         chile_geo=chile_geo,
         chile_regions=_chile_regions(chile_geo),
         active_page="clientes",
@@ -3038,9 +3041,11 @@ def cliente_editar(cid: int):
         flash("Cliente no encontrado.", "error")
         return redirect(url_for("ventas.clientes"))
 
+    validation_errors = []
     if request.method == "POST":
         form_data = _cliente_form_data(request.form)
         errors = _validate_cliente_data(form_data)
+        validation_errors = errors
         if not errors:
             _hydrate_cliente(c, form_data)
             db.session.commit()
@@ -3056,6 +3061,7 @@ def cliente_editar(cid: int):
         form_title="Editar cliente",
         submit_label="Guardar cambios",
         cliente=form_data,
+        validation_errors=validation_errors,
         chile_geo=chile_geo,
         chile_regions=_chile_regions(chile_geo),
         cliente_id=cid,

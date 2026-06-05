@@ -6,7 +6,7 @@
 {% include 'ventas/_erp_styles.html' %}
 {% endblock %}
 
-{% block content %}
+{% block ventas_inner %}
 {% set selected_party_id = selected_proveedor_id if is_supplier_doc else (selected_client_id or selected_proveedor_id) %}
 <form method="post" id="erpDocForm" autocomplete="off" novalidate data-doc-type="{{ doc_type }}" data-stock-direction="{{ 'in' if is_supplier_doc else ('out' if doc_type == 'orden_venta' else 'none') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
