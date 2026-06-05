@@ -37,6 +37,7 @@ from .contabilidad.routes import contabilidad_bp, finanzas_bp
 from .informes.routes import informes_bp
 from .rrhh.routes import rrhh_bp
 from .sii_sync import sii_sync_bp
+from .mobile import mobile_bp
 from app.seguridad.init_roles import crear_roles
 from app.seguridad.crear_superadmin import crear_superadmin
 from app.utils.datetime_utils import chile_datetime_filter
@@ -311,6 +312,7 @@ def create_app():
         app.register_blueprint(informes_bp)
         app.register_blueprint(rrhh_bp)
         app.register_blueprint(sii_sync_bp)
+        app.register_blueprint(mobile_bp)
 
     print(app.url_map)
 
@@ -1071,6 +1073,8 @@ def create_app():
     def inject_chat_widget(response):
         # Inject chat globally for authenticated users in HTML responses.
         if (app.config.get("ANDES_APP_MODE") or "").strip().lower() == "search_lite":
+            return response
+        if (request.path or "").startswith("/m/"):
             return response
         if request.endpoint in {"auth.login", "auth.inicio_seguro"}:
             return response

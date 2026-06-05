@@ -1,0 +1,35 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}Stock crítico — Andes Mobile{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('mobile.dashboard') }}" class="m-back" aria-label="Volver">
+  <span aria-hidden="true">&#8592;</span> Dashboard
+</a>
+
+<section class="m-page-head">
+  <h1 class="m-page-title">Stock crítico</h1>
+  <p class="m-page-sub">Umbral ≤ {{ umbral }} unidades</p>
+</section>
+
+<div data-pull-refresh>
+  {% if items %}
+  <ul class="m-card-list">
+    {% for it in items %}
+    <li>
+      <a href="{{ url_for('mobile.producto', codigo=it.codigo) }}" class="m-result-card m-result-card--alert">
+        <span class="m-result-card__code">{{ it.codigo }}</span>
+        <span class="m-result-card__desc">{{ it.descripcion }}</span>
+        <div class="m-result-card__footer">
+          <span class="m-badge m-badge--danger">Stock {{ it.stock }}</span>
+          <span class="m-hint">Mín. {{ it.minimo }} · {{ it.bodega }}</span>
+        </div>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="m-empty">No hay productos bajo el umbral configurado.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}Buscar — Andes Mobile{% endblock %}
+
+{% block content %}
+<section class="m-page-head">
+  <h1 class="m-page-title">Buscar producto</h1>
+</section>
+
+<form class="m-search-form" action="{{ url_for('mobile.buscar') }}" method="get" role="search">
+  <input
+    type="search"
+    name="q"
+    id="mobile-search-input"
+    class="m-search-input"
+    placeholder="Código, proveedor o descripción"
+    value="{{ q }}"
+    autocomplete="off"
+    autocapitalize="characters"
+    enterkeyhint="search"
+    autofocus
+  >
+</form>
+
+<div id="mobile-search-results" class="m-results" data-api="{{ url_for('mobile.api_buscar') }}">
+  {% if q and not resultados %}
+  <p class="m-empty">Sin resultados para «{{ q }}».</p>
+  {% elif not q %}
+  <p class="m-hint">Escribe al menos 2 caracteres para buscar.</p>
+  {% else %}
+  <ul class="m-card-list">
+    {% for r in resultados %}
+    <li>
+      <a href="{{ url_for('mobile.producto', codigo=r.codigo) }}" class="m-result-card">
+        <span class="m-result-card__code">{{ r.codigo }}</span>
+        <span class="m-result-card__desc">{{ r.descripcion }}</span>
+        <div class="m-result-card__footer">
+          <span class="m-badge">Stock {{ r.stock }}</span>
+          <span class="m-result-card__price">{{ r.precio_fmt }}</span>
+        </div>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+
+<div id="mobile-search-skeleton" class="m-skeleton-list" hidden aria-hidden="true">
+  {% for _ in range(4) %}
+  <div class="m-skeleton m-skeleton--card"></div>
+  {% endfor %}
+</div>
+{% endblock %}

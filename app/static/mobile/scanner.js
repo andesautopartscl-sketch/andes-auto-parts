@@ -1,0 +1,358 @@
+(function () {
+  "use strict";
+
+  var root = document.getElementById("mobile-scanner-root");
+  if (!root || typeof Html5Qrcode === "undefined") return;
+
+  var readerId = "qr-reader";
+  var modo = (root.getAttribute("data-modo") || "qr").toLowerCase();
+  var apiTpl = root.getAttribute("data-api-producto") || "";
+  var urlProductoTpl = root.getAttribute("data-url-producto") || "";
+  var urlStockTpl = root.getAttribute("data-url-stock") || "";
+  var urlVentaRapida = root.getAttribute("data-url-venta-rapida") || "/m/venta-rapida";
+
+  var hintEl = document.getElementById("scanner-hint");
+  var toastEl = document.getElementById("mobile-toast");
+  var deniedEl = document.getElementById("scanner-permission-denied");
+  var retryBtn = document.getElementById("scanner-retry-btn");
+  var torchBtn = document.getElementById("scanner-torch-btn");
+  var switchBtn = document.getElementById("scanner-switch-btn");
+  var tabButtons = root.querySelectorAll(".m-scanner-tab");
+
+  var html5QrCode = null;
+  var cameras = [];
+  var cameraIndex = 0;
+  var torchOn = false;
+  var torchSupported = false;
+  var paused = false;
+  var lastScanAt = 0;
+  var COOLDOWN_MS = 1800;
+
+  var QR_FORMATS = window.Html5QrcodeSupportedFormats
+    ? [Html5QrcodeSupportedFormats.QR_CODE]
+    : undefined;
+
+  var BARCODE_FORMATS = window.Html5QrcodeSupportedFormats
+    ? [
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+      ]
+    : undefined;
+
+  function tplReplace(tpl, code) {
+    return tpl.replace("__CODE__", encodeURIComponent(code));
+  }
+
+  function showToast(msg) {
+    if (!toastEl) return;
+    toastEl.textContent = msg;
+    toastEl.hidden = false;
+    toastEl.classList.add("m-toast--visible");
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function () {
+      toastEl.classList.remove("m-toast--visible");
+      toastEl.hidden = true;
+    }, 2800);
+  }
+
+  function feedbackOk() {
+    if (navigator.vibrate) navigator.vibrate(80);
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.value = 0.08;
+      osc.start();
+      osc.stop(ctx.currentTime + 0.08);
+    } catch (_e) {}
+  }
+
+  function parseQrPayload(text) {
+    var t = (text || "").trim();
+    if (!t) return null;
+    var lower = t.toLowerCase();
+    var markers = ["/m/producto/", "/producto/"];
+    for (var i = 0; i < markers.length; i++) {
+      var idx = lower.indexOf(markers[i]);
+      if (idx >= 0) {
+        var rest = t.substring(idx + markers[i].length);
+        var codigo = rest.split("?")[0].split("#")[0].replace(/\/+$/, "");
+        if (codigo) return codigo.toUpperCase();
+      }
+    }
+    if (/^[A-Za-z0-9._\-/]+$/.test(t)) return t.toUpperCase();
+    return t.toUpperCase();
+  }
+
+  function normalizeBarcode(text) {
+    var t = (text || "").trim();
+    return t ? t.toUpperCase() : null;
+  }
+
+  function updateHint() {
+    if (!hintEl) return;
+    if (modo === "venta") {
+      hintEl.textContent = "Escanea productos para la venta";
+      return;
+    }
+    hintEl.textContent =
+      modo === "qr"
+        ? "Apunta al QR de la etiqueta"
+        : "Apunta al código de barras";
+  }
+
+  function setActiveTab() {
+    tabButtons.forEach(function (btn) {
+      var isActive = btn.getAttribute("data-modo") === modo;
+      btn.classList.toggle("m-scanner-tab--active", isActive);
+      btn.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+    updateHint();
+  }
+
+  function scannerConfig() {
+    return {
+      fps: 10,
+      qrbox: function (viewfinderWidth, viewfinderHeight) {
+        var size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72);
+        return { width: size, height: Math.floor(size * 0.85) };
+      },
+      aspectRatio: 1.0,
+      disableFlip: false,
+    };
+  }
+
+  function formatsForMode() {
+    if (modo === "venta") {
+      if (BARCODE_FORMATS && QR_FORMATS) {
+        return BARCODE_FORMATS.concat(QR_FORMATS);
+      }
+      return BARCODE_FORMATS || QR_FORMATS;
+    }
+    return modo === "qr" ? QR_FORMATS : BARCODE_FORMATS;
+  }
+
+  function preferredCameraId() {
+    if (!cameras.length) return { facingMode: "environment" };
+    var back = cameras.find(function (c) {
+      return /back|rear|environment|trasera/i.test(c.label || "");
+    });
+    var cam = back || cameras[cameraIndex] || cameras[0];
+    return cam ? { deviceId: { exact: cam.id } } : { facingMode: "environment" };
+  }
+
+  function showDenied(show) {
+    if (!deniedEl) return;
+    deniedEl.hidden = !show;
+  }
+
+  function stopScanner() {
+    if (!html5QrCode) return Promise.resolve();
+    return html5QrCode
+      .stop()
+      .then(function () {
+        return html5QrCode.clear();
+      })
+      .catch(function () {});
+  }
+
+  function refreshTorchSupport() {
+    if (!html5QrCode || !torchBtn) return;
+    torchSupported = false;
+    try {
+      var track = html5QrCode.getRunningTrack && html5QrCode.getRunningTrack();
+      if (track && typeof track.getCapabilities === "function") {
+        var caps = track.getCapabilities();
+        torchSupported = !!(caps && caps.torch);
+      }
+    } catch (_e) {
+      torchSupported = false;
+    }
+    torchBtn.disabled = !torchSupported;
+  }
+
+  function startScanner() {
+    paused = false;
+    showDenied(false);
+    var formats = formatsForMode();
+    if (html5QrCode) {
+      return stopScanner().then(function () {
+        html5QrCode = null;
+        return bootScanner();
+      });
+    }
+    return bootScanner();
+
+    function bootScanner() {
+      html5QrCode = formats
+        ? new Html5Qrcode(readerId, { formatsToSupport: formats, verbose: false })
+        : new Html5Qrcode(readerId, { verbose: false });
+
+      return Html5Qrcode.getCameras()
+        .then(function (devices) {
+          cameras = devices || [];
+          if (!cameras.length) {
+            showDenied(true);
+            throw new Error("No cameras");
+          }
+          return html5QrCode.start(
+            preferredCameraId(),
+            scannerConfig(),
+            onScanSuccess,
+            function () {}
+          );
+        })
+        .then(function () {
+          refreshTorchSupport();
+        })
+        .catch(function (err) {
+          /* Scanner start failed — UI ya muestra permiso denegado */
+          showDenied(true);
+        });
+    }
+  }
+
+  function fetchProducto(codigo) {
+    return fetch(tplReplace(apiTpl, codigo), {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    }).then(function (r) {
+      return r.json();
+    });
+  }
+
+  function onScanSuccess(decodedText) {
+    if (paused) return;
+    var now = Date.now();
+    if (now - lastScanAt < COOLDOWN_MS) return;
+
+    var codigo;
+    if (modo === "venta") {
+      codigo = parseQrPayload(decodedText) || normalizeBarcode(decodedText);
+    } else {
+      codigo = modo === "qr" ? parseQrPayload(decodedText) : normalizeBarcode(decodedText);
+    }
+    if (!codigo) return;
+
+    paused = true;
+    lastScanAt = now;
+
+    fetchProducto(codigo)
+      .then(function (data) {
+        if (!data || !data.exists) {
+          paused = false;
+          if (modo === "qr") showToast("QR no reconocido");
+          else showToast("Código no encontrado");
+          return;
+        }
+        feedbackOk();
+        var resolved = data.codigo || codigo;
+        if (modo === "venta") {
+          try {
+            var key = "andes_mobile_venta_scan_pending";
+            var existing = sessionStorage.getItem(key);
+            var cartKey = "andes_mobile_venta_wizard";
+            var cartRaw = sessionStorage.getItem(cartKey);
+            var cart = cartRaw ? JSON.parse(cartRaw) : { items: [] };
+            if (!cart.items) cart.items = [];
+            var found = cart.items.find(function (it) {
+              return it.codigo === resolved;
+            });
+            if (found) {
+              found.cantidad = (Number(found.cantidad) || 0) + 1;
+            } else {
+              cart.items.push({
+                codigo: resolved,
+                descripcion: "",
+                cantidad: 1,
+                precio: 0,
+              });
+            }
+            cart.step = 2;
+            sessionStorage.setItem(cartKey, JSON.stringify(cart));
+          } catch (_e) {}
+          showToast(resolved + " agregado");
+          paused = false;
+          return;
+        }
+        if (modo === "qr") {
+          window.location.href = tplReplace(urlProductoTpl, resolved);
+        } else {
+          window.location.href = tplReplace(urlStockTpl, resolved);
+        }
+      })
+      .catch(function () {
+        paused = false;
+        showToast("Error al validar código");
+      });
+  }
+
+  function switchMode(newModo) {
+    if (newModo === modo) return;
+    modo = newModo;
+    setActiveTab();
+    startScanner();
+  }
+
+  if (modo !== "venta") {
+    tabButtons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        switchMode(btn.getAttribute("data-modo") || "qr");
+      });
+    });
+  }
+
+  var listoBtn = document.getElementById("scanner-listo-btn");
+  if (listoBtn) {
+    listoBtn.addEventListener("click", function () {
+      window.location.href = urlVentaRapida + "?step=2";
+    });
+  }
+
+  if (switchBtn) {
+    switchBtn.addEventListener("click", function () {
+      if (cameras.length < 2) {
+        showToast("Solo hay una cámara disponible");
+        return;
+      }
+      cameraIndex = (cameraIndex + 1) % cameras.length;
+      torchOn = false;
+      startScanner();
+    });
+  }
+
+  if (torchBtn) {
+    torchBtn.addEventListener("click", function () {
+      if (!html5QrCode || !torchSupported) return;
+      torchOn = !torchOn;
+      html5QrCode
+        .applyVideoConstraints({ advanced: [{ torch: torchOn }] })
+        .catch(function () {
+          showToast("Linterna no disponible");
+        });
+      torchBtn.classList.toggle("m-scanner-action--active", torchOn);
+    });
+  }
+
+  if (retryBtn) {
+    retryBtn.addEventListener("click", function () {
+      startScanner();
+    });
+  }
+
+  setActiveTab();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startScanner);
+  } else {
+    startScanner();
+  }
+
+  window.addEventListener("pagehide", function () {
+    stopScanner();
+  });
+})();

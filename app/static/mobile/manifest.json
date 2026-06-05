@@ -1,0 +1,38 @@
+{
+  "id": "/m/",
+  "name": "Andes Auto Parts",
+  "short_name": "Andes",
+  "description": "ERP móvil Andes Auto Parts — ventas, stock y catálogo",
+  "start_url": "/m/",
+  "scope": "/m/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "theme_color": "#1B2B6B",
+  "background_color": "#1B2B6B",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/static/mobile/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/mobile/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/mobile/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": []
+}

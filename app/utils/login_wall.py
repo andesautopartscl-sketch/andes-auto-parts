@@ -44,6 +44,8 @@ def is_public_auth_route() -> bool:
     path = request.path or ""
     if path.startswith("/static/"):
         return True
+    if path == "/m/service-worker.js":
+        return True
     ep = request.endpoint
     if ep in PUBLIC_AUTH_ENDPOINTS:
         return True

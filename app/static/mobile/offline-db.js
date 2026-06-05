@@ -1,0 +1,266 @@
+(function (global) {
+  "use strict";
+
+  var DB_NAME = "andes-mobile-offline";
+  var DB_VERSION = 1;
+  var CATALOG_STORE = "catalogo";
+  var VENTAS_STORE = "ventas_recientes";
+  var INGRESOS_STORE = "ingresos_recientes";
+  var META_STORE = "meta";
+  var CATALOG_TTL_MS = 30 * 60 * 1000;
+  var RECENT_LIMIT = 50;
+
+  function openDb() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onerror = function () {
+        reject(req.error);
+      };
+      req.onupgradeneeded = function (ev) {
+        var db = ev.target.result;
+        if (!db.objectStoreNames.contains(CATALOG_STORE)) {
+          var cat = db.createObjectStore(CATALOG_STORE, { keyPath: "codigo" });
+          cat.createIndex("descripcion", "descripcion", { unique: false });
+        }
+        if (!db.objectStoreNames.contains(VENTAS_STORE)) {
+          db.createObjectStore(VENTAS_STORE, { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains(INGRESOS_STORE)) {
+          db.createObjectStore(INGRESOS_STORE, { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains(META_STORE)) {
+          db.createObjectStore(META_STORE, { keyPath: "key" });
+        }
+      };
+      req.onsuccess = function () {
+        resolve(req.result);
+      };
+    });
+  }
+
+  function txStore(db, store, mode) {
+    return db.transaction(store, mode).objectStore(store);
+  }
+
+  function getMeta(db, key) {
+    return new Promise(function (resolve) {
+      var store = txStore(db, META_STORE, "readonly");
+      var req = store.get(key);
+      req.onsuccess = function () {
+        resolve(req.result ? req.result.value : null);
+      };
+      req.onerror = function () {
+        resolve(null);
+      };
+    });
+  }
+
+  function setMeta(db, key, value) {
+    return new Promise(function (resolve, reject) {
+      var store = txStore(db, META_STORE, "readwrite");
+      var req = store.put({ key: key, value: value });
+      req.onsuccess = function () {
+        resolve();
+      };
+      req.onerror = function () {
+        reject(req.error);
+      };
+    });
+  }
+
+  function putCatalogItems(db, items) {
+    return new Promise(function (resolve, reject) {
+      var tx = db.transaction(CATALOG_STORE, "readwrite");
+      var store = tx.objectStore(CATALOG_STORE);
+      store.clear();
+      items.forEach(function (item) {
+        store.put(item);
+      });
+      tx.oncomplete = function () {
+        resolve(items.length);
+      };
+      tx.onerror = function () {
+        reject(tx.error);
+      };
+    });
+  }
+
+  function searchCatalogLocal(db, query, limit) {
+    var q = String(query || "")
+      .trim()
+      .toLowerCase();
+    if (q.length < 2) return Promise.resolve([]);
+    limit = limit || 30;
+    return new Promise(function (resolve) {
+      var out = [];
+      var store = txStore(db, CATALOG_STORE, "readonly");
+      var req = store.openCursor();
+      req.onsuccess = function (ev) {
+        var cursor = ev.target.result;
+        if (!cursor) {
+          resolve(out.slice(0, limit));
+          return;
+        }
+        var row = cursor.value || {};
+        var codigo = String(row.codigo || "").toLowerCase();
+        var desc = String(row.descripcion || "").toLowerCase();
+        var marca = String(row.marca || "").toLowerCase();
+        if (codigo.indexOf(q) !== -1 || desc.indexOf(q) !== -1 || marca.indexOf(q) !== -1) {
+          out.push(row);
+        }
+        if (out.length >= limit * 3) {
+          resolve(out.slice(0, limit));
+          return;
+        }
+        cursor.continue();
+      };
+      req.onerror = function () {
+        resolve([]);
+      };
+    });
+  }
+
+  function getCatalogProduct(db, codigo) {
+    var key = String(codigo || "").trim().toUpperCase();
+    if (!key) return Promise.resolve(null);
+    return new Promise(function (resolve) {
+      var store = txStore(db, CATALOG_STORE, "readonly");
+      var req = store.get(key);
+      req.onsuccess = function () {
+        resolve(req.result || null);
+      };
+      req.onerror = function () {
+        resolve(null);
+      };
+    });
+  }
+
+  function pushRecent(db, storeName, record) {
+    if (!record || record.id == null) return Promise.resolve();
+    return new Promise(function (resolve, reject) {
+      var tx = db.transaction(storeName, "readwrite");
+      var store = tx.objectStore(storeName);
+      store.put(record);
+      var all = [];
+      var cursorReq = store.openCursor(null, "prev");
+      cursorReq.onsuccess = function (ev) {
+        var cursor = ev.target.result;
+        if (cursor) {
+          all.push(cursor.value);
+          if (all.length > RECENT_LIMIT) {
+            store.delete(cursor.value.id);
+          }
+          cursor.continue();
+        }
+      };
+      tx.oncomplete = function () {
+        resolve();
+      };
+      tx.onerror = function () {
+        reject(tx.error);
+      };
+    });
+  }
+
+  function shouldSyncCatalog(lastSync) {
+    if (!lastSync) return true;
+    return Date.now() - Number(lastSync) > CATALOG_TTL_MS;
+  }
+
+  var AndesOfflineDb = {
+    CATALOG_TTL_MS: CATALOG_TTL_MS,
+    open: openDb,
+    shouldSyncCatalog: shouldSyncCatalog,
+    getMeta: getMeta,
+    setMeta: setMeta,
+    syncCatalog: function (apiUrl, options) {
+      options = options || {};
+      return openDb().then(function (db) {
+        return getMeta(db, "catalog_synced_at").then(function (lastSync) {
+          if (!options.force && !shouldSyncCatalog(lastSync)) {
+            return { skipped: true, count: 0 };
+          }
+          return fetch(apiUrl, {
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+            credentials: "same-origin",
+          })
+            .then(function (res) {
+              return res.json();
+            })
+            .then(function (data) {
+              var items = (data && data.items) || [];
+              return putCatalogItems(db, items).then(function (count) {
+                return setMeta(db, "catalog_synced_at", Date.now()).then(function () {
+                  return { skipped: false, count: count };
+                });
+              });
+            });
+        });
+      });
+    },
+    searchLocal: function (query, limit) {
+      return openDb().then(function (db) {
+        return searchCatalogLocal(db, query, limit);
+      });
+    },
+    getProduct: function (codigo) {
+      return openDb().then(function (db) {
+        return getCatalogProduct(db, codigo);
+      });
+    },
+    recordVenta: function (venta) {
+      return openDb().then(function (db) {
+        return pushRecent(db, VENTAS_STORE, venta);
+      });
+    },
+    recordIngreso: function (ingreso) {
+      return openDb().then(function (db) {
+        return pushRecent(db, INGRESOS_STORE, ingreso);
+      });
+    },
+    getRecentVentas: function () {
+      return openDb().then(function (db) {
+        return new Promise(function (resolve) {
+          var out = [];
+          var store = txStore(db, VENTAS_STORE, "readonly");
+          var req = store.openCursor(null, "prev");
+          req.onsuccess = function (ev) {
+            var cursor = ev.target.result;
+            if (!cursor || out.length >= RECENT_LIMIT) {
+              resolve(out);
+              return;
+            }
+            out.push(cursor.value);
+            cursor.continue();
+          };
+          req.onerror = function () {
+            resolve([]);
+          };
+        });
+      });
+    },
+    getRecentIngresos: function () {
+      return openDb().then(function (db) {
+        return new Promise(function (resolve) {
+          var out = [];
+          var store = txStore(db, INGRESOS_STORE, "readonly");
+          var req = store.openCursor(null, "prev");
+          req.onsuccess = function (ev) {
+            var cursor = ev.target.result;
+            if (!cursor || out.length >= RECENT_LIMIT) {
+              resolve(out);
+              return;
+            }
+            out.push(cursor.value);
+            cursor.continue();
+          };
+          req.onerror = function () {
+            resolve([]);
+          };
+        });
+      });
+    },
+  };
+
+  global.AndesOfflineDb = AndesOfflineDb;
+})(typeof window !== "undefined" ? window : self);

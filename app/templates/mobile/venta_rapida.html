@@ -1,0 +1,131 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}Venta rápida — Andes Mobile{% endblock %}
+
+{% block head_extra %}
+<script>
+  window.ANDES_VENTA_RAPIDA = {
+    puedeVender: {{ 'true' if puede_vender else 'false' }},
+    apiClientes: "{{ url_for('mobile.api_clientes') }}",
+    apiProducto: "{{ url_for('mobile.api_venta_producto', codigo='__CODE__') }}",
+    apiGuardar: "{{ url_for('mobile.api_venta_rapida') }}",
+    urlEscaner: "{{ url_for('mobile.escaner', modo='venta') }}",
+    urlDetalle: "{{ url_for('mobile.venta', doc_id=0) }}".replace("/0", "/"),
+    urlNueva: "{{ url_for('mobile.venta_rapida') }}"
+  };
+</script>
+{% endblock %}
+
+{% block content %}
+<article class="m-wizard" id="venta-rapida-root" data-puede-vender="{{ '1' if puede_vender else '0' }}">
+  <header class="m-wizard__head">
+    <h1 class="m-wizard__title">Venta rápida</h1>
+    <ol class="m-wizard__steps" aria-label="Pasos">
+      <li class="m-wizard__step m-wizard__step--active" data-step-indicator="1">Cliente</li>
+      <li class="m-wizard__step" data-step-indicator="2">Productos</li>
+      <li class="m-wizard__step" data-step-indicator="3">Pago</li>
+    </ol>
+  </header>
+
+  {% if not puede_vender %}
+  <p class="m-alert m-alert--error">No tienes permiso para registrar ventas en el ERP.</p>
+  {% endif %}
+
+  <!-- Paso 1 -->
+  <section class="m-wizard__panel" data-step="1">
+    <label class="m-field">
+      <span class="m-field__label">Buscar cliente (RUT o nombre)</span>
+      <input type="search" class="m-field__input" id="vr-cliente-q" placeholder="Ej: 12.345.678-9 o nombre" autocomplete="off">
+    </label>
+    <div id="vr-clientes-list" class="m-card-select-list" role="listbox" aria-label="Clientes"></div>
+    <button type="button" class="m-btn m-btn--secondary m-btn--block" id="vr-consumidor-final">
+      Cliente sin registrar
+    </button>
+    <p class="m-hint" id="vr-cliente-seleccionado">Ningún cliente seleccionado</p>
+    <button type="button" class="m-btn m-btn--primary m-btn--block" id="vr-next-1" disabled>Siguiente</button>
+  </section>
+
+  <!-- Paso 2 -->
+  <section class="m-wizard__panel" data-step="2" hidden>
+    <div class="m-wizard__scan-row">
+      <a href="{{ url_for('mobile.escaner', modo='venta') }}" class="m-btn m-btn--primary m-btn--block m-btn--lg">
+        &#128247; Escanear producto
+      </a>
+      <button type="button" class="m-btn m-btn--secondary m-btn--block" id="vr-toggle-buscar">
+        &#128269; Buscar manualmente
+      </button>
+    </div>
+    <div id="vr-buscar-wrap" class="m-wizard__inline-search" hidden>
+      <input type="search" class="m-field__input" id="vr-producto-q" placeholder="Código o descripción">
+      <div id="vr-productos-list" class="m-card-select-list"></div>
+    </div>
+    <ul class="m-cart" id="vr-cart" aria-label="Productos en la venta"></ul>
+    <p class="m-empty" id="vr-cart-empty">Agrega productos escaneando o buscando.</p>
+    <div class="m-cart-total">
+      <span>Total parcial (con IVA)</span>
+      <strong id="vr-total-parcial">$0</strong>
+    </div>
+    <div class="m-wizard__nav-row">
+      <button type="button" class="m-btn m-btn--secondary" id="vr-back-2">Atrás</button>
+      <button type="button" class="m-btn m-btn--primary" id="vr-next-2" disabled>Siguiente</button>
+    </div>
+  </section>
+
+  <!-- Paso 3 -->
+  <section class="m-wizard__panel" data-step="3" hidden>
+    <label class="m-field">
+      <span class="m-field__label">Método de pago</span>
+      <select class="m-field__input m-field__input--lg" id="vr-metodo-pago">
+        <option value="efectivo">Efectivo</option>
+        <option value="transferencia">Transferencia</option>
+        <option value="tarjeta">Tarjeta</option>
+        <option value="credito">Crédito</option>
+      </select>
+    </label>
+    <label class="m-field">
+      <span class="m-field__label">Observación (opcional)</span>
+      <textarea class="m-field__input" id="vr-observacion" rows="2" maxlength="300" placeholder="Notas de la venta"></textarea>
+    </label>
+    <dl class="m-resumen">
+      <div class="m-resumen__row"><dt>Subtotal</dt><dd id="vr-res-subtotal">$0</dd></div>
+      <div class="m-resumen__row"><dt>IVA (19%)</dt><dd id="vr-res-iva">$0</dd></div>
+      <div class="m-resumen__row m-resumen__row--total"><dt>Total</dt><dd id="vr-res-total">$0</dd></div>
+    </dl>
+    <div class="m-wizard__nav-row">
+      <button type="button" class="m-btn m-btn--secondary" id="vr-back-3">Atrás</button>
+      <button type="button" class="m-btn m-btn--primary m-btn--lg" id="vr-confirmar" disabled data-requires-online>
+        <span id="vr-confirmar-label">Confirmar venta</span>
+        <span class="m-spinner" id="vr-spinner" hidden aria-hidden="true"></span>
+      </button>
+    </div>
+  </section>
+
+  <!-- Éxito -->
+  <section class="m-wizard__panel m-wizard__success" data-step="ok" hidden>
+    <div class="m-success-icon" aria-hidden="true">&#10003;</div>
+    <h2 class="m-wizard__success-title">Venta registrada</h2>
+    <p class="m-wizard__success-doc" id="vr-success-numero"></p>
+    <p class="m-hint" id="vr-success-detalle"></p>
+    <a href="#" class="m-btn m-btn--primary m-btn--block" id="vr-ver-detalle">Ver detalle</a>
+    <a href="{{ url_for('mobile.venta_rapida') }}" class="m-btn m-btn--secondary m-btn--block">Nueva venta</a>
+  </section>
+
+  <div id="vr-toast" class="m-toast" role="alert" hidden></div>
+</article>
+
+<div id="vr-modal" class="m-modal" hidden>
+  <div class="m-modal__backdrop" data-vr-modal-close></div>
+  <div class="m-modal__panel" role="dialog" aria-labelledby="vr-modal-title">
+    <h2 id="vr-modal-title" class="m-modal__title">¿Confirmar venta?</h2>
+    <p id="vr-modal-text" class="m-modal__text"></p>
+    <div class="m-modal__actions">
+      <button type="button" class="m-btn m-btn--secondary" data-vr-modal-close>Cancelar</button>
+      <button type="button" class="m-btn m-btn--primary" id="vr-modal-ok" data-requires-online>Sí, confirmar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='mobile/venta_rapida.js') }}" defer></script>
+{% endblock %}

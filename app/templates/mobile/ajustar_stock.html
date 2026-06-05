@@ -1,0 +1,100 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}Ajustar {{ s.codigo }} — Andes Mobile{% endblock %}
+
+{% block head_extra %}
+<script>
+  window.ANDES_AJUSTE_STOCK = {
+    apiGuardar: "{{ url_for('mobile.api_ajustar_stock') }}",
+    urlStock: "{{ url_for('mobile.stock', codigo=s.codigo) }}",
+    codigo: "{{ s.codigo }}",
+    lineas: {{ s.lineas | tojson }}
+  };
+</script>
+{% endblock %}
+
+{% block content %}
+<article class="m-ajuste-stock" id="ajuste-stock-root">
+  <header class="m-ajuste-stock__head">
+    <h1 class="m-ajuste-stock__code">{{ s.codigo }}</h1>
+    <p class="m-ajuste-stock__desc">{{ s.descripcion }}</p>
+    <p class="m-ajuste-stock__total">Stock total: <strong>{{ s.stock_total }}</strong></p>
+  </header>
+
+  <section class="m-section">
+    <h2 class="m-section__title">Stock por bodega</h2>
+    <ul class="m-list">
+      {% for l in s.lineas %}
+      <li class="m-list-item m-list-item--static">
+        <span class="m-list-item__main">
+          {{ l.bodega }}{% if l.marca %} · {{ l.marca }}{% endif %}
+        </span>
+        <span class="m-list-item__meta">{{ l.stock }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <form id="ajuste-stock-form" class="m-form" novalidate>
+    <label class="m-field">
+      <span class="m-field__label">Bodega</span>
+      <select class="m-field__input m-field__input--lg" name="bodega" id="as-bodega" required>
+        {% for b in s.bodegas %}
+        <option value="{{ b }}">{{ b }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    {% if s.requiere_variante %}
+    <label class="m-field">
+      <span class="m-field__label">Marca / variante</span>
+      <select class="m-field__input m-field__input--lg" name="marca" id="as-marca" required>
+        <option value="">Selecciona marca</option>
+      </select>
+    </label>
+    {% else %}
+    <input type="hidden" name="marca" id="as-marca" value="{{ s.lineas[0].marca if s.lineas else '' }}">
+    {% endif %}
+
+    <fieldset class="m-field">
+      <legend class="m-field__label">Tipo de movimiento</legend>
+      <div class="m-segmented">
+        {% for t in tipos %}
+        <label class="m-segmented__item">
+          <input type="radio" name="tipo" value="{{ t }}"{% if loop.first %} checked{% endif %}>
+          <span>{{ t | capitalize }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <p class="m-hint" id="as-tipo-hint">Ingreso: suma unidades al stock actual.</p>
+
+    <label class="m-field">
+      <span class="m-field__label" id="as-cantidad-label">Cantidad</span>
+      <input type="number" class="m-field__input m-field__input--lg" name="cantidad" id="as-cantidad"
+             inputmode="numeric" min="1" step="1" required placeholder="0">
+    </label>
+
+    <label class="m-field">
+      <span class="m-field__label">Motivo / observación <em>(obligatorio)</em></span>
+      <textarea class="m-field__input" name="motivo" id="as-motivo" rows="3" maxlength="255" required
+                placeholder="Ej: Conteo físico, merma, corrección…"></textarea>
+    </label>
+
+    <p class="m-hint" id="as-stock-actual">Stock en bodega seleccionada: —</p>
+
+    <button type="submit" class="m-btn m-btn--primary m-btn--block m-btn--lg" id="as-submit" data-requires-online>
+      <span id="as-submit-label">Confirmar</span>
+      <span class="m-spinner" id="as-spinner" hidden></span>
+    </button>
+    <a href="{{ url_for('mobile.stock', codigo=s.codigo) }}" class="m-btn m-btn--secondary m-btn--block">Cancelar</a>
+  </form>
+
+  <div id="as-toast" class="m-toast" role="alert" hidden></div>
+</article>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='mobile/ajuste_stock.js') }}" defer></script>
+{% endblock %}

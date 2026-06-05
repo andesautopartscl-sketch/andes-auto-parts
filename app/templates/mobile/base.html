@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1B2B6B">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Andes">
+  <title>{% block title %}Andes Mobile{% endblock %}</title>
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <link rel="manifest" href="{{ url_for('static', filename='mobile/manifest.json') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='mobile/icons/icon-192.png') }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='mobile/icons/icon-192.png') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" as="style">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/mobile.min.css') }}">
+  {% block head_extra %}{% endblock %}
+</head>
+<body
+  class="mobile-app{% if scanner_layout %} mobile-app--scanner{% endif %}"
+  data-active-nav="{{ active_nav or '' }}"
+  data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
+>
+  <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
+    <img
+      src="{{ url_for('static', filename='mobile/icons/icon-192.png') }}"
+      alt=""
+      class="mobile-splash__logo"
+      width="96"
+      height="96"
+    >
+    <p class="mobile-splash__title">Andes Auto Parts</p>
+    <p class="mobile-splash__subtitle">ERP móvil</p>
+  </div>
+
+  <div id="catalog-sync-skeleton" class="catalog-sync-skeleton" hidden aria-hidden="true">
+    <div class="catalog-sync-skeleton__bar"></div>
+    <p class="catalog-sync-skeleton__text">Sincronizando catálogo…</p>
+  </div>
+
+  {% if not scanner_layout %}
+  <header class="mobile-header">
+    <div class="mobile-header__brand">
+      <a href="{{ url_for('mobile.home') }}" class="mobile-header__brand-link">
+        <img
+          src="{{ 'logo_andes.png' | static_or_cloud }}"
+          alt="Andes Auto Parts"
+          class="mobile-header__logo"
+          width="36"
+          height="36"
+          loading="eager"
+          decoding="async"
+        >
+        <span class="mobile-header__title">Andes</span>
+      </a>
+    </div>
+    <div class="mobile-header__user">
+      {% if usuario_foto_url %}
+      <img src="{{ usuario_foto_url }}" alt="" class="mobile-header__avatar" width="32" height="32" loading="lazy" decoding="async">
+      {% endif %}
+      <span class="mobile-header__name">{{ usuario_nombre or 'Usuario' }}</span>
+    </div>
+  </header>
+  {% endif %}
+
+  <main class="mobile-main{% if scanner_layout %} mobile-main--scanner{% endif %}">
+    {% block content %}{% endblock %}
+  </main>
+
+  <div id="mobile-mas-menu" class="m-mas-menu" hidden>
+    <div class="m-mas-menu__backdrop" data-mas-close></div>
+    <nav class="m-mas-menu__panel" aria-label="Más opciones">
+      <h2 class="m-mas-menu__title">Más</h2>
+      <a href="{{ url_for('mobile.dashboard') }}" class="m-mas-menu__link">Dashboard</a>
+      <a href="{{ url_for('mobile.ingresos') }}" class="m-mas-menu__link">Ingresos</a>
+      <a href="{{ url_for('mobile.stock_critico') }}" class="m-mas-menu__link">Stock crítico</a>
+      <a href="{{ url_for('mobile.reportes') }}" class="m-mas-menu__link">Reportes</a>
+      <button type="button" class="m-mas-menu__close" data-mas-close>Cerrar</button>
+    </nav>
+  </div>
+
+  <nav class="mobile-nav" aria-label="Navegación principal">
+    <a href="{{ url_for('mobile.home') }}" class="mobile-nav__item{% if active_nav == 'inicio' %} mobile-nav__item--active{% endif %}" aria-label="Inicio">
+      <span class="mobile-nav__icon" aria-hidden="true">&#127968;</span>
+      <span class="mobile-nav__label">Inicio</span>
+    </a>
+    <a href="{{ url_for('mobile.buscar') }}" class="mobile-nav__item{% if active_nav == 'buscar' %} mobile-nav__item--active{% endif %}" aria-label="Buscar">
+      <span class="mobile-nav__icon" aria-hidden="true">&#128269;</span>
+      <span class="mobile-nav__label">Buscar</span>
+    </a>
+    <a href="{{ url_for('mobile.escaner') }}" class="mobile-nav__item{% if active_nav == 'escaner' %} mobile-nav__item--active{% endif %}" aria-label="Escáner">
+      <span class="mobile-nav__icon" aria-hidden="true">&#128248;</span>
+      <span class="mobile-nav__label">Escáner</span>
+    </a>
+    <a href="{{ url_for('mobile.ventas') }}" class="mobile-nav__item{% if active_nav == 'ventas' %} mobile-nav__item--active{% endif %}" aria-label="Ventas">
+      <span class="mobile-nav__icon" aria-hidden="true">&#128176;</span>
+      <span class="mobile-nav__label">Ventas</span>
+    </a>
+    <button type="button" class="mobile-nav__item{% if active_nav == 'mas' %} mobile-nav__item--active{% endif %}" id="mobile-mas-toggle" aria-label="Más" aria-expanded="false" aria-controls="mobile-mas-menu">
+      <span class="mobile-nav__icon" aria-hidden="true">&#8942;</span>
+      <span class="mobile-nav__label">Más</span>
+    </button>
+  </nav>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker
+          .register("{{ url_for('mobile.service_worker') }}", { scope: "/m/" })
+          .catch(function () {});
+      });
+    }
+  </script>
+  <script src="{{ url_for('static', filename='mobile/offline-db.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='mobile/offline-ui.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='mobile/splash.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='mobile/mobile.min.js') }}" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

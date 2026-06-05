@@ -1,0 +1,50 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}{{ i.numero }} — Andes Mobile{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('mobile.ingresos') }}" class="m-back" aria-label="Volver">
+  <span aria-hidden="true">&#8592;</span> Ingresos
+</a>
+
+<article class="m-doc">
+  <header class="m-doc__head">
+    <h1 class="m-doc__title">{{ i.numero }}</h1>
+    <p class="m-doc__date">{{ i.fecha }}</p>
+  </header>
+
+  <section class="m-section">
+    <h2 class="m-section__title">Proveedor</h2>
+    <p class="m-doc__party-name">{{ i.proveedor or 'Sin proveedor' }}</p>
+    {% if i.proveedor_rut %}<p class="m-hint">RUT {{ i.proveedor_rut }}</p>{% endif %}
+  </section>
+
+  <section class="m-section">
+    <h2 class="m-section__title">Líneas</h2>
+    <ul class="m-list m-list--compact">
+      {% for it in i.items %}
+      <li class="m-list-item m-list-item--static">
+        <span class="m-list-item__main">{{ it.codigo }} × {{ it.cantidad }}</span>
+        <span class="m-list-item__sub">{{ it.descripcion or it.marca }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="m-totals">
+    <div class="m-totals__row"><span>Neto</span><span>{{ i.total_neto_fmt }}</span></div>
+    <div class="m-totals__row m-totals__row--total"><span>Total c/IVA</span><span>{{ i.total_fmt }}</span></div>
+  </section>
+
+  {% if i.metodo_pago %}
+  <p class="m-hint">Pago: <strong>{{ i.metodo_pago }}</strong></p>
+  {% endif %}
+</article>
+<script type="application/json" id="mobile-ingreso-json">{{ {
+  "id": i.id,
+  "numero": i.numero,
+  "proveedor": i.proveedor,
+  "total_fmt": i.total_fmt,
+  "fecha": i.fecha
+} | tojson }}</script>
+{% endblock %}
