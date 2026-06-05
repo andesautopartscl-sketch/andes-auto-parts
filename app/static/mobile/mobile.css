@@ -1494,6 +1494,49 @@ body.mobile-app--scanner .mobile-nav__item--active {
   color: var(--andes-navy);
 }
 
+.mobile-sw-update-banner {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--mobile-nav-height) + var(--safe-bottom) + 10px);
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #1b2b6b;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.28);
+  font-size: 0.8125rem;
+}
+
+.mobile-sw-update-banner[hidden] {
+  display: none !important;
+}
+
+.mobile-sw-update-banner__text {
+  flex: 1;
+  font-weight: 600;
+}
+
+.mobile-sw-update-banner__btn {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  color: #1b2b6b;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+body.mobile-app--scanner .mobile-sw-update-banner {
+  bottom: calc(var(--safe-bottom) + 12px);
+}
+
 .mobile-offline-banner {
   position: fixed;
   top: calc(var(--mobile-header-height) + var(--safe-top));

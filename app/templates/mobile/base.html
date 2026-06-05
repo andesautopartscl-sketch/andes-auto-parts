@@ -24,6 +24,7 @@
   class="mobile-app{% if scanner_layout %} mobile-app--scanner{% endif %}"
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
+  data-sw-url="{{ url_for('mobile.service_worker') }}"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
     <img
@@ -106,15 +107,6 @@
     </button>
   </nav>
 
-  <script>
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", function () {
-        navigator.serviceWorker
-          .register("{{ url_for('mobile.service_worker') }}", { scope: "/m/" })
-          .catch(function () {});
-      });
-    }
-  </script>
   <script src="{{ url_for('static', filename='mobile/offline-db.min.js') }}" defer></script>
   <script src="{{ url_for('static', filename='mobile/offline-ui.min.js') }}" defer></script>
   <script src="{{ url_for('static', filename='mobile/splash.min.js') }}" defer></script>

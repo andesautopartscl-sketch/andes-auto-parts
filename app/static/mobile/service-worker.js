@@ -1,5 +1,6 @@
 /* Andes Mobile PWA — service worker v2 */
-const SW_VERSION = "andes-mobile-v6";
+const SW_VERSION = "andes-mobile-v7";
+const CACHE_PREFIX = `${SW_VERSION}-`;
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
 const API_DASH_CACHE = `${SW_VERSION}-api-dash`;
@@ -162,9 +163,9 @@ self.addEventListener("install", (event) => {
           }
         })
       );
+      self.skipWaiting();
     })()
   );
-  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -173,12 +174,17 @@ self.addEventListener("activate", (event) => {
       const keys = await caches.keys();
       await Promise.all(
         keys
-          .filter((key) => key.startsWith("andes-mobile-") && !key.startsWith(SW_VERSION))
+          .filter((key) => key.startsWith("andes-mobile-") && !key.startsWith(CACHE_PREFIX))
           .map((key) => caches.delete(key))
       );
       await self.clients.claim();
     })()
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (!event.data || event.data.type !== "SKIP_WAITING") return;
+  self.skipWaiting();
 });
 
 self.addEventListener("fetch", (event) => {

@@ -192,7 +192,141 @@
     });
   }
 
+  function initPwaAutoUpdate() {
+    if (!("serviceWorker" in navigator)) return;
+
+    var body = document.body;
+    var swUrl = (body && body.getAttribute("data-sw-url")) || "/m/service-worker.js";
+    var UPDATE_INTERVAL_MS = 30 * 60 * 1000;
+    var BANNER_FALLBACK_MS = 4500;
+    var reloadPending = false;
+    var bannerEl = null;
+    var bannerTimer = null;
+
+    function logUpdate(msg) {
+      console.log("[Andes PWA Update]", msg);
+    }
+
+    function ensureUpdateBanner() {
+      if (bannerEl) return bannerEl;
+      bannerEl = document.createElement("div");
+      bannerEl.id = "mobile-sw-update-banner";
+      bannerEl.className = "mobile-sw-update-banner";
+      bannerEl.setAttribute("role", "status");
+      bannerEl.hidden = true;
+      bannerEl.innerHTML =
+        '<span class="mobile-sw-update-banner__text">Nueva versión disponible — Actualizar</span>' +
+        '<button type="button" class="mobile-sw-update-banner__btn" id="mobile-sw-update-btn">Actualizar</button>';
+      document.body.appendChild(bannerEl);
+      return bannerEl;
+    }
+
+    function showUpdateBanner(registration) {
+      var banner = ensureUpdateBanner();
+      banner.hidden = false;
+      document.body.classList.add("mobile-app--update-available");
+      var btn = document.getElementById("mobile-sw-update-btn");
+      if (btn && !btn._andesBound) {
+        btn._andesBound = true;
+        btn.addEventListener("click", function () {
+          applyUpdate(registration, false);
+        });
+      }
+    }
+
+    function hideUpdateBanner() {
+      if (!bannerEl) return;
+      bannerEl.hidden = true;
+      document.body.classList.remove("mobile-app--update-available");
+    }
+
+    function scheduleBannerFallback(registration) {
+      clearTimeout(bannerTimer);
+      bannerTimer = setTimeout(function () {
+        if (reloadPending) return;
+        if (registration.waiting) {
+          logUpdate("Mostrando banner de actualización (fallback)");
+          showUpdateBanner(registration);
+        }
+      }, BANNER_FALLBACK_MS);
+    }
+
+    function applyUpdate(registration, silent) {
+      var waiting = registration.waiting;
+      if (!waiting) return;
+      logUpdate(silent ? "Actualización silenciosa" : "Actualización manual");
+      if (silent) hideUpdateBanner();
+      reloadPending = true;
+      waiting.postMessage({ type: "SKIP_WAITING" });
+      if (!silent) {
+        window.setTimeout(function () {
+          window.location.reload();
+        }, 400);
+      }
+    }
+
+    function onUpdateReady(registration) {
+      if (!navigator.serviceWorker.controller) return;
+      if (!registration.waiting) return;
+      logUpdate("Nueva versión detectada");
+      applyUpdate(registration, true);
+      scheduleBannerFallback(registration);
+    }
+
+    function watchInstallingWorker(registration, worker) {
+      if (!worker) return;
+      worker.addEventListener("statechange", function () {
+        logUpdate("SW state:", worker.state);
+        if (worker.state === "installed") {
+          onUpdateReady(registration);
+        }
+      });
+    }
+
+    function watchRegistration(registration) {
+      if (registration.waiting && navigator.serviceWorker.controller) {
+        onUpdateReady(registration);
+      }
+
+      registration.addEventListener("updatefound", function () {
+        logUpdate("updatefound");
+        watchInstallingWorker(registration, registration.installing);
+      });
+    }
+
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (!reloadPending) {
+        reloadPending = true;
+      }
+      logUpdate("controllerchange — recargando");
+      window.location.reload();
+    });
+
+    navigator.serviceWorker
+      .register(swUrl, { scope: "/m/", updateViaCache: "none" })
+      .then(function (registration) {
+        logUpdate("Service worker registrado");
+        watchRegistration(registration);
+        if (registration.waiting && navigator.serviceWorker.controller) {
+          onUpdateReady(registration);
+        }
+        registration.update().catch(function () {});
+        setInterval(function () {
+          registration.update().catch(function () {});
+        }, UPDATE_INTERVAL_MS);
+        document.addEventListener("visibilitychange", function () {
+          if (!document.hidden) {
+            registration.update().catch(function () {});
+          }
+        });
+      })
+      .catch(function (err) {
+        console.warn("[Andes PWA Update] registro falló:", err);
+      });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
+    initPwaAutoUpdate();
     initMasMenu();
     initSearchDebounce();
     initPullToRefresh();
