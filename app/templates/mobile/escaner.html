@@ -2,9 +2,7 @@
 
 {% block title %}Escáner — Andes Mobile{% endblock %}
 
-{% block head_extra %}
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
-{% endblock %}
+{% block head_extra %}{% endblock %}
 
 {% block content %}
 <div class="m-scanner" id="mobile-scanner-root"
@@ -42,9 +40,9 @@
       <p class="m-scanner__denied-title">No se pudo acceder a la cámara</p>
       <p class="m-scanner__denied-text">
         Permite el acceso a la cámara en la configuración del navegador.
-        En Chrome: ícono del candado en la barra de direcciones → Permisos → Cámara → Permitir.
-        Luego recarga esta página.
+        En Chrome: Ajustes del sitio → Cámara → Permitir, luego reintenta.
       </p>
+      <p class="m-scanner__denied-detail" id="scanner-error-detail"></p>
       <button type="button" class="m-btn m-btn--primary" id="scanner-retry-btn">Reintentar</button>
     </div>
   </div>
@@ -71,5 +69,6 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="{{ url_for('static', filename='mobile/scanner.js') }}" defer></script>
 {% endblock %}

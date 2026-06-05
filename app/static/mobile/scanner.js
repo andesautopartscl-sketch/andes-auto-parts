@@ -1,8 +1,31 @@
 (function () {
   "use strict";
 
+  var LOG_PREFIX = "[Andes Scanner]";
+
+  function debugLog() {
+    var args = Array.prototype.slice.call(arguments);
+    args.unshift(LOG_PREFIX);
+    console.log.apply(console, args);
+  }
+
+  function debugWarn() {
+    var args = Array.prototype.slice.call(arguments);
+    args.unshift(LOG_PREFIX);
+    console.warn.apply(console, args);
+  }
+
+  function debugError() {
+    var args = Array.prototype.slice.call(arguments);
+    args.unshift(LOG_PREFIX);
+    console.error.apply(console, args);
+  }
+
   var root = document.getElementById("mobile-scanner-root");
-  if (!root || typeof Html5Qrcode === "undefined") return;
+  if (!root) {
+    debugWarn("mobile-scanner-root no encontrado");
+    return;
+  }
 
   var readerId = "qr-reader";
   var modo = (root.getAttribute("data-modo") || "qr").toLowerCase();
@@ -14,6 +37,7 @@
   var hintEl = document.getElementById("scanner-hint");
   var toastEl = document.getElementById("mobile-toast");
   var deniedEl = document.getElementById("scanner-permission-denied");
+  var deniedDetailEl = document.getElementById("scanner-error-detail");
   var retryBtn = document.getElementById("scanner-retry-btn");
   var torchBtn = document.getElementById("scanner-torch-btn");
   var switchBtn = document.getElementById("scanner-switch-btn");
@@ -22,6 +46,7 @@
   var html5QrCode = null;
   var cameras = [];
   var cameraIndex = 0;
+  var useFacingMode = true;
   var torchOn = false;
   var torchSupported = false;
   var paused = false;
@@ -116,15 +141,23 @@
     updateHint();
   }
 
-  function scannerConfig() {
+  function scannerConfig(facingMode) {
+    var videoConstraints = {
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+    };
+    if (facingMode) {
+      videoConstraints.facingMode = facingMode;
+    }
     return {
       fps: 10,
       qrbox: function (viewfinderWidth, viewfinderHeight) {
         var size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72);
         return { width: size, height: Math.floor(size * 0.85) };
       },
-      aspectRatio: 1.0,
+      aspectRatio: 1.777778,
       disableFlip: false,
+      videoConstraints: videoConstraints,
     };
   }
 
@@ -138,28 +171,67 @@
     return modo === "qr" ? QR_FORMATS : BARCODE_FORMATS;
   }
 
-  function preferredCameraId() {
-    if (!cameras.length) return { facingMode: "environment" };
-    var back = cameras.find(function (c) {
-      return /back|rear|environment|trasera/i.test(c.label || "");
-    });
-    var cam = back || cameras[cameraIndex] || cameras[0];
-    return cam ? { deviceId: { exact: cam.id } } : { facingMode: "environment" };
+  function cameraConfigForAttempt(attempt) {
+    if (attempt === 0) {
+      debugLog("Intento cámara: facingMode environment");
+      return { facingMode: "environment" };
+    }
+    if (attempt === 1) {
+      debugLog("Intento cámara: facingMode user (frontal)");
+      return { facingMode: "user" };
+    }
+    if (cameras.length) {
+      var cam = cameras[cameraIndex % cameras.length];
+      debugLog("Intento cámara por deviceId:", cam.id, cam.label || "(sin label)");
+      return { deviceId: { exact: cam.id } };
+    }
+    debugLog("Intento cámara: facingMode environment (último recurso)");
+    return { facingMode: "environment" };
   }
 
-  function showDenied(show) {
+  function showDenied(show, message) {
     if (!deniedEl) return;
     deniedEl.hidden = !show;
+    if (deniedDetailEl && message) {
+      deniedDetailEl.textContent = message;
+    }
   }
 
   function stopScanner() {
     if (!html5QrCode) return Promise.resolve();
+    debugLog("Deteniendo escáner…");
     return html5QrCode
       .stop()
       .then(function () {
         return html5QrCode.clear();
       })
-      .catch(function () {});
+      .catch(function (err) {
+        debugWarn("stop/clear:", err && err.message ? err.message : err);
+      });
+  }
+
+  function verifyVideoStream() {
+    var reader = document.getElementById(readerId);
+    if (!reader) {
+      debugWarn("Contenedor #qr-reader no encontrado tras start");
+      return false;
+    }
+    var video = reader.querySelector("video");
+    if (!video) {
+      debugWarn("Elemento <video> no creado por html5-qrcode");
+      return false;
+    }
+    debugLog("Video encontrado:", {
+      readyState: video.readyState,
+      videoWidth: video.videoWidth,
+      videoHeight: video.videoHeight,
+      paused: video.paused,
+      srcObject: !!video.srcObject,
+    });
+    if (!video.srcObject && video.readyState < 2) {
+      return false;
+    }
+    return true;
   }
 
   function refreshTorchSupport() {
@@ -170,52 +242,110 @@
       if (track && typeof track.getCapabilities === "function") {
         var caps = track.getCapabilities();
         torchSupported = !!(caps && caps.torch);
+        debugLog("Linterna soportada:", torchSupported);
       }
-    } catch (_e) {
+    } catch (err) {
+      debugWarn("getCapabilities torch:", err && err.message ? err.message : err);
       torchSupported = false;
     }
     torchBtn.disabled = !torchSupported;
   }
 
+  function facingFromConfig(config) {
+    if (config && config.facingMode) return config.facingMode;
+    return null;
+  }
+
+  function tryStartWithConfig(config, attempt) {
+    debugLog("Html5Qrcode.start() intento", attempt, "config:", JSON.stringify(config));
+    return html5QrCode.start(
+      config,
+      scannerConfig(facingFromConfig(config)),
+      onScanSuccess,
+      function () {}
+    );
+  }
+
+  function startWithFallbacks() {
+    var maxAttempts = 4;
+    var attempt = 0;
+
+    function next() {
+      if (attempt >= maxAttempts) {
+        var msg =
+          "No se pudo iniciar la cámara tras " +
+          maxAttempts +
+          " intentos. Revisa permisos de cámara en Ajustes → Apps → Chrome.";
+        debugError(msg);
+        showDenied(true, msg);
+        showToast("Cámara no disponible");
+        return Promise.reject(new Error(msg));
+      }
+      var config = cameraConfigForAttempt(attempt);
+      attempt += 1;
+      return tryStartWithConfig(config, attempt)
+        .then(function () {
+          debugLog("Html5Qrcode.start() OK en intento", attempt);
+          if (!verifyVideoStream()) {
+            debugWarn("Stream de video no verificado, reintentando…");
+            return stopScanner().then(next);
+          }
+          refreshTorchSupport();
+          showDenied(false);
+        })
+        .catch(function (err) {
+          var errMsg = (err && err.message) || String(err);
+          debugError("start falló intento", attempt, ":", errMsg);
+          return stopScanner().then(next);
+        });
+    }
+
+    return next();
+  }
+
+  function loadCamerasOptional() {
+    debugLog("Enumerando cámaras (opcional)…");
+    return Html5Qrcode.getCameras()
+      .then(function (devices) {
+        cameras = devices || [];
+        debugLog("Cámaras detectadas:", cameras.length);
+        cameras.forEach(function (cam, idx) {
+          debugLog("  [" + idx + "]", cam.id, cam.label || "(sin label)");
+        });
+      })
+      .catch(function (err) {
+        cameras = [];
+        debugWarn("getCameras() falló (se usará facingMode):", err && err.message ? err.message : err);
+      });
+  }
+
   function startScanner() {
     paused = false;
     showDenied(false);
+    debugLog("startScanner() modo=", modo);
+
     var formats = formatsForMode();
-    if (html5QrCode) {
-      return stopScanner().then(function () {
-        html5QrCode = null;
-        return bootScanner();
-      });
-    }
-    return bootScanner();
-
-    function bootScanner() {
+    var startChain = stopScanner().then(function () {
+      html5QrCode = null;
+      var reader = document.getElementById(readerId);
+      if (reader) {
+        reader.innerHTML = "";
+        reader.style.minHeight = "280px";
+      }
       html5QrCode = formats
-        ? new Html5Qrcode(readerId, { formatsToSupport: formats, verbose: false })
-        : new Html5Qrcode(readerId, { verbose: false });
+        ? new Html5Qrcode(readerId, { formatsToSupport: formats, verbose: true })
+        : new Html5Qrcode(readerId, { verbose: true });
+      debugLog("Instancia Html5Qrcode creada, readerId=", readerId);
+      return loadCamerasOptional().then(function () {
+        return startWithFallbacks();
+      });
+    });
 
-      return Html5Qrcode.getCameras()
-        .then(function (devices) {
-          cameras = devices || [];
-          if (!cameras.length) {
-            showDenied(true);
-            throw new Error("No cameras");
-          }
-          return html5QrCode.start(
-            preferredCameraId(),
-            scannerConfig(),
-            onScanSuccess,
-            function () {}
-          );
-        })
-        .then(function () {
-          refreshTorchSupport();
-        })
-        .catch(function (err) {
-          /* Scanner start failed — UI ya muestra permiso denegado */
-          showDenied(true);
-        });
-    }
+    return startChain.catch(function (err) {
+      var errMsg = (err && err.message) || "Error desconocido al abrir la cámara";
+      debugError("startScanner error final:", errMsg);
+      showDenied(true, errMsg);
+    });
   }
 
   function fetchProducto(codigo) {
@@ -239,6 +369,7 @@
     }
     if (!codigo) return;
 
+    debugLog("Código leído:", codigo);
     paused = true;
     lastScanAt = now;
 
@@ -254,8 +385,6 @@
         var resolved = data.codigo || codigo;
         if (modo === "venta") {
           try {
-            var key = "andes_mobile_venta_scan_pending";
-            var existing = sessionStorage.getItem(key);
             var cartKey = "andes_mobile_venta_wizard";
             var cartRaw = sessionStorage.getItem(cartKey);
             var cart = cartRaw ? JSON.parse(cartRaw) : { items: [] };
@@ -316,11 +445,14 @@
 
   if (switchBtn) {
     switchBtn.addEventListener("click", function () {
-      if (cameras.length < 2) {
-        showToast("Solo hay una cámara disponible");
-        return;
+      if (cameras.length >= 2) {
+        cameraIndex = (cameraIndex + 1) % cameras.length;
+        useFacingMode = false;
+        debugLog("Cambiar cámara → índice", cameraIndex);
+      } else {
+        useFacingMode = !useFacingMode;
+        debugLog("Alternar facingMode, useFacingMode=", useFacingMode);
       }
-      cameraIndex = (cameraIndex + 1) % cameras.length;
       torchOn = false;
       startScanner();
     });
@@ -341,18 +473,48 @@
 
   if (retryBtn) {
     retryBtn.addEventListener("click", function () {
+      debugLog("Reintentar solicitado por usuario");
+      useFacingMode = true;
+      cameraIndex = 0;
       startScanner();
     });
   }
 
-  setActiveTab();
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", startScanner);
-  } else {
+  function bootWhenLibraryReady() {
+    if (typeof Html5Qrcode === "undefined") {
+      debugWarn("Html5Qrcode aún no cargado, esperando…");
+      return false;
+    }
+    debugLog("Html5Qrcode disponible, versión lib OK");
+    setActiveTab();
     startScanner();
+    return true;
+  }
+
+  function waitForLibraryAndBoot() {
+    if (bootWhenLibraryReady()) return;
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries += 1;
+      if (bootWhenLibraryReady()) {
+        clearInterval(timer);
+      } else if (tries >= 60) {
+        clearInterval(timer);
+        var msg = "No se cargó la librería html5-qrcode. Revisa tu conexión y recarga.";
+        debugError(msg);
+        showDenied(true, msg);
+      }
+    }, 100);
   }
 
   window.addEventListener("pagehide", function () {
     stopScanner();
   });
+
+  debugLog("scanner.js cargado, modo=", modo, "readyState=", document.readyState);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", waitForLibraryAndBoot);
+  } else {
+    waitForLibraryAndBoot();
+  }
 })();

@@ -1,5 +1,5 @@
 /* Andes Mobile PWA — service worker v2 */
-const SW_VERSION = "andes-mobile-v2";
+const SW_VERSION = "andes-mobile-v3";
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
 const API_DASH_CACHE = `${SW_VERSION}-api-dash`;
@@ -17,6 +17,9 @@ const PRECACHE_URLS = [
   "/static/mobile/manifest.json",
   "/static/mobile/icons/icon-192.png",
   "/static/mobile/icons/icon-512.png",
+  "/static/mobile/icons/icon-192-maskable.png",
+  "/static/mobile/icons/icon-512-maskable.png",
+  "/static/mobile/icons/apple-touch-icon.png",
 ];
 
 const CDN_ASSETS = [
