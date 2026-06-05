@@ -1,0 +1,58 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}Andes Mobile{% endblock %}
+
+{% block content %}
+<section class="mobile-hero">
+  <h1 class="mobile-hero__title">Andes Mobile</h1>
+  <p class="mobile-hero__subtitle">Hola, <strong>{{ usuario_nombre or 'Usuario' }}</strong></p>
+</section>
+
+<section class="mobile-sections" aria-label="Accesos rápidos">
+  <a href="{{ url_for('mobile.dashboard') }}" class="mobile-card mobile-card--link">
+    <span class="mobile-card__icon" aria-hidden="true">&#128202;</span>
+    <h2 class="mobile-card__title">Dashboard</h2>
+    <p class="mobile-card__status">Ventas e ingresos del día</p>
+  </a>
+  <a href="{{ url_for('mobile.buscar') }}" class="mobile-card mobile-card--link">
+    <span class="mobile-card__icon" aria-hidden="true">&#128269;</span>
+    <h2 class="mobile-card__title">Buscar</h2>
+    <p class="mobile-card__status">Código, proveedor o descripción</p>
+  </a>
+  <a href="{{ url_for('mobile.ventas') }}" class="mobile-card mobile-card--link">
+    <span class="mobile-card__icon" aria-hidden="true">&#128176;</span>
+    <h2 class="mobile-card__title">Ventas</h2>
+    <p class="mobile-card__status">Hoy, ayer o semana</p>
+  </a>
+  <a href="{{ url_for('mobile.ingresos') }}" class="mobile-card mobile-card--link">
+    <span class="mobile-card__icon" aria-hidden="true">&#128230;</span>
+    <h2 class="mobile-card__title">Ingresos</h2>
+    <p class="mobile-card__status">Últimos 20 documentos</p>
+  </a>
+  <a href="{{ url_for('mobile.stock_critico') }}" class="mobile-card mobile-card--link mobile-card--alert">
+    <span class="mobile-card__icon" aria-hidden="true">&#9888;</span>
+    <h2 class="mobile-card__title">Stock crítico</h2>
+    <p class="mobile-card__status">Bajo mínimo configurado</p>
+  </a>
+  <a href="{{ url_for('mobile.reportes') }}" class="mobile-card mobile-card--link">
+    <span class="mobile-card__icon" aria-hidden="true">&#128200;</span>
+    <h2 class="mobile-card__title">Reportes</h2>
+    <p class="mobile-card__status">Semana, mes y rankings</p>
+  </a>
+  <a href="{{ url_for('mobile.escaner') }}" class="mobile-card mobile-card--link">
+    <span class="mobile-card__icon" aria-hidden="true">&#128248;</span>
+    <h2 class="mobile-card__title">Escáner</h2>
+    <p class="mobile-card__status">QR y código de barras</p>
+  </a>
+  <a href="{{ url_for('mobile.venta_rapida') }}" class="mobile-card mobile-card--link mobile-card--accent" data-requires-online>
+    <span class="mobile-card__icon" aria-hidden="true">&#128179;</span>
+    <h2 class="mobile-card__title">Venta rápida</h2>
+    <p class="mobile-card__status">Boleta o factura desde el celular</p>
+  </a>
+  <div class="mobile-card mobile-card--offline-ready">
+    <span class="mobile-card__icon" aria-hidden="true">&#128241;</span>
+    <h2 class="mobile-card__title">Modo offline</h2>
+    <p class="mobile-card__status">Catálogo cacheado — solo lectura sin internet</p>
+  </div>
+</section>
+{% endblock %}

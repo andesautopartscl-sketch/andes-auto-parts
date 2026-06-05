@@ -1,0 +1,74 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}Escáner — Andes Mobile{% endblock %}
+
+{% block head_extra %}{% endblock %}
+
+{% block content %}
+<div class="m-scanner" id="mobile-scanner-root"
+     data-modo="{{ modo_inicial }}"
+     data-api-producto="{{ url_for('mobile.api_producto', codigo='__CODE__') }}"
+     data-url-producto="{{ url_for('mobile.producto', codigo='__CODE__') }}"
+     data-url-stock="{{ url_for('mobile.stock', codigo='__CODE__') }}"
+     data-url-venta-rapida="{{ url_for('mobile.venta_rapida') }}"
+     data-url-escaner-barcode="{{ url_for('mobile.escaner', modo='barcode') }}">
+
+  <div class="m-scanner__top">
+    {% if modo_inicial == 'venta' %}
+    <p class="m-scanner__mode-title">Modo venta rápida</p>
+    {% else %}
+    <div class="m-scanner-tabs" role="tablist" aria-label="Modo de escaneo">
+      <button type="button" class="m-scanner-tab{% if modo_inicial == 'qr' %} m-scanner-tab--active{% endif %}" data-modo="qr" role="tab" aria-selected="{{ 'true' if modo_inicial == 'qr' else 'false' }}">
+        QR (Producto)
+      </button>
+      <button type="button" class="m-scanner-tab{% if modo_inicial == 'barcode' %} m-scanner-tab--active{% endif %}" data-modo="barcode" role="tab" aria-selected="{{ 'true' if modo_inicial == 'barcode' else 'false' }}">
+        Código de barras (Stock)
+      </button>
+    </div>
+    {% endif %}
+    <p class="m-scanner__hint" id="scanner-hint">{% if modo_inicial == 'venta' %}Escanea productos para la venta{% elif modo_inicial == 'barcode' %}Apunta al código de barras{% else %}Apunta al QR de la etiqueta{% endif %}</p>
+  </div>
+
+  <div class="m-scanner__viewport">
+    <div id="qr-reader" class="m-scanner__reader" aria-label="Vista de cámara"></div>
+    <div class="m-scanner__overlay" aria-hidden="true">
+      <div class="m-scanner__frame">
+        <span class="m-scanner__scanline"></span>
+      </div>
+    </div>
+    <div id="scanner-permission-denied" class="m-scanner__denied" hidden>
+      <p class="m-scanner__denied-title">No se pudo acceder a la cámara</p>
+      <p class="m-scanner__denied-text">
+        Permite el acceso a la cámara en la configuración del navegador.
+        En Chrome: Ajustes del sitio → Cámara → Permitir, luego reintenta.
+      </p>
+      <p class="m-scanner__denied-detail" id="scanner-error-detail"></p>
+      <button type="button" class="m-btn m-btn--primary" id="scanner-retry-btn">Reintentar</button>
+    </div>
+  </div>
+
+  <div class="m-scanner__actions">
+    <button type="button" class="m-scanner-action" id="scanner-torch-btn" disabled title="Linterna">
+      <span aria-hidden="true">&#128161;</span>
+      <span class="m-scanner-action__label">Linterna</span>
+    </button>
+    <button type="button" class="m-scanner-action" id="scanner-switch-btn" title="Cambiar cámara">
+      <span aria-hidden="true">&#128247;</span>
+      <span class="m-scanner-action__label">Cámara</span>
+    </button>
+    {% if modo_inicial == 'venta' %}
+    <a href="{{ url_for('mobile.venta_rapida') }}?step=2" class="m-scanner-action m-scanner-action--listo" id="scanner-listo-btn" title="Volver al wizard">
+      <span aria-hidden="true">&#10003;</span>
+      <span class="m-scanner-action__label">Listo</span>
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<div id="mobile-toast" class="m-toast" role="alert" aria-live="assertive" hidden></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='mobile/lib/html5-qrcode.min.js') }}"></script>
+<script src="{{ url_for('static', filename='mobile/scanner.js') }}" defer></script>
+{% endblock %}

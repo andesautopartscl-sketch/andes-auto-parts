@@ -1,0 +1,46 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}Stock {{ s.codigo }} — Andes Mobile{% endblock %}
+
+{% block content %}
+<article class="m-stock-quick">
+  <header class="m-stock-quick__head">
+    {% if s.imagen %}
+    <img src="{{ s.imagen | product_image_src }}" alt="" class="m-stock-quick__thumb" width="56" height="56" loading="lazy" decoding="async">
+    {% else %}
+    <div class="m-stock-quick__thumb m-stock-quick__thumb--empty" aria-hidden="true">&#128230;</div>
+    {% endif %}
+    <div class="m-stock-quick__meta">
+      <h1 class="m-stock-quick__code">{{ s.codigo }}</h1>
+      <p class="m-stock-quick__desc">{{ s.descripcion }}</p>
+    </div>
+  </header>
+
+  <section class="m-stock-quick__hero" aria-label="Stock total">
+    <span class="m-stock-quick__hero-value">{{ s.stock_total }}</span>
+    <span class="m-stock-quick__hero-label">unidades</span>
+  </section>
+
+  <section class="m-section">
+    <h2 class="m-section__title">Por bodega</h2>
+    {% if s.bodegas %}
+    <ul class="m-list">
+      {% for b in s.bodegas %}
+      <li class="m-list-item m-list-item--static">
+        <span class="m-list-item__main">{{ b.nombre }}</span>
+        <span class="m-list-item__meta">{{ b.stock }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="m-empty">Sin stock registrado por bodega.</p>
+    {% endif %}
+  </section>
+
+  <div class="m-stock-quick__actions">
+    <a href="{{ url_for('mobile.escaner', modo='barcode') }}" class="m-btn m-btn--primary">Escanear otro</a>
+    <a href="{{ url_for('mobile.producto', codigo=s.codigo) }}" class="m-btn m-btn--secondary">Ver ficha completa</a>
+    <a href="{{ url_for('mobile.ajustar_stock', codigo=s.codigo) }}" class="m-btn m-btn--secondary">Ajustar stock</a>
+  </div>
+</article>
+{% endblock %}

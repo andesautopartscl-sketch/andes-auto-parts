@@ -1,0 +1,33 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}Ventas — Andes Mobile{% endblock %}
+
+{% block content %}
+<section class="m-page-head">
+  <h1 class="m-page-title">Ventas</h1>
+</section>
+
+<div class="m-filter-bar" role="tablist" aria-label="Filtrar por fecha">
+  <a href="{{ url_for('mobile.ventas', periodo='hoy') }}" class="m-filter-btn{% if periodo == 'hoy' %} m-filter-btn--active{% endif %}" role="tab">Hoy</a>
+  <a href="{{ url_for('mobile.ventas', periodo='ayer') }}" class="m-filter-btn{% if periodo == 'ayer' %} m-filter-btn--active{% endif %}" role="tab">Ayer</a>
+  <a href="{{ url_for('mobile.ventas', periodo='semana') }}" class="m-filter-btn{% if periodo == 'semana' %} m-filter-btn--active{% endif %}" role="tab">Semana</a>
+</div>
+
+<div data-pull-refresh>
+  {% if ventas %}
+  <ul class="m-list">
+    {% for v in ventas %}
+    <li>
+      <a href="{{ url_for('mobile.venta', doc_id=v.id) }}" class="m-list-item">
+        <span class="m-list-item__main">{{ v.tipo | capitalize }} {{ v.numero }}</span>
+        <span class="m-list-item__sub">{{ v.cliente }}{% if v.hora %} · {{ v.hora }}{% endif %}</span>
+        <span class="m-list-item__meta">{{ v.total_fmt }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="m-empty">No hay ventas en este período.</p>
+  {% endif %}
+</div>
+{% endblock %}

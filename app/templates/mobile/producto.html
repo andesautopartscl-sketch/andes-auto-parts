@@ -1,0 +1,97 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}{{ p.codigo }} — Andes Mobile{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('mobile.buscar') }}" class="m-back" aria-label="Volver">
+  <span aria-hidden="true">&#8592;</span> Buscar
+</a>
+
+<article class="m-product">
+  <div class="m-product__media">
+    {% if p.imagen %}
+    <img src="{{ p.imagen | product_image_src }}" alt="{{ p.descripcion }}" class="m-product__img" loading="lazy" decoding="async">
+    {% else %}
+    <div class="m-product__img m-product__img--empty">Sin imagen</div>
+    {% endif %}
+  </div>
+
+  <header class="m-product__head">
+    <h1 class="m-product__code">{{ p.codigo }}</h1>
+    {% if p.codigos_proveedor %}
+    <p class="m-product__prov">Prov: {{ p.codigos_proveedor | join(', ') }}</p>
+    {% endif %}
+    <p class="m-product__desc">{{ p.descripcion }}</p>
+  </header>
+
+  <div class="m-detail-grid">
+    <div class="m-detail-item">
+      <span class="m-detail-item__label">Precio venta</span>
+      <span class="m-detail-item__value">{{ p.precio_venta_fmt }}</span>
+    </div>
+    <div class="m-detail-item">
+      <span class="m-detail-item__label">Precio neto</span>
+      <span class="m-detail-item__value">
+        {% if p.precio_neto > 0 %}${{ "{:,.0f}".format(p.precio_neto).replace(",", ".") }}{% else %}—{% endif %}
+      </span>
+    </div>
+    <div class="m-detail-item">
+      <span class="m-detail-item__label">Marca</span>
+      <span class="m-detail-item__value">{{ p.marca or '—' }}</span>
+    </div>
+    <div class="m-detail-item">
+      <span class="m-detail-item__label">Origen</span>
+      <span class="m-detail-item__value">{{ p.origen or '—' }}</span>
+    </div>
+  </div>
+
+  <section class="m-section">
+    <h2 class="m-section__title">Stock por bodega</h2>
+    <ul class="m-stock-list">
+      {% for b in p.ficha_stock.bodegas %}
+      {% if b.subtotal > 0 or b.lineas %}
+      <li class="m-stock-row">
+        <span class="m-stock-row__bodega">{{ b.nombre }}</span>
+        <span class="m-stock-row__qty">{{ b.subtotal }}</span>
+      </li>
+      {% for ln in b.lineas %}
+      {% if ln.stock > 0 %}
+      <li class="m-stock-row m-stock-row--sub">
+        <span class="m-stock-row__bodega">{{ ln.marca }}</span>
+        <span class="m-stock-row__qty">{{ ln.stock }}</span>
+      </li>
+      {% endif %}
+      {% endfor %}
+      {% endif %}
+      {% endfor %}
+      {% for o in p.ficha_stock.otras_lineas %}
+      <li class="m-stock-row">
+        <span class="m-stock-row__bodega">{{ o.bodega }} · {{ o.marca }}</span>
+        <span class="m-stock-row__qty">{{ o.stock }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="m-hint">Total: <strong>{{ p.ficha_stock.stotal }}</strong> unidades</p>
+  </section>
+
+  <section class="m-section">
+    <h2 class="m-section__title">Últimos movimientos</h2>
+    {% if p.movimientos %}
+    <ul class="m-list m-list--compact">
+      {% for m in p.movimientos %}
+      <li class="m-list-item m-list-item--static">
+        <span class="m-list-item__main">{{ m.tipo | capitalize }} · {{ m.cantidad }} u.</span>
+        <span class="m-list-item__sub">{{ m.bodega }} · {{ m.fecha }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="m-empty">Sin movimientos recientes.</p>
+    {% endif %}
+  </section>
+
+  <button type="button" class="m-btn m-btn--secondary m-btn--disabled" disabled title="Fase 4">
+    Ajustar stock (próximamente)
+  </button>
+</article>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}Dashboard — Andes Mobile{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('mobile.home') }}" class="m-back" aria-label="Volver">
+  <span aria-hidden="true">&#8592;</span> Volver
+</a>
+
+<section class="m-page-head">
+  <h1 class="m-page-title">Dashboard del día</h1>
+</section>
+
+<div class="m-kpi-grid" data-pull-refresh>
+  <article class="m-kpi-card">
+    <span class="m-kpi-card__label">Ventas hoy</span>
+    <span class="m-kpi-card__value">{{ data.ventas_hoy_count }}</span>
+    <span class="m-kpi-card__meta">{{ data.ventas_hoy_monto_fmt }}</span>
+  </article>
+  <article class="m-kpi-card">
+    <span class="m-kpi-card__label">Ingresos hoy</span>
+    <span class="m-kpi-card__value">{{ data.ingresos_hoy_count }}</span>
+    <span class="m-kpi-card__meta">{{ data.ingresos_hoy_monto_fmt }}</span>
+  </article>
+  <article class="m-kpi-card m-kpi-card--alert">
+    <span class="m-kpi-card__label">Stock crítico</span>
+    <span class="m-kpi-card__value">{{ data.stock_critico_count }}</span>
+    <a href="{{ url_for('mobile.stock_critico') }}" class="m-kpi-card__link">Ver lista</a>
+  </article>
+  <article class="m-kpi-card">
+    <span class="m-kpi-card__label">Productos catálogo</span>
+    <span class="m-kpi-card__value">{{ data.productos_total }}</span>
+  </article>
+</div>
+
+<section class="m-section">
+  <h2 class="m-section__title">Últimas ventas hoy</h2>
+  {% if data.ultimas_ventas %}
+  <ul class="m-list">
+    {% for v in data.ultimas_ventas %}
+    <li>
+      <a href="{{ url_for('mobile.venta', doc_id=v.id) }}" class="m-list-item">
+        <span class="m-list-item__main">{{ v.descripcion }}</span>
+        <span class="m-list-item__sub">{{ v.cliente }}</span>
+        <span class="m-list-item__meta">{{ v.total_fmt }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="m-empty">Sin ventas registradas hoy.</p>
+  {% endif %}
+</section>
+
+<section class="m-section">
+  <h2 class="m-section__title">Últimos ingresos hoy</h2>
+  {% if data.ultimos_ingresos %}
+  <ul class="m-list">
+    {% for i in data.ultimos_ingresos %}
+    <li>
+      <a href="{{ url_for('mobile.ingreso', doc_id=i.id) }}" class="m-list-item">
+        <span class="m-list-item__main">{{ i.numero }}</span>
+        <span class="m-list-item__sub">{{ i.proveedor }}</span>
+        <span class="m-list-item__meta">{{ i.total_fmt }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="m-empty">Sin ingresos registrados hoy.</p>
+  {% endif %}
+</section>
+{% endblock %}

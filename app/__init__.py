@@ -37,6 +37,7 @@ from .contabilidad.routes import contabilidad_bp, finanzas_bp
 from .informes.routes import informes_bp
 from .rrhh.routes import rrhh_bp
 from .sii_sync import sii_sync_bp
+from .mobile import mobile_bp
 from app.seguridad.init_roles import crear_roles
 from app.seguridad.crear_superadmin import crear_superadmin
 from app.utils.datetime_utils import chile_datetime_filter
@@ -311,6 +312,7 @@ def create_app():
         app.register_blueprint(informes_bp)
         app.register_blueprint(rrhh_bp)
         app.register_blueprint(sii_sync_bp)
+        app.register_blueprint(mobile_bp)
 
     print(app.url_map)
 
@@ -1072,6 +1074,8 @@ def create_app():
         # Inject chat globally for authenticated users in HTML responses.
         if (app.config.get("ANDES_APP_MODE") or "").strip().lower() == "search_lite":
             return response
+        if (request.path or "").startswith("/m/"):
+            return response
         if request.endpoint in {"auth.login", "auth.inicio_seguro"}:
             return response
         if response.status_code != 200:
@@ -1115,6 +1119,21 @@ def create_app():
                 session_cookie_secure=bool(app.config.get("SESSION_COOKIE_SECURE")),
                 hsts_enabled=bool(app.config.get("ANDES_HSTS", True)),
             )
+        except Exception:
+            pass
+        return response
+
+    @app.after_request
+    def _mobile_camera_permissions_policy(response):
+        """Permite cámara en PWA /m/; apply_security_headers bloquea camera=() globalmente."""
+        path = request.path or ""
+        if not (path == "/m" or path.startswith("/m/")):
+            return response
+        try:
+            response.headers["Permissions-Policy"] = (
+                "camera=(self), microphone=(self), geolocation=(self)"
+            )
+            response.headers["Feature-Policy"] = "camera 'self'"
         except Exception:
             pass
         return response

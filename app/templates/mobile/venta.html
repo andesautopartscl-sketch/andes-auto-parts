@@ -1,0 +1,58 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}{{ v.numero }} — Andes Mobile{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('mobile.ventas') }}" class="m-back" aria-label="Volver">
+  <span aria-hidden="true">&#8592;</span> Ventas
+</a>
+
+<article class="m-doc">
+  <header class="m-doc__head">
+    <h1 class="m-doc__title">{{ v.tipo_documento | capitalize }} {{ v.numero }}</h1>
+    <p class="m-doc__date">{{ v.fecha_documento }}</p>
+  </header>
+
+  <section class="m-section">
+    <h2 class="m-section__title">Cliente</h2>
+    <p class="m-doc__party-name">{{ v.party.name or 'Sin nombre' }}</p>
+    {% if v.party.rut %}<p class="m-hint">RUT {{ v.party.rut }}</p>{% endif %}
+    {% if v.party.telefono %}<p class="m-hint">{{ v.party.telefono }}</p>{% endif %}
+  </section>
+
+  <section class="m-section">
+    <h2 class="m-section__title">Productos</h2>
+    <ul class="m-list m-list--compact">
+      {% for it in v.items %}
+      <li class="m-list-item m-list-item--static">
+        <span class="m-list-item__main">{{ it.codigo }} × {{ it.cantidad }}</span>
+        <span class="m-list-item__sub">{{ it.descripcion }}</span>
+        {% if it.subtotal is not none %}
+        <span class="m-list-item__meta">${{ "{:,.0f}".format(it.subtotal).replace(",", ".") }}</span>
+        {% else %}
+        <span class="m-list-item__meta">—</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="m-totals">
+    <div class="m-totals__row"><span>Neto</span><span>{{ v.totals.subtotal_fmt }}</span></div>
+    <div class="m-totals__row"><span>IVA</span><span>{{ v.totals.iva_fmt }}</span></div>
+    <div class="m-totals__row m-totals__row--total"><span>Total</span><span>{{ v.totals.total_fmt }}</span></div>
+  </section>
+
+  {% if v.metodo_pago %}
+  <p class="m-hint">Pago: <strong>{{ v.metodo_pago }}</strong>{% if v.estado_pago %} ({{ v.estado_pago }}){% endif %}</p>
+  {% endif %}
+</article>
+<script type="application/json" id="mobile-venta-json">{{ {
+  "id": v.id,
+  "numero": v.numero,
+  "tipo": v.tipo_documento,
+  "cliente": v.party.name,
+  "total_fmt": v.totals.total_fmt,
+  "fecha": v.fecha_documento
+} | tojson }}</script>
+{% endblock %}

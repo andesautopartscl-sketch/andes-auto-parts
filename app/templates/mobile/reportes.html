@@ -1,0 +1,60 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}Reportes — Andes Mobile{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('mobile.home') }}" class="m-back" aria-label="Volver">
+  <span aria-hidden="true">&#8592;</span> Inicio
+</a>
+
+<section class="m-page-head">
+  <h1 class="m-page-title">Reportes</h1>
+</section>
+
+<div class="m-kpi-grid">
+  <article class="m-kpi-card">
+    <span class="m-kpi-card__label">Ventas esta semana</span>
+    <span class="m-kpi-card__value">{{ data.ventas_semana_count }}</span>
+    <span class="m-kpi-card__meta">{{ data.ventas_semana_monto_fmt }}</span>
+  </article>
+  <article class="m-kpi-card">
+    <span class="m-kpi-card__label">Ventas este mes</span>
+    <span class="m-kpi-card__value">{{ data.ventas_mes_count }}</span>
+    <span class="m-kpi-card__meta">{{ data.ventas_mes_monto_fmt }}</span>
+  </article>
+</div>
+
+<section class="m-section">
+  <h2 class="m-section__title">Top 5 productos del mes</h2>
+  {% if data.top_productos %}
+  <ul class="m-list">
+    {% for p in data.top_productos %}
+    <li class="m-list-item m-list-item--static">
+      <span class="m-list-item__main">{{ p.codigo }}</span>
+      <span class="m-list-item__sub">{{ p.descripcion }} · {{ p.qty }} u.</span>
+      <span class="m-list-item__meta">{{ p.venta_fmt }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="m-empty">Sin datos este mes.</p>
+  {% endif %}
+</section>
+
+<section class="m-section">
+  <h2 class="m-section__title">Top 5 clientes del mes</h2>
+  {% if data.top_clientes %}
+  <ul class="m-list">
+    {% for c in data.top_clientes %}
+    <li class="m-list-item m-list-item--static">
+      <span class="m-list-item__main">{{ c.nombre }}</span>
+      <span class="m-list-item__sub">{{ c.docs }} documento(s)</span>
+      <span class="m-list-item__meta">{{ c.total_fmt }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="m-empty">Sin datos este mes.</p>
+  {% endif %}
+</section>
+{% endblock %}

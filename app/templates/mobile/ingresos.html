@@ -1,0 +1,32 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}Ingresos — Andes Mobile{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('mobile.home') }}" class="m-back" aria-label="Volver">
+  <span aria-hidden="true">&#8592;</span> Inicio
+</a>
+
+<section class="m-page-head">
+  <h1 class="m-page-title">Historial de ingresos</h1>
+  <p class="m-page-sub">Últimos 20 documentos</p>
+</section>
+
+<div data-pull-refresh>
+  {% if ingresos %}
+  <ul class="m-list">
+    {% for i in ingresos %}
+    <li>
+      <a href="{{ url_for('mobile.ingreso', doc_id=i.id) }}" class="m-list-item">
+        <span class="m-list-item__main">{{ i.numero }}</span>
+        <span class="m-list-item__sub">{{ i.proveedor }} · {{ i.fecha }}</span>
+        <span class="m-list-item__meta">{{ i.total_fmt }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="m-empty">No hay ingresos registrados.</p>
+  {% endif %}
+</div>
+{% endblock %}
