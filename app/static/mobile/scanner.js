@@ -53,19 +53,44 @@
   var lastScanAt = 0;
   var COOLDOWN_MS = 1800;
 
-  var QR_FORMATS = window.Html5QrcodeSupportedFormats
-    ? [Html5QrcodeSupportedFormats.QR_CODE]
-    : undefined;
+  function supportedFormatsEnum() {
+    return window.Html5QrcodeSupportedFormats || null;
+  }
 
-  var BARCODE_FORMATS = window.Html5QrcodeSupportedFormats
-    ? [
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E,
-      ]
-    : undefined;
+  function qrFormatsList() {
+    var F = supportedFormatsEnum();
+    if (!F) return null;
+    return [F.QR_CODE];
+  }
+
+  function barcodeFormatsList() {
+    var F = supportedFormatsEnum();
+    if (!F) return null;
+    return [
+      F.CODE_128,
+      F.EAN_13,
+      F.EAN_8,
+      F.UPC_A,
+      F.UPC_E,
+      F.CODE_39,
+      F.CODE_93,
+      F.ITF,
+    ];
+  }
+
+  function formatNames(formats) {
+    if (!formats || !formats.length) return "(ninguno)";
+    var F = supportedFormatsEnum();
+    if (!F) return formats.join(",");
+    return formats
+      .map(function (fmt) {
+        for (var key in F) {
+          if (F[key] === fmt) return key;
+        }
+        return String(fmt);
+      })
+      .join(", ");
+  }
 
   function tplReplace(tpl, code) {
     return tpl.replace("__CODE__", encodeURIComponent(code));
@@ -152,6 +177,12 @@
     return {
       fps: 10,
       qrbox: function (viewfinderWidth, viewfinderHeight) {
+        if (modo === "barcode") {
+          return {
+            width: Math.floor(viewfinderWidth * 0.88),
+            height: Math.floor(viewfinderHeight * 0.34),
+          };
+        }
         var size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72);
         return { width: size, height: Math.floor(size * 0.85) };
       },
@@ -162,13 +193,25 @@
   }
 
   function formatsForMode() {
+    var qr = qrFormatsList();
+    var barcode = barcodeFormatsList();
     if (modo === "venta") {
-      if (BARCODE_FORMATS && QR_FORMATS) {
-        return BARCODE_FORMATS.concat(QR_FORMATS);
+      if (qr && barcode) {
+        debugLog("Formatos modo venta:", formatNames(barcode.concat(qr)));
+        return barcode.concat(qr);
       }
-      return BARCODE_FORMATS || QR_FORMATS;
+      return barcode || qr;
     }
-    return modo === "qr" ? QR_FORMATS : BARCODE_FORMATS;
+    if (modo === "qr") {
+      debugLog("Formatos modo QR:", formatNames(qr));
+      return qr;
+    }
+    if (modo === "barcode") {
+      debugLog("Formatos modo Barcode:", formatNames(barcode));
+      return barcode;
+    }
+    debugWarn("Modo desconocido para formatos:", modo);
+    return qr;
   }
 
   function cameraConfigForAttempt(attempt) {
@@ -199,15 +242,34 @@
 
   function stopScanner() {
     if (!html5QrCode) return Promise.resolve();
-    debugLog("Deteniendo escáner…");
-    return html5QrCode
+    var instance = html5QrCode;
+    html5QrCode = null;
+    debugLog("Deteniendo y destruyendo instancia Html5Qrcode…");
+    return instance
       .stop()
       .then(function () {
-        return html5QrCode.clear();
+        return instance.clear();
       })
       .catch(function (err) {
         debugWarn("stop/clear:", err && err.message ? err.message : err);
       });
+  }
+
+  function createScannerInstance() {
+    var formats = formatsForMode();
+    if (!formats || !formats.length) {
+      throw new Error("Html5QrcodeSupportedFormats no disponible para modo " + modo);
+    }
+    debugLog(
+      "Creando Html5Qrcode, modo=",
+      modo,
+      "formatsToSupport:",
+      formatNames(formats)
+    );
+    return new Html5Qrcode(readerId, {
+      formatsToSupport: formats,
+      verbose: false,
+    });
   }
 
   function verifyVideoStream() {
@@ -369,18 +431,14 @@
     showDenied(false);
     debugLog("startScanner() modo=", modo);
 
-    var formats = formatsForMode();
     var startChain = stopScanner().then(function () {
-      html5QrCode = null;
       var reader = document.getElementById(readerId);
       if (reader) {
         reader.innerHTML = "";
         reader.style.minHeight = "280px";
       }
-      html5QrCode = formats
-        ? new Html5Qrcode(readerId, { formatsToSupport: formats, verbose: true })
-        : new Html5Qrcode(readerId, { verbose: true });
-      debugLog("Instancia Html5Qrcode creada, readerId=", readerId);
+      html5QrCode = createScannerInstance();
+      debugLog("Instancia Html5Qrcode lista, readerId=", readerId);
       return requestCameraAccess()
         .then(function () {
           return loadCamerasOptional();
@@ -471,8 +529,10 @@
   }
 
   function switchMode(newModo) {
-    if (newModo === modo) return;
-    modo = newModo;
+    var next = (newModo || "qr").toLowerCase();
+    if (next === modo) return;
+    debugLog("Cambio de tab escáner:", modo, "→", next, "(recrear instancia con nuevos formatos)");
+    modo = next;
     setActiveTab();
     startScanner();
   }
