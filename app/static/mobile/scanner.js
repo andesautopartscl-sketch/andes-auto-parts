@@ -29,6 +29,7 @@
 
   var readerId = "qr-reader";
   var modo = (root.getAttribute("data-modo") || "qr").toLowerCase();
+  var activeMode = modo === "barcode" ? "barcode" : "qr";
   var apiTpl = root.getAttribute("data-api-producto") || "";
   var urlProductoTpl = root.getAttribute("data-url-producto") || "";
   var urlStockTpl = root.getAttribute("data-url-stock") || "";
@@ -42,6 +43,7 @@
   var torchBtn = document.getElementById("scanner-torch-btn");
   var switchBtn = document.getElementById("scanner-switch-btn");
   var tabButtons = root.querySelectorAll(".m-scanner-tab");
+  var frameEl = root.querySelector(".m-scanner__frame");
 
   var html5QrCode = null;
   var cameras = [];
@@ -57,16 +59,11 @@
     return window.Html5QrcodeSupportedFormats || null;
   }
 
-  function qrFormatsList() {
-    var F = supportedFormatsEnum();
-    if (!F) return null;
-    return [F.QR_CODE];
-  }
-
-  function barcodeFormatsList() {
+  function allFormatsList() {
     var F = supportedFormatsEnum();
     if (!F) return null;
     return [
+      F.QR_CODE,
       F.CODE_128,
       F.EAN_13,
       F.EAN_8,
@@ -152,18 +149,35 @@
       return;
     }
     hintEl.textContent =
-      modo === "qr"
+      activeMode === "qr"
         ? "Apunta al QR de la etiqueta"
         : "Apunta al código de barras";
   }
 
+  function updateScannerUi() {
+    updateHint();
+    if (modo === "venta") {
+      root.classList.remove("m-scanner--mode-qr", "m-scanner--mode-barcode");
+      if (frameEl) {
+        frameEl.classList.remove("m-scanner__frame--qr", "m-scanner__frame--barcode");
+      }
+      return;
+    }
+    root.classList.toggle("m-scanner--mode-qr", activeMode === "qr");
+    root.classList.toggle("m-scanner--mode-barcode", activeMode === "barcode");
+    if (frameEl) {
+      frameEl.classList.toggle("m-scanner__frame--qr", activeMode === "qr");
+      frameEl.classList.toggle("m-scanner__frame--barcode", activeMode === "barcode");
+    }
+  }
+
   function setActiveTab() {
     tabButtons.forEach(function (btn) {
-      var isActive = btn.getAttribute("data-modo") === modo;
+      var isActive = btn.getAttribute("data-modo") === activeMode;
       btn.classList.toggle("m-scanner-tab--active", isActive);
       btn.setAttribute("aria-selected", isActive ? "true" : "false");
     });
-    updateHint();
+    updateScannerUi();
   }
 
   function scannerConfig(facingMode) {
@@ -176,42 +190,18 @@
     }
     return {
       fps: 10,
-      qrbox: function (viewfinderWidth, viewfinderHeight) {
-        if (modo === "barcode") {
-          return {
-            width: Math.floor(viewfinderWidth * 0.88),
-            height: Math.floor(viewfinderHeight * 0.34),
-          };
-        }
-        var size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72);
-        return { width: size, height: Math.floor(size * 0.85) };
-      },
+      qrbox: { width: 280, height: 180 },
       aspectRatio: 1.777778,
       disableFlip: false,
       videoConstraints: videoConstraints,
     };
   }
 
-  function formatsForMode() {
-    var qr = qrFormatsList();
-    var barcode = barcodeFormatsList();
-    if (modo === "venta") {
-      if (qr && barcode) {
-        debugLog("Formatos modo venta:", formatNames(barcode.concat(qr)));
-        return barcode.concat(qr);
-      }
-      return barcode || qr;
-    }
-    if (modo === "qr") {
-      debugLog("Formatos modo QR:", formatNames(qr));
-      return qr;
-    }
-    if (modo === "barcode") {
-      debugLog("Formatos modo Barcode:", formatNames(barcode));
-      return barcode;
-    }
-    debugWarn("Modo desconocido para formatos:", modo);
-    return qr;
+  function scanFormatIsQr(decodedResult) {
+    var F = supportedFormatsEnum();
+    if (!F || !decodedResult || !decodedResult.result) return null;
+    if (decodedResult.result.format === undefined) return null;
+    return decodedResult.result.format === F.QR_CODE;
   }
 
   function cameraConfigForAttempt(attempt) {
@@ -240,36 +230,40 @@
     }
   }
 
-  function stopScanner() {
+  function stopScanner(destroy) {
     if (!html5QrCode) return Promise.resolve();
     var instance = html5QrCode;
-    html5QrCode = null;
-    debugLog("Deteniendo y destruyendo instancia Html5Qrcode…");
+    if (destroy) {
+      html5QrCode = null;
+      debugLog("Deteniendo y destruyendo instancia Html5Qrcode…");
+    } else {
+      debugLog("Deteniendo cámara (instancia conservada)…");
+    }
     return instance
       .stop()
       .then(function () {
-        return instance.clear();
+        if (destroy) return instance.clear();
       })
       .catch(function (err) {
         debugWarn("stop/clear:", err && err.message ? err.message : err);
       });
   }
 
-  function createScannerInstance() {
-    var formats = formatsForMode();
+  function ensureScannerInstance() {
+    if (html5QrCode) return html5QrCode;
+    var formats = allFormatsList();
     if (!formats || !formats.length) {
-      throw new Error("Html5QrcodeSupportedFormats no disponible para modo " + modo);
+      throw new Error("Html5QrcodeSupportedFormats no disponible");
     }
     debugLog(
-      "Creando Html5Qrcode, modo=",
-      modo,
-      "formatsToSupport:",
+      "Creando Html5Qrcode unificado, formatsToSupport:",
       formatNames(formats)
     );
-    return new Html5Qrcode(readerId, {
+    html5QrCode = new Html5Qrcode(readerId, {
       formatsToSupport: formats,
       verbose: false,
     });
+    return html5QrCode;
   }
 
   function verifyVideoStream() {
@@ -350,7 +344,7 @@
           debugLog("Html5Qrcode.start() OK en intento", attempt);
           if (!verifyVideoStream()) {
             debugWarn("Stream de video no verificado, reintentando…");
-            return stopScanner().then(next);
+            return stopScanner(false).then(next);
           }
           refreshTorchSupport();
           showDenied(false);
@@ -358,7 +352,7 @@
         .catch(function (err) {
           var errMsg = (err && err.message) || String(err);
           debugError("start falló intento", attempt, ":", errMsg);
-          return stopScanner().then(next);
+          return stopScanner(false).then(next);
         });
     }
 
@@ -429,23 +423,30 @@
   function startScanner() {
     paused = false;
     showDenied(false);
-    debugLog("startScanner() modo=", modo);
+    var isRestart = !!html5QrCode;
+    debugLog("startScanner() modo=", modo, "activeMode=", activeMode, "restart=", isRestart);
 
-    var startChain = stopScanner().then(function () {
-      var reader = document.getElementById(readerId);
-      if (reader) {
-        reader.innerHTML = "";
-        reader.style.minHeight = "280px";
+    var startChain = (isRestart
+      ? stopScanner(false)
+      : Promise.resolve()
+    ).then(function () {
+      if (!isRestart) {
+        var reader = document.getElementById(readerId);
+        if (reader) {
+          reader.innerHTML = "";
+          reader.style.minHeight = "280px";
+        }
+        ensureScannerInstance();
+        debugLog("Instancia Html5Qrcode lista, readerId=", readerId);
+        return requestCameraAccess()
+          .then(function () {
+            return loadCamerasOptional();
+          })
+          .then(function () {
+            return startWithFallbacks();
+          });
       }
-      html5QrCode = createScannerInstance();
-      debugLog("Instancia Html5Qrcode lista, readerId=", readerId);
-      return requestCameraAccess()
-        .then(function () {
-          return loadCamerasOptional();
-        })
-        .then(function () {
-          return startWithFallbacks();
-        });
+      return startWithFallbacks();
     });
 
     return startChain.catch(function (err) {
@@ -463,20 +464,29 @@
     });
   }
 
-  function onScanSuccess(decodedText) {
+  function onScanSuccess(decodedText, decodedResult) {
     if (paused) return;
     var now = Date.now();
     if (now - lastScanAt < COOLDOWN_MS) return;
 
+    var isQr = scanFormatIsQr(decodedResult);
     var codigo;
     if (modo === "venta") {
       codigo = parseQrPayload(decodedText) || normalizeBarcode(decodedText);
+      if (isQr === null && codigo) {
+        isQr = !!parseQrPayload(decodedText);
+      }
+    } else if (isQr === true) {
+      codigo = parseQrPayload(decodedText);
+    } else if (isQr === false) {
+      codigo = normalizeBarcode(decodedText);
     } else {
-      codigo = modo === "qr" ? parseQrPayload(decodedText) : normalizeBarcode(decodedText);
+      codigo = parseQrPayload(decodedText) || normalizeBarcode(decodedText);
+      isQr = !!parseQrPayload(decodedText);
     }
     if (!codigo) return;
 
-    debugLog("Código leído:", codigo);
+    debugLog("Código leído:", codigo, "formatoQR=", isQr);
     paused = true;
     lastScanAt = now;
 
@@ -484,7 +494,7 @@
       .then(function (data) {
         if (!data || !data.exists) {
           paused = false;
-          if (modo === "qr") showToast("QR no reconocido");
+          if (modo !== "venta" && isQr) showToast("QR no reconocido");
           else showToast("Código no encontrado");
           return;
         }
@@ -516,7 +526,7 @@
           paused = false;
           return;
         }
-        if (modo === "qr") {
+        if (isQr) {
           window.location.href = tplReplace(urlProductoTpl, resolved);
         } else {
           window.location.href = tplReplace(urlStockTpl, resolved);
@@ -530,11 +540,10 @@
 
   function switchMode(newModo) {
     var next = (newModo || "qr").toLowerCase();
-    if (next === modo) return;
-    debugLog("Cambio de tab escáner:", modo, "→", next, "(recrear instancia con nuevos formatos)");
-    modo = next;
+    if (next === activeMode) return;
+    debugLog("Cambio de tab escáner (solo UI):", activeMode, "→", next);
+    activeMode = next;
     setActiveTab();
-    startScanner();
   }
 
   if (modo !== "venta") {
@@ -617,10 +626,10 @@
   }
 
   window.addEventListener("pagehide", function () {
-    stopScanner();
+    stopScanner(true);
   });
 
-  debugLog("scanner.js cargado, modo=", modo, "readyState=", document.readyState);
+  debugLog("scanner.js cargado, modo=", modo, "activeMode=", activeMode, "readyState=", document.readyState);
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", waitForLibraryAndBoot);
   } else {

@@ -1128,6 +1128,10 @@ body.mobile-app--scanner .mobile-nav__item--active {
   color: #fff;
 }
 
+.m-scanner--mode-barcode .m-scanner-tab--active[data-modo="barcode"] {
+  border-color: #2ecc71;
+}
+
 .m-scanner__hint {
   margin: 10px 0 0;
   text-align: center;
@@ -1186,6 +1190,25 @@ body.mobile-app--scanner .mobile-nav__item--active {
     0 0 0 9999px rgba(0, 0, 0, 0.45),
     inset 0 0 24px rgba(46, 204, 113, 0.15);
   overflow: hidden;
+  transition: width 0.2s ease, height 0.2s ease, border-color 0.2s ease;
+}
+
+.m-scanner__frame--qr {
+  width: min(72vw, 260px);
+  height: min(72vw, 260px);
+  border-color: rgba(61, 90, 240, 0.9);
+  box-shadow:
+    0 0 0 9999px rgba(0, 0, 0, 0.45),
+    inset 0 0 24px rgba(61, 90, 240, 0.15);
+}
+
+.m-scanner__frame--barcode {
+  width: min(88vw, 300px);
+  height: min(34vw, 120px);
+  border-color: rgba(46, 204, 113, 0.9);
+  box-shadow:
+    0 0 0 9999px rgba(0, 0, 0, 0.45),
+    inset 0 0 24px rgba(46, 204, 113, 0.15);
 }
 
 .m-scanner__scanline {
