@@ -1,5 +1,5 @@
 /* Andes Mobile PWA — service worker v2 */
-const SW_VERSION = "andes-mobile-v3";
+const SW_VERSION = "andes-mobile-v4";
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
 const API_DASH_CACHE = `${SW_VERSION}-api-dash`;
@@ -20,11 +20,10 @@ const PRECACHE_URLS = [
   "/static/mobile/icons/icon-192-maskable.png",
   "/static/mobile/icons/icon-512-maskable.png",
   "/static/mobile/icons/apple-touch-icon.png",
+  "/static/mobile/lib/html5-qrcode.min.js",
 ];
 
-const CDN_ASSETS = [
-  "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js",
-];
+const CDN_ASSETS = [];
 
 const CACHE_FIRST_EXTENSIONS = [
   ".css",
