@@ -303,6 +303,51 @@
     return next();
   }
 
+  function releaseMediaStream(stream) {
+    if (!stream || !stream.getTracks) return;
+    stream.getTracks().forEach(function (track) {
+      try {
+        track.stop();
+      } catch (_e) {}
+    });
+  }
+
+  function requestCameraAccess() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      debugWarn("navigator.mediaDevices.getUserMedia no disponible");
+      return Promise.resolve();
+    }
+    debugLog("Solicitando permiso getUserMedia (environment)…");
+    return navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "environment" } })
+      .then(function (stream) {
+        debugLog("getUserMedia environment OK, tracks:", stream.getTracks().length);
+        releaseMediaStream(stream);
+      })
+      .catch(function (err) {
+        debugWarn(
+          "getUserMedia environment falló:",
+          err && err.name ? err.name : "Error",
+          err && err.message ? err.message : err
+        );
+        debugLog("Reintentando getUserMedia (user)…");
+        return navigator.mediaDevices
+          .getUserMedia({ video: { facingMode: "user" } })
+          .then(function (stream) {
+            debugLog("getUserMedia user OK");
+            releaseMediaStream(stream);
+          })
+          .catch(function (err2) {
+            debugError(
+              "getUserMedia denegado:",
+              err2 && err2.name ? err2.name : "Error",
+              err2 && err2.message ? err2.message : err2
+            );
+            throw err2;
+          });
+      });
+  }
+
   function loadCamerasOptional() {
     debugLog("Enumerando cámaras (opcional)…");
     return Html5Qrcode.getCameras()
@@ -336,9 +381,13 @@
         ? new Html5Qrcode(readerId, { formatsToSupport: formats, verbose: true })
         : new Html5Qrcode(readerId, { verbose: true });
       debugLog("Instancia Html5Qrcode creada, readerId=", readerId);
-      return loadCamerasOptional().then(function () {
-        return startWithFallbacks();
-      });
+      return requestCameraAccess()
+        .then(function () {
+          return loadCamerasOptional();
+        })
+        .then(function () {
+          return startWithFallbacks();
+        });
     });
 
     return startChain.catch(function (err) {

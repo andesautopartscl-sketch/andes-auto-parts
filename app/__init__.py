@@ -1123,6 +1123,21 @@ def create_app():
             pass
         return response
 
+    @app.after_request
+    def _mobile_camera_permissions_policy(response):
+        """Permite cámara en PWA /m/; apply_security_headers bloquea camera=() globalmente."""
+        path = request.path or ""
+        if not (path == "/m" or path.startswith("/m/")):
+            return response
+        try:
+            response.headers["Permissions-Policy"] = (
+                "camera=(self), microphone=(self), geolocation=(self)"
+            )
+            response.headers["Feature-Policy"] = "camera 'self'"
+        except Exception:
+            pass
+        return response
+
     @app.errorhandler(500)
     def handle_internal_error(_error):
         try:
