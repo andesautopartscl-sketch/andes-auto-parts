@@ -7,8 +7,10 @@
   var VENTAS_STORE = "ventas_recientes";
   var INGRESOS_STORE = "ingresos_recientes";
   var META_STORE = "meta";
+  var RECENT_PRODUCTS_KEY = "recent_products";
   var CATALOG_TTL_MS = 30 * 60 * 1000;
   var RECENT_LIMIT = 50;
+  var RECENT_PRODUCTS_LIMIT = 12;
 
   function openDb() {
     return new Promise(function (resolve, reject) {
@@ -257,6 +259,36 @@
           req.onerror = function () {
             resolve([]);
           };
+        });
+      });
+    },
+    recordProduct: function (codigo, descripcion) {
+      var key = String(codigo || "").trim().toUpperCase();
+      if (!key) return Promise.resolve();
+      return openDb().then(function (db) {
+        return getMeta(db, RECENT_PRODUCTS_KEY).then(function (list) {
+          var items = Array.isArray(list) ? list.slice() : [];
+          items = items.filter(function (p) {
+            return (p.codigo || "").toUpperCase() !== key;
+          });
+          items.unshift({
+            codigo: key,
+            descripcion: String(descripcion || "").trim(),
+            visited_at: Date.now(),
+          });
+          if (items.length > RECENT_PRODUCTS_LIMIT) {
+            items = items.slice(0, RECENT_PRODUCTS_LIMIT);
+          }
+          return setMeta(db, RECENT_PRODUCTS_KEY, items);
+        });
+      });
+    },
+    getRecentProducts: function (limit) {
+      limit = limit || 3;
+      return openDb().then(function (db) {
+        return getMeta(db, RECENT_PRODUCTS_KEY).then(function (list) {
+          if (!Array.isArray(list)) return [];
+          return list.slice(0, limit);
         });
       });
     },

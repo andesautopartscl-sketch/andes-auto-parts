@@ -100,6 +100,13 @@
 
   function recordRecentFromPage() {
     if (!window.AndesOfflineDb) return;
+    var producto = document.querySelector("[data-producto-codigo]");
+    if (producto) {
+      AndesOfflineDb.recordProduct(
+        producto.getAttribute("data-producto-codigo"),
+        producto.getAttribute("data-producto-desc")
+      );
+    }
     var venta = document.getElementById("mobile-venta-json");
     if (venta && venta.textContent) {
       try {
@@ -113,6 +120,26 @@
       } catch (_e) {}
     }
   }
+
+  function forceSyncCatalog() {
+    if (!window.AndesOfflineDb || !isOnline()) {
+      return Promise.reject(new Error("offline"));
+    }
+    var api = document.body.getAttribute("data-catalog-api");
+    if (!api) return Promise.reject(new Error("no api"));
+    showCatalogSkeleton(true);
+    return AndesOfflineDb.syncCatalog(api, { force: true })
+      .then(function (result) {
+        return result;
+      })
+      .finally(function () {
+        showCatalogSkeleton(false);
+      });
+  }
+
+  window.AndesCatalogSync = {
+    force: forceSyncCatalog,
+  };
 
   document.addEventListener("DOMContentLoaded", function () {
     initOfflineState();

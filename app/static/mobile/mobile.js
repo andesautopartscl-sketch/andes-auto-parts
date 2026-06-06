@@ -35,6 +35,46 @@
     menu.querySelectorAll("[data-mas-close]").forEach(function (el) {
       el.addEventListener("click", closeMenu);
     });
+
+    var syncBtn = document.getElementById("mas-sync-catalog");
+    if (syncBtn) {
+      syncBtn.addEventListener("click", function () {
+        closeMenu();
+        if (!window.AndesCatalogSync) {
+          showMasToast("Catálogo offline no disponible");
+          return;
+        }
+        syncBtn.disabled = true;
+        AndesCatalogSync.force()
+          .then(function (res) {
+            var n = res && res.count ? res.count : 0;
+            if (res && res.skipped) {
+              showMasToast("Catálogo ya estaba actualizado");
+            } else {
+              showMasToast("Catálogo sincronizado (" + n + " productos)");
+            }
+          })
+          .catch(function () {
+            showMasToast("No se pudo sincronizar el catálogo");
+          })
+          .finally(function () {
+            syncBtn.disabled = false;
+          });
+      });
+    }
+  }
+
+  function showMasToast(msg) {
+    var toast = document.getElementById("mobile-toast");
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.hidden = false;
+    toast.classList.add("m-toast--visible");
+    clearTimeout(showMasToast._t);
+    showMasToast._t = setTimeout(function () {
+      toast.classList.remove("m-toast--visible");
+      toast.hidden = true;
+    }, 2800);
   }
 
   function initVersionBadge() {

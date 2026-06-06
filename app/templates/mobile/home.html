@@ -3,56 +3,82 @@
 {% block title %}Andes Mobile{% endblock %}
 
 {% block content %}
-<section class="mobile-hero">
-  <h1 class="mobile-hero__title">Andes Mobile</h1>
-  <p class="mobile-hero__subtitle">Hola, <strong>{{ usuario_nombre or 'Usuario' }}</strong></p>
-</section>
+<section class="m-home">
+  <header class="m-home__greeting">
+    <p class="m-home__saludo">{{ saludo }},</p>
+    <h1 class="m-home__name">{{ usuario_nombre or 'Usuario' }}</h1>
+  </header>
 
-<section class="mobile-sections" aria-label="Accesos rápidos">
-  <a href="{{ url_for('mobile.dashboard') }}" class="mobile-card mobile-card--link">
-    <span class="mobile-card__icon" aria-hidden="true">&#128202;</span>
-    <h2 class="mobile-card__title">Dashboard</h2>
-    <p class="mobile-card__status">Ventas e ingresos del día</p>
+  <a href="{{ url_for('mobile.dashboard') }}" class="m-home-kpi m-home-kpi--link m-home-animate" style="--delay: 0ms">
+    <div class="m-home-kpi__chips">
+      <div class="m-home-kpi__chip">
+        <span class="m-home-kpi__chip-label">Ventas hoy</span>
+        <span class="m-home-kpi__chip-value">{{ kpis.ventas_hoy_count }}</span>
+        <span class="m-home-kpi__chip-sub">{{ kpis.ventas_hoy_monto_fmt }}</span>
+      </div>
+      <div class="m-home-kpi__chip">
+        <span class="m-home-kpi__chip-label">Ingresos hoy</span>
+        <span class="m-home-kpi__chip-value">{{ kpis.ingresos_hoy_count }}</span>
+        <span class="m-home-kpi__chip-sub">{{ kpis.ingresos_hoy_monto_fmt }}</span>
+      </div>
+      <div class="m-home-kpi__chip{% if kpis.stock_critico_count > 0 %} m-home-kpi__chip--alert{% endif %}">
+        <span class="m-home-kpi__chip-label">Stock crítico</span>
+        <span class="m-home-kpi__chip-value">{{ kpis.stock_critico_count }}</span>
+        <span class="m-home-kpi__chip-sub">productos</span>
+      </div>
+    </div>
   </a>
-  <a href="{{ url_for('mobile.buscar') }}" class="mobile-card mobile-card--link">
-    <span class="mobile-card__icon" aria-hidden="true">&#128269;</span>
-    <h2 class="mobile-card__title">Buscar</h2>
-    <p class="mobile-card__status">Código, proveedor o descripción</p>
-  </a>
-  <a href="{{ url_for('mobile.ventas') }}" class="mobile-card mobile-card--link">
-    <span class="mobile-card__icon" aria-hidden="true">&#128176;</span>
-    <h2 class="mobile-card__title">Ventas</h2>
-    <p class="mobile-card__status">Hoy, ayer o semana</p>
-  </a>
-  <a href="{{ url_for('mobile.ingresos') }}" class="mobile-card mobile-card--link">
-    <span class="mobile-card__icon" aria-hidden="true">&#128230;</span>
-    <h2 class="mobile-card__title">Ingresos</h2>
-    <p class="mobile-card__status">Últimos 20 documentos</p>
-  </a>
-  <a href="{{ url_for('mobile.stock_critico') }}" class="mobile-card mobile-card--link mobile-card--alert">
-    <span class="mobile-card__icon" aria-hidden="true">&#9888;</span>
-    <h2 class="mobile-card__title">Stock crítico</h2>
-    <p class="mobile-card__status">Bajo mínimo configurado</p>
-  </a>
-  <a href="{{ url_for('mobile.reportes') }}" class="mobile-card mobile-card--link">
-    <span class="mobile-card__icon" aria-hidden="true">&#128200;</span>
-    <h2 class="mobile-card__title">Reportes</h2>
-    <p class="mobile-card__status">Semana, mes y rankings</p>
-  </a>
-  <a href="{{ url_for('mobile.escaner') }}" class="mobile-card mobile-card--link">
-    <span class="mobile-card__icon" aria-hidden="true">&#128248;</span>
-    <h2 class="mobile-card__title">Escáner</h2>
-    <p class="mobile-card__status">QR y código de barras</p>
-  </a>
-  <a href="{{ url_for('mobile.venta_rapida') }}" class="mobile-card mobile-card--link mobile-card--accent" data-requires-online>
-    <span class="mobile-card__icon" aria-hidden="true">&#128179;</span>
-    <h2 class="mobile-card__title">Venta rápida</h2>
-    <p class="mobile-card__status">Boleta o factura desde el celular</p>
-  </a>
-  <div class="mobile-card mobile-card--offline-ready">
-    <span class="mobile-card__icon" aria-hidden="true">&#128241;</span>
-    <h2 class="mobile-card__title">Modo offline</h2>
-    <p class="mobile-card__status">Catálogo cacheado — solo lectura sin internet</p>
-  </div>
+
+  <section class="m-home-grid" aria-label="Accesos rápidos">
+    <a href="{{ url_for('mobile.buscar') }}" class="m-home-card m-home-animate" style="--delay: 60ms">
+      <span class="m-home-card__icon m-home-card__icon--blue" aria-hidden="true">🔍</span>
+      <span class="m-home-card__title">Buscar</span>
+      <span class="m-home-card__desc">Código, proveedor o descripción</span>
+    </a>
+    <a href="{{ url_for('mobile.escaner') }}" class="m-home-card m-home-animate" style="--delay: 120ms">
+      <span class="m-home-card__icon m-home-card__icon--green" aria-hidden="true">📷</span>
+      <span class="m-home-card__title">Escáner</span>
+      <span class="m-home-card__desc">QR y código de barras</span>
+    </a>
+    <a href="{{ url_for('mobile.ventas') }}" class="m-home-card m-home-animate" style="--delay: 180ms">
+      <span class="m-home-card__icon m-home-card__icon--navy" aria-hidden="true">💰</span>
+      <span class="m-home-card__title">Ventas</span>
+      <span class="m-home-card__desc">Hoy, ayer o semana</span>
+    </a>
+    <a href="{{ url_for('mobile.venta_rapida') }}" class="m-home-card m-home-animate" style="--delay: 240ms" data-requires-online>
+      <span class="m-home-card__icon m-home-card__icon--red" aria-hidden="true">💳</span>
+      <span class="m-home-card__title">Venta rápida</span>
+      <span class="m-home-card__desc">Boleta o factura móvil</span>
+    </a>
+    <a href="{{ url_for('mobile.dashboard') }}" class="m-home-card m-home-animate" style="--delay: 300ms">
+      <span class="m-home-card__icon m-home-card__icon--purple" aria-hidden="true">📊</span>
+      <span class="m-home-card__title">Dashboard</span>
+      <span class="m-home-card__desc">Resumen del día</span>
+    </a>
+    <a href="{{ url_for('mobile.ingresos') }}" class="m-home-card m-home-animate" style="--delay: 360ms">
+      <span class="m-home-card__icon m-home-card__icon--teal" aria-hidden="true">📥</span>
+      <span class="m-home-card__title">Ingresos</span>
+      <span class="m-home-card__desc">Últimos documentos</span>
+    </a>
+    <a href="{{ url_for('mobile.stock_critico') }}" class="m-home-card m-home-animate" style="--delay: 420ms">
+      <span class="m-home-card__icon m-home-card__icon--yellow" aria-hidden="true">⚠️</span>
+      <span class="m-home-card__title">Stock crítico</span>
+      <span class="m-home-card__desc">Bajo mínimo</span>
+    </a>
+    <a href="{{ url_for('mobile.reportes') }}" class="m-home-card m-home-animate" style="--delay: 480ms">
+      <span class="m-home-card__icon m-home-card__icon--indigo" aria-hidden="true">📈</span>
+      <span class="m-home-card__title">Reportes</span>
+      <span class="m-home-card__desc">Semana, mes y rankings</span>
+    </a>
+  </section>
+
+  <section class="m-home-recent m-home-animate" id="m-home-recent" style="--delay: 540ms" hidden>
+    <h2 class="m-home-recent__title">Accesos recientes</h2>
+    <ul class="m-home-recent__list" id="m-home-recent-list"></ul>
+  </section>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='mobile/home.js') }}" defer></script>
 {% endblock %}

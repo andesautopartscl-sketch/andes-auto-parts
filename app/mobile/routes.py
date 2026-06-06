@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 from flask import abort, current_app, jsonify, render_template, request, send_from_directory, session
@@ -20,6 +21,15 @@ def _nav_ctx(active: str, **extra) -> dict:
     return {"active_nav": active, "puede_ver_finanzas": _puede_ver_finanzas(), **extra}
 
 
+def _saludo_hora() -> str:
+    h = datetime.now().hour
+    if 5 <= h < 12:
+        return "Buenos días"
+    if 12 <= h < 20:
+        return "Buenas tardes"
+    return "Buenas noches"
+
+
 @mobile_bp.route("/service-worker.js")
 def service_worker():
     """SW con scope /m/ — exento del login wall vía login_wall.py."""
@@ -33,7 +43,13 @@ def service_worker():
 @mobile_bp.route("/")
 @login_required
 def home():
-    return render_template("mobile/home.html", **_nav_ctx("inicio"))
+    kpis = mobile_data.dashboard_payload(_puede_ver_finanzas())
+    return render_template(
+        "mobile/home.html",
+        kpis=kpis,
+        saludo=_saludo_hora(),
+        **_nav_ctx("inicio"),
+    )
 
 
 @mobile_bp.route("/dashboard")

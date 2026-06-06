@@ -1,5 +1,5 @@
-/* Andes Mobile PWA — service worker v10 */
-const SW_VERSION = "andes-mobile-v10";
+/* Andes Mobile PWA — service worker v11 */
+const SW_VERSION = "andes-mobile-v11";
 const CACHE_PREFIX = `${SW_VERSION}-`;
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
@@ -19,6 +19,8 @@ const PRECACHE_URLS = [
   "/static/mobile/offline-ui.min.js",
   "/static/mobile/splash.min.js",
   "/static/mobile/producto_gallery.js",
+  "/static/mobile/producto_accordion.js",
+  "/static/mobile/home.js",
   "/static/mobile/manifest.json",
   "/static/mobile/icons/icon-192.png",
   "/static/mobile/icons/icon-512.png",

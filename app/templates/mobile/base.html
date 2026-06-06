@@ -15,8 +15,8 @@
   <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='mobile/icons/icon-192.png') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" as="style">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" as="style">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='mobile/mobile.min.css') }}">
   {% block head_extra %}{% endblock %}
 </head>
@@ -25,18 +25,26 @@
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
   data-sw-url="{{ url_for('mobile.service_worker') }}"
-  data-pwa-version="v2026.06.05-v10"
+  data-pwa-version="v2026.06.05-v11"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
-    <img
-      src="{{ url_for('static', filename='mobile/icons/icon-192.png') }}"
-      alt=""
-      class="mobile-splash__logo"
-      width="96"
-      height="96"
-    >
-    <p class="mobile-splash__title">Andes Auto Parts</p>
-    <p class="mobile-splash__subtitle">ERP móvil</p>
+    <div class="mobile-splash__content">
+      <img
+        src="{{ 'logo_andes.png' | static_or_cloud }}"
+        alt="Andes Auto Parts"
+        class="mobile-splash__logo"
+        width="96"
+        height="96"
+      >
+      <p class="mobile-splash__title">Andes Auto Parts</p>
+      <p class="mobile-splash__subtitle">ERP móvil</p>
+      <div class="mobile-splash__loader" aria-hidden="true">
+        <span class="mobile-splash__dot"></span>
+        <span class="mobile-splash__dot"></span>
+        <span class="mobile-splash__dot"></span>
+      </div>
+    </div>
+    <span class="mobile-splash__version">v2026.06.05-v11</span>
   </div>
 
   <div id="catalog-sync-skeleton" class="catalog-sync-skeleton" hidden aria-hidden="true">
@@ -113,6 +121,39 @@
           </span>
           <span class="m-mas-item__arrow" aria-hidden="true">›</span>
         </a>
+        <div class="m-mas-menu__divider" role="separator"></div>
+        <a href="{{ url_for('productos.importar_imagenes_cloudinary_view') }}" class="m-mas-item" data-requires-online>
+          <span class="m-mas-item__icon m-mas-item__icon--images" aria-hidden="true">📷</span>
+          <span class="m-mas-item__body">
+            <span class="m-mas-item__title">Importar imágenes</span>
+            <span class="m-mas-item__desc">Cloudinary desde el ERP</span>
+          </span>
+          <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+        </a>
+        <a href="{{ url_for('ventas.clientes') }}" class="m-mas-item" data-requires-online>
+          <span class="m-mas-item__icon m-mas-item__icon--clientes" aria-hidden="true">👥</span>
+          <span class="m-mas-item__body">
+            <span class="m-mas-item__title">Clientes</span>
+            <span class="m-mas-item__desc">Listado y gestión</span>
+          </span>
+          <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+        </a>
+        <button type="button" class="m-mas-item" id="mas-sync-catalog" data-requires-online>
+          <span class="m-mas-item__icon m-mas-item__icon--sync" aria-hidden="true">🔄</span>
+          <span class="m-mas-item__body">
+            <span class="m-mas-item__title">Sincronizar catálogo</span>
+            <span class="m-mas-item__desc">Actualizar búsqueda offline</span>
+          </span>
+          <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+        </button>
+        <span class="m-mas-item m-mas-item--disabled">
+          <span class="m-mas-item__icon m-mas-item__icon--settings" aria-hidden="true">⚙️</span>
+          <span class="m-mas-item__body">
+            <span class="m-mas-item__title">Ajustes</span>
+            <span class="m-mas-item__desc">Próximamente</span>
+          </span>
+        </span>
+        <div class="m-mas-menu__divider" role="separator"></div>
         <form method="post" action="{{ url_for('auth.logout') }}" class="m-mas-item m-mas-item--logout">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button type="submit" class="m-mas-item__btn">
@@ -130,6 +171,8 @@
   </div>
 
   <span id="mobile-version-badge" class="mobile-version-badge" aria-hidden="true"></span>
+
+  <div id="mobile-toast" class="m-toast" role="alert" aria-live="assertive" hidden></div>
 
   <nav class="mobile-nav" aria-label="Navegación principal">
     <a href="{{ url_for('mobile.home') }}" class="mobile-nav__item{% if active_nav == 'inicio' %} mobile-nav__item--active{% endif %}" aria-label="Inicio">

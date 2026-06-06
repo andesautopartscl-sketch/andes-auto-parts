@@ -476,6 +476,36 @@ def buscar_productos(term: str, limit: int = 30) -> list[dict]:
     return items[:limit]
 
 
+def _producto_caracteristicas(producto: Producto) -> list[dict]:
+    items: list[dict] = []
+
+    def _add(label: str, value: str | None) -> None:
+        v = (value or "").strip()
+        if v:
+            items.append({"label": label, "value": v})
+
+    _add("Medidas", producto.medidas)
+    aplicacion: list[str] = []
+    for part in (producto.modelo, producto.motor, producto.anio, producto.version):
+        p = (part or "").strip()
+        if p:
+            aplicacion.append(p)
+    if aplicacion:
+        _add("Aplicaciones", " · ".join(aplicacion))
+    _add("OEM", producto.codigo_oem)
+    _add("Código alternativo", producto.codigo_alternativo)
+    _add("Homologados", producto.homologados)
+    _add("Despiece", producto.despiece)
+    try:
+        if producto.categoria_rel and (producto.categoria_rel.nombre or "").strip():
+            _add("Categoría", producto.categoria_rel.nombre)
+        if producto.subcategoria_rel and (producto.subcategoria_rel.nombre or "").strip():
+            _add("Subcategoría", producto.subcategoria_rel.nombre)
+    except Exception:
+        pass
+    return items
+
+
 def producto_detalle(codigo_raw: str) -> dict | None:
     producto = _find_producto_by_codigo(db.session, codigo_raw)
     if producto is None or producto.activo is False:
@@ -521,7 +551,7 @@ def producto_detalle(codigo_raw: str) -> dict | None:
     movs = (
         MovimientoStock.query.filter(func.upper(MovimientoStock.codigo_producto) == codigo)
         .order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc())
-        .limit(5)
+        .limit(10)
         .all()
     )
     movimientos = [
@@ -554,6 +584,7 @@ def producto_detalle(codigo_raw: str) -> dict | None:
         "ficha_stock": ficha_stock,
         "origen": origen,
         "movimientos": movimientos,
+        "caracteristicas": _producto_caracteristicas(producto),
     }
 
 

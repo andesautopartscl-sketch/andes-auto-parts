@@ -7,7 +7,7 @@
   <span aria-hidden="true">&#8592;</span> Buscar
 </a>
 
-<article class="m-product">
+<article class="m-product" data-producto-codigo="{{ p.codigo }}" data-producto-desc="{{ p.descripcion }}">
   <div id="m-product-gallery" class="m-gallery" data-360='{{ p.imagenes_360_urls | tojson }}'>
     {% if p.galeria or p.tiene_360 %}
     <div class="m-gallery__track">
@@ -78,49 +78,81 @@
     </div>
   </div>
 
-  <section class="m-section">
-    <h2 class="m-section__title">Stock por bodega</h2>
-    <ul class="m-stock-list">
-      {% for b in p.ficha_stock.bodegas %}
-      {% if b.subtotal > 0 or b.lineas %}
-      <li class="m-stock-row">
-        <span class="m-stock-row__bodega">{{ b.nombre }}</span>
-        <span class="m-stock-row__qty">{{ b.subtotal }}</span>
-      </li>
-      {% for ln in b.lineas %}
-      {% if ln.stock > 0 %}
-      <li class="m-stock-row m-stock-row--sub">
-        <span class="m-stock-row__bodega">{{ ln.marca }}</span>
-        <span class="m-stock-row__qty">{{ ln.stock }}</span>
-      </li>
-      {% endif %}
+  {% if p.caracteristicas %}
+  <section class="m-kv-card">
+    <h2 class="m-kv-card__title">Características</h2>
+    <dl class="m-kv-list">
+      {% for c in p.caracteristicas %}
+      <div class="m-kv-list__row">
+        <dt class="m-kv-list__key">{{ c.label }}</dt>
+        <dd class="m-kv-list__val">{{ c.value }}</dd>
+      </div>
       {% endfor %}
-      {% endif %}
+    </dl>
+  </section>
+  {% endif %}
+
+  <section class="m-accordion" data-accordion>
+    <button type="button" class="m-accordion__header" aria-expanded="false">
+      <span class="m-accordion__title">Stock por bodega</span>
+      <span class="m-accordion__meta">{{ p.ficha_stock.stotal }} u.</span>
+      <span class="m-accordion__chevron" aria-hidden="true">▼</span>
+    </button>
+    <div class="m-accordion__body">
+      {% for b in p.ficha_stock.bodegas %}
+      <div class="m-accordion m-accordion--nested{% if b.subtotal > 0 %} m-accordion--has-stock m-accordion--open{% endif %}" data-accordion data-open-default="{{ 'true' if b.subtotal > 0 else 'false' }}">
+        <button type="button" class="m-accordion__header m-accordion__header--sub" aria-expanded="{{ 'true' if b.subtotal > 0 else 'false' }}">
+          <span class="m-accordion__title">{{ b.nombre }}</span>
+          <span class="m-accordion__meta{% if b.subtotal > 0 %} m-accordion__meta--ok{% endif %}">{{ b.subtotal }}</span>
+          <span class="m-accordion__chevron" aria-hidden="true">▼</span>
+        </button>
+        <div class="m-accordion__body">
+          {% for ln in b.lineas %}
+          {% if ln.stock > 0 %}
+          <div class="m-stock-variant">
+            <span class="m-stock-variant__marca">{{ ln.marca }}</span>
+            <span class="m-stock-variant__qty">{{ ln.stock }}</span>
+          </div>
+          {% endif %}
+          {% endfor %}
+          {% if b.subtotal <= 0 %}
+          <p class="m-accordion__empty">Sin stock</p>
+          {% endif %}
+        </div>
+      </div>
       {% endfor %}
       {% for o in p.ficha_stock.otras_lineas %}
-      <li class="m-stock-row">
-        <span class="m-stock-row__bodega">{{ o.bodega }} · {{ o.marca }}</span>
-        <span class="m-stock-row__qty">{{ o.stock }}</span>
-      </li>
+      <div class="m-stock-variant m-stock-variant--other">
+        <span class="m-stock-variant__marca">{{ o.bodega }} · {{ o.marca }}</span>
+        <span class="m-stock-variant__qty">{{ o.stock }}</span>
+      </div>
       {% endfor %}
-    </ul>
-    <p class="m-hint">Total: <strong>{{ p.ficha_stock.stotal }}</strong> unidades</p>
+    </div>
   </section>
 
-  <section class="m-section">
-    <h2 class="m-section__title">Últimos movimientos</h2>
-    {% if p.movimientos %}
-    <ul class="m-list m-list--compact">
-      {% for m in p.movimientos %}
-      <li class="m-list-item m-list-item--static">
-        <span class="m-list-item__main">{{ m.tipo | capitalize }} · {{ m.cantidad }} u.</span>
-        <span class="m-list-item__sub">{{ m.bodega }} · {{ m.fecha }}</span>
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="m-empty">Sin movimientos recientes.</p>
-    {% endif %}
+  <section class="m-accordion" data-accordion>
+    <button type="button" class="m-accordion__header" aria-expanded="false">
+      <span class="m-accordion__title">Últimos movimientos</span>
+      <span class="m-accordion__meta">{{ p.movimientos | length }}</span>
+      <span class="m-accordion__chevron" aria-hidden="true">▼</span>
+    </button>
+    <div class="m-accordion__body">
+      {% if p.movimientos %}
+      <ul class="m-mov-list" id="m-mov-list">
+        {% for m in p.movimientos %}
+        <li class="m-mov-item{% if loop.index > 3 %} m-mov-item--extra{% endif %}"{% if loop.index > 3 %} hidden{% endif %}>
+          <span class="m-mov-item__main">{{ m.tipo | capitalize }} · {{ m.cantidad }} u.</span>
+          <span class="m-mov-item__sub">{{ m.bodega }}{% if m.marca %} · {{ m.marca }}{% endif %} · {{ m.fecha }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if p.movimientos | length > 3 %}
+      <button type="button" class="m-accordion__more" id="m-mov-more" data-mov-more>Ver más</button>
+      {% endif %}
+      {% else %}
+      <p class="m-accordion__empty">Sin movimientos recientes.</p>
+      {% endif %}
+    </div>
   </section>
 
   <a href="{{ url_for('mobile.ajustar_stock', codigo=p.codigo) }}" class="m-btn m-btn--secondary m-btn--block">
@@ -144,4 +176,5 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='mobile/producto_gallery.js') }}" defer></script>
+<script src="{{ url_for('static', filename='mobile/producto_accordion.js') }}" defer></script>
 {% endblock %}
