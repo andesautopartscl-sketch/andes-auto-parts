@@ -1,0 +1,47 @@
+{% extends "mobile/base.html" %}
+{% block title %}Importar imágenes — Andes Mobile{% endblock %}
+{% block head_extra %}
+<script>
+  window.ANDES_IMPORT_IMG = {
+    apiBuscar: "{{ url_for('mobile.api_importar_imagenes_buscar') }}",
+    apiResolver: "{{ url_for('mobile.api_importar_imagenes_resolver') }}",
+    apiSubir: "{{ url_for('mobile.api_importar_imagenes_subir') }}",
+    cloudinaryOk: {{ 'true' if cloudinary_ok else 'false' }}
+  };
+</script>
+{% endblock %}
+{% block content %}
+<section class="m-page-head">
+  <h1 class="m-page-title">Importar imágenes a Cloudinary</h1>
+  <p class="m-page-sub">Asigna fotos a productos, 360° o despiece</p>
+</section>
+
+{% if not cloudinary_ok %}
+<p class="m-alert m-alert--error">Cloudinary no está configurado en el servidor.</p>
+{% endif %}
+
+<div class="m-import-img" id="import-img-root" data-enabled="{{ '1' if cloudinary_ok else '0' }}">
+  <div class="m-import-img__pickers">
+    <label class="m-btn m-btn--primary m-btn--block m-btn--lg m-import-img__picker">
+      📷 Tomar foto
+      <input type="file" id="ii-camera" accept="image/*" capture="environment" hidden>
+    </label>
+    <label class="m-btn m-btn--secondary m-btn--block m-btn--lg m-import-img__picker">
+      🖼️ Seleccionar desde galería
+      <input type="file" id="ii-gallery" accept="image/*" multiple hidden>
+    </label>
+  </div>
+
+  <ul class="m-import-img__list" id="ii-list"></ul>
+  <p class="m-empty" id="ii-empty">Aún no hay imágenes en la cola.</p>
+</div>
+
+<div class="m-import-img__sticky" id="ii-sticky" hidden>
+  <button type="button" class="m-btn m-btn--primary m-btn--block m-btn--lg" id="ii-upload-all" disabled>
+    Subir todas
+  </button>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='mobile/importar_imagenes.js') }}" defer></script>
+{% endblock %}

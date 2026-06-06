@@ -10,6 +10,7 @@ from . import mobile_bp
 from . import clientes as mobile_clientes
 from . import data as mobile_data
 from . import etiquetas as mobile_etiquetas
+from . import importar_imagenes as mobile_importar_imagenes
 from . import ingreso_rapido as mobile_ingreso_rapido
 from . import proveedores as mobile_proveedores
 from . import scan as mobile_scan
@@ -564,3 +565,58 @@ def etiquetas_imprimir():
         missing=missing,
         print_mode=print_mode,
     )
+
+
+@mobile_bp.route("/importar-imagenes")
+@login_required
+def importar_imagenes():
+    if not mobile_importar_imagenes.puede_importar_imagenes(session.get("user"), session.get("rol")):
+        abort(403)
+    return render_template(
+        "mobile/importar_imagenes.html",
+        cloudinary_ok=mobile_importar_imagenes.cloudinary_is_configured(),
+        tipos_imagen=mobile_importar_imagenes.TIPO_OPCIONES,
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/api/importar-imagenes/buscar")
+@login_required
+def api_importar_imagenes_buscar():
+    if not mobile_importar_imagenes.puede_importar_imagenes(session.get("user"), session.get("rol")):
+        return mobile_importar_imagenes._deny_json()
+    q = (request.args.get("q") or "").strip()
+    items = mobile_importar_imagenes.buscar_productos(q)
+    return jsonify(success=True, items=items, count=len(items))
+
+
+@mobile_bp.route("/api/importar-imagenes/resolver")
+@login_required
+def api_importar_imagenes_resolver():
+    if not mobile_importar_imagenes.puede_importar_imagenes(session.get("user"), session.get("rol")):
+        return mobile_importar_imagenes._deny_json()
+    codigo = (request.args.get("codigo") or "").strip()
+    return jsonify(mobile_importar_imagenes.resolver_codigo(codigo))
+
+
+@mobile_bp.route("/api/importar-imagenes/subir", methods=["POST"])
+@login_required
+def api_importar_imagenes_subir():
+    if not mobile_importar_imagenes.puede_importar_imagenes(session.get("user"), session.get("rol")):
+        return mobile_importar_imagenes._deny_json()
+    file_obj = request.files.get("imagen") or request.files.get("file")
+    codigo = (request.form.get("codigo") or "").strip().upper()
+    archivo_nombre = (request.form.get("archivo_nombre") or "").strip()
+    tipo_imagen = (request.form.get("tipo_imagen") or "producto").strip()
+    if not file_obj:
+        return jsonify(ok=False, success=False, error="Falta archivo", estado="error"), 400
+    if not codigo:
+        return jsonify(ok=False, success=False, error="Falta código", estado="error"), 400
+    result = mobile_importar_imagenes.subir_imagen(
+        file_obj,
+        codigo=codigo,
+        archivo_nombre=archivo_nombre,
+        tipo_imagen=tipo_imagen,
+    )
+    status = 200 if result.get("ok") else 500
+    return jsonify(result), status

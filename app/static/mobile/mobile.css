@@ -2064,6 +2064,116 @@ body.mobile-app--scanner .mobile-nav__item--active {
 .m-mas-item__icon--ingreso { background: rgba(99, 102, 241, 0.12); }
 .m-mas-item__icon--etiquetas { background: rgba(249, 115, 22, 0.14); }
 
+.m-import-img__pickers {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.m-import-img__picker {
+  position: relative;
+  cursor: pointer;
+}
+
+.m-import-img__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.m-import-img__card {
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--andes-white);
+  border: 1px solid var(--andes-gray-200);
+  box-shadow: 0 2px 8px rgba(27, 43, 107, 0.06);
+}
+
+.m-import-img__card-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.m-import-img__thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--andes-gray-100);
+  flex-shrink: 0;
+}
+
+.m-import-img__meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.m-import-img__name {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--andes-navy);
+  word-break: break-all;
+}
+
+.m-import-img__status {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--andes-gray-600);
+}
+
+.m-import-img__status--done { color: #15803d; font-weight: 600; }
+.m-import-img__status--error { color: var(--andes-red); font-weight: 600; }
+.m-import-img__status--uploading { color: var(--andes-navy); }
+
+.m-import-img__remove {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: var(--andes-gray-100);
+  color: var(--andes-gray-600);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.m-import-img__progress {
+  height: 6px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: var(--andes-gray-200);
+  overflow: hidden;
+}
+
+.m-import-img__progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--andes-navy), #3b5bdb);
+  transition: width 0.25s ease;
+}
+
+.m-import-img__msg {
+  margin: 8px 0 0;
+  font-size: 0.75rem;
+  color: var(--andes-gray-600);
+}
+
+.m-import-img__sticky {
+  position: sticky;
+  bottom: calc(var(--mobile-nav-height) + var(--safe-bottom) + 8px);
+  margin-top: 16px;
+  padding-top: 8px;
+  z-index: 20;
+}
+
 .m-toast {
   position: fixed;
   left: 16px;

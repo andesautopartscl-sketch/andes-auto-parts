@@ -1,5 +1,5 @@
-/* Andes Mobile PWA — service worker v14 */
-const SW_VERSION = "andes-mobile-v14";
+/* Andes Mobile PWA — service worker v15 */
+const SW_VERSION = "andes-mobile-v15";
 const CACHE_PREFIX = `${SW_VERSION}-`;
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
@@ -16,6 +16,7 @@ const PRECACHE_URLS = [
   "/m/proveedores",
   "/m/ingreso-rapido",
   "/m/etiquetas",
+  "/m/importar-imagenes",
   "/m/service-worker.js",
   "/static/mobile/mobile.min.css",
   "/static/mobile/mobile.min.js",
@@ -34,6 +35,7 @@ const PRECACHE_URLS = [
   "/static/mobile/lib/html5-qrcode.min.js",
   "/static/mobile/scanner.js",
   "/static/mobile/ingreso_rapida.js",
+  "/static/mobile/importar_imagenes.js",
 ];
 
 const CDN_ASSETS = [];

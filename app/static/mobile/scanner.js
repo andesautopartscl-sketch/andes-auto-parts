@@ -58,6 +58,19 @@
   var paused = false;
   var lastScanAt = 0;
   var COOLDOWN_MS = 1800;
+  var pageLoadTs = Date.now();
+  var scannerStarted = false;
+  var bootComplete = false;
+  var bootRetryCount = 0;
+  var bootRetryTimer = null;
+  var MAX_BOOT_RETRIES = 5;
+  var visibilityStopTimer = null;
+
+  function tsLog() {
+    var args = Array.prototype.slice.call(arguments);
+    args.unshift("[" + (Date.now() - pageLoadTs) + "ms]");
+    debugLog.apply(null, args);
+  }
 
   function supportedFormatsEnum() {
     return window.Html5QrcodeSupportedFormats || null;
@@ -254,6 +267,17 @@
     deniedEl.hidden = !show;
     if (deniedDetailEl && message) {
       deniedDetailEl.textContent = message;
+    }
+  }
+
+  function cleanupResidualScanner() {
+    tsLog("cleanupResidualScanner");
+    html5QrCode = null;
+    scannerStarted = false;
+    var reader = document.getElementById(readerId);
+    if (reader) {
+      reader.innerHTML = "";
+      reader.style.minHeight = "200px";
     }
   }
 
@@ -541,11 +565,67 @@
       return startWithFallbacks();
     });
 
-    return startChain.catch(function (err) {
-      var errMsg = (err && err.message) || "Error desconocido al abrir la cámara";
-      debugError("startScanner error final:", errMsg);
-      showDenied(true, errMsg);
-    });
+    return startChain
+      .then(function () {
+        scannerStarted = true;
+        bootComplete = true;
+        tsLog("startScanner OK — cámara activa");
+      })
+      .catch(function (err) {
+        var errMsg = (err && err.message) || "Error desconocido al abrir la cámara";
+        debugError("startScanner error final:", errMsg);
+        scannerStarted = false;
+        if (bootRetryCount < MAX_BOOT_RETRIES) {
+          tsLog("startScanner falló, reintento automático en 500ms:", errMsg);
+          scheduleBootRetry(500);
+          return;
+        }
+        showDenied(true, errMsg);
+      });
+  }
+
+  function scheduleBootRetry(delayMs) {
+    if (bootRetryTimer) {
+      clearTimeout(bootRetryTimer);
+      bootRetryTimer = null;
+    }
+    bootRetryCount += 1;
+    tsLog("scheduleBootRetry intento", bootRetryCount, "de", MAX_BOOT_RETRIES, "en", delayMs || 500, "ms");
+    if (bootRetryCount > MAX_BOOT_RETRIES) {
+      showDenied(true, "No se pudo iniciar la cámara. Toca Reintentar.");
+      return;
+    }
+    bootRetryTimer = setTimeout(function () {
+      bootRetryTimer = null;
+      bootScanner();
+    }, delayMs || 500);
+  }
+
+  function bootScanner() {
+    tsLog("bootScanner readyState=", document.readyState);
+    var reader = document.getElementById(readerId);
+    if (!reader) {
+      tsLog("bootScanner: #qr-reader no existe aún");
+      scheduleBootRetry(500);
+      return;
+    }
+    var rect = reader.getBoundingClientRect();
+    tsLog("bootScanner: #qr-reader height=", Math.round(rect.height), "width=", Math.round(rect.width));
+    if (rect.height < 60) {
+      tsLog("bootScanner: contenedor sin altura, esperando layout");
+      scheduleBootRetry(500);
+      return;
+    }
+    if (typeof Html5Qrcode === "undefined") {
+      tsLog("bootScanner: librería no cargada, delegando waitForLibraryAndBoot");
+      waitForLibraryAndBoot();
+      return;
+    }
+    if (!html5QrCode) {
+      cleanupResidualScanner();
+    }
+    setActiveTab();
+    startScanner();
   }
 
   function fetchProducto(codigo) {
@@ -710,10 +790,13 @@
 
   if (retryBtn) {
     retryBtn.addEventListener("click", function () {
-      debugLog("Reintentar solicitado por usuario");
+      tsLog("Reintentar solicitado por usuario");
+      bootRetryCount = 0;
+      bootComplete = false;
       useFacingMode = true;
       cameraIndex = 0;
-      startScanner();
+      cleanupResidualScanner();
+      bootScanner();
     });
   }
 
@@ -722,9 +805,8 @@
       debugWarn("Html5Qrcode aún no cargado, esperando…");
       return false;
     }
-    debugLog("Html5Qrcode disponible, versión lib OK");
-    setActiveTab();
-    startScanner();
+    tsLog("Html5Qrcode disponible");
+    bootScanner();
     return true;
   }
 
@@ -744,20 +826,59 @@
     }, 100);
   }
 
+  function onDomReady() {
+    tsLog("DOM listo — iniciando boot del escáner");
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        bootRetryCount = 0;
+        bootScanner();
+      });
+    });
+  }
+
   window.addEventListener("pagehide", function () {
+    tsLog("pagehide — destruyendo escáner");
+    if (bootRetryTimer) clearTimeout(bootRetryTimer);
     stopScanner(true);
+    scannerStarted = false;
+    bootComplete = false;
+  });
+
+  window.addEventListener("pageshow", function (ev) {
+    tsLog("pageshow persisted=", ev.persisted, "scannerStarted=", scannerStarted);
+    if (!ev.persisted) return;
+    bootRetryCount = 0;
+    bootComplete = false;
+    cleanupResidualScanner();
+    scheduleBootRetry(150);
   });
 
   document.addEventListener("visibilitychange", function () {
-    if (document.hidden) {
-      stopScanner(true);
+    if (visibilityStopTimer) {
+      clearTimeout(visibilityStopTimer);
+      visibilityStopTimer = null;
     }
+    if (!document.hidden) {
+      if (!scannerStarted && !bootComplete) {
+        tsLog("visibility visible durante boot — reintento");
+        scheduleBootRetry(400);
+      }
+      return;
+    }
+    if (!scannerStarted) return;
+    visibilityStopTimer = setTimeout(function () {
+      if (document.hidden && scannerStarted) {
+        tsLog("visibility hidden prolongado — deteniendo cámara");
+        stopScanner(true);
+        scannerStarted = false;
+      }
+    }, 500);
   });
 
-  debugLog("scanner.js cargado, modo=", modo, "activeMode=", activeMode, "readyState=", document.readyState);
+  tsLog("scanner.js evaluado modo=", modo, "readyState=", document.readyState);
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", waitForLibraryAndBoot);
+    document.addEventListener("DOMContentLoaded", onDomReady);
   } else {
-    waitForLibraryAndBoot();
+    onDomReady();
   }
 })();
