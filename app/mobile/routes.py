@@ -1,12 +1,13 @@
 from datetime import datetime
 from pathlib import Path
 
-from flask import abort, current_app, jsonify, render_template, request, send_from_directory, session
+from flask import abort, current_app, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
 from app.utils.decorators import login_required
 from app.utils.finance_visibility import user_can_view_finanzas
 
 from . import mobile_bp
+from . import clientes as mobile_clientes
 from . import data as mobile_data
 from . import scan as mobile_scan
 from . import stock_ajuste as mobile_stock_ajuste
@@ -288,3 +289,97 @@ def stock(codigo):
     if vista is None:
         abort(404)
     return render_template("mobile/stock.html", s=vista, **_nav_ctx("escaner"))
+
+
+@mobile_bp.route("/clientes")
+@login_required
+def clientes():
+    q = (request.args.get("q") or "").strip()
+    lista = mobile_clientes.listar_clientes(q)
+    toast_map = {"creado": "Cliente creado", "actualizado": "Cliente actualizado", "eliminado": "Cliente desactivado"}
+    toast_key = (request.args.get("toast") or "").strip().lower()
+    return render_template(
+        "mobile/clientes.html",
+        clientes=lista,
+        q=q,
+        toast_msg=toast_map.get(toast_key, ""),
+        puede_gestionar=mobile_clientes.puede_gestionar_clientes(session.get("user"), session.get("rol")),
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/cliente/nuevo", methods=["GET", "POST"])
+@login_required
+def cliente_nuevo():
+    if not mobile_clientes.puede_gestionar_clientes(session.get("user"), session.get("rol")):
+        abort(403)
+    validation_errors = []
+    cliente = {}
+    if request.method == "POST":
+        ok, result = mobile_clientes.guardar_cliente_nuevo(request.form)
+        if ok:
+            return redirect(url_for("mobile.clientes", toast="creado"))
+        validation_errors = result.get("errors") or []
+        cliente = result.get("cliente") or {}
+    return render_template(
+        "mobile/cliente_form.html",
+        form_title="Nuevo cliente",
+        submit_label="Crear cliente",
+        cliente=cliente,
+        validation_errors=validation_errors,
+        back_url=url_for("mobile.clientes"),
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/cliente/<int:cid>")
+@login_required
+def cliente_detalle(cid):
+    detalle = mobile_clientes.cliente_detalle(cid)
+    if detalle is None:
+        abort(404)
+    return render_template(
+        "mobile/cliente_detalle.html",
+        c=detalle,
+        puede_gestionar=mobile_clientes.puede_gestionar_clientes(session.get("user"), session.get("rol")),
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/cliente/<int:cid>/editar", methods=["GET", "POST"])
+@login_required
+def cliente_editar(cid):
+    if not mobile_clientes.puede_gestionar_clientes(session.get("user"), session.get("rol")):
+        abort(403)
+    validation_errors = []
+    cliente = {}
+    if request.method == "POST":
+        ok, result = mobile_clientes.guardar_cliente_editar(cid, request.form)
+        if ok:
+            return redirect(url_for("mobile.cliente_detalle", cid=cid, toast="actualizado"))
+        validation_errors = result.get("errors") or []
+        cliente = result.get("cliente") or {}
+    else:
+        detalle = mobile_clientes.cliente_detalle(cid)
+        if detalle is None:
+            abort(404)
+        cliente = detalle
+    return render_template(
+        "mobile/cliente_form.html",
+        form_title="Editar cliente",
+        submit_label="Guardar cambios",
+        cliente=cliente,
+        validation_errors=validation_errors,
+        back_url=url_for("mobile.cliente_detalle", cid=cid),
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/cliente/<int:cid>/eliminar", methods=["POST"])
+@login_required
+def cliente_eliminar(cid):
+    if not mobile_clientes.puede_gestionar_clientes(session.get("user"), session.get("rol")):
+        abort(403)
+    if mobile_clientes.desactivar_cliente(cid):
+        return redirect(url_for("mobile.clientes", toast="eliminado"))
+    abort(404)

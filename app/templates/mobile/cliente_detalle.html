@@ -1,0 +1,60 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}{{ c.nombre }} — Andes Mobile{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('mobile.clientes') }}" class="m-back" aria-label="Volver">
+  <span aria-hidden="true">&#8592;</span> Clientes
+</a>
+
+<article class="m-cliente-detail">
+  <header class="m-cliente-detail__head">
+    <h1 class="m-cliente-detail__name">{{ c.nombre }}</h1>
+    {% if c.rut %}<p class="m-cliente-detail__rut">{{ c.rut }}</p>{% endif %}
+  </header>
+
+  <section class="m-kv-card">
+    <dl class="m-kv-list">
+      {% if c.giro %}
+      <div class="m-kv-list__row"><dt class="m-kv-list__key">Giro</dt><dd class="m-kv-list__val">{{ c.giro }}</dd></div>
+      {% endif %}
+      {% if c.direccion_full %}
+      <div class="m-kv-list__row"><dt class="m-kv-list__key">Dirección</dt><dd class="m-kv-list__val">{{ c.direccion_full }}</dd></div>
+      {% endif %}
+      {% if c.telefono %}
+      <div class="m-kv-list__row"><dt class="m-kv-list__key">Teléfono</dt><dd class="m-kv-list__val">{{ c.telefono }}</dd></div>
+      {% endif %}
+      {% if c.email %}
+      <div class="m-kv-list__row"><dt class="m-kv-list__key">Email</dt><dd class="m-kv-list__val">{{ c.email }}</dd></div>
+      {% endif %}
+    </dl>
+  </section>
+
+  <section class="m-section">
+    <h2 class="m-section__title">Historial (últimos 10)</h2>
+    {% if c.historial %}
+    <ul class="m-list m-list--compact">
+      {% for h in c.historial %}
+      <li class="m-list-item m-list-item--static">
+        <span class="m-list-item__main">{{ h.tipo_label }} · {{ h.numero }}</span>
+        <span class="m-list-item__sub">{{ h.fecha }} · {{ h.total_fmt }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="m-empty">Sin documentos para este cliente.</p>
+    {% endif %}
+  </section>
+
+  {% if puede_gestionar %}
+  <div class="m-cliente-detail__actions">
+    <a href="{{ url_for('mobile.cliente_editar', cid=c.id) }}" class="m-btn m-btn--primary m-btn--block">Editar</a>
+    <form method="post" action="{{ url_for('mobile.cliente_eliminar', cid=c.id) }}" class="m-cliente-delete-form"
+          onsubmit="return confirm('¿Desactivar este cliente?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="m-btn m-btn--danger m-btn--block">Eliminar</button>
+    </form>
+  </div>
+  {% endif %}
+</article>
+{% endblock %}

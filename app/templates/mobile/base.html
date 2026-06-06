@@ -25,14 +25,14 @@
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
   data-sw-url="{{ url_for('mobile.service_worker') }}"
-  data-pwa-version="v2026.06.05-v11"
+  data-pwa-version="v2026.06.05-v12"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
     <div class="mobile-splash__content">
       <img
         src="{{ 'logo_andes.png' | static_or_cloud }}"
         alt="Andes Auto Parts"
-        class="mobile-splash__logo"
+        class="mobile-splash__logo andes-logo-pulse"
         width="96"
         height="96"
       >
@@ -44,12 +44,16 @@
         <span class="mobile-splash__dot"></span>
       </div>
     </div>
-    <span class="mobile-splash__version">v2026.06.05-v11</span>
+    <span class="mobile-splash__version">v2026.06.05-v12</span>
   </div>
 
   <div id="catalog-sync-skeleton" class="catalog-sync-skeleton" hidden aria-hidden="true">
-    <div class="catalog-sync-skeleton__bar"></div>
+    <img src="{{ 'logo_andes.png' | static_or_cloud }}" alt="" class="catalog-sync-skeleton__logo andes-logo-pulse" width="40" height="40">
     <p class="catalog-sync-skeleton__text">Sincronizando catálogo…</p>
+  </div>
+
+  <div id="mobile-page-transition" class="mobile-page-transition" hidden aria-hidden="true">
+    <img src="{{ 'logo_andes.png' | static_or_cloud }}" alt="" class="mobile-page-transition__logo andes-logo-pulse" width="56" height="56">
   </div>
 
   {% if not scanner_layout %}
@@ -130,7 +134,7 @@
           </span>
           <span class="m-mas-item__arrow" aria-hidden="true">›</span>
         </a>
-        <a href="{{ url_for('ventas.clientes') }}" class="m-mas-item" data-requires-online>
+        <a href="{{ url_for('mobile.clientes') }}" class="m-mas-item">
           <span class="m-mas-item__icon m-mas-item__icon--clientes" aria-hidden="true">👥</span>
           <span class="m-mas-item__body">
             <span class="m-mas-item__title">Clientes</span>

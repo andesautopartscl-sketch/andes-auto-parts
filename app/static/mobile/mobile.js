@@ -1,10 +1,18 @@
 (function () {
   "use strict";
 
+  var masMenuApi = null;
+
   function initMasMenu() {
     var toggle = document.getElementById("mobile-mas-toggle");
     var menu = document.getElementById("mobile-mas-menu");
     if (!toggle || !menu) return;
+
+    var masHistoryPushed = false;
+
+    function isMenuOpen() {
+      return menu.classList.contains("m-mas-menu--visible");
+    }
 
     function openMenu() {
       menu.hidden = false;
@@ -13,9 +21,14 @@
       requestAnimationFrame(function () {
         menu.classList.add("m-mas-menu--visible");
       });
+      if (!masHistoryPushed) {
+        history.pushState({ andesMasMenu: true }, "");
+        masHistoryPushed = true;
+      }
     }
 
-    function closeMenu() {
+    function closeMenu(fromPopstate) {
+      if (!isMenuOpen() && menu.hidden) return;
       menu.classList.remove("m-mas-menu--visible");
       toggle.setAttribute("aria-expanded", "false");
       document.body.classList.remove("m-mas-open");
@@ -24,16 +37,32 @@
           menu.hidden = true;
         }
       }, 280);
+      if (!fromPopstate && masHistoryPushed) {
+        masHistoryPushed = false;
+        window.andesSkipNextBackGuardFlag = true;
+        history.back();
+      } else if (fromPopstate) {
+        masHistoryPushed = false;
+      }
     }
+
+    masMenuApi = {
+      isOpen: isMenuOpen,
+      close: function (fromPopstate) {
+        closeMenu(!!fromPopstate);
+      },
+    };
 
     toggle.addEventListener("click", function (e) {
       e.preventDefault();
-      if (menu.hidden || !menu.classList.contains("m-mas-menu--visible")) openMenu();
-      else closeMenu();
+      if (menu.hidden || !isMenuOpen()) openMenu();
+      else closeMenu(false);
     });
 
     menu.querySelectorAll("[data-mas-close]").forEach(function (el) {
-      el.addEventListener("click", closeMenu);
+      el.addEventListener("click", function () {
+        closeMenu(false);
+      });
     });
 
     var syncBtn = document.getElementById("mas-sync-catalog");
@@ -416,10 +445,83 @@
       });
   }
 
+  function initBackNavigation() {
+    if (!window.history || !window.history.pushState) return;
+
+    var backToastAt = 0;
+
+    if (!history.state || !history.state.andesMobile) {
+      history.replaceState({ andesMobile: true, screen: "app" }, "", location.href);
+    }
+
+    window.addEventListener("popstate", function () {
+      if (masMenuApi && masMenuApi.isOpen()) {
+        masMenuApi.close(true);
+        history.pushState({ andesMobile: true, screen: "app" }, "", location.href);
+        return;
+      }
+
+      if (window.andesSkipNextBackGuardFlag) {
+        window.andesSkipNextBackGuardFlag = false;
+        return;
+      }
+
+      history.pushState({ andesMobile: true, screen: "app" }, "", location.href);
+      var now = Date.now();
+      if (now - backToastAt > 2200) {
+        backToastAt = now;
+        showMasToast("Toca atrás de nuevo para cerrar la app");
+      }
+    });
+  }
+
+  function initPageTransitions() {
+    var overlay = document.getElementById("mobile-page-transition");
+    if (!overlay) return;
+
+    function flashTransition() {
+      overlay.hidden = false;
+      window.setTimeout(function () {
+        overlay.hidden = true;
+      }, 320);
+    }
+
+    document.addEventListener("click", function (e) {
+      var link = e.target.closest("a[href]");
+      if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
+      var href = link.getAttribute("href") || "";
+      if (href.indexOf("/m/") !== 0 && href.indexOf("/m") !== 0) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      flashTransition();
+    });
+  }
+
+  function initQueryToast() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var toast = params.get("toast");
+      var map = {
+        creado: "Cliente creado",
+        actualizado: "Cliente actualizado",
+        eliminado: "Cliente desactivado",
+      };
+      if (toast && map[toast]) {
+        showMasToast(map[toast]);
+        params.delete("toast");
+        var qs = params.toString();
+        var next = window.location.pathname + (qs ? "?" + qs : "");
+        history.replaceState(history.state, "", next);
+      }
+    } catch (_e) {}
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     initPwaAutoUpdate();
     initVersionBadge();
     initMasMenu();
+    initBackNavigation();
+    initPageTransitions();
+    initQueryToast();
     initSearchDebounce();
     initPullToRefresh();
     initNavPlaceholders();

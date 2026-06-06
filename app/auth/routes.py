@@ -153,6 +153,11 @@ def login():
                     print("="*70 + "\n")
 
                 if next_url:
+                    if next_url.startswith("/m"):
+                        return render_template(
+                            "mobile/post_login_replace.html",
+                            target=next_url,
+                        )
                     return redirect(next_url)
                 return redirect(url_for("productos.buscar"))
 
@@ -189,6 +194,11 @@ def login():
                         session["rol"] = legacy_user.rol or ""
                         rotate_csrf_token()
                         if next_url:
+                            if next_url.startswith("/m"):
+                                return render_template(
+                                    "mobile/post_login_replace.html",
+                                    target=next_url,
+                                )
                             return redirect(next_url)
                         return redirect(url_for("productos.buscar"))
 

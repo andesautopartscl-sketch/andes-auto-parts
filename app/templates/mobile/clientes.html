@@ -1,0 +1,50 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}Clientes — Andes Mobile{% endblock %}
+
+{% block content %}
+<section class="m-page-head">
+  <h1 class="m-page-title">Clientes</h1>
+</section>
+
+<form class="m-search-form" method="get" action="{{ url_for('mobile.clientes') }}" role="search">
+  <input
+    type="search"
+    name="q"
+    class="m-search-input"
+    placeholder="Buscar por nombre o RUT"
+    value="{{ q }}"
+    autocomplete="off"
+    enterkeyhint="search"
+  >
+</form>
+
+{% if toast_msg %}
+<p class="m-flash m-flash--ok" role="status">{{ toast_msg }}</p>
+{% endif %}
+
+<div class="m-clientes-list">
+  {% if clientes %}
+  <ul class="m-card-list">
+    {% for c in clientes %}
+    <li>
+      <a href="{{ url_for('mobile.cliente_detalle', cid=c.id) }}" class="m-cliente-card">
+        <span class="m-cliente-card__name">{{ c.nombre }}</span>
+        {% if c.rut %}<span class="m-cliente-card__rut">{{ c.rut }}</span>{% endif %}
+        <div class="m-cliente-card__meta">
+          {% if c.telefono %}<span>{{ c.telefono }}</span>{% endif %}
+          {% if c.email %}<span>{{ c.email }}</span>{% endif %}
+        </div>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="m-empty">{% if q %}Sin resultados para «{{ q }}».{% else %}No hay clientes activos.{% endif %}</p>
+  {% endif %}
+</div>
+
+{% if puede_gestionar %}
+<a href="{{ url_for('mobile.cliente_nuevo') }}" class="m-fab" aria-label="Nuevo cliente">+</a>
+{% endif %}
+{% endblock %}
