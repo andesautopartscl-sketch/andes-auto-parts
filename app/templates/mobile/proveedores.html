@@ -1,0 +1,31 @@
+{% extends "mobile/base.html" %}
+{% block title %}Proveedores — Andes Mobile{% endblock %}
+{% block content %}
+<section class="m-page-head"><h1 class="m-page-title">Proveedores</h1></section>
+<form class="m-search-form" method="get" action="{{ url_for('mobile.proveedores') }}" role="search">
+  <input type="search" name="q" class="m-search-input" placeholder="Buscar por nombre o RUT" value="{{ q }}" autocomplete="off">
+</form>
+<div class="m-clientes-list">
+  {% if proveedores %}
+  <ul class="m-card-list">
+    {% for p in proveedores %}
+    <li>
+      <a href="{{ url_for('mobile.proveedor_detalle', pid=p.id) }}" class="m-cliente-card">
+        <span class="m-cliente-card__name">{{ p.display_name or p.nombre }}</span>
+        {% if p.rut %}<span class="m-cliente-card__rut">{{ p.rut }}</span>{% endif %}
+        <div class="m-cliente-card__meta">
+          {% if p.telefono %}<span>{{ p.telefono }}</span>{% endif %}
+          <span>Últ. ingreso: {{ p.ultimo_ingreso }}</span>
+        </div>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="m-empty">{% if q %}Sin resultados.{% else %}No hay proveedores activos.{% endif %}</p>
+  {% endif %}
+</div>
+{% if puede_gestionar %}
+<a href="{{ url_for('mobile.proveedor_nuevo') }}" class="m-fab" aria-label="Nuevo proveedor">+</a>
+{% endif %}
+{% endblock %}

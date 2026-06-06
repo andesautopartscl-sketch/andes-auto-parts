@@ -25,7 +25,7 @@
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
   data-sw-url="{{ url_for('mobile.service_worker') }}"
-  data-pwa-version="v2026.06.05-v12"
+  data-pwa-version="v2026.06.05-v13"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
     <div class="mobile-splash__content">
@@ -44,7 +44,7 @@
         <span class="mobile-splash__dot"></span>
       </div>
     </div>
-    <span class="mobile-splash__version">v2026.06.05-v12</span>
+    <span class="mobile-splash__version">v2026.06.05-v13</span>
   </div>
 
   <div id="catalog-sync-skeleton" class="catalog-sync-skeleton" hidden aria-hidden="true">
@@ -131,6 +131,30 @@
           <span class="m-mas-item__body">
             <span class="m-mas-item__title">Importar imágenes</span>
             <span class="m-mas-item__desc">Cloudinary desde el ERP</span>
+          </span>
+          <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+        </a>
+        <a href="{{ url_for('mobile.etiquetas') }}" class="m-mas-item">
+          <span class="m-mas-item__icon m-mas-item__icon--etiquetas" aria-hidden="true">🏷️</span>
+          <span class="m-mas-item__body">
+            <span class="m-mas-item__title">Etiquetas</span>
+            <span class="m-mas-item__desc">Imprimir QR y códigos</span>
+          </span>
+          <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+        </a>
+        <a href="{{ url_for('mobile.proveedores') }}" class="m-mas-item">
+          <span class="m-mas-item__icon m-mas-item__icon--proveedores" aria-hidden="true">🚚</span>
+          <span class="m-mas-item__body">
+            <span class="m-mas-item__title">Proveedores</span>
+            <span class="m-mas-item__desc">Listado y gestión</span>
+          </span>
+          <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+        </a>
+        <a href="{{ url_for('mobile.ingreso_rapido') }}" class="m-mas-item" data-requires-online>
+          <span class="m-mas-item__icon m-mas-item__icon--ingreso" aria-hidden="true">📦</span>
+          <span class="m-mas-item__body">
+            <span class="m-mas-item__title">Ingreso rápido</span>
+            <span class="m-mas-item__desc">Compra en 3 pasos</span>
           </span>
           <span class="m-mas-item__arrow" aria-hidden="true">›</span>
         </a>

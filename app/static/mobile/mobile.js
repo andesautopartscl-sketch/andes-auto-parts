@@ -505,6 +505,14 @@
         actualizado: "Cliente actualizado",
         eliminado: "Cliente desactivado",
       };
+      var path = window.location.pathname;
+      if (path.indexOf("/proveedores") >= 0 || path.indexOf("/proveedor/") >= 0) {
+        map = {
+          creado: "Proveedor creado",
+          actualizado: "Proveedor actualizado",
+          eliminado: "Proveedor desactivado",
+        };
+      }
       if (toast && map[toast]) {
         showMasToast(map[toast]);
         params.delete("toast");

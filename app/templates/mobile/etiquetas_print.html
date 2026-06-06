@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="es" data-print-mode="{{ print_mode }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Imprimir etiquetas</title>
+  <style>
+    body { margin: 0; font-family: Inter, sans-serif; }
+    .sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; padding: 12px; }
+    .label { border: 1px solid #ddd; border-radius: 8px; padding: 8px; text-align: center; page-break-inside: avoid; }
+    .label img { max-width: 100%; height: auto; }
+    .codigo { font-weight: 800; font-size: 14px; }
+    .desc { font-size: 10px; color: #444; }
+    @media print {
+      html[data-print-mode="thermal"] .sheet { grid-template-columns: 1fr; }
+      html[data-print-mode="thermal_100x150"] .sheet { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body onload="window.print()">
+  <div class="sheet">
+    {% for l in labels %}
+    <div class="label">
+      {% if l.qr_base64 %}<img src="data:image/png;base64,{{ l.qr_base64 }}" alt="QR">{% endif %}
+      <div class="codigo">{{ l.codigo }}</div>
+      <div class="desc">{{ l.descripcion }}</div>
+      {% if l.barcode_base64 %}<img src="data:image/png;base64,{{ l.barcode_base64 }}" alt="Barcode">{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</body>
+</html>

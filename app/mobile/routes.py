@@ -9,6 +9,9 @@ from app.utils.finance_visibility import user_can_view_finanzas
 from . import mobile_bp
 from . import clientes as mobile_clientes
 from . import data as mobile_data
+from . import etiquetas as mobile_etiquetas
+from . import ingreso_rapido as mobile_ingreso_rapido
+from . import proveedores as mobile_proveedores
 from . import scan as mobile_scan
 from . import stock_ajuste as mobile_stock_ajuste
 from . import venta_rapida as mobile_venta_rapida
@@ -196,7 +199,7 @@ def reportes():
 @login_required
 def escaner():
     modo = (request.args.get("modo") or "qr").strip().lower()
-    if modo not in {"qr", "barcode", "venta"}:
+    if modo not in {"qr", "barcode", "venta", "ingreso"}:
         modo = "qr"
     return render_template(
         "mobile/escaner.html",
@@ -383,3 +386,181 @@ def cliente_eliminar(cid):
     if mobile_clientes.desactivar_cliente(cid):
         return redirect(url_for("mobile.clientes", toast="eliminado"))
     abort(404)
+
+
+@mobile_bp.route("/proveedores")
+@login_required
+def proveedores():
+    q = (request.args.get("q") or "").strip()
+    lista = mobile_proveedores.listar_proveedores(q)
+    toast_map = {"creado": "Proveedor creado", "actualizado": "Proveedor actualizado", "eliminado": "Proveedor desactivado"}
+    toast_key = (request.args.get("toast") or "").strip().lower()
+    return render_template(
+        "mobile/proveedores.html",
+        proveedores=lista,
+        q=q,
+        toast_msg=toast_map.get(toast_key, ""),
+        puede_gestionar=mobile_proveedores.puede_gestionar_proveedores(session.get("user"), session.get("rol")),
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/proveedor/nuevo", methods=["GET", "POST"])
+@login_required
+def proveedor_nuevo():
+    if not mobile_proveedores.puede_gestionar_proveedores(session.get("user"), session.get("rol")):
+        abort(403)
+    validation_errors = []
+    proveedor = {}
+    if request.method == "POST":
+        ok, result = mobile_proveedores.guardar_proveedor_nuevo(request.form)
+        if ok:
+            return redirect(url_for("mobile.proveedores", toast="creado"))
+        validation_errors = result.get("errors") or []
+        proveedor = result.get("proveedor") or {}
+    return render_template(
+        "mobile/proveedor_form.html",
+        form_title="Nuevo proveedor",
+        submit_label="Crear proveedor",
+        proveedor=proveedor,
+        validation_errors=validation_errors,
+        back_url=url_for("mobile.proveedores"),
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/proveedor/<int:pid>")
+@login_required
+def proveedor_detalle(pid):
+    detalle = mobile_proveedores.proveedor_detalle(pid)
+    if detalle is None:
+        abort(404)
+    return render_template(
+        "mobile/proveedor_detalle.html",
+        p=detalle,
+        puede_gestionar=mobile_proveedores.puede_gestionar_proveedores(session.get("user"), session.get("rol")),
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/proveedor/<int:pid>/editar", methods=["GET", "POST"])
+@login_required
+def proveedor_editar(pid):
+    if not mobile_proveedores.puede_gestionar_proveedores(session.get("user"), session.get("rol")):
+        abort(403)
+    validation_errors = []
+    proveedor = {}
+    if request.method == "POST":
+        ok, result = mobile_proveedores.guardar_proveedor_editar(pid, request.form)
+        if ok:
+            return redirect(url_for("mobile.proveedor_detalle", pid=pid, toast="actualizado"))
+        validation_errors = result.get("errors") or []
+        proveedor = result.get("proveedor") or {}
+    else:
+        detalle = mobile_proveedores.proveedor_detalle(pid)
+        if detalle is None:
+            abort(404)
+        proveedor = detalle
+    return render_template(
+        "mobile/proveedor_form.html",
+        form_title="Editar proveedor",
+        submit_label="Guardar cambios",
+        proveedor=proveedor,
+        validation_errors=validation_errors,
+        back_url=url_for("mobile.proveedor_detalle", pid=pid),
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/proveedor/<int:pid>/eliminar", methods=["POST"])
+@login_required
+def proveedor_eliminar(pid):
+    if not mobile_proveedores.puede_gestionar_proveedores(session.get("user"), session.get("rol")):
+        abort(403)
+    if mobile_proveedores.desactivar_proveedor(pid):
+        return redirect(url_for("mobile.proveedores", toast="eliminado"))
+    abort(404)
+
+
+@mobile_bp.route("/api/proveedores")
+@login_required
+def api_proveedores():
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify(success=True, items=[], count=0)
+    items = mobile_proveedores.buscar_proveedores(q, limit=30)
+    return jsonify(success=True, items=items, count=len(items), query=q)
+
+
+@mobile_bp.route("/ingreso-rapido")
+@login_required
+def ingreso_rapido():
+    return render_template(
+        "mobile/ingreso_rapido.html",
+        puede_ingreso=mobile_ingreso_rapido.puede_registrar_ingreso(session.get("user"), session.get("rol")),
+        metodos_pago=mobile_ingreso_rapido.metodos_pago_opciones(),
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/api/ingreso-producto/<codigo>")
+@login_required
+def api_ingreso_producto(codigo):
+    linea = mobile_ingreso_rapido.producto_linea_ingreso(codigo)
+    if linea is None:
+        return jsonify(success=False, message="Producto no encontrado"), 404
+    return jsonify(success=True, producto=linea)
+
+
+@mobile_bp.route("/api/ingreso-rapido", methods=["POST"])
+@login_required
+def api_ingreso_rapido():
+    data = request.get_json(silent=True) or {}
+    ok, result = mobile_ingreso_rapido.registrar_ingreso_rapido(data)
+    if not ok:
+        return jsonify(success=False, **result), 400
+    return jsonify(success=True, **result)
+
+
+@mobile_bp.route("/etiquetas", methods=["GET", "POST"])
+@login_required
+def etiquetas():
+    if not mobile_etiquetas.puede_imprimir_etiquetas(session.get("user"), session.get("rol")):
+        abort(403)
+    codigos_raw = (request.values.get("codigos") or "").strip()
+    labels = []
+    missing = []
+    message = ""
+    if request.method == "POST" and codigos_raw:
+        labels, missing = mobile_etiquetas.generar_etiquetas(codigos_raw)
+        if labels:
+            mobile_etiquetas.registrar_impresion(labels)
+        if missing:
+            message = f"No encontrados: {', '.join(missing[:5])}"
+    return render_template(
+        "mobile/etiquetas.html",
+        codigos_raw=codigos_raw,
+        labels=labels,
+        missing=missing,
+        message=message,
+        print_modes=mobile_etiquetas.PRINT_MODES,
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/etiquetas/imprimir", methods=["POST"])
+@login_required
+def etiquetas_imprimir():
+    if not mobile_etiquetas.puede_imprimir_etiquetas(session.get("user"), session.get("rol")):
+        abort(403)
+    codigos_raw = (request.form.get("codigos") or "").strip()
+    print_mode = (request.form.get("print_mode") or "a4").strip()
+    labels, missing = mobile_etiquetas.generar_etiquetas(codigos_raw)
+    if labels:
+        mobile_etiquetas.registrar_impresion(labels)
+    return render_template(
+        "mobile/etiquetas_print.html",
+        labels=labels,
+        missing=missing,
+        print_mode=print_mode,
+    )

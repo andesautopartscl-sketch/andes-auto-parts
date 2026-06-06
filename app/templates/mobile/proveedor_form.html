@@ -1,0 +1,32 @@
+{% extends "mobile/base.html" %}
+{% block title %}{{ form_title }} — Andes Mobile{% endblock %}
+{% block content %}
+<a href="{{ back_url }}" class="m-back"><span aria-hidden="true">&#8592;</span> Volver</a>
+<section class="m-page-head"><h1 class="m-page-title">{{ form_title }}</h1></section>
+{% if validation_errors %}
+<div class="m-flash m-flash--error" role="alert"><ul class="m-flash__list">{% for e in validation_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+{% endif %}
+<form method="post" class="m-form" novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="pais" value="Chile">
+  <label class="m-field"><span class="m-field__label">Empresa / Razón social *</span>
+    <input type="text" name="empresa" class="m-field__input" required value="{{ proveedor.empresa or proveedor.nombre or '' }}"></label>
+  <label class="m-field"><span class="m-field__label">Contacto</span>
+    <input type="text" name="nombre" class="m-field__input" value="{{ proveedor.nombre or '' }}"></label>
+  <label class="m-field"><span class="m-field__label">RUT</span>
+    <input type="text" name="rut" class="m-field__input" inputmode="numeric" value="{{ proveedor.rut or '' }}"></label>
+  <label class="m-field"><span class="m-field__label">Giro</span>
+    <input type="text" name="giro" class="m-field__input" value="{{ proveedor.giro or '' }}"></label>
+  <label class="m-field"><span class="m-field__label">Dirección</span>
+    <input type="text" name="direccion" class="m-field__input" value="{{ proveedor.direccion or '' }}"></label>
+  <label class="m-field"><span class="m-field__label">Región *</span>
+    <input type="text" name="region" class="m-field__input" required value="{{ proveedor.region or '' }}"></label>
+  <label class="m-field"><span class="m-field__label">Comuna *</span>
+    <input type="text" name="comuna" class="m-field__input" required value="{{ proveedor.comuna or '' }}"></label>
+  <label class="m-field"><span class="m-field__label">Teléfono</span>
+    <input type="tel" name="telefono" class="m-field__input" inputmode="tel" value="{{ proveedor.telefono or '' }}"></label>
+  <label class="m-field"><span class="m-field__label">Email</span>
+    <input type="email" name="email" class="m-field__input" value="{{ proveedor.email or '' }}"></label>
+  <button type="submit" class="m-btn m-btn--primary m-btn--block m-btn--lg">{{ submit_label }}</button>
+</form>
+{% endblock %}

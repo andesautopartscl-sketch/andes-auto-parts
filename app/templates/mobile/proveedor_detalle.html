@@ -1,0 +1,53 @@
+{% extends "mobile/base.html" %}
+{% block title %}{{ p.display_name }} — Andes Mobile{% endblock %}
+{% block content %}
+<a href="{{ url_for('mobile.proveedores') }}" class="m-back"><span aria-hidden="true">&#8592;</span> Proveedores</a>
+<article class="m-cliente-detail">
+  <header class="m-cliente-detail__head">
+    <h1 class="m-cliente-detail__name">{{ p.display_name or p.nombre }}</h1>
+    {% if p.rut %}<p class="m-cliente-detail__rut">{{ p.rut }}</p>{% endif %}
+  </header>
+  <section class="m-kv-card">
+    <dl class="m-kv-list">
+      {% if p.giro %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Giro</dt><dd class="m-kv-list__val">{{ p.giro }}</dd></div>{% endif %}
+      {% if p.telefono %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Teléfono</dt><dd class="m-kv-list__val">{{ p.telefono }}</dd></div>{% endif %}
+      {% if p.email %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Email</dt><dd class="m-kv-list__val">{{ p.email }}</dd></div>{% endif %}
+    </dl>
+  </section>
+  <section class="m-section">
+    <h2 class="m-section__title">Últimos ingresos</h2>
+    {% if p.ingresos %}
+    <ul class="m-list m-list--compact">
+      {% for i in p.ingresos %}
+      <li class="m-list-item m-list-item--static">
+        <span class="m-list-item__main">{{ i.number }} · ${{ "{:,.0f}".format(i.total).replace(",", ".") }}</span>
+        <span class="m-list-item__sub">{{ i.fecha }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="m-empty">Sin ingresos registrados.</p>{% endif %}
+  </section>
+  <section class="m-section">
+    <h2 class="m-section__title">Productos asociados</h2>
+    {% if p.productos %}
+    <ul class="m-list m-list--compact">
+      {% for pr in p.productos %}
+      <li class="m-list-item m-list-item--static">
+        <span class="m-list-item__main">{{ pr.codigo_interno }}</span>
+        <span class="m-list-item__sub">Prov: {{ pr.codigo_proveedor }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="m-empty">Sin homologaciones.</p>{% endif %}
+  </section>
+  {% if puede_gestionar %}
+  <div class="m-cliente-detail__actions">
+    <a href="{{ url_for('mobile.proveedor_editar', pid=p.id) }}" class="m-btn m-btn--primary m-btn--block">Editar</a>
+    <form method="post" action="{{ url_for('mobile.proveedor_eliminar', pid=p.id) }}" onsubmit="return confirm('¿Desactivar proveedor?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="m-btn m-btn--danger m-btn--block">Eliminar</button>
+    </form>
+  </div>
+  {% endif %}
+</article>
+{% endblock %}

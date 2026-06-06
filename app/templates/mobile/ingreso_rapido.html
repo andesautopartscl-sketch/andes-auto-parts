@@ -1,0 +1,73 @@
+{% extends "mobile/base.html" %}
+{% block title %}Ingreso rápido — Andes Mobile{% endblock %}
+{% block head_extra %}
+<script>
+  window.ANDES_INGRESO_RAPIDO = {
+    puedeIngreso: {{ 'true' if puede_ingreso else 'false' }},
+    apiProveedores: "{{ url_for('mobile.api_proveedores') }}",
+    apiProducto: "{{ url_for('mobile.api_ingreso_producto', codigo='__CODE__') }}",
+    apiGuardar: "{{ url_for('mobile.api_ingreso_rapido') }}",
+    urlEscaner: "{{ url_for('mobile.escaner', modo='ingreso') }}",
+    urlDetalle: "{{ url_for('mobile.ingreso', doc_id=0) }}".replace("/0", "/"),
+    metodosPago: {{ metodos_pago | tojson }}
+  };
+</script>
+{% endblock %}
+{% block content %}
+<article class="m-wizard" id="ingreso-rapido-root" data-puede-ingreso="{{ '1' if puede_ingreso else '0' }}">
+  <header class="m-wizard__head">
+    <h1 class="m-wizard__title">Ingreso rápido</h1>
+    <ol class="m-wizard__steps" aria-label="Pasos">
+      <li class="m-wizard__step m-wizard__step--active" data-step-indicator="1">Proveedor</li>
+      <li class="m-wizard__step" data-step-indicator="2">Productos</li>
+      <li class="m-wizard__step" data-step-indicator="3">Confirmar</li>
+    </ol>
+  </header>
+  {% if not puede_ingreso %}
+  <p class="m-alert m-alert--error">No tienes permiso para registrar ingresos.</p>
+  {% endif %}
+  <section class="m-wizard__panel" data-step="1">
+    <label class="m-field"><span class="m-field__label">Buscar proveedor (RUT o nombre)</span>
+      <input type="search" class="m-field__input" id="ir-proveedor-q" autocomplete="off"></label>
+    <div id="ir-proveedores-list" class="m-card-select-list"></div>
+    <p class="m-hint" id="ir-proveedor-sel">Ningún proveedor seleccionado</p>
+    <button type="button" class="m-btn m-btn--primary m-btn--block" id="ir-next-1" disabled>Siguiente</button>
+  </section>
+  <section class="m-wizard__panel" data-step="2" hidden>
+    <div class="m-wizard__scan-row">
+      <a href="{{ url_for('mobile.escaner', modo='ingreso') }}" class="m-btn m-btn--primary m-btn--block m-btn--lg">📷 Escanear</a>
+      <button type="button" class="m-btn m-btn--secondary m-btn--block" id="ir-toggle-buscar">🔍 Buscar manualmente</button>
+    </div>
+    <div id="ir-buscar-wrap" hidden>
+      <input type="search" class="m-field__input" id="ir-producto-q" placeholder="Código producto">
+      <div id="ir-productos-list" class="m-card-select-list"></div>
+    </div>
+    <ul class="m-cart" id="ir-cart"></ul>
+    <p class="m-empty" id="ir-cart-empty">Agrega productos al ingreso.</p>
+    <div class="m-cart-total"><span>Total neto parcial</span><strong id="ir-total-parcial">$0</strong></div>
+    <div class="m-wizard__nav-row">
+      <button type="button" class="m-btn m-btn--secondary" id="ir-back-2">Atrás</button>
+      <button type="button" class="m-btn m-btn--primary" id="ir-next-2" disabled>Siguiente</button>
+    </div>
+  </section>
+  <section class="m-wizard__panel" data-step="3" hidden>
+    <label class="m-field"><span class="m-field__label">N° documento</span>
+      <input type="text" class="m-field__input" id="ir-numero-doc"></label>
+    <label class="m-field"><span class="m-field__label">Fecha</span>
+      <input type="date" class="m-field__input" id="ir-fecha"></label>
+    <label class="m-field"><span class="m-field__label">Método de pago</span>
+      <select class="m-field__input" id="ir-metodo-pago">
+        {% for m in metodos_pago %}<option value="{{ m.value }}">{{ m.label }}</option>{% endfor %}
+      </select></label>
+    <label class="m-field"><span class="m-field__label">Observación</span>
+      <textarea class="m-field__input" id="ir-observacion" rows="2"></textarea></label>
+    <label class="m-field"><span class="m-field__label">Total factura c/IVA (opcional)</span>
+      <input type="text" class="m-field__input" id="ir-total-factura" inputmode="numeric"></label>
+    <button type="button" class="m-btn m-btn--primary m-btn--block m-btn--lg" id="ir-confirmar" disabled>Confirmar ingreso</button>
+    <button type="button" class="m-btn m-btn--secondary m-btn--block" id="ir-back-3">Atrás</button>
+  </section>
+</article>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='mobile/ingreso_rapida.js') }}" defer></script>
+{% endblock %}
