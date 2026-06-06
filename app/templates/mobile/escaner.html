@@ -24,7 +24,6 @@
       <button type="button" class="m-scanner-segmented__btn{% if modo_inicial == 'barcode' %} m-scanner-segmented__btn--active{% endif %}" data-modo="barcode" role="tab">Código barras</button>
     </div>
     {% endif %}
-    <p class="m-scanner__status" id="scanner-detecting" hidden>Detectando…</p>
     <p class="m-scanner__hint" id="scanner-hint">
       {% if modo_inicial == 'venta' %}Escanea productos para la venta
       {% elif modo_inicial == 'ingreso' %}Escanea productos para el ingreso
@@ -33,7 +32,9 @@
     </p>
   </div>
 
-  <div class="m-scanner__viewport">
+  <div class="m-scanner__stage">
+    <p class="m-scanner__status" id="scanner-detecting" hidden>Detectando…</p>
+    <div class="m-scanner__viewport">
     <div id="qr-reader" class="m-scanner__reader" aria-label="Vista de cámara"></div>
     <div class="m-scanner__overlay" aria-hidden="true">
       <div class="m-scanner__viewfinder m-scanner__frame{% if modo_inicial == 'qr' %} m-scanner__frame--qr{% elif modo_inicial == 'barcode' %} m-scanner__frame--barcode{% endif %}">
@@ -53,10 +54,11 @@
       <p class="m-scanner__denied-detail" id="scanner-error-detail"></p>
       <button type="button" class="m-btn m-btn--primary" id="scanner-retry-btn">Reintentar</button>
     </div>
+    </div>
   </div>
 
   <div class="m-scanner__float-actions">
-    <button type="button" class="m-scanner-fab" id="scanner-torch-btn" disabled title="Linterna" aria-label="Linterna">
+    <button type="button" class="m-scanner-fab m-scanner-fab--torch" id="scanner-torch-btn" hidden disabled title="Linterna" aria-label="Linterna">
       <span aria-hidden="true">&#128161;</span>
     </button>
     <button type="button" class="m-scanner-fab" id="scanner-switch-btn" title="Cambiar cámara" aria-label="Cambiar cámara">

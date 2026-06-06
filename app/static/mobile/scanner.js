@@ -259,6 +259,11 @@
 
   function stopScanner(destroy) {
     setDetecting(false);
+    if (torchOn) {
+      applyTorchState(false).catch(function () {});
+      torchOn = false;
+      updateTorchUi();
+    }
     if (!html5QrCode) return Promise.resolve();
     var instance = html5QrCode;
     if (destroy) {
@@ -318,21 +323,79 @@
     return true;
   }
 
+  function getVideoTrack() {
+    var reader = document.getElementById(readerId);
+    if (!reader) return null;
+    var video = reader.querySelector("video");
+    if (!video || !video.srcObject || !video.srcObject.getVideoTracks) return null;
+    var tracks = video.srcObject.getVideoTracks();
+    return tracks && tracks.length ? tracks[0] : null;
+  }
+
+  function updateTorchUi() {
+    if (!torchBtn) return;
+    torchBtn.classList.toggle("m-scanner-fab--active", torchOn);
+    torchBtn.setAttribute("aria-pressed", torchOn ? "true" : "false");
+    torchBtn.title = torchOn ? "Apagar linterna" : "Encender linterna";
+  }
+
   function refreshTorchSupport() {
-    if (!html5QrCode || !torchBtn) return;
+    if (!torchBtn) return;
     torchSupported = false;
     try {
-      var track = html5QrCode.getRunningTrack && html5QrCode.getRunningTrack();
+      var track = getVideoTrack();
       if (track && typeof track.getCapabilities === "function") {
         var caps = track.getCapabilities();
         torchSupported = !!(caps && caps.torch);
-        debugLog("Linterna soportada:", torchSupported);
+        debugLog("Linterna soportada:", torchSupported, caps);
       }
     } catch (err) {
       debugWarn("getCapabilities torch:", err && err.message ? err.message : err);
       torchSupported = false;
     }
-    torchBtn.disabled = !torchSupported;
+    if (!torchSupported) {
+      torchBtn.hidden = true;
+      torchBtn.disabled = true;
+      torchOn = false;
+      updateTorchUi();
+      return;
+    }
+    torchBtn.hidden = false;
+    torchBtn.disabled = false;
+  }
+
+  function applyTorchState(on) {
+    var track = getVideoTrack();
+    if (!track) return Promise.reject(new Error("Sin track de video"));
+    var caps = track.getCapabilities ? track.getCapabilities() : {};
+    if (!caps || !caps.torch) {
+      return Promise.reject(new Error("Torch no soportado"));
+    }
+    var settings = track.getSettings ? track.getSettings() : {};
+    var next = typeof on === "boolean" ? on : !settings.torch;
+    debugLog("applyTorchState:", next);
+    return track
+      .applyConstraints({ advanced: [{ torch: next }] })
+      .catch(function (err) {
+        debugWarn("torch advanced falló, intentando constraint directo:", err);
+        return track.applyConstraints({ torch: next });
+      })
+      .then(function () {
+        torchOn = next;
+        updateTorchUi();
+      });
+  }
+
+  function toggleTorch() {
+    if (!torchSupported) {
+      showToast("Tu dispositivo no soporta linterna");
+      return;
+    }
+    applyTorchState()
+      .catch(function (err) {
+        debugError("toggleTorch:", err);
+        showToast("Linterna no disponible");
+      });
   }
 
   function facingFromConfig(config) {
@@ -630,22 +693,18 @@
         useFacingMode = !useFacingMode;
         debugLog("Alternar facingMode, useFacingMode=", useFacingMode);
       }
+      if (torchOn) {
+        applyTorchState(false).catch(function () {});
+      }
       torchOn = false;
+      updateTorchUi();
       startScanner();
     });
   }
 
   if (torchBtn) {
     torchBtn.addEventListener("click", function () {
-      if (!html5QrCode || !torchSupported) return;
-      torchOn = !torchOn;
-      html5QrCode
-        .applyVideoConstraints({ advanced: [{ torch: torchOn }] })
-        .catch(function () {
-          showToast("Linterna no disponible");
-        });
-      torchBtn.classList.toggle("m-scanner-fab--active", torchOn);
-      torchBtn.classList.toggle("m-scanner-action--active", torchOn);
+      toggleTorch();
     });
   }
 
