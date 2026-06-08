@@ -379,15 +379,15 @@ _EMPTY_CODIGO_LINE_RE = re.compile(r"^[\s\-—|\.]+$", re.IGNORECASE)
 #   PRECIO_UNIT
 #   0= TOTAL
 _THERMAL_CODE_DESC_RE = re.compile(
-    r"^\s*([A-Z0-9]{3,15}-[A-Z0-9]{2,12})\s+(.+)$",
+    r"^\s*([A-Z0-9]{5,18}(?:-[A-Z0-9]{2,12})?)\s+(.+)$",
     re.IGNORECASE,
 )
 _THERMAL_CODE_ONLY_RE = re.compile(
-    r"^\s*([A-Z0-9]{3,15}-[A-Z0-9]{2,12})\s*$",
+    r"^\s*([A-Z0-9]{5,18}(?:-[A-Z0-9]{2,12})?)\s*$",
     re.IGNORECASE,
 )
 _THERMAL_QTY_LINE_RE = re.compile(
-    r"^\s*(\d+),\d+\s*UN(?:\s*(?:X|x)\s*([\d.,]+))?",
+    r"^\s*(\d+)[,.]?\d*\s*UN(?:\s*(?:X|x)\s*([\d.,]+))?(?:\s+0\s*=\s*([\d.,]+))?",
     re.IGNORECASE,
 )
 _THERMAL_PRICE_RE = re.compile(r"^[\$]?\s*([\d.,]+)\s*$")
@@ -411,15 +411,19 @@ def _fix_thermal_ocr_split_codes(texto: str) -> str:
 
 
 def _is_plausible_supplier_code(code: str) -> bool:
-    """Código proveedor real (ej. M60415-BOSCH), no fragmentos de descripción (XUV-GENIO)."""
     c = (code or "").strip().upper()
-    if "-" not in c:
+    # Con guión: M60415-BOSCH, 40043-GSP
+    if "-" in c:
+        head, _, tail = c.partition("-")
+        if not tail or not any(ch.isdigit() for ch in head):
+            return False
+        return any(ch.isdigit() for ch in head)
+    # Sin guión: MX60903CHN, JMB04210EM — mínimo 6 chars, con letras Y dígitos
+    if len(c) < 6:
         return False
-    head, _, tail = c.partition("-")
-    if not head or not tail:
-        return False
-    # Fitalia y similares: prefijo con al menos un dígito (M60415-BOSCH, 40043-GSP).
-    return any(ch.isdigit() for ch in head)
+    has_letters = any(ch.isalpha() for ch in c)
+    has_digits = any(ch.isdigit() for ch in c)
+    return has_letters and has_digits
 
 
 def _collect_plausible_thermal_codes(text: str) -> list[str]:
@@ -1489,13 +1493,24 @@ def _find_xinwang_numeric_start(lines: list[str]) -> int | None:
 
 
 def _is_xinwang_qty_line(line: str) -> bool:
-    """Cantidad Xinwang: '1 1' (2.º dígito = % imp. adic.) o '11' (mismo código)."""
+    """Cantidad Xinwang: 'N N' donde N es cantidad y segundo N es % imp. adic."""
     s = (line or "").strip()
-    if re.fullmatch(r"1\s+1", s):
+    if re.fullmatch(r"(\d{1,3})\s+\d{1,2}", s):
         return True
-    if re.fullmatch(r"11", s):
+    if re.fullmatch(r"\d{1,2}", s):
         return True
     return False
+
+
+def _parse_xinwang_qty_from_line(line: str) -> int:
+    """Extrae el primer número de una línea de cantidad Xinwang. Ej: '3 3' → 3"""
+    s = (line or "").strip()
+    m = re.match(r"^(\d{1,3})", s)
+    if m:
+        val = int(m.group(1))
+        if 1 <= val <= 999:
+            return val
+    return 1
 
 
 def _extract_xinwang_unit_prices(lines: list[str]) -> list[int]:
@@ -1538,6 +1553,22 @@ def _extract_xinwang_unit_prices(lines: list[str]) -> list[int]:
     return units
 
 
+def _extract_xinwang_quantities(lines: list[str]) -> list[int]:
+    """Lee la cantidad real de cada ítem Xinwang desde las líneas 'N N'."""
+    start = _find_xinwang_numeric_start(lines)
+    qtys: list[int] = []
+    i = start
+    while i < len(lines):
+        line = lines[i].strip()
+        if not line:
+            i += 1
+            continue
+        if _is_xinwang_qty_line(line):
+            qtys.append(_parse_xinwang_qty_from_line(line))
+        i += 1
+    return qtys
+
+
 def _extract_productos_sin_codigo_xinwang(lines: list[str]) -> list[dict[str, Any]]:
     if _xinwang_uses_stacked_descriptions(lines):
         descs = _extract_xinwang_descripciones(lines)
@@ -1555,8 +1586,12 @@ def _extract_productos_sin_codigo_xinwang(lines: list[str]) -> list[dict[str, An
                 units = seq
     if not descs or not units:
         return []
+    qtys = _extract_xinwang_quantities(lines)
     n = min(len(descs), len(units))
-    return [_producto_sin_codigo(descs[i], 1, units[i]) for i in range(n)]
+    return [
+        _producto_sin_codigo(descs[i], qtys[i] if i < len(qtys) else 1, units[i])
+        for i in range(n)
+    ]
 
 
 def _is_detalle_producto_stop_line(line: str) -> bool:
@@ -1812,7 +1847,7 @@ def _is_thermal_desc_continuation(line: str) -> bool:
 
 
 def _parse_thermal_qty_line(line: str) -> tuple[int | None, int | None]:
-    """Cantidad y precio unitario opcional en '2,00UN X 8.500'."""
+    """Cantidad y precio unitario en '4,00UN X 2.700' o '4,00UN X 2.700 0= 10.800'."""
     mq = _THERMAL_QTY_LINE_RE.match(line)
     if not mq:
         return None, None
@@ -1821,8 +1856,14 @@ def _parse_thermal_qty_line(line: str) -> tuple[int | None, int | None]:
     except ValueError:
         return None, None
     precio = None
+    # Precio inline directo
     if mq.group(2):
         precio = _parse_monto_chileno(mq.group(2))
+    # Si hay total inline y no hay precio, calcular precio = total / qty
+    if precio is None and mq.group(3) and qty > 0:
+        total_inline = _parse_monto_chileno(mq.group(3))
+        if total_inline:
+            precio = int(round(total_inline / qty))
     return qty, precio
 
 
@@ -2265,6 +2306,9 @@ def analizar_factura(image_base64: str, media_type: str) -> dict[str, Any]:
         raise ValueError("La imagen generada desde el PDF es demasiado grande (máx. 12 MB)")
 
     texto = _vision_ocr_text(image_bytes, cred_path).strip()
+    # LOG TEMPORAL - remover después
+    import logging
+    logging.getLogger(__name__).warning("=== OCR CRUDO FITALIA ===\n%s\n=== FIN OCR ===", texto)
     if not texto:
         raise ValueError("No se detectó texto en el documento. Pruebe con mejor calidad.")
 
