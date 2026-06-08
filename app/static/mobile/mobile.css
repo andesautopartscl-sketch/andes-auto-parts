@@ -608,6 +608,10 @@ a.m-list-item:active {
   color: var(--andes-gray-600);
 }
 
+.m-hint--error {
+  color: #b91c1c;
+}
+
 .m-search-form {
   margin-bottom: 16px;
 }

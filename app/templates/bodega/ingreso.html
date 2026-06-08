@@ -800,6 +800,20 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
     flex: 1;
     min-width: 0;
 }
+.ingreso-numero-doc-status {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #64748b;
+}
+.ingreso-numero-doc-status.is-error {
+    color: #b91c1c;
+}
+.ingreso-doc-num-field input.ingreso-numero-doc-duplicado {
+    border-color: #f87171;
+    background: #fef2f2;
+}
 .ingreso-factura-scan-btn {
     flex-shrink: 0;
     width: 36px;
@@ -1142,6 +1156,7 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
           data-marcas-url="{{ url_for('bodega.ingreso_marcas_por_codigo') }}"
           data-product-search-url="{{ url_for('ventas.api_productos_search') }}"
           data-analizar-factura-url="{{ url_for('bodega.api_analizar_factura') }}"
+          data-numero-duplicado-url="{{ url_for('bodega.api_ingreso_numero_documento_duplicado') }}"
           data-codigo-prov-url="/bodega/ingreso/codigo_interno_por_proveedor"
           data-bodegas='{{ bodegas_opciones | tojson }}'
           data-default-bodega="{{ default_bodega }}"
@@ -1174,6 +1189,7 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
                        accept="image/jpg,image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
                        capture="environment" hidden>
                 <span id="ingresoFacturaAutoBadge" class="ingreso-factura-auto-badge" hidden aria-live="polite"></span>
+                <small id="numeroDocStatus" class="ingreso-numero-doc-status" hidden aria-live="polite"></small>
             </div>
             <div class="field">
                 <label for="ingresoMetodoPago" title="Cómo pagaste esta factura al proveedor">Método de pago</label>

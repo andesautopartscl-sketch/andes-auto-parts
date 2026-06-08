@@ -26,6 +26,15 @@
         }
     }
 
+    /** Stock por variante en modal buscar producto; 0 es válido (no usar || con stock total). */
+    function productSearchStockQty(it) {
+        if (!it) return 0;
+        if (it.variant_stock != null && it.variant_stock !== "") {
+            return parseInt(it.variant_stock, 10) || 0;
+        }
+        return parseInt(it.stock || 0, 10) || 0;
+    }
+
     function initIngresoView(root) {
         var form = root.querySelector("#ingresoForm");
         if (!form || form.dataset.bodegaUiBound === "20260603") return;
@@ -37,6 +46,10 @@
         var rutRow = form.querySelector(".ingreso-rut-row");
         var btnBuscar = form.querySelector("#btnBuscarProveedor");
         var rutStatus = form.querySelector("#rutStatus");
+        var numeroDocInput = form.querySelector("#numero_documento");
+        var numeroDocStatus = form.querySelector("#numeroDocStatus");
+        var numeroDuplicadoUrl = form.dataset.numeroDuplicadoUrl || "";
+        var numeroDocCheckTimer = null;
         var supplierFormWrap = form.querySelector("#supplierFormWrap");
         var supplierCard = form.querySelector(".supplier-card");
         var supplierSummary = form.querySelector("#supplierSummary");
@@ -1609,7 +1622,7 @@
                     '<div><strong>' + esc(it.codigo || "") + "</strong></div>" +
                     '<div><div>' + esc(it.descripcion || "") + '</div><div class="ingreso-product-meta">' + esc(it.modelo || "—") + "</div></div>" +
                     '<div>' + esc(((it.marca || "").trim() || "—")) + "</div>" +
-                    '<div>' + (parseInt(it.variant_stock || it.stock || 0, 10) || 0) + "</div>" +
+                    '<div>' + productSearchStockQty(it) + "</div>" +
                     '<div><button type="button" class="btn btn-primary btn-sm">Seleccionar</button></div>';
                 var btnSel = row.querySelector("button");
                 if (btnSel) {
@@ -1977,23 +1990,65 @@
             scheduleAutoLookup();
         });
 
-        form.addEventListener("submit", function (ev) {
-            if (form.dataset.ingresoSubmitting === "1") {
-                form.dataset.ingresoSubmitting = "0";
+        function setNumeroDocStatus(msg, isError) {
+            if (!numeroDocStatus) return;
+            if (!msg) {
+                numeroDocStatus.hidden = true;
+                numeroDocStatus.textContent = "";
+                numeroDocStatus.classList.remove("is-error");
+                if (numeroDocInput) numeroDocInput.classList.remove("ingreso-numero-doc-duplicado");
                 return;
             }
-            if (!marcasUrl) {
-                return;
+            numeroDocStatus.hidden = false;
+            numeroDocStatus.textContent = msg;
+            numeroDocStatus.classList.toggle("is-error", !!isError);
+            if (numeroDocInput) numeroDocInput.classList.toggle("ingreso-numero-doc-duplicado", !!isError);
+        }
+
+        function checkNumeroDocumentoDuplicado() {
+            if (!numeroDuplicadoUrl || !numeroDocInput || !rutInput) {
+                return Promise.resolve(false);
             }
-            ev.preventDefault();
-            var vpCheck = validateMargenYPrecioVentaIngresoRows();
-            if (!vpCheck.ok) {
-                window.alert(vpCheck.message);
-                if (vpCheck.focusEl) {
-                    vpCheck.focusEl.focus();
-                }
-                return;
+            var rut = (rutInput.value || "").trim();
+            var numero = (numeroDocInput.value || "").trim();
+            if (!rut || !numero) {
+                setNumeroDocStatus("", false);
+                return Promise.resolve(false);
             }
+            var url = numeroDuplicadoUrl
+                + "?rut=" + encodeURIComponent(rut)
+                + "&numero=" + encodeURIComponent(numero);
+            return fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+                .then(function (response) { return response.json(); })
+                .then(function (data) {
+                    if (data && data.duplicado) {
+                        setNumeroDocStatus(data.message || "Este N° de documento ya está ingresado.", true);
+                        return true;
+                    }
+                    setNumeroDocStatus("", false);
+                    return false;
+                })
+                .catch(function () {
+                    setNumeroDocStatus("", false);
+                    return false;
+                });
+        }
+
+        function scheduleNumeroDocCheck() {
+            if (numeroDocCheckTimer) window.clearTimeout(numeroDocCheckTimer);
+            numeroDocCheckTimer = window.setTimeout(checkNumeroDocumentoDuplicado, 450);
+        }
+
+        if (numeroDocInput) {
+            numeroDocInput.addEventListener("input", scheduleNumeroDocCheck);
+            numeroDocInput.addEventListener("blur", checkNumeroDocumentoDuplicado);
+        }
+        if (rutInput) {
+            rutInput.addEventListener("change", scheduleNumeroDocCheck);
+            rutInput.addEventListener("blur", scheduleNumeroDocCheck);
+        }
+
+        function proceedIngresoSubmit() {
             var rows = itemsBody.querySelectorAll(".item-row");
             var promises = [];
             rows.forEach(function (row) {
@@ -2027,6 +2082,36 @@
                 syncValorNetoInputsForSubmit();
                 form.dataset.ingresoSubmitting = "1";
                 form.submit();
+            });
+        }
+
+        form.addEventListener("submit", function (ev) {
+            if (form.dataset.ingresoSubmitting === "1") {
+                form.dataset.ingresoSubmitting = "0";
+                return;
+            }
+            if (!marcasUrl) {
+                return;
+            }
+            ev.preventDefault();
+            var vpCheck = validateMargenYPrecioVentaIngresoRows();
+            if (!vpCheck.ok) {
+                window.alert(vpCheck.message);
+                if (vpCheck.focusEl) {
+                    vpCheck.focusEl.focus();
+                }
+                return;
+            }
+            checkNumeroDocumentoDuplicado().then(function (isDup) {
+                if (isDup) {
+                    window.alert(
+                        (numeroDocStatus && numeroDocStatus.textContent)
+                            || "Este N° de documento ya está ingresado para este proveedor."
+                    );
+                    if (numeroDocInput) numeroDocInput.focus();
+                    return;
+                }
+                proceedIngresoSubmit();
             });
         });
 
@@ -4073,7 +4158,7 @@
                     esc(((it.marca || "").trim() || "—")) +
                     "</div>" +
                     "<div>" +
-                    (parseInt(it.variant_stock || it.stock || 0, 10) || 0) +
+                    productSearchStockQty(it) +
                     "</div>" +
                     '<div><button type="button" class="btn btn-primary btn-sm">Seleccionar</button></div>';
                 var btn = row.querySelector("button");

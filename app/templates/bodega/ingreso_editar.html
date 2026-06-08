@@ -10,6 +10,18 @@
   .ing-edit-grid .field label { font-size: 10px; margin-bottom: 2px; color: #475569; letter-spacing: .01em; }
   .ing-edit-grid .field input,
   .ing-edit-grid .field select { height: 30px; font-size: 11px; padding: 4px 8px; border-radius: 8px; }
+  .ingreso-numero-doc-status {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #64748b;
+  }
+  .ingreso-numero-doc-status.is-error { color: #b91c1c; }
+  #numero_documento.ingreso-numero-doc-duplicado {
+    border-color: #f87171;
+    background: #fef2f2;
+  }
   .ing-edit-totals-strip {
     grid-column: 1 / -1;
     border-top: 1px solid #e2e8f0;
@@ -133,7 +145,10 @@
 </div>
 
 <div class="form-card ing-edit-wrap" style="padding:10px;">
-    <form method="post" class="form-grid ing-edit-grid">
+    <form method="post" class="form-grid ing-edit-grid" id="ingresoEditarForm"
+          data-numero-duplicado-url="{{ url_for('bodega.api_ingreso_numero_documento_duplicado') }}"
+          data-proveedor-rut="{{ doc.proveedor_rut or '' }}"
+          data-exclude-doc-id="{{ doc.id }}">
         <div class="field" style="grid-column:1 / -1;">
             <label>ID documento</label>
             <input type="text" value="#{{ doc.id }}" disabled>
@@ -145,6 +160,7 @@
         <div class="field">
             <label for="numero_documento">N° documento</label>
             <input id="numero_documento" name="numero_documento" maxlength="60" value="{{ doc.numero_documento or '' }}" placeholder="Factura / guía">
+            <small id="ingEditNumeroDocStatus" class="ingreso-numero-doc-status" hidden aria-live="polite"></small>
         </div>
         <div class="field">
             <label>Proveedor</label>
@@ -369,6 +385,83 @@
         var tr = e.target && e.target.closest('tr');
         if (tr) recalcRow(tr);
         recalcTotals();
+    });
+
+    var numeroDocInput = document.getElementById('numero_documento');
+    var numeroDocStatus = document.getElementById('ingEditNumeroDocStatus');
+    var numeroDuplicadoUrl = form.dataset.numeroDuplicadoUrl || '';
+    var proveedorRut = form.dataset.proveedorRut || '';
+    var excludeDocId = form.dataset.excludeDocId || '';
+    var numeroDocCheckTimer = null;
+
+    function setNumeroDocStatus(msg, isError) {
+        if (!numeroDocStatus) return;
+        if (!msg) {
+            numeroDocStatus.hidden = true;
+            numeroDocStatus.textContent = '';
+            numeroDocStatus.classList.remove('is-error');
+            if (numeroDocInput) numeroDocInput.classList.remove('ingreso-numero-doc-duplicado');
+            return;
+        }
+        numeroDocStatus.hidden = false;
+        numeroDocStatus.textContent = msg;
+        numeroDocStatus.classList.toggle('is-error', !!isError);
+        if (numeroDocInput) numeroDocInput.classList.toggle('ingreso-numero-doc-duplicado', !!isError);
+    }
+
+    function checkNumeroDocumentoDuplicado() {
+        if (!numeroDuplicadoUrl || !numeroDocInput || !proveedorRut) {
+            return Promise.resolve(false);
+        }
+        var numero = (numeroDocInput.value || '').trim();
+        if (!numero) {
+            setNumeroDocStatus('', false);
+            return Promise.resolve(false);
+        }
+        var url = numeroDuplicadoUrl
+            + '?rut=' + encodeURIComponent(proveedorRut)
+            + '&numero=' + encodeURIComponent(numero)
+            + '&exclude_doc_id=' + encodeURIComponent(excludeDocId);
+        return fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (data && data.duplicado) {
+                    setNumeroDocStatus(data.message || 'Este N° de documento ya está ingresado.', true);
+                    return true;
+                }
+                setNumeroDocStatus('', false);
+                return false;
+            })
+            .catch(function () {
+                setNumeroDocStatus('', false);
+                return false;
+            });
+    }
+
+    function scheduleNumeroDocCheck() {
+        if (numeroDocCheckTimer) window.clearTimeout(numeroDocCheckTimer);
+        numeroDocCheckTimer = window.setTimeout(checkNumeroDocumentoDuplicado, 450);
+    }
+
+    if (numeroDocInput) {
+        numeroDocInput.addEventListener('input', scheduleNumeroDocCheck);
+        numeroDocInput.addEventListener('blur', checkNumeroDocumentoDuplicado);
+    }
+
+    form.addEventListener('submit', function (ev) {
+        if (!numeroDuplicadoUrl) return;
+        ev.preventDefault();
+        checkNumeroDocumentoDuplicado().then(function (isDup) {
+            if (isDup) {
+                window.alert(
+                    (numeroDocStatus && numeroDocStatus.textContent)
+                        || 'Este N° de documento ya está ingresado para este proveedor.'
+                );
+                if (numeroDocInput) numeroDocInput.focus();
+                return;
+            }
+            form.submit();
+        });
     });
 })();
 </script>

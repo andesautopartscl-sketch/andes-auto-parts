@@ -39,6 +39,7 @@ from app.utils.finance_visibility import redact_compra_historial_row, user_can_v
 from ..import_excel import import_products_from_excel
 from ..utils.product_audit import build_diffs, register_product_audit, resolve_producto_audit_action_filter
 from ..utils.variante_comercial import merge_ingreso_ref_variante_overrides
+from ..utils.precio_lista import batch_precio_neto_desde_ingreso_o_variante
 from ..utils.categoria_autodetect import (
     auto_asignar_categoria_si_vacio as _auto_asignar_categoria_si_vacio,
     bulk_auto_asignar_categorias_faltantes,
@@ -1144,6 +1145,22 @@ def buscar():
         for p in productos:
             if not (p.codigo or "").strip():
                 print("Producto sin código detectado")
+
+        sin_precio_cat = [
+            (p.codigo or "").strip().upper()
+            for p in productos
+            if (p.codigo or "").strip() and not float(p.p_publico or 0)
+        ]
+        if sin_precio_cat:
+            precio_fallback = batch_precio_neto_desde_ingreso_o_variante(
+                security_db.session, sin_precio_cat
+            )
+            for p in productos:
+                key = (p.codigo or "").strip().upper()
+                if key and not float(p.p_publico or 0):
+                    pv = precio_fallback.get(key)
+                    if pv:
+                        p.p_publico = pv
 
         # Auditoría de búsqueda (solo si hay término para reducir ruido).
         if q:

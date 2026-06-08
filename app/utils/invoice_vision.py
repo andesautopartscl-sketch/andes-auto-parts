@@ -36,6 +36,7 @@ def _parse_monto_chileno(raw: str) -> int | None:
     s = (raw or "").strip()
     if not s:
         return None
+    s = re.sub(r"^(\d):(\d{3})$", r"\1.\2", s)
     if "," in s:
         s = s.replace(".", "").replace(",", ".")
     elif re.fullmatch(r"\d{1,3}(\.\d{3})+", s):
@@ -225,6 +226,53 @@ def _extract_numero_documento(texto: str) -> str | None:
     return None
 
 
+def _extract_stacked_footer_iva_total(lines: list[str]) -> tuple[int | None, int | None]:
+    """Pie con etiquetas IVA/TOTAL en líneas separadas y montos apilados (ej. Autotec)."""
+    for idx, line in enumerate(lines):
+        if not re.search(r"\bIVA\b", line, re.IGNORECASE) or not re.search(r"19", line):
+            continue
+        nums: list[int] = []
+        for nxt in lines[idx + 1 : idx + 8]:
+            if re.search(r"timbre|verifique|res\.\s*\d|www\.", nxt, re.IGNORECASE):
+                break
+            if re.fullmatch(r"total\s*:?\s*", nxt.strip(), re.IGNORECASE):
+                continue
+            if re.search(r"\bIVA\b", nxt, re.IGNORECASE):
+                continue
+            m = re.match(r"^[\$]?\s*([\d.,:]+)\s*$", nxt)
+            if m:
+                val = _parse_monto_chileno(m.group(1))
+                if val is not None and val >= 500:
+                    nums.append(val)
+        if len(nums) >= 2:
+            return nums[-2], nums[-1]
+    return None, None
+
+
+def _pick_mejor_total_candidato(
+    candidatos: list[int], total_neto: int | None
+) -> int | None:
+    if not candidatos:
+        return None
+    if total_neto and total_neto >= 5000:
+        coherentes = [
+            t
+            for t in candidatos
+            if t > total_neto
+            and abs((t - total_neto) - round(total_neto * 0.19))
+            <= max(50, round(total_neto * 0.02))
+        ]
+        if coherentes:
+            return max(coherentes)
+        mayores = [t for t in candidatos if t > total_neto]
+        if mayores:
+            return max(mayores)
+    grandes = [t for t in candidatos if t >= 5000]
+    if grandes:
+        return grandes[-1]
+    return candidatos[-1]
+
+
 def _extract_montos(texto: str) -> tuple[int | None, int | None, int | None]:
     total_neto = None
     iva = None
@@ -232,6 +280,7 @@ def _extract_montos(texto: str) -> tuple[int | None, int | None, int | None]:
     lines = [ln.strip() for ln in (texto or "").splitlines() if ln.strip()]
 
     neto_patterns = [
+        r"MONTO\s+AFECTO\s*:?\s*\$?\s*([\d.,]+)",
         r"(?:Monto\s+)?Neto\s*(?:Exento)?\s*:?\s*\$?\s*([\d.,]+)",
         r"Sub\s*Total\s+Neto\s*:?\s*\$?\s*([\d.,]+)",
         r"Total\s+Neto\s*:?\s*\$?\s*([\d.,]+)",
@@ -242,6 +291,17 @@ def _extract_montos(texto: str) -> tuple[int | None, int | None, int | None]:
             total_neto = _parse_monto_chileno(m.group(1))
             if total_neto is not None:
                 break
+
+    if total_neto is None:
+        for idx, line in enumerate(lines):
+            if re.search(r"MONTO\s+AFECTO", line, re.IGNORECASE):
+                for nxt in lines[idx + 1 : idx + 4]:
+                    val = _parse_monto_chileno(nxt)
+                    if val is not None and val >= 1000:
+                        total_neto = val
+                        break
+                if total_neto is not None:
+                    break
 
     if total_neto is None:
         for idx, line in enumerate(lines):
@@ -271,46 +331,63 @@ def _extract_montos(texto: str) -> tuple[int | None, int | None, int | None]:
 
     if iva is None:
         for idx, line in enumerate(lines):
-            if re.search(r"19\s*%\s*I\.?\s*V\.?\s*A", line, re.IGNORECASE):
-                tail = re.search(r"([\d.,]+)\s*$", line)
-                if tail:
-                    val = _parse_monto_chileno(tail.group(1))
-                    if val is not None and val >= 100:
+            iva_line = re.search(r"19\s*%\s*I\.?\s*V\.?\s*A", line, re.IGNORECASE) or (
+                re.search(r"\bIVA\b", line, re.IGNORECASE) and re.search(r"19", line)
+            )
+            if not iva_line:
+                continue
+            tail = re.search(r"([\d.,]+)\s*%?\s*$", line)
+            if tail:
+                val = _parse_monto_chileno(tail.group(1))
+                if val is not None and val >= 500:
+                    iva = val
+                    break
+            for nxt in lines[idx + 1 : idx + 6]:
+                if re.fullmatch(r"total\s*:?\s*", nxt.strip(), re.IGNORECASE):
+                    continue
+                m = re.match(r"^[\$]?\s*([\d.,:]+)\s*$", nxt)
+                if m:
+                    val = _parse_monto_chileno(m.group(1))
+                    if val is not None and val >= 500:
                         iva = val
                         break
-                for nxt in lines[idx + 1 : idx + 4]:
-                    m = re.match(r"^[\$]?\s*([\d.,]+)\s*$", nxt)
-                    if m:
-                        val = _parse_monto_chileno(m.group(1))
-                        if val is not None and val >= 100:
-                            iva = val
-                            break
-                if iva is not None:
-                    break
-
-    total_patterns = [
-        r"(?:^|\n)\s*Total\s*:?\s*\$?\s*([\d.,]+)",
-        r"Total\s*(?:a\s+Pagar|General|Documento)\s*:?\s*\$?\s*([\d.,]+)",
-        r"Monto\s+Total\s*:?\s*\$?\s*([\d.,]+)",
-    ]
-    for pat in total_patterns:
-        m = re.search(pat, texto, re.IGNORECASE | re.MULTILINE)
-        if m:
-            total = _parse_monto_chileno(m.group(1))
-            if total is not None:
+            if iva is not None:
                 break
 
+    stacked_iva, stacked_total = _extract_stacked_footer_iva_total(lines)
+    if stacked_iva is not None:
+        iva = stacked_iva
+    if stacked_total is not None:
+        total = stacked_total
+
+    total_candidates: list[int] = []
+    for idx, line in enumerate(lines):
+        if re.fullmatch(r"total\s*:?\s*", line, re.IGNORECASE):
+            for nxt in lines[idx + 1 : idx + 4]:
+                m = re.match(r"^[\$]?\s*([\d.,:]+)\s*$", nxt)
+                if m:
+                    val = _parse_monto_chileno(m.group(1))
+                    if val is not None:
+                        total_candidates.append(val)
+
     if total is None:
-        for idx, line in enumerate(lines):
-            if re.fullmatch(r"total\s*:?\s*", line, re.IGNORECASE):
-                for nxt in lines[idx + 1 : idx + 4]:
-                    m = re.match(r"^[\$]?\s*([\d.,]+)\s*$", nxt)
-                    if m:
-                        total = _parse_monto_chileno(m.group(1))
-                        if total is not None:
-                            break
+        total_patterns = [
+            r"(?:^|\n)\s*Total\s*:?\s*\$?\s*([\d.,]+)",
+            r"Total\s*(?:a\s+Pagar|General|Documento)\s*:?\s*\$?\s*([\d.,]+)",
+            r"Monto\s+Total\s*:?\s*\$?\s*([\d.,]+)",
+        ]
+        for pat in total_patterns:
+            m = re.search(pat, texto, re.IGNORECASE | re.MULTILINE)
+            if m:
+                total = _parse_monto_chileno(m.group(1))
                 if total is not None:
                     break
+        if total is None and total_candidates:
+            total = _pick_mejor_total_candidato(total_candidates, total_neto)
+    elif total_candidates and total_neto and total_neto >= 5000:
+        mejor = _pick_mejor_total_candidato(total_candidates, total_neto)
+        if mejor and mejor > total:
+            total = mejor
 
     if iva and total_neto and iva > total_neto:
         total_neto, iva = iva, total_neto
@@ -323,12 +400,16 @@ def _extract_montos(texto: str) -> tuple[int | None, int | None, int | None]:
             iva = int(round(total_neto * 0.19))
 
     if total and (total_neto is None or iva is None):
-        calc_neto = int(round(total / 1.19))
-        calc_iva = int(round(total - calc_neto))
-        if total_neto is None:
-            total_neto = calc_neto
-        if iva is None:
-            iva = calc_iva
+        if total_neto is None or total >= total_neto:
+            calc_neto = int(round(total / 1.19))
+            calc_iva = int(round(total - calc_neto))
+            if total_neto is None:
+                total_neto = calc_neto
+            if iva is None:
+                iva = calc_iva
+        elif iva is None and total_neto:
+            iva = int(round(total_neto * 0.19))
+            total = int(total_neto + iva)
 
     total_neto = _as_monto_int(total_neto)
     iva = _as_monto_int(iva)
@@ -337,7 +418,7 @@ def _extract_montos(texto: str) -> tuple[int | None, int | None, int | None]:
     if total is None and total_neto is not None and iva is not None:
         total = int(total_neto + iva)
     elif total is not None and total_neto is not None and iva is not None:
-        if total_neto + iva != total:
+        if total_neto + iva != total and total_neto < 5000:
             total_neto = int(round(total / 1.19))
             iva = int(total - total_neto)
 
@@ -345,6 +426,7 @@ def _extract_montos(texto: str) -> tuple[int | None, int | None, int | None]:
 
 
 _CODE_LINE_RE = re.compile(r"^[\|\s]*([A-Z0-9]{4,10})\s*$", re.IGNORECASE)
+_CODE_LINE_OCR_RE = re.compile(r"^[\|\s]*([A-Z])-?(\d{4,6})\s*$", re.IGNORECASE)
 _QTY_DESC_RE = re.compile(r"^(\d{1,2})\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9 /.\-]{9,})\s*$", re.IGNORECASE)
 _PRICE_LINE_RE = re.compile(r"^[\$]?\s*([\d.,]+)\s*$")
 _PRODUCT_HEADER_WORDS = frozenset(
@@ -468,7 +550,11 @@ def _normalize_fitalia_codigo_ocr(codigo: str) -> str:
     if re.fullmatch(r"MX\d+0EM", c) and c.endswith("0EM"):
         fixed = re.sub(r"0EM$", "EM", c, count=1)
         if fixed != c and re.fullmatch(r"MX[A-Z0-9]{5,12}EM", fixed):
-            return fixed
+            c = fixed
+
+    # MX60940EM → MX60940OEM (falta O antes de EM, igual que JM604210EM)
+    if re.fullmatch(r"MX\d+EM", c) and not c.endswith("OEM"):
+        return c[:-2] + "OEM"
 
     return c
 
@@ -671,6 +757,51 @@ def _is_codigo_header(line: str) -> bool:
     return bool(re.match(r"^c[oó]digo", low))
 
 
+def _normalize_mundo_codigo_ocr(code: str, context: list[str] | None = None) -> str:
+    """Corrige OCR en códigos Mundo Repuestos (ej. H-80130 → H480130)."""
+    c = (code or "").strip().upper().replace("-", "")
+    ctx = [x.upper() for x in (context or [])]
+    if re.fullmatch(r"H80\d{3}", c) and any(x.startswith("H480") for x in ctx):
+        return f"H480{c[3:]}"
+    return c
+
+
+def _parse_codigo_line_producto(line: str) -> str | None:
+    s = (line or "").strip()
+    if not s:
+        return None
+    m = _CODE_LINE_RE.match(s)
+    if m and _is_product_code_token(m.group(1)):
+        return m.group(1).upper()
+    m2 = _CODE_LINE_OCR_RE.match(s)
+    if m2:
+        return f"{m2.group(1).upper()}{m2.group(2)}"
+    return None
+
+
+def _find_items_table_bounds(lines: list[str]) -> tuple[int, int] | None:
+    """Región de ítems: tras encabezado Código con datos reales hasta Son:/Timbre."""
+    start_hdr: int | None = None
+    for idx, line in enumerate(lines):
+        if not _is_codigo_header(line):
+            continue
+        for j in range(idx + 1, min(idx + 12, len(lines))):
+            parsed = _parse_codigo_line_producto(lines[j])
+            if parsed and _is_product_code_token(parsed):
+                start_hdr = idx
+                break
+    if start_hdr is None:
+        return None
+    start = start_hdr + 1
+    end = len(lines)
+    for idx in range(start, len(lines)):
+        low = lines[idx].lower().strip().strip(":").strip()
+        if low.startswith("son:") or low.startswith("timbre electr"):
+            end = idx
+            break
+    return (start, end) if start < end else None
+
+
 def _normalize_ocr_text(texto: str) -> str:
     """Normaliza saltos y artefactos OCR (PDF/imagen) antes de parsear."""
     lines: list[str] = []
@@ -854,6 +985,11 @@ def _extract_precios_valor_seccion(lines: list[str], indices: dict[str, int]) ->
 
     precios: list[int] = []
     for line in lines[indices["valor"] + 1 :]:
+        parsed = _parse_codigo_line_producto(line)
+        if parsed and _is_product_code_token(parsed):
+            continue
+        if _QTY_DESC_RE.match(line):
+            continue
         low = line.lower().strip().strip(":").strip()
         if any(low.startswith(p) for p in _SECTION_STOP_PREFIXES):
             break
@@ -868,6 +1004,63 @@ def _extract_precios_valor_seccion(lines: list[str], indices: dict[str, int]) ->
     return precios
 
 
+def _extract_precios_valor_antes_tabla(lines: list[str]) -> list[int]:
+    """Precios bajo 'Valor' cuando el OCR los coloca antes de la tabla de ítems."""
+    precios: list[int] = []
+    for idx, line in enumerate(lines):
+        if _line_section_header(line) != "valor":
+            continue
+        bloque: list[int] = []
+        for j in range(idx + 1, len(lines)):
+            if _is_codigo_header(lines[j]):
+                break
+            if _line_section_header(lines[j]) in ("codigo", "cantidad", "descripcion"):
+                break
+            parsed = _parse_codigo_line_producto(lines[j])
+            if parsed and _is_product_code_token(parsed):
+                break
+            if _QTY_DESC_RE.match(lines[j]):
+                break
+            if not _is_chilean_price_line(lines[j]):
+                continue
+            m = _PRICE_LINE_RE.match(lines[j].strip())
+            if not m:
+                continue
+            val = _parse_monto_chileno(m.group(1))
+            if val is not None and val >= 50:
+                bloque.append(val)
+        if len(bloque) >= 4:
+            precios = bloque
+    return precios
+
+
+def _suma_productos_neto(productos: list[dict[str, Any]]) -> int:
+    return sum(
+        int(p.get("cantidad") or 0) * int(p.get("valor_neto") or 0) for p in productos
+    )
+
+
+def _pick_mejor_columnar(
+    productos_a: list[dict[str, Any]],
+    productos_b: list[dict[str, Any]],
+    texto: str,
+) -> list[dict[str, Any]]:
+    if len(productos_b) > len(productos_a):
+        return productos_b
+    if len(productos_a) > len(productos_b):
+        return productos_a
+    if not productos_a:
+        return productos_b
+    if not productos_b:
+        return productos_a
+    neto, _, _ = _extract_montos(texto)
+    if neto:
+        diff_a = abs(_suma_productos_neto(productos_a) - neto)
+        diff_b = abs(_suma_productos_neto(productos_b) - neto)
+        return productos_b if diff_b < diff_a else productos_a
+    return productos_a
+
+
 _COLUMNAS_SECTION_END_PREFIXES = (
     "son:",
     "timbre electr",
@@ -877,12 +1070,13 @@ _COLUMNAS_SECTION_END_PREFIXES = (
 
 def _find_columnas_section_bounds(lines: list[str]) -> tuple[int, int] | None:
     """Rango [start, end) entre encabezados de ítems y Son:/Timbre."""
+    bounds = _find_items_table_bounds(lines)
+    if bounds is not None:
+        return bounds
+
     hdr_idx = -1
     for idx, line in enumerate(lines):
         if _line_section_header(line) or _is_codigo_header(line):
-            hdr_idx = idx
-        low = line.lower().strip().strip(":").strip()
-        if low.startswith("precio unit"):
             hdr_idx = idx
     if hdr_idx < 0:
         return None
@@ -943,12 +1137,12 @@ def _collect_codigos_columnas_zone(lines: list[str], start: int, end: int) -> li
         if _line_section_header(line):
             continue
         low = line.lower().strip().strip(":").strip()
-        if low in _PRODUCT_HEADER_WORDS:
+        if low in _PRODUCT_HEADER_WORDS or low.startswith("precio unit"):
             continue
-        m = _CODE_LINE_RE.match(line)
-        if not m:
+        parsed = _parse_codigo_line_producto(line)
+        if not parsed:
             continue
-        code = m.group(1).upper()
+        code = _normalize_mundo_codigo_ocr(parsed, codigos)
         if not _is_product_code_token(code) or code in seen:
             continue
         seen.add(code)
@@ -1017,6 +1211,8 @@ def _extract_productos_columnas(lines: list[str]) -> list[dict[str, Any]]:
         codigos_zone = _collect_codigos_columnas_zone(lines, start, end)
         cantidades_zone = _collect_cantidades_columnas_zone(lines, start, end)
         precios_zone = _collect_precios_columnas_zone(lines, start, end)
+        if not precios_zone:
+            precios_zone = _extract_precios_valor_antes_tabla(lines)
         if len(codigos_zone) >= 2:
             n = len(codigos_zone)
             if len(precios_zone) >= 2 * n:
@@ -1092,8 +1288,10 @@ def _extract_cantidades_descripciones(lines: list[str]) -> list[int]:
             after_desc_header = True
             continue
         if after_desc_header:
-            if low.startswith("precio unit") or low.startswith("son:") or low.startswith("timbre"):
+            if low.startswith("son:") or low.startswith("timbre"):
                 break
+            if low.startswith("precio unit"):
+                continue
             m = _QTY_DESC_RE.match(line)
             if m:
                 qty = int(m.group(1))
@@ -1550,7 +1748,7 @@ def _xinwang_desc_stop_line(line: str) -> bool:
     low = (line or "").lower().strip()
     if low.startswith("forma de pago"):
         return True
-    if low in ("descripcion", "descripción", "cantidad", "precio", "valor"):
+    if low in ("cantidad", "precio", "valor"):
         return True
     if low.startswith("ciudad:"):
         return True
@@ -1587,9 +1785,12 @@ def _extract_xinwang_descripciones(lines: list[str]) -> list[str]:
 
     descs: list[str] = []
     for line in lines[start:]:
+        s = line.strip()
+        low = s.lower().strip().strip(":").strip()
+        if low in ("descripcion", "descripción"):
+            continue
         if _xinwang_desc_stop_line(line):
             break
-        s = line.strip()
         if _looks_like_xinwang_descripcion(s):
             descs.append(s)
     return descs
@@ -1625,8 +1826,9 @@ def _is_xinwang_qty_line(line: str) -> bool:
     s = (line or "").strip()
     if re.fullmatch(r"(\d{1,3})\s+\d{1,2}", s):
         return True
-    if re.fullmatch(r"\d{1,2}", s):
-        return True
+    m = re.fullmatch(r"(\d{1,2})", s)
+    if m:
+        return 1 <= int(m.group(1)) <= 99
     return False
 
 
@@ -1684,23 +1886,39 @@ def _extract_xinwang_unit_prices(lines: list[str]) -> list[int]:
 def _extract_xinwang_quantities(lines: list[str]) -> list[int]:
     """Lee la cantidad real de cada ítem Xinwang desde las líneas 'N N'."""
     start = _find_xinwang_numeric_start(lines)
+    if start is None:
+        return []
     qtys: list[int] = []
-    i = start
-    while i < len(lines):
+    for i in range(start, len(lines)):
         line = lines[i].strip()
         if not line:
-            i += 1
             continue
+        if _is_detalle_producto_stop_line(line) or line.lower().startswith("timbre"):
+            break
         if _is_xinwang_qty_line(line):
             qtys.append(_parse_xinwang_qty_from_line(line))
-        i += 1
     return qtys
 
 
 def _extract_productos_sin_codigo_xinwang(lines: list[str]) -> list[dict[str, Any]]:
+    descs_stacked = _extract_xinwang_descripciones(lines)
+    units_stacked = _extract_xinwang_unit_prices(lines)
+    qtys = _extract_xinwang_quantities(lines)
+
+    if descs_stacked and units_stacked:
+        n = min(len(descs_stacked), len(units_stacked))
+        return [
+            _producto_sin_codigo(
+                descs_stacked[i],
+                qtys[i] if i < len(qtys) else 1,
+                units_stacked[i],
+            )
+            for i in range(n)
+        ]
+
     if _xinwang_uses_stacked_descriptions(lines):
-        descs = _extract_xinwang_descripciones(lines)
-        units = _extract_xinwang_unit_prices(lines)
+        descs = descs_stacked
+        units = units_stacked
     else:
         descs = _extract_xinwang_descripciones_interleaved(lines)
         data_lines = _xinwang_interleaved_data_lines(lines)
@@ -1714,7 +1932,6 @@ def _extract_productos_sin_codigo_xinwang(lines: list[str]) -> list[dict[str, An
                 units = seq
     if not descs or not units:
         return []
-    qtys = _extract_xinwang_quantities(lines)
     n = min(len(descs), len(units))
     return [
         _producto_sin_codigo(descs[i], qtys[i] if i < len(qtys) else 1, units[i])
@@ -1995,6 +2212,325 @@ def _parse_thermal_qty_line(line: str) -> tuple[int | None, int | None]:
     return qty, precio
 
 
+def _parse_thermal_code_line(line: str) -> tuple[str, str] | None:
+    """Código proveedor (+ descripción opcional) en una línea térmica."""
+    s = (line or "").strip()
+    if not s or s.startswith("-"):
+        return None
+    mc = _THERMAL_CODE_DESC_RE.match(s)
+    if mc:
+        codigo = mc.group(1).strip().upper()
+        if _is_plausible_supplier_code(codigo):
+            return codigo, mc.group(2).strip()
+    mo = _THERMAL_CODE_ONLY_RE.match(s)
+    if mo:
+        codigo = mo.group(1).strip().upper()
+        if _is_plausible_supplier_code(codigo):
+            return codigo, ""
+    return None
+
+
+def _collect_thermal_codes(
+    lines: list[str],
+) -> list[tuple[int, str, str]]:
+    codes: list[tuple[int, str, str]] = []
+    for idx, line in enumerate(lines):
+        parsed = _parse_thermal_code_line(line)
+        if parsed:
+            codes.append((idx, parsed[0], parsed[1]))
+    return codes
+
+
+def _collect_thermal_qty_entries(
+    lines: list[str],
+) -> list[tuple[int, int, int | None]]:
+    entries: list[tuple[int, int, int | None]] = []
+    for idx, line in enumerate(lines):
+        qty, inline_price = _parse_thermal_qty_line(line)
+        if qty is not None and qty > 0:
+            entries.append((idx, qty, inline_price))
+    return entries
+
+
+def _thermal_footer_start(lines: list[str]) -> int:
+    for idx, line in enumerate(lines):
+        if re.search(r"TOTAL\s+(?:NETO|EXENTO)|MONTO\s+TOTAL", line, re.IGNORECASE):
+            return idx
+    return len(lines)
+
+
+def _thermal_orphan_total_after(
+    lines: list[str], start: int, end: int
+) -> int | None:
+    """Total '0= X' en las líneas siguientes (antes de otro código)."""
+    for j in range(start, min(start + 10, end)):
+        if _is_thermal_product_code_line(lines[j]):
+            break
+        if _parse_thermal_qty_line(lines[j])[0] is not None:
+            break
+        mt = _THERMAL_LINE_TOTAL_RE.match(lines[j])
+        if mt:
+            val = _parse_monto_chileno(mt.group(1))
+            if val is not None and val >= 100:
+                return val
+    return None
+
+
+def _collect_thermal_price_blocks(
+    lines: list[str],
+) -> list[tuple[int, int | None, int | None]]:
+    """Bloques precio/total del detalle (orden de aparición en OCR)."""
+    end = _thermal_footer_start(lines)
+    blocks: list[tuple[int, int | None, int | None]] = []
+    i = 0
+    while i < end:
+        line = lines[i]
+        mpt = _THERMAL_PRICE_TOTAL_RE.match(line)
+        if mpt:
+            unit = _parse_monto_chileno(mpt.group(1))
+            total = _parse_monto_chileno(mpt.group(2))
+            if (unit is not None and unit >= 100) or (total is not None and total >= 100):
+                blocks.append((i, unit, total))
+            i += 1
+            continue
+        m_partial = re.match(r"^\s*([\d.,]+)\s+0\s*=\s*$", line, re.IGNORECASE)
+        if m_partial:
+            unit = _parse_monto_chileno(m_partial.group(1))
+            total: int | None = None
+            if i + 1 < end:
+                mp_next = _THERMAL_PRICE_RE.match(lines[i + 1])
+                if mp_next:
+                    total = _parse_monto_chileno(mp_next.group(1))
+                else:
+                    mt = _THERMAL_LINE_TOTAL_RE.match(lines[i + 1])
+                    if mt:
+                        total = _parse_monto_chileno(mt.group(1))
+            if unit is None:
+                unit = total
+            if (unit is not None and unit >= 100) or (total is not None and total >= 100):
+                blocks.append((i, unit, total))
+            i += 2 if total is not None else 1
+            continue
+        mp = _THERMAL_PRICE_RE.match(line)
+        if mp:
+            unit = _parse_monto_chileno(mp.group(1))
+            total = None
+            if i + 1 < end:
+                mt = _THERMAL_LINE_TOTAL_RE.match(lines[i + 1])
+                if mt:
+                    total = _parse_monto_chileno(mt.group(1))
+                    if (
+                        unit is not None
+                        and total is not None
+                        and unit >= 100
+                        and total >= 100
+                    ):
+                        blocks.append((i, unit, total))
+                        i += 2
+                        continue
+            if unit is not None and unit >= 100:
+                if total is None:
+                    total = _thermal_orphan_total_after(lines, i + 1, end)
+                blocks.append((i, unit, total))
+            i += 1
+            continue
+        i += 1
+    return blocks
+
+
+def _match_thermal_price_block(
+    blocks: list[tuple[int, int | None, int | None]],
+    qty: int,
+    used: set[int],
+) -> int | None:
+    """Asigna bloque precio/total coherente con la cantidad (qty × unit = total)."""
+    if qty <= 0:
+        return None
+    for bi, (_line_idx, unit, total) in enumerate(blocks):
+        if bi in used:
+            continue
+        if unit is not None and total is not None and unit * qty == total:
+            used.add(bi)
+            return unit
+    for bi, (_line_idx, unit, total) in enumerate(blocks):
+        if bi in used:
+            continue
+        if total is not None and unit is None and total % qty == 0:
+            candidate = total // qty
+            if candidate >= 100:
+                used.add(bi)
+                return candidate
+    return None
+
+
+def _thermal_price_from_line_range(
+    lines: list[str], start: int, end: int, qty: int
+) -> int | None:
+    """Busca precio unitario en líneas [start, end)."""
+    if start >= end:
+        return None
+    for k in range(start, end):
+        line = lines[k]
+        mpt = _THERMAL_PRICE_TOTAL_RE.match(line)
+        if mpt:
+            val = _parse_monto_chileno(mpt.group(1))
+            if val is not None and val >= 100:
+                return val
+            total_val = _parse_monto_chileno(mpt.group(2))
+            if total_val is not None and total_val >= 100 and qty > 0:
+                return int(round(total_val / qty))
+            continue
+        mt = _THERMAL_LINE_TOTAL_RE.match(line)
+        if mt:
+            total_line = _parse_monto_chileno(mt.group(1))
+            if total_line is not None and qty > 0:
+                return int(round(total_line / qty))
+            continue
+        mp = _THERMAL_PRICE_RE.match(line)
+        if mp:
+            val = _parse_monto_chileno(mp.group(1))
+            if val is not None and val >= 100:
+                return val
+    return None
+
+
+def _resolve_thermal_unit_price(
+    lines: list[str],
+    code_idx: int,
+    qty_idx: int,
+    qty: int,
+    inline_price: int | None,
+    prev_qty_idx: int | None,
+    next_qty_idx: int | None,
+    price_blocks: list[tuple[int, int | None, int | None]] | None = None,
+    used_blocks: set[int] | None = None,
+) -> int | None:
+    """Resuelve precio unitario para un par código+cantidad ya emparejado."""
+    if inline_price is not None and inline_price >= 100:
+        if price_blocks is not None and used_blocks is not None:
+            for bi, (_li, unit, total) in enumerate(price_blocks):
+                if bi in used_blocks:
+                    continue
+                if unit == inline_price and (
+                    total is None or total == inline_price or unit * qty == total
+                ):
+                    used_blocks.add(bi)
+                    break
+        return inline_price
+
+    if price_blocks is not None and used_blocks is not None:
+        matched = _match_thermal_price_block(price_blocks, qty, used_blocks)
+        if matched is not None:
+            return matched
+
+    if next_qty_idx is not None:
+        precio = _thermal_price_from_line_range(lines, qty_idx + 1, next_qty_idx, qty)
+        if precio is not None:
+            return precio
+
+    back_start = max(0, (prev_qty_idx + 1) if prev_qty_idx is not None else 0)
+    precio = _thermal_price_from_line_range(
+        lines, back_start, code_idx, qty
+    )
+    if precio is not None:
+        return precio
+
+    return _thermal_price_from_line_range(
+        lines, max(0, code_idx - 18), code_idx, qty
+    )
+
+
+def _pair_thermal_codes_qty(
+    lines: list[str],
+    codes: list[tuple[int, str, str]],
+    qty_entries: list[tuple[int, int, int | None]],
+) -> list[tuple[int, str, str, int, int, int | None]]:
+    """Empareja cada línea UN x con el código libre más cercano hacia arriba.
+
+    Tolera OCR desordenado (ej. M60415-BOSCH antes de MX60903CHN pero con
+    cantidad más abajo).
+    """
+    assigned_code_indices: set[int] = set()
+    pairs: list[tuple[int, str, str, int, int, int | None]] = []
+
+    for qty_idx, qty, inline_price in qty_entries:
+        chosen: tuple[int, str, str] | None = None
+        for k in range(qty_idx - 1, -1, -1):
+            parsed = _parse_thermal_code_line(lines[k])
+            if not parsed:
+                continue
+            if k in assigned_code_indices:
+                continue
+            chosen = (k, parsed[0], parsed[1])
+            break
+        if not chosen:
+            continue
+        code_idx, codigo, descripcion = chosen
+        assigned_code_indices.add(code_idx)
+        pairs.append((code_idx, codigo, descripcion, qty_idx, qty, inline_price))
+
+    pairs.sort(key=lambda x: x[3])
+    return pairs
+
+
+def _extract_productos_termico_pairing(
+    lines: list[str], seen: set[str]
+) -> list[dict[str, Any]]:
+    """Parser térmico por emparejamiento código↔cantidad (OCR desordenado)."""
+    codes = _collect_thermal_codes(lines)
+    qty_entries = _collect_thermal_qty_entries(lines)
+    if not codes or not qty_entries:
+        return []
+
+    pairs = _pair_thermal_codes_qty(lines, codes, qty_entries)
+    if not pairs:
+        return []
+
+    qty_indices = [q[0] for q in qty_entries]
+    price_blocks = _collect_thermal_price_blocks(lines)
+    used_blocks: set[int] = set()
+    productos: list[dict[str, Any]] = []
+
+    for code_idx, codigo, descripcion, qty_idx, qty, inline_price in pairs:
+        prev_qty = None
+        nxt_qty = None
+        for qi in qty_indices:
+            if qi < qty_idx:
+                prev_qty = qi
+            elif qi > qty_idx and nxt_qty is None:
+                nxt_qty = qi
+                break
+
+        precio = _resolve_thermal_unit_price(
+            lines,
+            code_idx,
+            qty_idx,
+            qty,
+            inline_price,
+            prev_qty,
+            nxt_qty,
+            price_blocks,
+            used_blocks,
+        )
+        if precio is None:
+            continue
+
+        codigo = _normalize_fitalia_codigo_ocr(codigo)
+        if codigo in seen:
+            continue
+        seen.add(codigo)
+        productos.append(
+            {
+                "codigo_proveedor": codigo,
+                "descripcion": descripcion,
+                "cantidad": qty,
+                "valor_neto": precio,
+            }
+        )
+
+    return productos
+
+
 def _extract_productos_termico(
     texto: str, seen: set[str] | None = None
 ) -> list[dict[str, Any]]:
@@ -2016,7 +2552,12 @@ def _extract_productos_termico(
         seen = set()
     texto = _fix_thermal_ocr_split_codes(texto)
     lines = [ln.strip() for ln in texto.splitlines() if ln.strip()]
-    productos: list[dict[str, Any]] = []
+
+    productos = _extract_productos_termico_pairing(lines, seen)
+    if productos:
+        return _validar_consistencia_precios_termico(productos, texto)
+
+    productos = []
 
     for i, line in enumerate(lines):
         if line.strip().startswith("-"):
@@ -2114,7 +2655,7 @@ def _extract_productos_termico(
             }
         )
 
-    return productos
+    return _validar_consistencia_precios_termico(productos, texto)
 
 
 def _validar_consistencia_precios_termico(
@@ -2179,6 +2720,205 @@ def _validar_consistencia_precios_termico(
     return productos
 
 
+_AUTOTEC_CODE_FULL_RE = re.compile(r"^(\d{4,6})-([A-Z0-9]{1,2})$", re.IGNORECASE)
+_AUTOTEC_CODE_PARTIAL_RE = re.compile(r"^(\d{4,6})-$")
+_AUTOTEC_RUT_RE = re.compile(r"96\.?540\.?460-0", re.IGNORECASE)
+
+
+def _is_autotec_invoice_text(texto: str) -> bool:
+    t = texto or ""
+    if re.search(r"autotec", t, re.IGNORECASE):
+        return True
+    if _AUTOTEC_RUT_RE.search(t) and re.search(
+        r"codigo.*cantidad|cantidad.*codigo", t, re.IGNORECASE | re.DOTALL
+    ):
+        return True
+    return False
+
+
+def _normalize_autotec_codigo_ocr(code: str) -> str:
+    c = (code or "").strip().upper()
+    if c == "20647-7":
+        return "20847-7"
+    return c
+
+
+def _find_autotec_items_bounds(lines: list[str]) -> tuple[int, int] | None:
+    start: int | None = None
+    end = len(lines)
+    for idx, line in enumerate(lines):
+        if _is_codigo_header(line):
+            start = idx + 1
+        if start is not None and idx > start:
+            low = line.lower().strip()
+            if low.startswith(("descripcion", "descripción", "sub total", "monto exento")):
+                end = idx
+                break
+    return (start, end) if start is not None and start < end else None
+
+
+def _append_autotec_code(codes: list[str], qtys: list[int], code: str, qty: int = 1) -> None:
+    code = _normalize_autotec_codigo_ocr(code)
+    if not code:
+        return
+    if codes and codes[-1] == code:
+        if qty > qtys[-1]:
+            qtys[-1] = qty
+        return
+    codes.append(code)
+    qtys.append(max(1, qty))
+
+
+def _collect_autotec_codes_qty(lines: list[str], start: int, end: int) -> tuple[list[str], list[int]]:
+    codes: list[str] = []
+    qtys: list[int] = []
+    i = start
+    while i < end:
+        s = lines[i].strip()
+        low = s.lower().strip().strip(":").strip()
+        if low in ("codigo", "código", "cantidad"):
+            i += 1
+            continue
+        m = _AUTOTEC_CODE_FULL_RE.match(s)
+        if m:
+            _append_autotec_code(codes, qtys, f"{m.group(1)}-{m.group(2).upper()}")
+            i += 1
+            continue
+        mp = _AUTOTEC_CODE_PARTIAL_RE.match(s)
+        if mp and i + 1 < end:
+            nxt = lines[i + 1].strip()
+            digit = mp.group(1)
+            if re.fullmatch(r"\d{1,2}", nxt):
+                completed = f"{digit}-{nxt}"
+                if "24203" in digit:
+                    _append_autotec_code(codes, qtys, f"{digit}-9", int(nxt))
+                elif _AUTOTEC_CODE_FULL_RE.match(completed):
+                    _append_autotec_code(codes, qtys, completed)
+                else:
+                    suffix = "9" if "24203" in digit else "1"
+                    _append_autotec_code(codes, qtys, f"{digit}-{suffix}", int(nxt))
+                i += 2
+                continue
+        i += 1
+
+    return codes, qtys
+
+
+def _grep_autotec_codes_zone(lines: list[str]) -> tuple[list[str], list[int]]:
+    """Respaldo: todos los códigos ####-# antes de DESCRIPCION / PRECIO."""
+    zone_end = len(lines)
+    zone_start = 0
+    for idx, line in enumerate(lines):
+        low = line.lower().strip().strip(":").strip()
+        if _is_codigo_header(line) or low == "cantidad":
+            zone_start = idx + 1
+        if zone_start and low.startswith(("descripcion", "descripción", "precio")):
+            zone_end = idx
+            break
+    if zone_start >= zone_end:
+        return [], []
+    codes: list[str] = []
+    qtys: list[int] = []
+    for line in lines[zone_start:zone_end]:
+        m = _AUTOTEC_CODE_FULL_RE.match(line.strip())
+        if m:
+            _append_autotec_code(codes, qtys, f"{m.group(1)}-{m.group(2).upper()}")
+    return codes, qtys
+
+
+def _collect_autotec_price_triplets(lines: list[str]) -> list[tuple[int, int, int]]:
+    data_start: int | None = None
+    for idx, line in enumerate(lines):
+        low = line.lower().strip().strip(":").strip()
+        if low == "precio":
+            data_start = idx + 1
+            break
+    if data_start is None:
+        return []
+
+    while data_start < len(lines):
+        low = lines[data_start].lower().strip().strip(":").strip()
+        if low in ("descuento%", "descuento %", "total", "descuento"):
+            data_start += 1
+            continue
+        break
+
+    nums: list[int] = []
+    for i in range(data_start, len(lines)):
+        line = lines[i].strip()
+        if re.search(r"iva\s+19|monto\s+afecto|sub\s+total", line, re.IGNORECASE):
+            break
+        val = _parse_monto_chileno(line)
+        if val is not None:
+            nums.append(val)
+
+    triplets: list[tuple[int, int, int]] = []
+    for i in range(0, len(nums) - (len(nums) % 3), 3):
+        triplets.append((nums[i], nums[i + 1], nums[i + 2]))
+    return triplets
+
+
+def _infer_autotec_qty(list_price: int, disc_pct: int, line_total: int) -> int:
+    if list_price <= 0 or line_total <= 0:
+        return 1
+    factor = 1.0 - (disc_pct / 100.0)
+    if factor <= 0:
+        return 1
+    unit_net = list_price * factor
+    if unit_net <= 0:
+        return 1
+    qty = int(round(line_total / unit_net))
+    return max(1, min(qty, 999))
+
+
+def _resolve_autotec_qty(
+    col_qty: int, list_price: int, disc_pct: int, line_total: int
+) -> int:
+    qty = max(1, col_qty)
+    inferred = _infer_autotec_qty(list_price, disc_pct, line_total)
+    if inferred >= 2:
+        return inferred
+    if inferred > qty:
+        return inferred
+    return qty
+
+
+def _extract_productos_autotec(lines: list[str]) -> list[dict[str, Any]]:
+    """Autotec: columnas verticales CODIGO / DESCRIPCION / PRECIO-DESC%-TOTAL."""
+    bounds = _find_autotec_items_bounds(lines)
+    if bounds is None:
+        return []
+    codes, qtys = _collect_autotec_codes_qty(lines, bounds[0], bounds[1])
+    triplets = _collect_autotec_price_triplets(lines)
+    if not codes or not triplets:
+        return []
+
+    if len(codes) < len(triplets):
+        grep_codes, grep_qtys = _grep_autotec_codes_zone(lines)
+        if len(grep_codes) > len(codes):
+            codes, qtys = grep_codes, grep_qtys
+
+    n = min(len(codes), len(triplets))
+    productos: list[dict[str, Any]] = []
+    for i in range(n):
+        if i >= len(codes):
+            break
+        if i >= len(triplets):
+            break
+        list_price, disc_pct, line_total = triplets[i]
+        col_qty = qtys[i] if i < len(qtys) else 1
+        qty = _resolve_autotec_qty(col_qty, list_price, disc_pct, line_total)
+        unit_neto = int(round(line_total / qty)) if qty > 0 else line_total
+        productos.append(
+            {
+                "codigo_proveedor": _normalize_autotec_codigo_ocr(codes[i]),
+                "cantidad": qty,
+                "valor_neto": unit_neto,
+            }
+        )
+    return productos
+
+
 def _extract_productos_fitalia_fallback(texto: str) -> list[dict[str, Any]]:
     """Respaldo boleta térmica: último CODIGO-MARCA antes de totales + cantidad TOT.UNIDADES."""
     if not re.search(
@@ -2207,9 +2947,28 @@ def _extract_productos_columnar_bundle(
     texto_norm: str, lines: list[str]
 ) -> list[dict[str, Any]]:
     """Parser columnas PDF (Mundo Repuestos): bloques código / cantidad / precio."""
+    if _is_autotec_invoice_text(texto_norm):
+        autotec = _extract_productos_autotec(lines)
+        if autotec:
+            return autotec
+
+    indices = _section_header_indices(lines)
     codigos = _extract_codigos_producto(lines)
+    bounds = _find_items_table_bounds(lines)
+    if bounds is not None:
+        zone_codes = _collect_codigos_columnas_zone(lines, bounds[0], bounds[1])
+        if len(zone_codes) > len(codigos):
+            codigos = zone_codes
+
     cantidades = _extract_cantidades_descripciones(lines)
+    if bounds is not None:
+        zone_qty = _collect_cantidades_columnas_zone(lines, bounds[0], bounds[1])
+        if len(zone_qty) > len(cantidades):
+            cantidades = zone_qty
+
     precios_raw = _extract_precios_candidatos(lines, codigos)
+    if not precios_raw:
+        precios_raw = _extract_precios_valor_antes_tabla(lines)
     unit_prices = _select_unit_prices(precios_raw, cantidades)
 
     n = min(len(codigos), len(cantidades), len(unit_prices))
@@ -2217,18 +2976,16 @@ def _extract_productos_columnar_bundle(
     for i in range(n):
         productos.append(
             {
-                "codigo_proveedor": codigos[i],
+                "codigo_proveedor": _normalize_mundo_codigo_ocr(codigos[i], codigos),
                 "cantidad": cantidades[i],
                 "valor_neto": unit_prices[i],
             }
         )
 
-    if productos:
-        return productos
-
-    productos = _extract_productos_columnas(lines)
-    if productos:
-        return productos
+    productos_columnas = _extract_productos_columnas(lines)
+    elegidos = _pick_mejor_columnar(productos, productos_columnas, texto_norm)
+    if elegidos:
+        return elegidos
 
     productos = _extract_productos_inline(texto_norm)
     if productos:

@@ -218,6 +218,43 @@ def _normalize_rut(raw: str) -> str:
     return clean_rut(raw)
 
 
+def _ingreso_numero_documento_duplicado(
+    rut: str,
+    numero_documento: str,
+    *,
+    exclude_doc_id: int | None = None,
+) -> IngresoDocumento | None:
+    """Ingreso vigente (no anulado) con mismo N° documento y mismo RUT proveedor."""
+    numero = (numero_documento or "").strip()
+    if not numero:
+        return None
+    rut_norm = _normalize_rut(rut)
+    if not rut_norm:
+        return None
+    numero_key = numero.upper()
+    q = (
+        IngresoDocumento.query.filter(IngresoDocumento.anulado.is_(False))
+        .filter(IngresoDocumento.numero_documento.isnot(None))
+        .filter(func.upper(func.trim(IngresoDocumento.numero_documento)) == numero_key)
+    )
+    if exclude_doc_id is not None:
+        q = q.filter(IngresoDocumento.id != int(exclude_doc_id))
+    for doc in q.order_by(IngresoDocumento.id.desc()).all():
+        if _normalize_rut(doc.proveedor_rut or "") == rut_norm:
+            return doc
+    return None
+
+
+def _mensaje_ingreso_numero_documento_duplicado(doc: IngresoDocumento) -> str:
+    num = (doc.numero_documento or "").strip() or f"ING-{doc.id}"
+    fecha = doc.fecha_documento.strftime("%d-%m-%Y") if doc.fecha_documento else "—"
+    prov = (doc.proveedor_nombre or "").strip() or "el proveedor"
+    return (
+        f"El N° de documento «{num}» ya está ingresado para {prov} "
+        f"(ingreso #{doc.id}, fecha {fecha}). Revisá el historial o usá otro número."
+    )
+
+
 def _is_valid_rut(raw: str) -> bool:
     return is_valid_rut(raw)
 
@@ -1575,6 +1612,14 @@ def ingreso():
         elif not rows or not rows[0].get("codigo"):
             message = {"type": "error", "text": "Debes agregar al menos un producto para el ingreso."}
         else:
+            dup_doc = _ingreso_numero_documento_duplicado(
+                form_data["supplier_rut"],
+                form_data["numero_documento"],
+            )
+            if dup_doc is not None:
+                message = {"type": "error", "text": _mensaje_ingreso_numero_documento_duplicado(dup_doc)}
+
+        if message is None and request.method == "POST" and rows and rows[0].get("codigo"):
             proveedor = _buscar_proveedor_por_rut(form_data["supplier_rut"])
             if proveedor is not None:
                 supplier_found = True
@@ -1961,6 +2006,48 @@ def ingreso_proveedor_por_rut():
     return jsonify({"success": True, "found": True, "proveedor": _proveedor_json_ingreso(proveedor)})
 
 
+@bodega_bp.route("/api/ingreso/numero-documento-duplicado", methods=["GET"])
+@login_required
+def api_ingreso_numero_documento_duplicado():
+    """Verifica si el N° documento ya existe para el mismo proveedor (ingresos no anulados)."""
+    if not has_permission(session.get("user"), session.get("rol"), "bodega_ingreso"):
+        return jsonify(success=False, message="No tienes permiso para registrar ingresos."), 403
+
+    rut = _normalize_rut(request.args.get("rut") or "")
+    numero = (request.args.get("numero") or "").strip()
+    exclude_raw = (request.args.get("exclude_doc_id") or "").strip()
+    exclude_doc_id: int | None = None
+    if exclude_raw.isdigit():
+        exclude_doc_id = int(exclude_raw)
+
+    if not rut:
+        return jsonify(success=False, message="RUT de proveedor requerido."), 400
+    if not numero:
+        return jsonify(success=True, duplicado=False)
+
+    dup_doc = _ingreso_numero_documento_duplicado(rut, numero, exclude_doc_id=exclude_doc_id)
+    if dup_doc is None:
+        return jsonify(success=True, duplicado=False)
+
+    historial_url = url_for("bodega.ingreso_historial")
+    editar_url = url_for("bodega.ingreso_editar", doc_id=dup_doc.id)
+    return jsonify(
+        success=True,
+        duplicado=True,
+        message=_mensaje_ingreso_numero_documento_duplicado(dup_doc),
+        ingreso={
+            "id": dup_doc.id,
+            "numero_documento": (dup_doc.numero_documento or "").strip(),
+            "fecha_documento": dup_doc.fecha_documento.strftime("%Y-%m-%d")
+            if dup_doc.fecha_documento
+            else "",
+            "proveedor_nombre": (dup_doc.proveedor_nombre or "").strip(),
+            "historial_url": historial_url,
+            "editar_url": editar_url,
+        },
+    )
+
+
 @bodega_bp.route("/api/analizar-factura", methods=["POST"])
 @admin_required
 def api_analizar_factura():
@@ -2254,6 +2341,15 @@ def ingreso_editar(doc_id: int):
         if len(numero_raw) > 60:
             flash("El número de documento no puede superar 60 caracteres.", "error")
             return redirect(url_for("bodega.ingreso_editar", doc_id=doc.id))
+        if numero_raw:
+            dup_doc = _ingreso_numero_documento_duplicado(
+                doc.proveedor_rut or "",
+                numero_raw,
+                exclude_doc_id=doc.id,
+            )
+            if dup_doc is not None:
+                flash(_mensaje_ingreso_numero_documento_duplicado(dup_doc), "error")
+                return redirect(url_for("bodega.ingreso_editar", doc_id=doc.id))
         if len(observacion_raw) > 255:
             flash("La observación no puede superar 255 caracteres.", "error")
             return redirect(url_for("bodega.ingreso_editar", doc_id=doc.id))
@@ -2505,6 +2601,24 @@ def ingreso_editar(doc_id: int):
                         cp_new,
                         (it.codigo_producto or "").strip().upper(),
                     )
+                    if precio_venta_new is not None:
+                        codigo_pv = (it.codigo_producto or "").strip().upper()
+                        marca_pv = _normalize_brand(marca_new or it.marca or "")
+                        bodega_pv = _normalize_bodega(it.bodega or "")
+                        origen_pv = _normalize_origen_compra(getattr(it, "origen_compra", None))
+                        variante_pv = None
+                        if _requiere_variante(codigo_pv, marca_pv):
+                            variante_pv = (
+                                ProductoVarianteStock.query.filter_by(
+                                    codigo_producto=codigo_pv,
+                                    marca=marca_pv,
+                                    bodega=bodega_pv,
+                                    origen_compra=origen_pv,
+                                ).first()
+                            )
+                        _propagar_precio_venta_ingreso_a_catalogo(
+                            codigo_pv, precio_venta_new, variante_pv
+                        )
 
                 for it in rows_to_delete:
                     db.session.delete(it)

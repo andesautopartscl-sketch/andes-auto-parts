@@ -7,6 +7,7 @@
     apiProveedores: "{{ url_for('mobile.api_proveedores') }}",
     apiProducto: "{{ url_for('mobile.api_ingreso_producto', codigo='__CODE__') }}",
     apiGuardar: "{{ url_for('mobile.api_ingreso_rapido') }}",
+    apiNumeroDuplicado: "{{ url_for('bodega.api_ingreso_numero_documento_duplicado') }}",
     urlEscaner: "{{ url_for('mobile.escaner', modo='ingreso') }}",
     urlDetalle: "{{ url_for('mobile.ingreso', doc_id=0) }}".replace("/0", "/"),
     metodosPago: {{ metodos_pago | tojson }}
@@ -53,6 +54,7 @@
   <section class="m-wizard__panel" data-step="3" hidden>
     <label class="m-field"><span class="m-field__label">N° documento</span>
       <input type="text" class="m-field__input" id="ir-numero-doc"></label>
+    <p class="m-hint m-hint--error" id="ir-numero-doc-hint" hidden></p>
     <label class="m-field"><span class="m-field__label">Fecha</span>
       <input type="date" class="m-field__input" id="ir-fecha"></label>
     <label class="m-field"><span class="m-field__label">Método de pago</span>

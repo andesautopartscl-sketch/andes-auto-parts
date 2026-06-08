@@ -11,6 +11,8 @@ from app.bodega.routes import (
     INGRESO_METODOS_PAGO_OPCIONES,
     _actualizar_stock,
     _buscar_proveedor_por_rut,
+    _ingreso_numero_documento_duplicado,
+    _mensaje_ingreso_numero_documento_duplicado,
     _ingreso_resolve_ciudad_chile,
     _normalize_bodega,
     _normalize_brand,
@@ -112,6 +114,10 @@ def registrar_ingreso_rapido(data: dict) -> tuple[bool, dict]:
         return False, {"message": row_errors[0], "errors": row_errors}
 
     numero_documento = (data.get("numero_documento") or "").strip()[:60]
+    if numero_documento:
+        dup_doc = _ingreso_numero_documento_duplicado(proveedor.rut or "", numero_documento)
+        if dup_doc is not None:
+            return False, {"message": _mensaje_ingreso_numero_documento_duplicado(dup_doc)}
     fecha_raw = (data.get("fecha_documento") or datetime.now().strftime("%Y-%m-%d")).strip()
     metodo_pago = (data.get("metodo_pago") or "efectivo").strip()
     observacion = (data.get("observacion") or MOBILE_ORIGIN_TAG).strip()[:500]

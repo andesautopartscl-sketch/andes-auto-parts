@@ -2040,25 +2040,37 @@ def _search_products(term: str, limit: int = 60) -> list[dict]:
         entries = payload.get("stock_entries") or []
         if entries:
             for entry in entries:
-                results.append(
-                    {
-                        **payload,
-                        "marca": entry.get("marca") or "",
-                        "bodega": entry.get("bodega") or "Bodega 1",
-                        "origen_compra": _normalize_origen_compra(entry.get("origen_compra")),
-                        "variant_stock": int(entry.get("stock") or 0),
-                    }
-                )
-        else:
-            results.append(
-                {
+                item_payload = {
                     **payload,
-                    "marca": "",
-                    "bodega": "Bodega 1",
-                    "origen_compra": ORIGEN_COMPRA_DEFAULT,
-                    "variant_stock": int(payload.get("stock") or 0),
+                    "marca": entry.get("marca") or "",
+                    "bodega": entry.get("bodega") or "Bodega 1",
+                    "origen_compra": _normalize_origen_compra(entry.get("origen_compra")),
+                    "variant_stock": int(entry.get("stock") or 0),
                 }
+                item_payload["ingreso_ref"] = _ultimo_ingreso_ref(
+                    code,
+                    item_payload.get("marca"),
+                    item_payload.get("bodega"),
+                    item_payload.get("origen_compra"),
+                )
+                _fill_precio_desde_ingreso_si_vacio(item_payload)
+                results.append(item_payload)
+        else:
+            item_payload = {
+                **payload,
+                "marca": "",
+                "bodega": "Bodega 1",
+                "origen_compra": ORIGEN_COMPRA_DEFAULT,
+                "variant_stock": int(payload.get("stock") or 0),
+            }
+            item_payload["ingreso_ref"] = _ultimo_ingreso_ref(
+                code,
+                item_payload.get("marca"),
+                item_payload.get("bodega"),
+                item_payload.get("origen_compra"),
             )
+            _fill_precio_desde_ingreso_si_vacio(item_payload)
+            results.append(item_payload)
     return results
 
 

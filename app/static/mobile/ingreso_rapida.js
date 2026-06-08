@@ -256,9 +256,51 @@
     });
   });
 
+  function checkNumeroDocumentoDuplicado(numero) {
+    if (!CFG.apiNumeroDuplicado || !state.proveedor || !numero) {
+      return Promise.resolve(false);
+    }
+    var rut = state.proveedor.rut || "";
+    var url = CFG.apiNumeroDuplicado
+      + "?rut=" + encodeURIComponent(rut)
+      + "&numero=" + encodeURIComponent(numero);
+    return fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var hint = document.getElementById("ir-numero-doc-hint");
+        if (d && d.duplicado) {
+          if (hint) {
+            hint.hidden = false;
+            hint.textContent = d.message || "Este N° de documento ya está ingresado.";
+          }
+          return d.message || "Este N° de documento ya está ingresado.";
+        }
+        if (hint) {
+          hint.hidden = true;
+          hint.textContent = "";
+        }
+        return false;
+      })
+      .catch(function () { return false; });
+  }
+
+  var irNumeroDoc = document.getElementById("ir-numero-doc");
+  if (irNumeroDoc) {
+    irNumeroDoc.addEventListener("blur", function () {
+      checkNumeroDocumentoDuplicado(this.value.trim());
+    });
+  }
+
   document.getElementById("ir-confirmar").addEventListener("click", function () {
     if (saving || !puedeIngreso) return;
+    var numeroDoc = document.getElementById("ir-numero-doc").value.trim();
     saving = true;
+    checkNumeroDocumentoDuplicado(numeroDoc).then(function (dupMsg) {
+      if (dupMsg) {
+        saving = false;
+        showToast(dupMsg);
+        return;
+      }
     var payload = {
       proveedor_id: state.proveedor ? state.proveedor.id : 0,
       proveedor_rut: state.proveedor ? state.proveedor.rut : "",
@@ -295,6 +337,7 @@
       .finally(function () {
         saving = false;
       });
+    });
   });
 
   try {
