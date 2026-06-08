@@ -4,6 +4,8 @@ from pathlib import Path
 from flask import abort, current_app, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
 from app.utils.decorators import login_required
+from app.extensions import db
+from app.seguridad.models import Usuario as UsuarioSistema
 from app.utils.finance_visibility import user_can_view_finanzas
 
 from . import mobile_bp
@@ -532,6 +534,7 @@ def etiquetas():
     labels = []
     missing = []
     message = ""
+    print_mode = (request.values.get("print_mode") or "a4").strip()
     if request.method == "POST" and codigos_raw:
         labels, missing = mobile_etiquetas.generar_etiquetas(codigos_raw)
         if labels:
@@ -544,18 +547,19 @@ def etiquetas():
         labels=labels,
         missing=missing,
         message=message,
+        print_mode=print_mode,
         print_modes=mobile_etiquetas.PRINT_MODES,
         **_nav_ctx("mas"),
     )
 
 
-@mobile_bp.route("/etiquetas/imprimir", methods=["POST"])
+@mobile_bp.route("/etiquetas/imprimir", methods=["GET", "POST"])
 @login_required
 def etiquetas_imprimir():
     if not mobile_etiquetas.puede_imprimir_etiquetas(session.get("user"), session.get("rol")):
         abort(403)
-    codigos_raw = (request.form.get("codigos") or "").strip()
-    print_mode = (request.form.get("print_mode") or "a4").strip()
+    codigos_raw = (request.values.get("codigos") or "").strip()
+    print_mode = (request.values.get("print_mode") or "a4").strip()
     labels, missing = mobile_etiquetas.generar_etiquetas(codigos_raw)
     if labels:
         mobile_etiquetas.registrar_impresion(labels)
@@ -620,3 +624,23 @@ def api_importar_imagenes_subir():
     )
     status = 200 if result.get("ok") else 500
     return jsonify(result), status
+
+
+@mobile_bp.route("/ajustes")
+@login_required
+def ajustes():
+    email = ""
+    uid = session.get("usuario_id")
+    if uid:
+        try:
+            u = db.session.get(UsuarioSistema, int(uid))
+            if u and u.correo:
+                email = (u.correo or "").strip()
+        except (TypeError, ValueError):
+            pass
+    return render_template(
+        "mobile/ajustes.html",
+        usuario_email=email,
+        pwa_version="v2026.06.05-v16",
+        **_nav_ctx("mas"),
+    )

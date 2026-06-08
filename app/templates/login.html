@@ -13,6 +13,16 @@
 
 <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
 
+<script>
+(function () {
+  try {
+    var q = window.location.search || "";
+    if (/[?&]next=%2Fm|[?&]next=\/m/i.test(q)) {
+      document.cookie = "andes_mobile_pwa=1; path=/; max-age=31536000; SameSite=Lax";
+    }
+  } catch (_e) {}
+})();
+</script>
 <style>
 html, body {
     margin:0;

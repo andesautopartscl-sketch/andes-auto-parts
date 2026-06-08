@@ -18,6 +18,16 @@
   <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" as="style">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='mobile/mobile.min.css') }}">
+  <script>
+  (function () {
+    try {
+      if (localStorage.getItem("andes_mobile_theme") === "1") {
+        document.documentElement.classList.add("mobile-theme-dark");
+      }
+      document.cookie = "andes_mobile_pwa=1; path=/; max-age=31536000; SameSite=Lax";
+    } catch (_e) {}
+  })();
+  </script>
   {% block head_extra %}{% endblock %}
 </head>
 <body
@@ -25,7 +35,7 @@
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
   data-sw-url="{{ url_for('mobile.service_worker') }}"
-  data-pwa-version="v2026.06.05-v15"
+  data-pwa-version="v2026.06.05-v16"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
     <div class="mobile-splash__content">
@@ -44,7 +54,7 @@
         <span class="mobile-splash__dot"></span>
       </div>
     </div>
-    <span class="mobile-splash__version">v2026.06.05-v15</span>
+    <span class="mobile-splash__version">v2026.06.05-v16</span>
   </div>
 
   <div id="catalog-sync-skeleton" class="catalog-sync-skeleton" hidden aria-hidden="true">
@@ -174,13 +184,14 @@
           </span>
           <span class="m-mas-item__arrow" aria-hidden="true">›</span>
         </button>
-        <span class="m-mas-item m-mas-item--disabled">
+        <a href="{{ url_for('mobile.ajustes') }}" class="m-mas-item">
           <span class="m-mas-item__icon m-mas-item__icon--settings" aria-hidden="true">⚙️</span>
           <span class="m-mas-item__body">
             <span class="m-mas-item__title">Ajustes</span>
-            <span class="m-mas-item__desc">Próximamente</span>
+            <span class="m-mas-item__desc">Perfil, tema y caché</span>
           </span>
-        </span>
+          <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+        </a>
         <div class="m-mas-menu__divider" role="separator"></div>
         <form method="post" action="{{ url_for('auth.logout') }}" class="m-mas-item m-mas-item--logout">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

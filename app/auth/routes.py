@@ -10,6 +10,7 @@ from app.models import Usuario as UsuarioLegacy, SessionDB
 from app.utils.csrf import rotate_csrf_token
 from app.utils.audit_log import record_audit_event
 from app.utils.login_wall import safe_next_path
+from app.utils.mobile_login import is_mobile_login_context, mobile_login_target
 from app.extensions import limiter
 
 
@@ -82,6 +83,12 @@ def login():
     )
     if request.method == "GET" and (request.args.get("expirado") or "").strip().lower() in ("1", "true", "si", "yes"):
         error = "Sesión cerrada por inactividad. Vuelve a iniciar sesión."
+    if request.method == "GET" and "user" in session:
+        if is_mobile_login_context(request, next_url):
+            return redirect(mobile_login_target(next_url))
+        if next_url:
+            return redirect(next_url)
+        return redirect(url_for("productos.buscar"))
     try:
         _migrate_plaintext_passwords()
         if request.method == "POST":
@@ -153,12 +160,11 @@ def login():
                     print("="*70 + "\n")
 
                 if next_url:
-                    if next_url.startswith("/m"):
-                        return render_template(
-                            "mobile/post_login_replace.html",
-                            target=next_url,
-                        )
+                    if next_url.startswith("/m") or is_mobile_login_context(request, next_url):
+                        return redirect(mobile_login_target(next_url))
                     return redirect(next_url)
+                if is_mobile_login_context(request, next_url):
+                    return redirect(mobile_login_target(None))
                 return redirect(url_for("productos.buscar"))
 
             else:
@@ -194,12 +200,11 @@ def login():
                         session["rol"] = legacy_user.rol or ""
                         rotate_csrf_token()
                         if next_url:
-                            if next_url.startswith("/m"):
-                                return render_template(
-                                    "mobile/post_login_replace.html",
-                                    target=next_url,
-                                )
+                            if next_url.startswith("/m") or is_mobile_login_context(request, next_url):
+                                return redirect(mobile_login_target(next_url))
                             return redirect(next_url)
+                        if is_mobile_login_context(request, next_url):
+                            return redirect(mobile_login_target(None))
                         return redirect(url_for("productos.buscar"))
 
                 error = "Usuario o clave incorrectos"

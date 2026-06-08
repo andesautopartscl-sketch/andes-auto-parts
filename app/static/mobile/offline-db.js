@@ -292,6 +292,24 @@
         });
       });
     },
+    clearAll: function () {
+      return openDb().then(function (db) {
+        var names = Array.from(db.objectStoreNames);
+        if (!names.length) return;
+        return new Promise(function (resolve, reject) {
+          var tx = db.transaction(names, "readwrite");
+          names.forEach(function (name) {
+            tx.objectStore(name).clear();
+          });
+          tx.oncomplete = function () {
+            resolve();
+          };
+          tx.onerror = function () {
+            reject(tx.error);
+          };
+        });
+      });
+    },
   };
 
   global.AndesOfflineDb = AndesOfflineDb;

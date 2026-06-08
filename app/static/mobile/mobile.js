@@ -523,7 +523,16 @@
     } catch (_e) {}
   }
 
+  function initMobileTheme() {
+    try {
+      var dark = localStorage.getItem("andes_mobile_theme") === "1";
+      document.body.classList.toggle("mobile-app--dark", dark);
+      document.documentElement.classList.toggle("mobile-theme-dark", dark);
+    } catch (_e) {}
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
+    initMobileTheme();
     initPwaAutoUpdate();
     initVersionBadge();
     initMasMenu();

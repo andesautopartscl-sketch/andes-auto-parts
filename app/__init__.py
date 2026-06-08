@@ -1155,6 +1155,9 @@ def create_app():
             if request.is_json:
                 return jsonify(success=False, message="Error interno temporal"), 500
             if "user" in session and request.endpoint != "auth.inicio_seguro":
+                path = request.path or ""
+                if path == "/m" or path.startswith("/m/"):
+                    return redirect(url_for("mobile.home"))
                 return redirect(url_for("auth.inicio_seguro"))
             return render_template(
                 "login.html",
