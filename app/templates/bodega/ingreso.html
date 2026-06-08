@@ -975,10 +975,29 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
 }
 .ingreso-factura-products-wrap {
     overflow-x: auto;
-    max-height: 220px;
+    max-height: 320px;
     overflow-y: auto;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: #64748b #e2e8f0;
+}
+.ingreso-factura-products-wrap::-webkit-scrollbar {
+    width: 10px;
+}
+.ingreso-factura-products-wrap::-webkit-scrollbar-track {
+    background: #e2e8f0;
+    border-radius: 0 6px 6px 0;
+}
+.ingreso-factura-products-wrap::-webkit-scrollbar-thumb {
+    background: #64748b;
+    border-radius: 4px;
+    border: 2px solid #e2e8f0;
+}
+/* Más de 6 ítems: reserva scrollbar visible a la derecha */
+.ingreso-factura-products-wrap:has(.ingreso-factura-products-table tbody tr:nth-child(n+7)) {
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
 }
 .ingreso-factura-products-table {
     width: 100%;
