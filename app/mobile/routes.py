@@ -551,6 +551,7 @@ def etiquetas():
         labels, missing = mobile_etiquetas.generar_etiquetas(codigos_raw)
         if labels:
             mobile_etiquetas.registrar_impresion(labels)
+            mobile_etiquetas.guardar_pending(codigos_raw, print_mode)
         if missing:
             message = f"No encontrados: {', '.join(missing[:5])}"
     return render_template(
@@ -573,19 +574,27 @@ def etiquetas_imprimir():
     if not mobile_etiquetas.puede_imprimir_etiquetas(user, rol):
         abort(403)
     codigos_raw = (request.values.get("codigos") or "").strip()
-    print_mode = (request.values.get("print_mode") or "a4").strip()
+    print_mode = (request.values.get("print_mode") or "").strip()
     valid_modes = {m["value"] for m in mobile_etiquetas.PRINT_MODES}
-    if print_mode not in valid_modes:
+    used_session_fallback = False
+    if not codigos_raw:
+        codigos_raw, pending_mode = mobile_etiquetas.leer_pending()
+        if codigos_raw:
+            used_session_fallback = True
+            if not print_mode or print_mode not in valid_modes:
+                print_mode = pending_mode
+    if not print_mode or print_mode not in valid_modes:
         print_mode = "a4"
     labels, missing = mobile_etiquetas.generar_etiquetas(codigos_raw)
     logger.info(
-        "mobile etiquetas/imprimir: user=%s method=%s codigos_len=%s labels=%s missing=%s mode=%s",
+        "mobile etiquetas/imprimir: user=%s method=%s codigos_len=%s labels=%s missing=%s mode=%s session_fallback=%s",
         user,
         request.method,
         len(codigos_raw),
         len(labels),
         len(missing),
         print_mode,
+        used_session_fallback,
     )
     if labels:
         mobile_etiquetas.registrar_impresion(labels)

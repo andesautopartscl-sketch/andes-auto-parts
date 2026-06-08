@@ -1,5 +1,5 @@
-/* Andes Mobile PWA — service worker v17 */
-const SW_VERSION = "andes-mobile-v17";
+/* Andes Mobile PWA — service worker v18 */
+const SW_VERSION = "andes-mobile-v18";
 const CACHE_PREFIX = `${SW_VERSION}-`;
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
@@ -84,6 +84,10 @@ function isStaleWhileRevalidateApi(url) {
 
 function isCatalogApi(url) {
   return url.pathname === "/m/api/catalogo";
+}
+
+function isLabelsPrint(url) {
+  return url.pathname === "/m/etiquetas/imprimir";
 }
 
 function isCdnAsset(url) {
@@ -235,6 +239,11 @@ self.addEventListener("fetch", (event) => {
 
   if (isCatalogApi(url)) {
     event.respondWith(networkFirstApi(request, API_DASH_CACHE));
+    return;
+  }
+
+  if (isLabelsPrint(url)) {
+    event.respondWith(fetch(request));
     return;
   }
 

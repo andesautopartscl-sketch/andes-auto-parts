@@ -31,34 +31,37 @@
     </div>
     {% endfor %}
   </div>
-  <form method="post" action="{{ url_for('mobile.etiquetas_imprimir') }}" target="_blank" class="m-form m-etiquetas-print-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <textarea name="codigos" hidden aria-hidden="true">{{ codigos_raw }}</textarea>
-    <input type="hidden" name="print_mode" value="{{ print_mode }}" id="etiquetas-print-mode-hidden">
-    <button type="submit" class="m-btn m-btn--primary m-btn--block m-btn--lg">Imprimir</button>
-  </form>
+  <button type="button" class="m-btn m-btn--primary m-btn--block m-btn--lg" id="etiquetas-print-btn"
+    data-print-url="{{ url_for('mobile.etiquetas_imprimir') }}">Imprimir</button>
 </section>
 {% endif %}
 {% endblock %}
 {% block scripts %}
 <script>
 (function () {
+  var printBtn = document.getElementById("etiquetas-print-btn");
+  if (!printBtn) return;
+
   var sel = document.getElementById("etiquetas-print-mode");
-  var hidden = document.getElementById("etiquetas-print-mode-hidden");
-  if (sel && hidden) {
-    sel.addEventListener("change", function () {
-      hidden.value = sel.value;
-    });
-  }
-  var printForm = document.querySelector(".m-etiquetas-print-form");
   var mainCodigos = document.querySelector("#m-etiquetas-form textarea[name=codigos]");
-  if (printForm && mainCodigos) {
-    printForm.addEventListener("submit", function () {
-      var ta = printForm.querySelector("textarea[name=codigos]");
-      if (ta) ta.value = mainCodigos.value;
-      if (sel && hidden) hidden.value = sel.value;
-    });
-  }
+  var printUrl = printBtn.getAttribute("data-print-url") || "";
+
+  printBtn.addEventListener("click", function () {
+    var codigos = (mainCodigos && mainCodigos.value ? mainCodigos.value : "").trim();
+    if (!codigos) {
+      window.alert("Ingresa códigos antes de imprimir.");
+      return;
+    }
+    var mode = sel && sel.value ? sel.value : "a4";
+    var params = new URLSearchParams();
+    params.set("codigos", codigos);
+    params.set("print_mode", mode);
+    var url = printUrl + "?" + params.toString();
+    var win = window.open(url, "_blank", "noopener,noreferrer");
+    if (!win) {
+      window.location.href = url;
+    }
+  });
 })();
 </script>
 {% endblock %}
