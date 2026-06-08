@@ -418,6 +418,123 @@ def _fix_thermal_ocr_split_codes(texto: str) -> str:
     return _THERMAL_OCR_SPLIT_CODE_RE.sub(r"\1\2", texto)
 
 
+def _looks_like_thermal_invoice(texto: str) -> bool:
+    """Boleta térmica (Fitalia, etc.): UN x, TOT.UNIDADES o layout Cantidad Ud Precio."""
+    if re.search(r"TOT\.?\s*UNIDADES", texto, re.IGNORECASE):
+        return True
+    if len(re.findall(r"\d+,\d+\s*UN\s*(?:X|x)", texto, re.IGNORECASE)) >= 2:
+        return True
+    if re.search(r"Cantidad\s+Ud\s+Precio", texto, re.IGNORECASE):
+        return True
+    return False
+
+
+def _looks_like_columnar_invoice(texto: str, lines: list[str]) -> bool:
+    """PDF DTE con columnas separadas (Mundo Repuestos y similares)."""
+    if re.search(r"mundo\s*repuestos|mundorepuestos", texto, re.IGNORECASE):
+        return True
+    indices = _section_header_indices(lines)
+    if "codigo" in indices and ("descripcion" in indices or "cantidad" in indices):
+        return True
+    low = texto.lower()
+    if "precio unit" in low and ("codigo" in low or "código" in low):
+        if "documentos referenciados" in low or "factura electronica" in low:
+            return True
+    return False
+
+
+def _is_fitalia_invoice_text(texto: str) -> bool:
+    return bool(
+        re.search(r"84726100[\d\-]*|fitalia", texto or "", re.IGNORECASE)
+    )
+
+
+def _normalize_fitalia_codigo_ocr(codigo: str) -> str:
+    """Corrige confusiones OCR 0/O en códigos alfanuméricos de Fitalia."""
+    c = (codigo or "").strip().upper()
+    if not c:
+        return c
+
+    # JM604210EM → JM604210OEM; JM604800EM → JM604800OEM
+    if re.fullmatch(r"JM\d{6}EM", c):
+        return c[:-2] + "OEM"
+
+    # JMB04420EM → JM604420OEM (B leída como 6 + falta O antes de EM)
+    m_b = re.fullmatch(r"JMB(\d{5})EM", c)
+    if m_b:
+        return f"JM6{m_b.group(1)}OEM"
+
+    # MX609400EM → MX60940EM (cero extra antes de EM)
+    if re.fullmatch(r"MX\d+0EM", c) and c.endswith("0EM"):
+        fixed = re.sub(r"0EM$", "EM", c, count=1)
+        if fixed != c and re.fullmatch(r"MX[A-Z0-9]{5,12}EM", fixed):
+            return fixed
+
+    return c
+
+
+def _normalize_fitalia_codigos_en_productos(
+    productos: list[dict[str, Any]], texto: str
+) -> list[dict[str, Any]]:
+    if not productos or not _is_fitalia_invoice_text(texto):
+        return productos
+    for p in productos:
+        raw = p.get("codigo_proveedor", "")
+        fixed = _normalize_fitalia_codigo_ocr(raw)
+        if fixed and fixed != raw:
+            p["codigo_proveedor"] = fixed
+    return productos
+
+
+def _is_thermal_product_code_line(line: str) -> bool:
+    s = (line or "").strip()
+    if not s or s.startswith("-"):
+        return False
+    mc = _THERMAL_CODE_DESC_RE.match(s)
+    if mc:
+        return _is_plausible_supplier_code(mc.group(1))
+    mo = _THERMAL_CODE_ONLY_RE.match(s)
+    return bool(mo and _is_plausible_supplier_code(mo.group(1)))
+
+
+def _thermal_unit_price_backward(
+    lines: list[str], code_idx: int, qty: int
+) -> int | None:
+    """Precio/total huérfano que el OCR colocó ANTES del código (layout invertido)."""
+    if code_idx <= 0 or qty <= 0:
+        return None
+    unit: int | None = None
+    total: int | None = None
+    for j in range(code_idx - 1, max(-1, code_idx - 20), -1):
+        line = lines[j]
+        if _is_thermal_product_code_line(line):
+            break
+        mpt = _THERMAL_PRICE_TOTAL_RE.match(line)
+        if mpt:
+            val = _parse_monto_chileno(mpt.group(1))
+            if val is not None and val >= 100:
+                unit = val
+            tot = _parse_monto_chileno(mpt.group(2))
+            if tot is not None and tot >= 100:
+                total = tot
+            if unit or total:
+                break
+        mt = _THERMAL_LINE_TOTAL_RE.match(line)
+        if mt:
+            total = _parse_monto_chileno(mt.group(1))
+            continue
+        mp = _THERMAL_PRICE_RE.match(line)
+        if mp:
+            val = _parse_monto_chileno(mp.group(1))
+            if val is not None and val >= 100:
+                unit = val
+    if unit is not None:
+        return unit
+    if total is not None and qty > 0:
+        return int(round(total / qty))
+    return None
+
+
 def _is_plausible_supplier_code(code: str) -> bool:
     c = (code or "").strip().upper()
     # Con guión: M60415-BOSCH, 40043-GSP
@@ -632,18 +749,20 @@ def _extract_codigos_producto(lines: list[str]) -> list[str]:
         seen.add(code)
         codigos.append(code)
 
-    for line in lines[start_idx:]:
+    desc_idx = _find_descripcion_index(lines)
+    end_idx = desc_idx if desc_idx is not None else len(lines)
+
+    for line in lines[start_idx:end_idx]:
         low = line.lower().strip().strip(":").strip()
         if any(low.startswith(w) for w in stop_words):
             break
         if low in ("cantidad", "fecha", "razón de referencia", "razon de referencia"):
             continue
+        if _line_section_header(line):
+            continue
         m = _CODE_LINE_RE.match(line)
         if m and _is_product_code_token(m.group(1)):
             add_code(m.group(1))
-            continue
-        if codigos:
-            break
 
     if not codigos:
         return _extract_codigos_bloque_consecutivo(lines)
@@ -1070,7 +1189,8 @@ def _select_unit_prices(precios: list[int], cantidades: list[int]) -> list[int]:
                 if q <= 1:
                     continue
                 expected = pu * q
-                if val == expected or abs(val - expected) <= max(5, int(round(pu * 0.01))):
+                tol = max(30, int(round(pu * 0.03)))
+                if val == expected or abs(val - expected) <= tol:
                     return True
         return False
 
@@ -1083,7 +1203,7 @@ def _select_unit_prices(precios: list[int], cantidades: list[int]) -> list[int]:
                     continue
                 product = p * qty
                 if any(
-                    product == other or abs(product - other) <= max(5, int(round(p * 0.01)))
+                    product == other or abs(product - other) <= max(30, int(round(p * 0.03)))
                     for other in price_set
                 ):
                     chosen = p
@@ -1091,19 +1211,19 @@ def _select_unit_prices(precios: list[int], cantidades: list[int]) -> list[int]:
                     break
         if chosen is None:
             for idx, p in enumerate(precios):
-                if idx in used_idx:
+                if idx in used_idx or is_line_total(p):
                     continue
-                if is_line_total(p):
-                    continue
+                if qty > 1 and p % qty == 0:
+                    implied = p // qty
+                    if implied >= 50:
+                        tol = max(30, int(round(implied * 0.03)))
+                        if abs(implied * qty - p) <= tol:
+                            chosen = implied
+                            chosen_idx = idx
+                            break
                 chosen = p
                 chosen_idx = idx
                 break
-        if chosen is None:
-            for idx, p in enumerate(precios):
-                if idx not in used_idx:
-                    chosen = p
-                    chosen_idx = idx
-                    break
         if chosen is None or chosen_idx is None:
             break
         used_idx.add(chosen_idx)
@@ -1949,14 +2069,14 @@ def _extract_productos_termico(
 
         if precio is None:
             for k in range(qty_idx + 1, min(len(lines), qty_idx + 8)):
-                # Línea "PRECIO 0= TOTAL" sin UN x delante
+                if k != i and _is_thermal_product_code_line(lines[k]):
+                    break
                 mpt = _THERMAL_PRICE_TOTAL_RE.match(lines[k])
                 if mpt:
                     val = _parse_monto_chileno(mpt.group(1))
                     if val is not None and val >= 100:
                         precio = val
                         break
-                    # Si el primer número es < 100, usar el total dividido por qty
                     total_val = _parse_monto_chileno(mpt.group(2))
                     if total_val is not None and total_val >= 100 and qty:
                         precio = int(round(total_val / qty))
@@ -1978,8 +2098,12 @@ def _extract_productos_termico(
                     continue
 
         if precio is None:
+            precio = _thermal_unit_price_backward(lines, i, qty)
+
+        if precio is None:
             continue
 
+        codigo = _normalize_fitalia_codigo_ocr(codigo)
         seen.add(codigo)
         productos.append(
             {
@@ -2079,17 +2203,10 @@ def _extract_productos_fitalia_fallback(texto: str) -> list[dict[str, Any]]:
     return [prod] if prod else []
 
 
-def _extract_productos(texto: str) -> list[dict[str, Any]]:
-    """Extrae productos cuando Vision OCR separa columnas en bloques distintos."""
-    texto_norm = _normalize_ocr_text(texto)
-    lines = [ln.strip() for ln in texto_norm.splitlines() if ln.strip()]
-
-    # Boleta térmica (Fitalia, etc.): priorizar ítems multilínea antes que columnas.
-    termico = _extract_productos_termico(texto_norm)
-    if termico:
-        termico = _validar_consistencia_precios_termico(termico, texto_norm)
-        return termico
-
+def _extract_productos_columnar_bundle(
+    texto_norm: str, lines: list[str]
+) -> list[dict[str, Any]]:
+    """Parser columnas PDF (Mundo Repuestos): bloques código / cantidad / precio."""
     codigos = _extract_codigos_producto(lines)
     cantidades = _extract_cantidades_descripciones(lines)
     precios_raw = _extract_precios_candidatos(lines, codigos)
@@ -2137,6 +2254,36 @@ def _extract_productos(texto: str) -> list[dict[str, Any]]:
             prod = _build_producto_termico(codigo, texto_norm, int(m_block.group(2)))
             if prod:
                 return [prod]
+
+    return []
+
+
+def _extract_productos(texto: str) -> list[dict[str, Any]]:
+    """Extrae productos cuando Vision OCR separa columnas en bloques distintos."""
+    texto_norm = _normalize_ocr_text(texto)
+    lines = [ln.strip() for ln in texto_norm.splitlines() if ln.strip()]
+    columnar = _looks_like_columnar_invoice(texto_norm, lines)
+    thermal_like = _looks_like_thermal_invoice(texto_norm)
+
+    if columnar:
+        productos = _extract_productos_columnar_bundle(texto_norm, lines)
+        if productos:
+            return productos
+
+    if thermal_like:
+        termico = _extract_productos_termico(texto_norm)
+        if termico:
+            termico = _validar_consistencia_precios_termico(termico, texto_norm)
+            return _normalize_fitalia_codigos_en_productos(termico, texto_norm)
+
+    productos = _extract_productos_columnar_bundle(texto_norm, lines)
+    if productos:
+        return productos
+
+    termico = _extract_productos_termico(texto_norm)
+    if termico:
+        termico = _validar_consistencia_precios_termico(termico, texto_norm)
+        return _normalize_fitalia_codigos_en_productos(termico, texto_norm)
 
     return []
 
