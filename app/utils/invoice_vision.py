@@ -2729,9 +2729,7 @@ def _is_autotec_invoice_text(texto: str) -> bool:
     t = texto or ""
     if re.search(r"autotec", t, re.IGNORECASE):
         return True
-    if _AUTOTEC_RUT_RE.search(t) and re.search(
-        r"codigo.*cantidad|cantidad.*codigo", t, re.IGNORECASE | re.DOTALL
-    ):
+    if _AUTOTEC_RUT_RE.search(t):
         return True
     return False
 
@@ -2805,14 +2803,14 @@ def _collect_autotec_codes_qty(lines: list[str], start: int, end: int) -> tuple[
 
 
 def _grep_autotec_codes_zone(lines: list[str]) -> tuple[list[str], list[int]]:
-    """Respaldo: todos los códigos ####-# antes de DESCRIPCION / PRECIO."""
+    """Respaldo: todos los códigos ####-# entre CODIGO y PRECIO (incl. DESCRIPCION)."""
     zone_end = len(lines)
     zone_start = 0
     for idx, line in enumerate(lines):
         low = line.lower().strip().strip(":").strip()
         if _is_codigo_header(line) or low == "cantidad":
             zone_start = idx + 1
-        if zone_start and low.startswith(("descripcion", "descripción", "precio")):
+        if zone_start and low == "precio":
             zone_end = idx
             break
     if zone_start >= zone_end:
@@ -2820,10 +2818,83 @@ def _grep_autotec_codes_zone(lines: list[str]) -> tuple[list[str], list[int]]:
     codes: list[str] = []
     qtys: list[int] = []
     for line in lines[zone_start:zone_end]:
-        m = _AUTOTEC_CODE_FULL_RE.match(line.strip())
+        stripped = line.strip()
+        m = _AUTOTEC_CODE_FULL_RE.match(stripped)
         if m:
             _append_autotec_code(codes, qtys, f"{m.group(1)}-{m.group(2).upper()}")
+            continue
+        for m2 in _AUTOTEC_CODE_FULL_RE.finditer(stripped):
+            _append_autotec_code(
+                codes, qtys, f"{m2.group(1)}-{m2.group(2).upper()}"
+            )
     return codes, qtys
+
+
+def _autotec_code_zone_text(lines: list[str]) -> str:
+    """Texto entre encabezado CODIGO y columna PRECIO."""
+    zone_end = len(lines)
+    zone_start = 0
+    for idx, line in enumerate(lines):
+        low = line.lower().strip().strip(":").strip()
+        if _is_codigo_header(line) or low == "cantidad":
+            zone_start = idx
+        if zone_start and low == "precio":
+            zone_end = idx
+            break
+    if zone_start >= zone_end:
+        return "\n".join(lines)
+    return "\n".join(lines[zone_start:zone_end])
+
+
+def _scan_autotec_codes_ordered(texto: str, lines: list[str] | None = None) -> list[str]:
+    """Escanea códigos Autotec (####-X) en orden; prioriza zona CODIGO→PRECIO."""
+    zone = _autotec_code_zone_text(lines) if lines else (texto or "")
+    if not zone.strip():
+        zone = texto or ""
+    codes: list[str] = []
+    seen: set[str] = set()
+    patterns = (
+        r"(?m)^\s*(\d{4,6}-[A-Z0-9]{1,2})\s*$",
+        r"\b(\d{4,6}-[A-Z0-9]{1,2})\b",
+    )
+    for pat in patterns:
+        for m in re.finditer(pat, zone, re.IGNORECASE):
+            code = _normalize_autotec_codigo_ocr(m.group(1).upper())
+            if code and code not in seen:
+                seen.add(code)
+                codes.append(code)
+    return codes
+
+
+def _best_autotec_codes(
+    lines: list[str],
+    texto: str,
+    codes: list[str],
+    qtys: list[int],
+    n_triplets: int = 0,
+) -> tuple[list[str], list[int]]:
+    """Elige la lista más completa de códigos sin perder cantidades ya detectadas."""
+    candidates: list[tuple[list[str], list[int]]] = [(codes, qtys)]
+    grep_codes, grep_qtys = _grep_autotec_codes_zone(lines)
+    if grep_codes:
+        candidates.append((grep_codes, grep_qtys))
+
+    scanned = _scan_autotec_codes_ordered(texto, lines)
+    if scanned:
+        qty_map = dict(zip(codes, qtys))
+        scanned_qtys = [qty_map.get(c, 1) for c in scanned]
+        candidates.append((scanned, scanned_qtys))
+
+    def _score(item: tuple[list[str], list[int]]) -> tuple[int, int, int]:
+        c = item[0]
+        n = len(c)
+        triplet_fit = -abs(n - n_triplets) if n_triplets else 0
+        return (triplet_fit, n, n)
+
+    best_codes, best_qtys = max(candidates, key=_score)
+    if len(best_qtys) < len(best_codes):
+        best_qtys = best_qtys + [1] * (len(best_codes) - len(best_qtys))
+    return best_codes, best_qtys
 
 
 def _collect_autotec_price_triplets(lines: list[str]) -> list[tuple[int, int, int]]:
@@ -2883,20 +2954,23 @@ def _resolve_autotec_qty(
     return qty
 
 
-def _extract_productos_autotec(lines: list[str]) -> list[dict[str, Any]]:
+def _extract_productos_autotec(lines: list[str], texto: str = "") -> list[dict[str, Any]]:
     """Autotec: columnas verticales CODIGO / DESCRIPCION / PRECIO-DESC%-TOTAL."""
+    texto_norm = texto or "\n".join(lines)
     bounds = _find_autotec_items_bounds(lines)
     if bounds is None:
-        return []
-    codes, qtys = _collect_autotec_codes_qty(lines, bounds[0], bounds[1])
+        codes, qtys = [], []
+    else:
+        codes, qtys = _collect_autotec_codes_qty(lines, bounds[0], bounds[1])
     triplets = _collect_autotec_price_triplets(lines)
-    if not codes or not triplets:
+    if not triplets:
         return []
 
-    if len(codes) < len(triplets):
-        grep_codes, grep_qtys = _grep_autotec_codes_zone(lines)
-        if len(grep_codes) > len(codes):
-            codes, qtys = grep_codes, grep_qtys
+    codes, qtys = _best_autotec_codes(
+        lines, texto_norm, codes, qtys, n_triplets=len(triplets)
+    )
+    if not codes:
+        return []
 
     n = min(len(codes), len(triplets))
     productos: list[dict[str, Any]] = []
@@ -2948,7 +3022,7 @@ def _extract_productos_columnar_bundle(
 ) -> list[dict[str, Any]]:
     """Parser columnas PDF (Mundo Repuestos): bloques código / cantidad / precio."""
     if _is_autotec_invoice_text(texto_norm):
-        autotec = _extract_productos_autotec(lines)
+        autotec = _extract_productos_autotec(lines, texto_norm)
         if autotec:
             return autotec
 
@@ -3019,6 +3093,12 @@ def _extract_productos(texto: str) -> list[dict[str, Any]]:
     """Extrae productos cuando Vision OCR separa columnas en bloques distintos."""
     texto_norm = _normalize_ocr_text(texto)
     lines = [ln.strip() for ln in texto_norm.splitlines() if ln.strip()]
+
+    if _is_autotec_invoice_text(texto_norm):
+        autotec = _extract_productos_autotec(lines, texto_norm)
+        if autotec:
+            return autotec
+
     columnar = _looks_like_columnar_invoice(texto_norm, lines)
     thermal_like = _looks_like_thermal_invoice(texto_norm)
 
