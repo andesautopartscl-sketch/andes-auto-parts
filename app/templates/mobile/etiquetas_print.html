@@ -3,30 +3,237 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Imprimir etiquetas</title>
+  <title>Imprimir etiquetas{% if labels %} ({{ labels|length }}){% endif %}</title>
   <style>
-    body { margin: 0; font-family: Inter, sans-serif; }
-    .sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; padding: 12px; }
-    .label { border: 1px solid #ddd; border-radius: 8px; padding: 8px; text-align: center; page-break-inside: avoid; }
-    .label img { max-width: 100%; height: auto; }
-    .codigo { font-weight: 800; font-size: 14px; }
-    .desc { font-size: 10px; color: #444; }
-    @media print {
-      html[data-print-mode="thermal"] .sheet { grid-template-columns: 1fr; }
-      html[data-print-mode="thermal_100x150"] .sheet { grid-template-columns: 1fr; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #f8fafc; color: #0f172a; }
+    .no-print { padding: 16px; text-align: center; }
+    .no-print p { margin: 0 0 12px; color: #64748b; font-size: 14px; }
+    .no-print button { border: none; border-radius: 10px; padding: 10px 18px; font-weight: 600; background: #2563eb; color: #fff; cursor: pointer; }
+    .sheet {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 280px));
+      gap: 18px;
+      justify-content: center;
+      align-items: start;
+      padding: 16px;
     }
+    .label {
+      width: 280px;
+      min-height: 220px;
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid #e5e7eb;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      justify-content: space-between;
+      overflow: hidden;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+    }
+    .label * { max-width: 100%; }
+    .label-header {
+      text-align: center;
+      font-size: 10px;
+      opacity: 0.78;
+      line-height: 1.2;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed #d1d5db;
+    }
+    .brand-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 3px; }
+    .logo-wrap { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .logo-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .empresa { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #0f172a; }
+    .contacto, .correo { font-size: 9px; color: #6b7280; }
+    .label-body { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1 1 auto; }
+    .codigo { text-align: center; font-size: 22px; font-weight: 800; line-height: 1; color: #0f172a; word-break: break-word; }
+    .descripcion { text-align: center; font-size: 13px; font-weight: 500; color: #1f2937; line-height: 1.28; overflow: hidden; }
+    .descripcion.name-sm { font-size: 12px; }
+    .descripcion.name-xs { font-size: 11px; }
+    .modelo { text-align: center; font-size: 11px; color: #6b7280; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.2em; }
+    .label-footer { display: flex; flex-direction: column; gap: 8px; }
+    .meta-row { display: grid; grid-template-columns: minmax(0, 1fr) 72px; gap: 10px; align-items: center; }
+    .fp-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px 8px; text-align: left; background: #f8fafc; }
+    .fp-label { display: block; font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; }
+    .fp-value { display: block; font-size: 12px; font-weight: 700; color: #0f172a; margin-top: 2px; word-break: break-word; }
+    .qr { width: 72px; height: 72px; border: 1px solid #e5e7eb; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: #fff; margin-left: auto; }
+    .qr img { width: 64px; height: 64px; display: block; }
+    .barcode { text-align: center; border-top: 1px solid #e2e8f0; padding-top: 6px; min-height: 52px; }
+    .barcode img { max-width: 100%; height: 46px; object-fit: contain; display: inline-block; }
+    .empty-state { padding: 48px 24px; text-align: center; color: #64748b; }
+    .empty-state strong { display: block; font-size: 18px; color: #0f172a; margin-bottom: 8px; }
+
+    html[data-print-mode="thermal"] .sheet { grid-template-columns: repeat(auto-fit, minmax(240px, 240px)); gap: 12px; }
+    html[data-print-mode="thermal"] .label { width: 240px; min-height: 160px; padding: 10px; border-radius: 10px; }
+    html[data-print-mode="thermal"] .logo-wrap { width: 30px; height: 30px; }
+    html[data-print-mode="thermal"] .codigo { font-size: 18px; }
+    html[data-print-mode="thermal"] .meta-row { grid-template-columns: minmax(0, 1fr) 62px; gap: 8px; }
+    html[data-print-mode="thermal"] .qr { width: 62px; height: 62px; }
+    html[data-print-mode="thermal"] .qr img { width: 56px; height: 56px; }
+
+    @media print {
+      body { background: #fff; }
+      .no-print { display: none !important; }
+      .sheet {
+        display: grid;
+        width: 100%;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 280px));
+        justify-content: center;
+        align-content: start;
+        row-gap: 4mm;
+        column-gap: 3mm;
+        padding: 0;
+      }
+      .label {
+        width: 280px;
+        max-width: 100%;
+        box-shadow: none;
+        border: 1px solid #333;
+        page-break-inside: avoid;
+        background: #fff;
+        overflow: hidden;
+      }
+
+      html[data-print-mode="thermal"] .sheet { display: block; width: auto; padding: 0; }
+      html[data-print-mode="thermal"] .label {
+        width: 60mm;
+        min-height: 40mm;
+        margin: 0;
+        padding: 2.4mm;
+        border-radius: 1.8mm;
+        border: 0.2mm solid #222;
+        page-break-after: always;
+      }
+      html[data-print-mode="thermal"] .label:last-child { page-break-after: auto; }
+      html[data-print-mode="thermal"] .logo-wrap { width: 6mm; height: 6mm; }
+      html[data-print-mode="thermal"] .empresa { font-size: 2.6mm; }
+      html[data-print-mode="thermal"] .contacto, html[data-print-mode="thermal"] .correo { font-size: 2.2mm; }
+      html[data-print-mode="thermal"] .codigo { font-size: 5.2mm; }
+      html[data-print-mode="thermal"] .descripcion { font-size: 2.8mm; line-height: 1.2; }
+      html[data-print-mode="thermal"] .modelo { font-size: 2.4mm; }
+      html[data-print-mode="thermal"] .meta-row { grid-template-columns: minmax(0, 1fr) 15mm; gap: 1.6mm; }
+      html[data-print-mode="thermal"] .qr { width: 15mm; height: 15mm; border-radius: 1.2mm; }
+      html[data-print-mode="thermal"] .qr img { width: 13.6mm; height: 13.6mm; }
+      html[data-print-mode="thermal"] .barcode img { height: 8mm; }
+
+      html[data-print-mode="thermal_100x150"] body,
+      html[data-print-mode="thermal_100x150"] .sheet {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100mm !important;
+        max-width: 100mm !important;
+      }
+      html[data-print-mode="thermal_100x150"] .sheet {
+        display: grid !important;
+        grid-template-columns: repeat(2, 47mm) !important;
+        grid-auto-rows: 48mm !important;
+        column-gap: 1mm !important;
+        row-gap: 1mm !important;
+        justify-content: center !important;
+        width: 95mm !important;
+        max-width: 95mm !important;
+      }
+      html[data-print-mode="thermal_100x150"] .label {
+        width: 47mm !important;
+        height: 48mm !important;
+        max-width: 47mm !important;
+        max-height: 48mm !important;
+        padding: 1.8mm 2mm;
+        margin: 0;
+        min-height: 0;
+        border-radius: 1mm;
+        border: 0.2mm solid #222;
+        gap: 0;
+      }
+      html[data-print-mode="thermal_100x150"] .logo-wrap { width: 5mm; height: 5mm; }
+      html[data-print-mode="thermal_100x150"] .empresa { font-size: 2.3mm; }
+      html[data-print-mode="thermal_100x150"] .contacto { font-size: 1.9mm; }
+      html[data-print-mode="thermal_100x150"] .correo { font-size: 1.7mm; }
+      html[data-print-mode="thermal_100x150"] .codigo { font-size: 4.2mm; }
+      html[data-print-mode="thermal_100x150"] .descripcion { font-size: 2.5mm; line-height: 1.15; }
+      html[data-print-mode="thermal_100x150"] .meta-row { grid-template-columns: minmax(0, 1fr) 12mm; gap: 1mm; }
+      html[data-print-mode="thermal_100x150"] .qr { width: 12mm; height: 12mm; }
+      html[data-print-mode="thermal_100x150"] .qr img { width: 10.5mm; height: 10.5mm; }
+      html[data-print-mode="thermal_100x150"] .barcode img { height: 6.5mm; }
+    }
+    {% if print_mode == 'thermal' %}
+    @media print { @page { size: 60mm 40mm; margin: 0; } }
+    {% elif print_mode == 'thermal_100x150' %}
+    @media print { @page { size: 100mm 150mm; margin: 2mm 0.5mm 0.5mm 0.5mm; } }
+    {% else %}
+    @media print { @page { size: letter; margin: 5mm; } }
+    {% endif %}
   </style>
 </head>
-<body onload="window.print()">
-  <div class="sheet">
-    {% for l in labels %}
-    <div class="label">
-      {% if l.qr_base64 %}<img src="data:image/png;base64,{{ l.qr_base64 }}" alt="QR">{% endif %}
-      <div class="codigo">{{ l.codigo }}</div>
-      <div class="desc">{{ l.descripcion }}</div>
-      {% if l.barcode_base64 %}<img src="data:image/png;base64,{{ l.barcode_base64 }}" alt="Barcode">{% endif %}
-    </div>
-    {% endfor %}
+<body>
+  {% if not labels %}
+  <div class="empty-state no-print">
+    <strong>Sin etiquetas para imprimir</strong>
+    {% if not codigos_raw %}
+    <p>No se recibieron códigos. Genera la vista previa en Etiquetas e intenta de nuevo.</p>
+    {% elif missing %}
+    <p>Códigos no encontrados: {{ missing|join(', ') }}</p>
+    {% else %}
+    <p>Revisa los códigos ingresados e intenta de nuevo.</p>
+    {% endif %}
   </div>
+  {% else %}
+  <div class="no-print">
+    <p>{{ labels|length }} etiqueta(s) — modo {{ print_mode }}</p>
+    <button type="button" onclick="window.print()">Imprimir</button>
+  </div>
+  {% endif %}
+
+  <section id="sheet" class="sheet">
+    {% for label in labels %}
+    <article class="label">
+      <div class="label-header">
+        <div class="brand-row">
+          <div class="logo-wrap">
+            <img class="logo-img" src="{{ 'logo_andes.png' | static_or_cloud }}" alt="Logo Andes">
+          </div>
+          <div class="empresa">ANDES AUTO PARTS LTDA</div>
+        </div>
+        <div class="contacto">+56 9 2615 2826</div>
+        <div class="correo">andesautopartscl@gmail.com</div>
+      </div>
+      <div class="label-body">
+        <div class="codigo">{{ label.codigo }}</div>
+        <div class="descripcion {{ label.name_class or '' }}">{{ label.descripcion or label.nombre or '—' }}</div>
+        <div class="modelo">{{ label.modelo or ' ' }}</div>
+        <div class="label-footer">
+          <div class="meta-row">
+            <div class="fp-card">
+              <span class="fp-label">F° P</span>
+              <strong class="fp-value">{{ label.fp or '—' }}</strong>
+            </div>
+            <div class="qr">
+              <img src="data:image/png;base64,{{ label.qr_base64 }}" alt="QR {{ label.codigo }}">
+            </div>
+          </div>
+          <div class="barcode">
+            <img src="data:image/png;base64,{{ label.barcode_base64 }}" alt="CODE128 {{ label.codigo }}">
+          </div>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </section>
+
+  {% if labels %}
+  <script>
+  (function () {
+    function triggerPrint() {
+      setTimeout(function () { window.print(); }, 600);
+    }
+    if (document.readyState === "complete") {
+      triggerPrint();
+    } else {
+      window.addEventListener("load", triggerPrint);
+    }
+  })();
+  </script>
+  {% endif %}
 </body>
 </html>

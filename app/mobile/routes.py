@@ -1,7 +1,10 @@
+import logging
 from datetime import datetime
 from pathlib import Path
 
 from flask import abort, current_app, jsonify, redirect, render_template, request, send_from_directory, session, url_for
+
+logger = logging.getLogger(__name__)
 
 from app.utils.decorators import login_required
 from app.extensions import db
@@ -498,10 +501,19 @@ def api_proveedores():
 @mobile_bp.route("/ingreso-rapido")
 @login_required
 def ingreso_rapido():
+    user = session.get("user")
+    rol = session.get("rol")
+    puede = mobile_ingreso_rapido.puede_registrar_ingreso(user, rol)
+    logger.info("mobile ingreso-rapido: user=%s rol=%s puede_ingreso=%s", user, rol, puede)
+    try:
+        metodos = mobile_ingreso_rapido.metodos_pago_opciones()
+    except Exception:
+        logger.exception("mobile ingreso-rapido: error metodos_pago user=%s", user)
+        metodos = []
     return render_template(
         "mobile/ingreso_rapido.html",
-        puede_ingreso=mobile_ingreso_rapido.puede_registrar_ingreso(session.get("user"), session.get("rol")),
-        metodos_pago=mobile_ingreso_rapido.metodos_pago_opciones(),
+        puede_ingreso=puede,
+        metodos_pago=metodos,
         **_nav_ctx("mas"),
     )
 
@@ -556,11 +568,25 @@ def etiquetas():
 @mobile_bp.route("/etiquetas/imprimir", methods=["GET", "POST"])
 @login_required
 def etiquetas_imprimir():
-    if not mobile_etiquetas.puede_imprimir_etiquetas(session.get("user"), session.get("rol")):
+    user = session.get("user")
+    rol = session.get("rol")
+    if not mobile_etiquetas.puede_imprimir_etiquetas(user, rol):
         abort(403)
     codigos_raw = (request.values.get("codigos") or "").strip()
     print_mode = (request.values.get("print_mode") or "a4").strip()
+    valid_modes = {m["value"] for m in mobile_etiquetas.PRINT_MODES}
+    if print_mode not in valid_modes:
+        print_mode = "a4"
     labels, missing = mobile_etiquetas.generar_etiquetas(codigos_raw)
+    logger.info(
+        "mobile etiquetas/imprimir: user=%s method=%s codigos_len=%s labels=%s missing=%s mode=%s",
+        user,
+        request.method,
+        len(codigos_raw),
+        len(labels),
+        len(missing),
+        print_mode,
+    )
     if labels:
         mobile_etiquetas.registrar_impresion(labels)
     return render_template(
@@ -568,6 +594,7 @@ def etiquetas_imprimir():
         labels=labels,
         missing=missing,
         print_mode=print_mode,
+        codigos_raw=codigos_raw,
     )
 
 

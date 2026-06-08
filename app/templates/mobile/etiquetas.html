@@ -33,7 +33,7 @@
   </div>
   <form method="post" action="{{ url_for('mobile.etiquetas_imprimir') }}" target="_blank" class="m-form m-etiquetas-print-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="codigos" value="{{ codigos_raw }}">
+    <textarea name="codigos" hidden aria-hidden="true">{{ codigos_raw }}</textarea>
     <input type="hidden" name="print_mode" value="{{ print_mode }}" id="etiquetas-print-mode-hidden">
     <button type="submit" class="m-btn m-btn--primary m-btn--block m-btn--lg">Imprimir</button>
   </form>
@@ -48,6 +48,15 @@
   if (sel && hidden) {
     sel.addEventListener("change", function () {
       hidden.value = sel.value;
+    });
+  }
+  var printForm = document.querySelector(".m-etiquetas-print-form");
+  var mainCodigos = document.querySelector("#m-etiquetas-form textarea[name=codigos]");
+  if (printForm && mainCodigos) {
+    printForm.addEventListener("submit", function () {
+      var ta = printForm.querySelector("textarea[name=codigos]");
+      if (ta) ta.value = mainCodigos.value;
+      if (sel && hidden) hidden.value = sel.value;
     });
   }
 })();

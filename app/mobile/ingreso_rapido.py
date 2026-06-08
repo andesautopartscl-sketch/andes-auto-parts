@@ -39,7 +39,7 @@ def puede_registrar_ingreso(user: str | None, rol: str | None) -> bool:
 
 
 def metodos_pago_opciones() -> list[dict]:
-    return [{"value": v, "label": lbl} for v, lbl in INGRESO_METODOS_PAGO_OPCIONES]
+    return [{"value": m, "label": m} for m in INGRESO_METODOS_PAGO_OPCIONES]
 
 
 def producto_linea_ingreso(codigo: str) -> dict | None:

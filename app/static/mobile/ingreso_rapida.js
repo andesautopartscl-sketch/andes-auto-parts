@@ -20,7 +20,7 @@
       var raw = sessionStorage.getItem(STORAGE_KEY);
       if (raw) return JSON.parse(raw);
     } catch (_e) {}
-    return { step: 1, proveedor: null, items: [], numero_documento: "", fecha: "", metodo_pago: "efectivo", observacion: "", total_factura: "" };
+    return { step: 1, proveedor: null, items: [], numero_documento: "", fecha: "", metodo_pago: "Efectivo", observacion: "", total_factura: "" };
   }
 
   function saveState() {
