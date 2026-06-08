@@ -2063,8 +2063,15 @@ def api_analizar_factura():
         return jsonify(success=False, message="Debe enviar la imagen en base64."), 400
 
     try:
-        from app.utils.invoice_vision import analizar_factura, garantizar_producto_factura
+        import importlib
+
+        from app.utils import invoice_vision
         from app.utils.codigo_matcher import aplicar_fuzzy_a_productos
+
+        # Evita respuestas obsoletas si el proceso Flask no recargó el módulo OCR.
+        importlib.reload(invoice_vision)
+        analizar_factura = invoice_vision.analizar_factura
+        garantizar_producto_factura = invoice_vision.garantizar_producto_factura
 
         resultado = analizar_factura(image_b64, media_type)
         data = garantizar_producto_factura(resultado)
