@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import base64
+import io
 import logging
 import os
 import re
 from pathlib import Path
 from typing import Any
+
+from PIL import Image, ImageEnhance, ImageFilter
 
 from google.cloud import vision
 from google.oauth2 import service_account
@@ -392,6 +395,11 @@ _THERMAL_QTY_LINE_RE = re.compile(
 )
 _THERMAL_PRICE_RE = re.compile(r"^[\$]?\s*([\d.,]+)\s*$")
 _THERMAL_LINE_TOTAL_RE = re.compile(r"^\s*0\s*=\s*([\d.,]+)\s*$", re.IGNORECASE)
+# Caso OCR fragmentado: "8.500 0= 8.500" en una sola línea sin "UN x" delante
+_THERMAL_PRICE_TOTAL_RE = re.compile(
+    r"^\s*([\d.,]+)\s+0\s*=\s*([\d.,]+)\s*$",
+    re.IGNORECASE,
+)
 _THERMAL_CODE_TOKEN_RE = re.compile(
     r"\b([A-Z0-9]{3,15}-[A-Z0-9]{2,12})\b",
     re.IGNORECASE,
@@ -1856,13 +1864,13 @@ def _parse_thermal_qty_line(line: str) -> tuple[int | None, int | None]:
     except ValueError:
         return None, None
     precio = None
-    # Precio inline directo
     if mq.group(2):
-        precio = _parse_monto_chileno(mq.group(2))
-    # Si hay total inline y no hay precio, calcular precio = total / qty
+        val = _parse_monto_chileno(mq.group(2))
+        if val is not None and val >= 100:
+            precio = val
     if precio is None and mq.group(3) and qty > 0:
         total_inline = _parse_monto_chileno(mq.group(3))
-        if total_inline:
+        if total_inline and total_inline >= 100:
             precio = int(round(total_inline / qty))
     return qty, precio
 
@@ -1941,6 +1949,20 @@ def _extract_productos_termico(
 
         if precio is None:
             for k in range(qty_idx + 1, min(len(lines), qty_idx + 8)):
+                # Línea "PRECIO 0= TOTAL" sin UN x delante
+                mpt = _THERMAL_PRICE_TOTAL_RE.match(lines[k])
+                if mpt:
+                    val = _parse_monto_chileno(mpt.group(1))
+                    if val is not None and val >= 100:
+                        precio = val
+                        break
+                    # Si el primer número es < 100, usar el total dividido por qty
+                    total_val = _parse_monto_chileno(mpt.group(2))
+                    if total_val is not None and total_val >= 100 and qty:
+                        precio = int(round(total_val / qty))
+                        break
+                    continue
+
                 mt = _THERMAL_LINE_TOTAL_RE.match(lines[k])
                 if mt:
                     total_line = _parse_monto_chileno(mt.group(1))
@@ -1950,9 +1972,10 @@ def _extract_productos_termico(
                 mp = _THERMAL_PRICE_RE.match(lines[k])
                 if mp:
                     val = _parse_monto_chileno(mp.group(1))
-                    if val is not None and val > 0:
+                    if val is not None and val >= 100:
                         precio = val
-                    break
+                        break
+                    continue
 
         if precio is None:
             continue
@@ -1966,6 +1989,68 @@ def _extract_productos_termico(
                 "valor_neto": precio,
             }
         )
+
+    return productos
+
+
+def _validar_consistencia_precios_termico(
+    productos: list[dict[str, Any]], texto: str
+) -> list[dict[str, Any]]:
+    """Corrige precios de productos térmicos cuando qty × precio_unit
+    no coincide con ningún '0= TOTAL' del texto, pero sí coincide
+    con un total disponible no asignado."""
+    if not productos:
+        return productos
+
+    # Extraer todos los totales del texto
+    totales: list[int] = []
+    for line in texto.splitlines():
+        stripped = line.strip()
+        m = _THERMAL_LINE_TOTAL_RE.match(stripped)
+        if m:
+            val = _parse_monto_chileno(m.group(1))
+            if val is not None and val >= 100:
+                totales.append(val)
+            continue
+        m2 = _THERMAL_PRICE_TOTAL_RE.match(stripped)
+        if m2:
+            val = _parse_monto_chileno(m2.group(2))
+            if val is not None and val >= 100:
+                totales.append(val)
+
+    if not totales:
+        return productos
+
+    # Marcar totales ya usados por productos consistentes
+    totales_disponibles = list(totales)
+    productos_inconsistentes: list[int] = []
+
+    for idx, p in enumerate(productos):
+        qty = p.get("cantidad", 1) or 1
+        precio = p.get("valor_neto", 0) or 0
+        total_esperado = qty * precio
+        if total_esperado in totales_disponibles:
+            totales_disponibles.remove(total_esperado)
+        else:
+            productos_inconsistentes.append(idx)
+
+    # Para cada producto inconsistente, buscar un total disponible
+    # cuya división por qty dé un precio plausible
+    for idx in productos_inconsistentes:
+        p = productos[idx]
+        qty = p.get("cantidad", 1) or 1
+        if qty <= 0:
+            continue
+        mejor_total = None
+        for t in totales_disponibles:
+            if t % qty == 0:
+                nuevo_precio = t // qty
+                if nuevo_precio >= 100:
+                    mejor_total = t
+                    break
+        if mejor_total is not None:
+            p["valor_neto"] = mejor_total // qty
+            totales_disponibles.remove(mejor_total)
 
     return productos
 
@@ -2002,6 +2087,7 @@ def _extract_productos(texto: str) -> list[dict[str, Any]]:
     # Boleta térmica (Fitalia, etc.): priorizar ítems multilínea antes que columnas.
     termico = _extract_productos_termico(texto_norm)
     if termico:
+        termico = _validar_consistencia_precios_termico(termico, texto_norm)
         return termico
 
     codigos = _extract_codigos_producto(lines)
@@ -2241,16 +2327,41 @@ def _convert_pdf_first_page_to_png(pdf_bytes: bytes) -> bytes:
     raise ValueError(msg)
 
 
+def _preprocess_image_for_ocr(image_bytes: bytes) -> bytes:
+    """Mejora la imagen antes de mandarla a Google Vision."""
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        if img.mode in ("RGBA", "LA", "P"):
+            img = img.convert("RGB")
+        w, h = img.size
+        if w < 1500:
+            scale = 1500 / w
+            img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+        img = img.convert("L")
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(1.5)
+        img = img.filter(ImageFilter.SHARPEN)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception:
+        return image_bytes
+
+
 def _vision_ocr_text(image_bytes: bytes, cred_path: Path) -> str:
     credentials = service_account.Credentials.from_service_account_file(
         str(cred_path),
         scopes=VISION_SCOPES,
     )
     client = vision.ImageAnnotatorClient(credentials=credentials)
-    image = vision.Image(content=image_bytes)
+    processed = _preprocess_image_for_ocr(image_bytes)
+    image = vision.Image(content=processed)
+    image_context = vision.ImageContext(language_hints=["es"])
 
     try:
-        response = client.text_detection(image=image)
+        response = client.document_text_detection(
+            image=image, image_context=image_context
+        )
     except Exception as exc:
         raise ValueError("No se pudo contactar a Google Cloud Vision") from exc
 
@@ -2306,9 +2417,6 @@ def analizar_factura(image_base64: str, media_type: str) -> dict[str, Any]:
         raise ValueError("La imagen generada desde el PDF es demasiado grande (máx. 12 MB)")
 
     texto = _vision_ocr_text(image_bytes, cred_path).strip()
-    # LOG TEMPORAL - remover después
-    import logging
-    logging.getLogger(__name__).warning("=== OCR CRUDO FITALIA ===\n%s\n=== FIN OCR ===", texto)
     if not texto:
         raise ValueError("No se detectó texto en el documento. Pruebe con mejor calidad.")
 
