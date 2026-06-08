@@ -12,7 +12,7 @@ from app.utils.rut_utils import clean_rut
 def fuzzy_match_codigo(
     codigo_ocr: str,
     rut_proveedor: str,
-    threshold: int = 85,
+    threshold: int = 92,
 ) -> dict[str, Any] | None:
     """Busca el código más parecido en proveedor_codigo_interno del
     proveedor identificado por RUT.
@@ -83,7 +83,7 @@ def fuzzy_match_codigo(
 def aplicar_fuzzy_a_productos(
     productos: list[dict[str, Any]],
     rut_proveedor: str,
-    threshold: int = 85,
+    threshold: int = 92,
 ) -> list[dict[str, Any]]:
     """Aplica fuzzy matching a una lista de productos de factura.
 

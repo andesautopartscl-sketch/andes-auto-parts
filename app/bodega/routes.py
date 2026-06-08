@@ -1985,7 +1985,7 @@ def api_analizar_factura():
         rut = data.get("rut_proveedor", "")
         if rut and data.get("productos"):
             data["productos"] = aplicar_fuzzy_a_productos(
-                data["productos"], rut, threshold=85
+                data["productos"], rut, threshold=92
             )
 
         current_app.logger.info(

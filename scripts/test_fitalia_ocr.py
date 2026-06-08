@@ -34,7 +34,7 @@ with app.app_context():
 
     rut = data.get("rut_proveedor", "")
     if rut and data.get("productos"):
-        data["productos"] = aplicar_fuzzy_a_productos(data["productos"], rut, threshold=85)
+        data["productos"] = aplicar_fuzzy_a_productos(data["productos"], rut, threshold=92)
 
     print("=" * 80)
     print("OCR TEXTO CRUDO:")
