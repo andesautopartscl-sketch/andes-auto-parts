@@ -1977,9 +1977,17 @@ def api_analizar_factura():
 
     try:
         from app.utils.invoice_vision import analizar_factura, garantizar_producto_factura
+        from app.utils.codigo_matcher import aplicar_fuzzy_a_productos
 
         resultado = analizar_factura(image_b64, media_type)
         data = garantizar_producto_factura(resultado)
+
+        rut = data.get("rut_proveedor", "")
+        if rut and data.get("productos"):
+            data["productos"] = aplicar_fuzzy_a_productos(
+                data["productos"], rut, threshold=85
+            )
+
         current_app.logger.info(
             "analizar-factura productos=%s producto_codigo=%s",
             len(data.get("productos") or []),
