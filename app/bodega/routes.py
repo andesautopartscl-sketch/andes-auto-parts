@@ -2067,6 +2067,7 @@ def api_analizar_factura():
 
         from app.utils import invoice_vision
         from app.utils.codigo_matcher import aplicar_fuzzy_a_productos
+        from app.utils.invoice_providers import registry as invoice_parser_registry
 
         # Evita respuestas obsoletas si el proceso Flask no recargó el módulo OCR.
         importlib.reload(invoice_vision)
@@ -2075,6 +2076,10 @@ def api_analizar_factura():
 
         resultado = analizar_factura(image_b64, media_type)
         data = garantizar_producto_factura(resultado)
+        parser = invoice_parser_registry.find(
+            data.get("rut_proveedor"), data.get("ocr_texto_crudo") or ""
+        )
+        data = parser.parse(data)
 
         rut = data.get("rut_proveedor", "")
         if rut and data.get("productos"):
