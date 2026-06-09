@@ -17,6 +17,9 @@ from app.extensions import db
 from app.seguridad.models import Usuario
 from app.ventas.models import DocumentoVenta, Proveedor
 from app.utils.decorators import admin_required, login_required
+from app.utils.invoice_vision import analizar_factura, garantizar_producto_factura
+from app.utils.invoice_providers import registry as invoice_parser_registry
+from app.utils.codigo_matcher import aplicar_fuzzy_a_productos
 from app.utils.permissions import has_permission
 from app.utils.phone_format import phone_to_compact_e164
 from app.utils.rut_utils import clean_rut, format_rut, is_valid_rut
@@ -2063,16 +2066,8 @@ def api_analizar_factura():
         return jsonify(success=False, message="Debe enviar la imagen en base64."), 400
 
     try:
-        import importlib
-
-        from app.utils import invoice_vision
-        from app.utils.codigo_matcher import aplicar_fuzzy_a_productos
-        from app.utils.invoice_providers import registry as invoice_parser_registry
-
-        # Evita respuestas obsoletas si el proceso Flask no recargó el módulo OCR.
-        importlib.reload(invoice_vision)
-        analizar_factura = invoice_vision.analizar_factura
-        garantizar_producto_factura = invoice_vision.garantizar_producto_factura
+        # Sin importlib.reload: en producción (gunicorn) el módulo se carga al arranque;
+        # el reload en cada request añadía latencia y no recargaba invoice_providers.
 
         resultado = analizar_factura(image_b64, media_type)
         data = garantizar_producto_factura(resultado)
@@ -2080,6 +2075,26 @@ def api_analizar_factura():
             data.get("rut_proveedor"), data.get("ocr_texto_crudo") or ""
         )
         data = parser.parse(data)
+
+        total_neto = data.get("total_neto")
+        productos = data.get("productos") or []
+        if total_neto and productos:
+            suma_items = sum(
+                (p.get("cantidad") or 1) * (p.get("valor_neto") or 0)
+                for p in productos
+            )
+            diferencia = abs(suma_items - total_neto)
+            tolerancia = max(50, total_neto * 0.01)
+            data["checksum_ok"] = diferencia <= tolerancia
+            data["checksum_diferencia"] = diferencia
+            if not data["checksum_ok"]:
+                current_app.logger.warning(
+                    "analizar-factura checksum FALLA doc=%s suma=%s neto=%s diff=%s",
+                    data.get("numero_documento"),
+                    suma_items,
+                    total_neto,
+                    diferencia,
+                )
 
         rut = data.get("rut_proveedor", "")
         if rut and data.get("productos"):

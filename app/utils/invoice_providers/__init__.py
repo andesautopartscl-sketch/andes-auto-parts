@@ -9,8 +9,10 @@ from .base import BaseInvoiceParser
 from .generico import GenericParser
 from .registry import InvoiceParserRegistry, registry
 
-# Auto-registro de proveedores (import side-effect).
+# Auto-registro de proveedores (import side-effect; orden = prioridad en find()).
 from . import autotec as _autotec  # noqa: F401
+from . import fitalia as _fitalia  # noqa: F401
+from . import mundo as _mundo  # noqa: F401
 
 __all__ = [
     "BaseInvoiceParser",
