@@ -142,42 +142,66 @@ def get_user_permissions(username: str | None, role_name: str | None = None) -> 
     if not username:
         return dict(DEFAULT_PERMISSIONS)
 
+    import time as _time
+    try:
+        from flask import session as _sess
+        _cached = _sess.get("_perms_cache")
+        if (
+            isinstance(_cached, dict)
+            and _cached.get("username") == username
+            and _time.time() - _cached.get("_ts", 0) < 60
+        ):
+            return _cached["perms"]
+    except RuntimeError:
+        pass  # sin contexto de request (startup, seeds)
+
     role = (role_name or "").strip().lower()
     if role == "superadmin":
-        return superadmin_permissions()
+        result = superadmin_permissions()
+    else:
+        try:
+            user = db.session.query(Usuario).filter_by(usuario=username).first()
+            if user is None:
+                result = dict(DEFAULT_PERMISSIONS)
+            elif user.rol and (user.rol.nombre or "").strip().lower() == "superadmin":
+                result = superadmin_permissions()
+            else:
+                perms = dict(DEFAULT_PERMISSIONS)
+                # Nuevo esquema normalizado.
+                rows = db.session.query(UsuarioPermisoDetalle).filter_by(usuario_id=user.id).all()
+                if rows:
+                    for row in rows:
+                        key = (row.permiso_key or "").strip()
+                        if key:
+                            perms[key] = bool(row.allowed)
+                    # Alias legacy para no romper llamadas existentes.
+                    perms["ver_finanzas"] = bool(perms.get("mod_finanzas"))
+                    perms["ver_precio_mayor"] = bool(perms.get("ver_precio_costo"))
+                    result = perms
+                else:
+                    # Fallback temporal: tabla legacy.
+                    perm = db.session.query(UsuarioPermiso).filter_by(usuario_id=user.id).first()
+                    if perm is not None:
+                        perms["mod_finanzas"] = bool(perm.ver_finanzas)
+                        perms["ver_finanzas"] = bool(perm.ver_finanzas)
+                        perms["ver_precio_costo"] = bool(perm.ver_precio_mayor)
+                        perms["ver_precio_mayor"] = bool(perm.ver_precio_mayor)
+                    result = perms
+        except Exception:
+            # Cualquier fallo de ORM/esquema/datos no debe tumbar la vista (p. ej. Render).
+            db.session.rollback()
+            result = dict(DEFAULT_PERMISSIONS)
 
     try:
-        user = db.session.query(Usuario).filter_by(usuario=username).first()
-        if user is None:
-            return dict(DEFAULT_PERMISSIONS)
+        from flask import session as _sess
+        _sess["_perms_cache"] = {
+            "username": username,
+            "perms": result,
+            "_ts": _time.time(),
+        }
+        _sess.modified = True
+    except (RuntimeError, Exception):
+        pass
 
-        if user.rol and (user.rol.nombre or "").strip().lower() == "superadmin":
-            return superadmin_permissions()
-
-        perms = dict(DEFAULT_PERMISSIONS)
-        # Nuevo esquema normalizado.
-        rows = db.session.query(UsuarioPermisoDetalle).filter_by(usuario_id=user.id).all()
-        if rows:
-            for row in rows:
-                key = (row.permiso_key or "").strip()
-                if key:
-                    perms[key] = bool(row.allowed)
-        else:
-            # Fallback temporal: tabla legacy.
-            perm = db.session.query(UsuarioPermiso).filter_by(usuario_id=user.id).first()
-            if perm is not None:
-                perms["mod_finanzas"] = bool(perm.ver_finanzas)
-                perms["ver_finanzas"] = bool(perm.ver_finanzas)
-                perms["ver_precio_costo"] = bool(perm.ver_precio_mayor)
-                perms["ver_precio_mayor"] = bool(perm.ver_precio_mayor)
-            return perms
-
-        # Alias legacy para no romper llamadas existentes.
-        perms["ver_finanzas"] = bool(perms.get("mod_finanzas"))
-        perms["ver_precio_mayor"] = bool(perms.get("ver_precio_costo"))
-        return perms
-    except Exception:
-        # Cualquier fallo de ORM/esquema/datos no debe tumbar la vista (p. ej. Render).
-        db.session.rollback()
-        return dict(DEFAULT_PERMISSIONS)
+    return result
 
