@@ -2923,6 +2923,16 @@
                 if (data.total_neto != null) dlRow("Neto", data.total_neto);
                 if (data.total != null) dlRow("Total", data.total);
                 if (data.iva != null) dlRow("IVA", data.iva);
+                if (data.ocr_parser_rev) {
+                    dlRow("Parser OCR", data.ocr_parser_rev);
+                }
+                if (data.productos_n != null) {
+                    dlRow("Ítems API", data.productos_n);
+                }
+
+                if (data.productos_fuente) {
+                    dlRow("Fuente ítems", data.productos_fuente);
+                }
 
                 var p0 = prods[0] || null;
                 if (p0 && p0.codigo_proveedor) {
