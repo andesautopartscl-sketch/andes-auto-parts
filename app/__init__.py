@@ -1173,6 +1173,21 @@ def create_app():
     if _app_mode != "search_lite":
         _init_gdrive_backup_scheduler(app)
 
+    try:
+        from app.models import engine
+        from app.utils.fts_productos import fts_create_table, fts_rebuild
+
+        with engine.begin() as conn:
+            fts_create_table(conn)
+            count = conn.execute(text("SELECT COUNT(*) FROM productos_fts")).scalar()
+            if count == 0:
+                n = fts_rebuild(conn)
+                app.logger.info("FTS5 productos: índice construido con %s filas", n)
+            else:
+                app.logger.info("FTS5 productos: índice existente con %s filas", count)
+    except Exception as exc:
+        app.logger.warning("FTS5 productos: no se pudo inicializar: %s", exc)
+
     return app
 
 

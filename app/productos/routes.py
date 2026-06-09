@@ -957,6 +957,7 @@ def buscar():
         total_pages = 1
 
         is_exact_codigo_search = False
+        _fts_used = False
         if q:
             termino = q.lower().strip()
             # Separar por espacios, comas o ; (p. ej. "sen, pos, cig vigu 2.4")
@@ -1044,60 +1045,101 @@ def buscar():
                         return literal(True)
                     return _fold_like_contains(_producto_busqueda_blob_expr(), p_norm)
 
-                if len(palabras) == 1:
-                    query = query.filter(_token_match_any_column(palabras[0]))
-                else:
-                    query = query.filter(
-                        and_(*(_token_match_any_column(p) for p in palabras))
-                    )
+                _fts_used = False
+                try:
+                    from app.utils.fts_productos import _fts_norm
 
-                compact_term = termino.replace(" ", "")
-                is_numeric = compact_term.isdigit()
+                    fts_terms = " ".join(_fts_norm(p) for p in palabras)
+                    if fts_terms.strip():
+                        fts_rows = sess.execute(
+                            text(
+                                "SELECT codigo FROM productos_fts "
+                                "WHERE blob MATCH :q ORDER BY rank"
+                            ),
+                            {"q": fts_terms},
+                        ).fetchall()
+                        codigos_fts = [r[0] for r in fts_rows]
+                        total_count = len(codigos_fts)
+                        total_pages = max(1, (total_count + per_page - 1) // per_page)
+                        page = max(1, min(page, total_pages))
+                        page_codes = codigos_fts[(page - 1) * per_page : page * per_page]
+                        if page_codes:
+                            prods_dict = {
+                                p.codigo: p
+                                for p in _producto_q(sess)
+                                .filter(Producto.activo.is_(True))
+                                .filter(Producto.codigo.in_(page_codes))
+                                .all()
+                            }
+                            productos = [
+                                prods_dict[c] for c in page_codes if c in prods_dict
+                            ]
+                        else:
+                            productos = []
+                        _fts_used = True
+                except Exception:
+                    pass
 
-                if len(palabras) > 1:
-                    # Relevancia: más palabras (útiles) en modelo/motor/descripción arriba; desempate código.
-                    modelo_pts = None
-                    motor_pts = None
-                    desc_pts = None
-                    for p in palabras:
-                        pn = _norm_busqueda_token(p)
-                        if not pn or pn in _ORDEN_BUSCAR_SKIP_TOKENS:
-                            continue
-                        cm = case((_fold_like_contains(Producto.modelo, pn), 1), else_=0)
-                        cmt = case((_fold_like_contains(Producto.motor, pn), 1), else_=0)
-                        cd = case((_fold_like_contains(Producto.descripcion, pn), 1), else_=0)
-                        modelo_pts = cm if modelo_pts is None else modelo_pts + cm
-                        motor_pts = cmt if motor_pts is None else motor_pts + cmt
-                        desc_pts = cd if desc_pts is None else desc_pts + cd
-                    if modelo_pts is None:
-                        modelo_pts = literal(0)
-                    if motor_pts is None:
-                        motor_pts = literal(0)
-                    if desc_pts is None:
-                        desc_pts = literal(0)
-                    query = query.order_by(
-                        modelo_pts.desc(),
-                        motor_pts.desc(),
-                        desc_pts.desc(),
-                        Producto.codigo.asc(),
-                    )
-                elif is_numeric:
-                    priority = case(
-                        (Producto.codigo.ilike(f"{compact_term}%"), 0),
-                        (Producto.codigo_oem.ilike(f"{compact_term}%"), 1),
-                        (_fold_like_contains(Producto.descripcion, _norm_busqueda_token(termino)), 2),
-                        else_=3,
-                    )
-                    query = query.order_by(priority.asc(), Producto.codigo.asc())
-                else:
-                    nt = _norm_busqueda_token(termino)
-                    priority = case(
-                        (_fold_like_contains(Producto.descripcion, nt), 0),
-                        (_fold_like_contains(Producto.codigo_oem, nt), 1),
-                        (_fold_like_contains(Producto.codigo, nt), 2),
-                        else_=3,
-                    )
-                    query = query.order_by(priority.asc(), Producto.codigo.asc())
+                if not _fts_used:
+                    if len(palabras) == 1:
+                        query = query.filter(_token_match_any_column(palabras[0]))
+                    else:
+                        query = query.filter(
+                            and_(*(_token_match_any_column(p) for p in palabras))
+                        )
+
+                    compact_term = termino.replace(" ", "")
+                    is_numeric = compact_term.isdigit()
+
+                    if len(palabras) > 1:
+                        # Relevancia: más palabras (útiles) en modelo/motor/descripción arriba; desempate código.
+                        modelo_pts = None
+                        motor_pts = None
+                        desc_pts = None
+                        for p in palabras:
+                            pn = _norm_busqueda_token(p)
+                            if not pn or pn in _ORDEN_BUSCAR_SKIP_TOKENS:
+                                continue
+                            cm = case((_fold_like_contains(Producto.modelo, pn), 1), else_=0)
+                            cmt = case((_fold_like_contains(Producto.motor, pn), 1), else_=0)
+                            cd = case((_fold_like_contains(Producto.descripcion, pn), 1), else_=0)
+                            modelo_pts = cm if modelo_pts is None else modelo_pts + cm
+                            motor_pts = cmt if motor_pts is None else motor_pts + cmt
+                            desc_pts = cd if desc_pts is None else desc_pts + cd
+                        if modelo_pts is None:
+                            modelo_pts = literal(0)
+                        if motor_pts is None:
+                            motor_pts = literal(0)
+                        if desc_pts is None:
+                            desc_pts = literal(0)
+                        query = query.order_by(
+                            modelo_pts.desc(),
+                            motor_pts.desc(),
+                            desc_pts.desc(),
+                            Producto.codigo.asc(),
+                        )
+                    elif is_numeric:
+                        priority = case(
+                            (Producto.codigo.ilike(f"{compact_term}%"), 0),
+                            (Producto.codigo_oem.ilike(f"{compact_term}%"), 1),
+                            (
+                                _fold_like_contains(
+                                    Producto.descripcion, _norm_busqueda_token(termino)
+                                ),
+                                2,
+                            ),
+                            else_=3,
+                        )
+                        query = query.order_by(priority.asc(), Producto.codigo.asc())
+                    else:
+                        nt = _norm_busqueda_token(termino)
+                        priority = case(
+                            (_fold_like_contains(Producto.descripcion, nt), 0),
+                            (_fold_like_contains(Producto.codigo_oem, nt), 1),
+                            (_fold_like_contains(Producto.codigo, nt), 2),
+                            else_=3,
+                        )
+                        query = query.order_by(priority.asc(), Producto.codigo.asc())
         else:
             query = query.order_by(Producto.codigo.asc())
 
@@ -1106,6 +1148,8 @@ def buscar():
             total_pages = 1
             page = 1
             productos = query.limit(1).all()
+        elif _fts_used:
+            page = max(1, min(page, total_pages))
         else:
             productos, total_count, total_pages = _paginate_producto_query(
                 query, page, per_page
@@ -1639,6 +1683,18 @@ def guardar_edicion():
 
         sess.commit()
         try:
+            from app.models import engine
+            from app.utils.fts_productos import fts_blob_de_producto, fts_delete, fts_upsert
+
+            with engine.begin() as conn:
+                codigo_fts = (producto.codigo or "").strip()
+                if activo_val:
+                    fts_upsert(conn, codigo_fts, fts_blob_de_producto(producto))
+                else:
+                    fts_delete(conn, codigo_fts)
+        except Exception:
+            pass
+        try:
             sess.refresh(producto)
             _auto_asignar_categoria_si_vacio(sess, producto)
         except Exception:
@@ -1680,6 +1736,14 @@ def desactivar_producto():
             diffs=build_diffs(before, after),
         )
         sess.commit()
+        try:
+            from app.models import engine
+            from app.utils.fts_productos import fts_delete
+
+            with engine.begin() as conn:
+                fts_delete(conn, codigo)
+        except Exception:
+            pass
         return jsonify({"success": True, "message": "Producto desactivado correctamente"})
     except Exception as exc:
         sess.rollback()
@@ -1749,6 +1813,14 @@ def reactivar_producto():
             diffs=build_diffs(before, after),
         )
         sess.commit()
+        try:
+            from app.models import engine
+            from app.utils.fts_productos import fts_blob_de_producto, fts_upsert
+
+            with engine.begin() as conn:
+                fts_upsert(conn, codigo, fts_blob_de_producto(producto))
+        except Exception:
+            pass
         return jsonify({"success": True, "message": "Producto reactivado correctamente"})
     except Exception as exc:
         sess.rollback()
@@ -1780,6 +1852,14 @@ def reactivar_todos():
                 metadata={"count": count, "codigos": codigos[:200]},
             )
         sess.commit()
+        try:
+            from app.models import engine
+            from app.utils.fts_productos import fts_rebuild
+
+            with engine.begin() as conn:
+                fts_rebuild(conn)
+        except Exception:
+            pass
         return jsonify({"success": True, "reactivados": count,
                         "message": f"{count} productos reactivados correctamente"})
     except Exception as exc:
@@ -2525,6 +2605,14 @@ def importar_excel_productos():
         archivo.save(tmp_path)
 
         summary = import_products_from_excel(tmp_path, batch_size=2000)
+        try:
+            from app.models import engine
+            from app.utils.fts_productos import fts_create_table, fts_rebuild
+            with engine.begin() as conn:
+                fts_create_table(conn)
+                fts_rebuild(conn)
+        except Exception:
+            pass
         errors_count = summary.get("errors_count", len(summary.get("errors", [])))
         msg = "Importacion completada"
         notes = summary.get("import_notes") or []
@@ -2760,6 +2848,14 @@ def crear_producto():
             diffs=build_diffs({}, _producto_snapshot(p)),
         )
         sess.commit()
+        try:
+            from app.models import engine
+            from app.utils.fts_productos import fts_blob_de_producto, fts_upsert
+
+            with engine.begin() as conn:
+                fts_upsert(conn, codigo, fts_blob_de_producto(p))
+        except Exception:
+            pass
         return jsonify({"success": True, "message": f"Producto {codigo} creado correctamente"})
     except Exception as exc:
         sess.rollback()
