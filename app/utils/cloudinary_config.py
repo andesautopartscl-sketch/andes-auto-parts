@@ -101,6 +101,25 @@ def public_id_from_url(url: str) -> str | None:
     return path_no_ext or None
 
 
+def image_ref_dedupe_key(ref: str) -> str:
+    """Clave estable para deduplicar referencias (ignora versión vNNN en Cloudinary)."""
+    pid = public_id_from_url(ref)
+    return (pid or (ref or "").strip()).lower()
+
+
+def same_image_ref(a: str, b: str) -> bool:
+    """True si dos refs apuntan al mismo asset (misma URL o mismo public_id)."""
+    aa = (a or "").strip()
+    bb = (b or "").strip()
+    if not aa or not bb:
+        return False
+    if aa == bb:
+        return True
+    ka = image_ref_dedupe_key(aa)
+    kb = image_ref_dedupe_key(bb)
+    return bool(ka and kb and ka == kb)
+
+
 def delete_image_by_url(url: str) -> bool:
     pid = public_id_from_url(url)
     if not pid:

@@ -10,6 +10,7 @@ from sqlalchemy import func, or_
 from werkzeug.utils import secure_filename
 
 from app.models import Producto, ProductoImagen, OemDespiece
+from app.utils.cloudinary_config import same_image_ref
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +173,9 @@ def build_import_public_id(
     if tipo == TIPO_IMAGEN_DESPIECE:
         return f"{folder}/{Path(target_stem + ext).stem}", "epc_despiece"
 
-    return f"{folder}/{Path(target_stem + ext).stem}", None
+    frame_name = Path((archivo_nombre or f"{target_stem}{ext}").strip()).stem
+    frame_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", frame_name) or target_stem
+    return f"{folder}/{stem}/{frame_name}", None
 
 
 def codigo_from_filename(filename: str) -> str:
@@ -287,22 +290,41 @@ def find_producto_by_image_code(sess, code: str) -> tuple[Producto | None, str |
 
 
 def link_cloudinary_url_to_producto(
-    sess, producto: Producto, url: str, *, es_principal: bool | None = None
+    sess,
+    producto: Producto,
+    url: str,
+    *,
+    es_principal: bool | None = None,
+    orden: int | None = None,
 ) -> None:
-    """Asigna URL como imagen principal del producto (sin borrar otras en Cloudinary)."""
+    """Asigna URL al producto; orden 0 = portada (es_principal + imagen_url OEM)."""
     url = (url or "").strip()
     if not url:
         return
-    make_principal = True if es_principal is None else bool(es_principal)
+    if orden is not None:
+        try:
+            orden_val = max(0, int(orden))
+        except (TypeError, ValueError):
+            orden_val = 0
+        make_principal = orden_val == 0
+    else:
+        make_principal = True if es_principal is None else bool(es_principal)
+        orden_val = 0 if make_principal else 999
     codigo = (producto.codigo or "").strip().upper()
     if make_principal:
         for img in list(producto.imagenes or []):
             img.es_principal = False
+            if getattr(img, "orden", None) == 0:
+                img.orden = 999
     exists = False
     for img in producto.imagenes or []:
-        if (img.ruta or "").strip() == url:
+        if same_image_ref(img.ruta, url):
+            img.ruta = url
+            img.orden = orden_val
             if make_principal:
                 img.es_principal = True
+            elif getattr(img, "es_principal", False):
+                img.es_principal = False
             exists = True
             break
     if not exists:
@@ -311,6 +333,7 @@ def link_cloudinary_url_to_producto(
                 producto_codigo=codigo,
                 ruta=url,
                 es_principal=make_principal,
+                orden=orden_val,
             )
         )
     if make_principal:

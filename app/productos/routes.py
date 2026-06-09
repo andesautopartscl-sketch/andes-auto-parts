@@ -55,6 +55,7 @@ from ..utils.catalog_cache import (
 from ..utils.cloudinary_config import is_configured as cloudinary_is_configured
 from ..utils.cloudinary_config import upload_image as cloudinary_upload_image
 from ..utils.cloudinary_config import delete_image_by_url
+from ..utils.cloudinary_config import image_ref_dedupe_key
 from ..utils.cloudinary_product_import import (
     cloudinary_storage_key,
     codigo_from_filename,
@@ -420,6 +421,18 @@ def _upload_product_image_file(
     return f"productos_img/{target_name}"
 
 
+def _producto_imagen_sort_key(img) -> tuple:
+    """Orden de galería: orden numérico (0=portada), desempate id."""
+    raw = getattr(img, "orden", None)
+    try:
+        orden = int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        orden = None
+    if orden is None:
+        orden = 0 if getattr(img, "es_principal", False) else 999
+    return (orden, getattr(img, "id", 0) or 0)
+
+
 def _imagenes_por_oem_compartido(producto: Producto) -> list[str]:
     """Hereda imágenes de otro producto activo con el mismo OEM."""
     oem = (producto.codigo_oem or "").strip().upper()
@@ -438,10 +451,22 @@ def _imagenes_por_oem_compartido(producto: Producto) -> list[str]:
             .filter(func.upper(func.trim(Producto.codigo_oem)) == oem)
             .filter(ProductoImagen.ruta.isnot(None))
             .filter(ProductoImagen.ruta != "")
-            .order_by(ProductoImagen.es_principal.desc(), ProductoImagen.id.asc())
+            .order_by(ProductoImagen.orden.asc(), ProductoImagen.id.asc())
             .all()
         )
-        return [(r.ruta or "").strip() for r in rows if (r.ruta or "").strip()]
+        seen_keys: set[str] = set()
+        out: list[str] = []
+        rows_sorted = sorted(rows, key=_producto_imagen_sort_key)
+        for r in rows_sorted:
+            url = (r.ruta or "").strip()
+            if not url:
+                continue
+            key = image_ref_dedupe_key(url) or url.lower()
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            out.append(url)
+        return out
     except Exception:
         return []
 
@@ -453,26 +478,32 @@ def _collect_imagenes_producto(producto: Producto) -> list[str]:
 
     def add(val: str | None) -> None:
         v = (val or "").strip()
-        if not v or v in seen:
+        if not v:
             return
-        seen.add(v)
+        key = image_ref_dedupe_key(v) or v.lower()
+        if key in seen:
+            return
+        seen.add(key)
         out.append(v)
 
     db_rows: list[str] = []
-    if getattr(producto, "imagen_url", None):
-        db_rows.append((producto.imagen_url or "").strip())
+    own_rutas: list[str] = []
     try:
         ordered = sorted(
             producto.imagenes or [],
-            key=lambda i: (0 if i.es_principal else 1, i.id or 0),
+            key=_producto_imagen_sort_key,
         )
         for img in ordered:
             if img.ruta:
-                db_rows.append((img.ruta or "").strip())
+                own_rutas.append((img.ruta or "").strip())
     except Exception:
         pass
-    if not db_rows:
+    if own_rutas:
+        db_rows = own_rutas
+    else:
         db_rows = _imagenes_por_oem_compartido(producto)
+        if not db_rows and getattr(producto, "imagen_url", None):
+            db_rows.append((producto.imagen_url or "").strip())
     for r in db_rows:
         add(r)
 
@@ -3677,6 +3708,7 @@ def _procesar_subida_imagen_cloudinary(
     archivo_nombre: str,
     tipo_imagen: str = TIPO_IMAGEN_PRODUCTO,
     es_principal: bool | None = None,
+    orden: int | None = None,
 ) -> dict:
     """Sube una imagen a Cloudinary y vincula al producto / 360 / despiece si aplica."""
     codigo = (codigo_asignado or "").strip().upper()
@@ -3741,7 +3773,11 @@ def _procesar_subida_imagen_cloudinary(
     if tipo == TIPO_IMAGEN_PRODUCTO:
         if producto:
             link_cloudinary_url_to_producto(
-                sess, producto, stored, es_principal=es_principal
+                sess,
+                producto,
+                stored,
+                es_principal=es_principal,
+                orden=orden,
             )
             info = producto_resolver_payload(producto, match_type or "interno")
             row["producto_codigo"] = info["codigo"]
@@ -3966,6 +4002,7 @@ def importar_imagenes_cloudinary_subir_uno():
                 archivo_nombre=fname,
                 tipo_imagen=tipo_imagen,
                 es_principal=es_principal,
+                orden=orden,
             )
             if row.get("estado") == "vinculado":
                 register_product_audit(

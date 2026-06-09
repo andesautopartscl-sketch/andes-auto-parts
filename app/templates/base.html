@@ -219,6 +219,7 @@ body.search-lite-app .content {
 .app-modal-dialog--producto-ficha .app-modal-iframe--producto {
 	min-height: 0;
 	height: auto;
+	transition: none;
 }
 
 .app-ficha-shell {
@@ -611,6 +612,11 @@ function toggleMenu(id) {
 
 	function closeAppModal() {
 		window._andesResizeProductoIframe = null;
+		window.__andesProductoIframeLastH = 0;
+		if (window.__andesResizeProductoIframeTimer) {
+			clearTimeout(window.__andesResizeProductoIframeTimer);
+			window.__andesResizeProductoIframeTimer = null;
+		}
 		restoreChatZIndex();
 		var modal = document.getElementById('appModal');
 		var modalBody = document.getElementById('appModalBody');
@@ -659,48 +665,83 @@ function toggleMenu(id) {
 			if (modalEl) modalEl.classList.add('app-modal--tall-iframe');
 			openAppModal();
 			var iframe = modalBody.querySelector('iframe');
-			function resizeProductoIframe() {
+			window.__andesProductoIframeLastH = 0;
+			function resizeProductoIframe(immediate) {
 				if (!iframe) return;
-				try {
-					var doc = iframe.contentDocument || iframe.contentWindow.document;
-					var card = doc.querySelector && doc.querySelector('.ft-card');
-					var h = 0;
-					if (card) {
-						// Usar altura de `.ft-card` evita que el `scrollHeight` cambie por imágenes/zoom
-						// (y evita que el modal “crezca” al presionar miniaturas).
-						h = Math.ceil(card.getBoundingClientRect().height || 0);
-					}
-					if (!h) {
-						h = Math.max(
-							doc.body ? doc.body.scrollHeight : 0,
-							doc.documentElement ? doc.documentElement.scrollHeight : 0
-						);
-					}
-					if (h > 0) {
-						iframe.style.height = (h + 4) + 'px';
-					}
-				} catch (e) {}
+				if (window.__andesResizeProductoIframeTimer) {
+					clearTimeout(window.__andesResizeProductoIframeTimer);
+				}
+				var run = function () {
+					window.__andesResizeProductoIframeTimer = null;
+					try {
+						var doc = iframe.contentDocument || iframe.contentWindow.document;
+						var card = doc.querySelector && doc.querySelector('.ft-card');
+						var h = 0;
+						if (card) {
+							h = Math.ceil(card.getBoundingClientRect().height || 0);
+						}
+						if (!h) {
+							h = Math.max(
+								doc.body ? doc.body.scrollHeight : 0,
+								doc.documentElement ? doc.documentElement.scrollHeight : 0
+							);
+						}
+						if (h > 0) {
+							var extrasReady = doc.body && doc.body.getAttribute('data-ft-extras-ready') === '1';
+							var last = window.__andesProductoIframeLastH || 0;
+							if (!last || extrasReady) {
+								last = h;
+							} else if (h > last) {
+								last = h;
+							}
+							window.__andesProductoIframeLastH = last;
+							iframe.style.height = (last + 4) + 'px';
+						}
+					} catch (e) {}
+				};
+				if (immediate) run();
+				else window.__andesResizeProductoIframeTimer = setTimeout(run, 90);
 			}
-			window._andesResizeProductoIframe = resizeProductoIframe;
+			window._andesResizeProductoIframe = function () {
+				resizeProductoIframe(false);
+			};
 			if (iframe) {
 				iframe.onload = function () {
 					var shell = modalBody.querySelector('.app-ficha-shell');
 					var sk = modalBody.querySelector('.app-ficha-shell-skeleton');
-					if (shell) shell.classList.add('is-ready');
-					if (sk) sk.classList.add('is-hidden');
-					resizeProductoIframe();
+					function revealFichaShell() {
+						if (shell) shell.classList.add('is-ready');
+						if (sk) sk.classList.add('is-hidden');
+						resizeProductoIframe(true);
+					}
+					function tryRevealWhenExtrasReady() {
+						try {
+							var doc = iframe.contentDocument || iframe.contentWindow.document;
+							if (doc && doc.body && doc.body.getAttribute('data-ft-extras-ready') === '1') {
+								revealFichaShell();
+								return true;
+							}
+						} catch (e) {}
+						return false;
+					}
+					if (!tryRevealWhenExtrasReady()) {
+						var pollCount = 0;
+						var pollId = setInterval(function () {
+							pollCount += 1;
+							if (tryRevealWhenExtrasReady() || pollCount > 150) {
+								clearInterval(pollId);
+								if (pollCount > 150) revealFichaShell();
+							}
+						}, 40);
+					}
 					try {
 						var doc = iframe.contentDocument || iframe.contentWindow.document;
-						if (doc) {
-							doc.querySelectorAll('img').forEach(function (img) {
-								if (!img.complete) img.addEventListener('load', resizeProductoIframe);
+						if (doc && doc.body) {
+							doc.body.addEventListener('andes-ficha-resize', function () {
+								resizeProductoIframe(false);
 							});
 						}
 					} catch (e2) {}
-					setTimeout(resizeProductoIframe, 50);
-					setTimeout(resizeProductoIframe, 200);
-					setTimeout(resizeProductoIframe, 600);
-					setTimeout(resizeProductoIframe, 1200);
 				};
 			}
 			return;

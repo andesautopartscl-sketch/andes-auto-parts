@@ -116,6 +116,7 @@ class ProductoImagen(Base):
     producto_codigo = Column(String, ForeignKey("productos.CODIGO"))
     ruta = Column(String)
     es_principal = Column(Boolean, default=False)
+    orden = Column(Integer, default=999)
 
 
 # =====================================================

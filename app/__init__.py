@@ -503,6 +503,24 @@ def create_app():
                     "ON producto_imagenes(producto_codigo)"
                 )
             )
+            pi_cols = conn.execute(text("PRAGMA table_info(producto_imagenes)")).fetchall()
+            pi_col_names = {col[1] for col in pi_cols}
+            if pi_cols and "orden" not in pi_col_names:
+                conn.execute(text("ALTER TABLE producto_imagenes ADD COLUMN orden INTEGER DEFAULT 999"))
+                conn.execute(
+                    text(
+                        "UPDATE producto_imagenes SET orden = 0 WHERE es_principal = 1"
+                    )
+                )
+                conn.execute(
+                    text(
+                        """
+                        UPDATE producto_imagenes
+                        SET orden = id
+                        WHERE (orden IS NULL OR orden = 999) AND (es_principal IS NULL OR es_principal = 0)
+                        """
+                    )
+                )
 
             movimientos_cols = conn.execute(text("PRAGMA table_info(movimientos_stock)")).fetchall()
             movimientos_col_names = {col[1] for col in movimientos_cols}
