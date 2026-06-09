@@ -286,18 +286,23 @@ def find_producto_by_image_code(sess, code: str) -> tuple[Producto | None, str |
     return None, None
 
 
-def link_cloudinary_url_to_producto(sess, producto: Producto, url: str) -> None:
+def link_cloudinary_url_to_producto(
+    sess, producto: Producto, url: str, *, es_principal: bool | None = None
+) -> None:
     """Asigna URL como imagen principal del producto (sin borrar otras en Cloudinary)."""
     url = (url or "").strip()
     if not url:
         return
+    make_principal = True if es_principal is None else bool(es_principal)
     codigo = (producto.codigo or "").strip().upper()
-    for img in list(producto.imagenes or []):
-        img.es_principal = False
+    if make_principal:
+        for img in list(producto.imagenes or []):
+            img.es_principal = False
     exists = False
     for img in producto.imagenes or []:
         if (img.ruta or "").strip() == url:
-            img.es_principal = True
+            if make_principal:
+                img.es_principal = True
             exists = True
             break
     if not exists:
@@ -305,10 +310,22 @@ def link_cloudinary_url_to_producto(sess, producto: Producto, url: str) -> None:
             ProductoImagen(
                 producto_codigo=codigo,
                 ruta=url,
-                es_principal=True,
+                es_principal=make_principal,
             )
         )
-    producto.imagen_url = url
+    if make_principal:
+        producto.imagen_url = url
+        oem = (producto.codigo_oem or "").strip().upper()
+        if oem:
+            otros = (
+                sess.query(Producto)
+                .filter(Producto.activo.is_(True))
+                .filter(func.upper(func.trim(Producto.codigo_oem)) == oem)
+                .filter(Producto.codigo != producto.codigo)
+                .all()
+            )
+            for otro in otros:
+                otro.imagen_url = url
 
 
 def _producto_search_item(p: Producto, match_type: str) -> dict:

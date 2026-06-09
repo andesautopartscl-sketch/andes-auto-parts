@@ -194,6 +194,7 @@ td.td-action {
 <section class="card" id="sec-asignacion" hidden>
   <h2 style="margin:0 0 8px;font-size:15px;">Asignación antes de subir</h2>
   <p class="note" style="margin-top:0;" id="cola-resumen"></p>
+  <p class="note" style="margin-top:0;">Orden <strong>0</strong> = imagen principal; 1, 2, … = galería secundaria (mismo código OEM).</p>
   <div class="table-wrap">
     <table>
       <thead>
@@ -204,6 +205,7 @@ td.td-action {
           <th>Código a asignar</th>
           <th>Producto encontrado</th>
           <th>Progreso</th>
+          <th>Orden</th>
           <th class="th-action">Acción</th>
         </tr>
       </thead>
@@ -582,6 +584,7 @@ td.td-action {
       '<td class="td-codigo"><div class="codigo-wrap"><input type="text" autocomplete="off" spellcheck="false" placeholder="Código OEM o interno" value="' + (item.codigo || '') + '"><ul class="codigo-suggest" hidden></ul></div></td>' +
       '<td class="td-producto"></td>' +
       '<td class="td-progress"></td>' +
+      '<td class="td-orden"><input type="number" min="0" max="99" value="' + (item.orden != null ? item.orden : 0) + '" class="input-orden" style="width:4em" title="0 = principal"></td>' +
       '<td class="td-action"><div class="cola-action-cell">' +
       '<button type="button" class="btn btn-primary btn-subir-uno">Subir</button>' +
       '<button type="button" class="btn-remove-cola" title="Quitar de la lista" aria-label="Quitar de la lista">&#10005;</button>' +
@@ -592,6 +595,11 @@ td.td-action {
     tr.querySelector('.td-producto').innerHTML = productoCellHtml(item);
     tr.querySelector('.td-progress').innerHTML = progressCellHtml(item);
     bindCodigoInput(item, tr.querySelector('.codigo-wrap input'), tr.querySelector('.codigo-suggest'));
+    tr.querySelector('.input-orden').addEventListener('change', function () {
+      var v = parseInt(this.value, 10);
+      item.orden = isNaN(v) ? 0 : Math.max(0, Math.min(99, v));
+      this.value = String(item.orden);
+    });
     tr.querySelector('.btn-subir-uno').addEventListener('click', function () {
       uploadItem(item);
     });
@@ -633,7 +641,8 @@ td.td-action {
       producto: null,
       status: 'pending',
       progress: 0,
-      uploadResult: null
+      uploadResult: null,
+      orden: queue.filter(function (q) { return (q.codigo || '').toUpperCase() === (stem || '').toUpperCase() && stem; }).length
     };
     queue.push(item);
     renderRow(item);
@@ -821,6 +830,12 @@ td.td-action {
       fd.append('codigo', item.codigo);
       fd.append('archivo_nombre', item.nombre);
       fd.append('tipo_imagen', normalizeTipo(item.tipoImagen));
+      var trOrd = tbody.querySelector('tr[data-id="' + item.id + '"]');
+      var ordInp = trOrd ? trOrd.querySelector('.input-orden') : null;
+      var ordenVal = ordInp ? parseInt(ordInp.value, 10) : (item.orden != null ? item.orden : 0);
+      if (isNaN(ordenVal)) ordenVal = 0;
+      item.orden = Math.max(0, Math.min(99, ordenVal));
+      fd.append('orden', String(item.orden));
       var csrfTok = (typeof window.getCsrfToken === 'function') ? window.getCsrfToken() : '';
       if (csrfTok) fd.append('csrf_token', csrfTok);
 

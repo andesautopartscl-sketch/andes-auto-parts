@@ -420,6 +420,32 @@ def _upload_product_image_file(
     return f"productos_img/{target_name}"
 
 
+def _imagenes_por_oem_compartido(producto: Producto) -> list[str]:
+    """Hereda imágenes de otro producto activo con el mismo OEM."""
+    oem = (producto.codigo_oem or "").strip().upper()
+    if not oem:
+        return []
+    try:
+        from sqlalchemy.orm import object_session
+
+        sess = object_session(producto)
+        if sess is None:
+            return []
+        rows = (
+            sess.query(ProductoImagen)
+            .join(Producto, ProductoImagen.producto_codigo == Producto.codigo)
+            .filter(Producto.activo.is_(True))
+            .filter(func.upper(func.trim(Producto.codigo_oem)) == oem)
+            .filter(ProductoImagen.ruta.isnot(None))
+            .filter(ProductoImagen.ruta != "")
+            .order_by(ProductoImagen.es_principal.desc(), ProductoImagen.id.asc())
+            .all()
+        )
+        return [(r.ruta or "").strip() for r in rows if (r.ruta or "").strip()]
+    except Exception:
+        return []
+
+
 def _collect_imagenes_producto(producto: Producto) -> list[str]:
     """URLs o rutas relativas para mostrar imágenes (BD + carpeta local)."""
     seen: set[str] = set()
@@ -432,14 +458,23 @@ def _collect_imagenes_producto(producto: Producto) -> list[str]:
         seen.add(v)
         out.append(v)
 
+    db_rows: list[str] = []
     if getattr(producto, "imagen_url", None):
-        add(producto.imagen_url)
+        db_rows.append((producto.imagen_url or "").strip())
     try:
-        for img in producto.imagenes or []:
+        ordered = sorted(
+            producto.imagenes or [],
+            key=lambda i: (0 if i.es_principal else 1, i.id or 0),
+        )
+        for img in ordered:
             if img.ruta:
-                add(img.ruta)
+                db_rows.append((img.ruta or "").strip())
     except Exception:
         pass
+    if not db_rows:
+        db_rows = _imagenes_por_oem_compartido(producto)
+    for r in db_rows:
+        add(r)
 
     folder = str(STATIC_PRODUCTOS_IMG)
     if STATIC_PRODUCTOS_IMG.is_dir():
@@ -2181,6 +2216,7 @@ def ver_producto_ficha_extras(codigo):
         imagenes_360 = _collect_imagenes_360(producto)
         codigo_dir = (producto.codigo or "").strip()
         imagenes_urls = [product_image_src(img) for img in imagenes]
+        portada_raw = imagenes[0] if imagenes else None
         imagenes_360_urls = [
             product_image_src(f"productos360/{codigo_dir}/{name}") for name in imagenes_360
         ]
@@ -2199,6 +2235,7 @@ def ver_producto_ficha_extras(codigo):
             success=True,
             codigo=producto.codigo,
             imagenes=imagenes_urls,
+            imagen_portada=product_image_src(portada_raw) if portada_raw else None,
             imagenes_360=imagenes_360_urls,
             ficha_stock=ficha_stock,
             homologados_raw=hom["homologados_raw"],
@@ -3639,6 +3676,7 @@ def _procesar_subida_imagen_cloudinary(
     codigo_asignado: str,
     archivo_nombre: str,
     tipo_imagen: str = TIPO_IMAGEN_PRODUCTO,
+    es_principal: bool | None = None,
 ) -> dict:
     """Sube una imagen a Cloudinary y vincula al producto / 360 / despiece si aplica."""
     codigo = (codigo_asignado or "").strip().upper()
@@ -3702,7 +3740,9 @@ def _procesar_subida_imagen_cloudinary(
 
     if tipo == TIPO_IMAGEN_PRODUCTO:
         if producto:
-            link_cloudinary_url_to_producto(sess, producto, stored)
+            link_cloudinary_url_to_producto(
+                sess, producto, stored, es_principal=es_principal
+            )
             info = producto_resolver_payload(producto, match_type or "interno")
             row["producto_codigo"] = info["codigo"]
             row["producto_descripcion"] = info["descripcion"]
@@ -3911,6 +3951,12 @@ def importar_imagenes_cloudinary_subir_uno():
             or (getattr(file_obj, "filename", None) or "").strip()
             or "imagen.jpg"
         )
+        orden_raw = (request.form.get("orden") or "0").strip()
+        try:
+            orden = int(orden_raw)
+        except ValueError:
+            orden = 0
+        es_principal = orden == 0
         sess = SessionDB()
         try:
             row = _procesar_subida_imagen_cloudinary(
@@ -3919,6 +3965,7 @@ def importar_imagenes_cloudinary_subir_uno():
                 codigo_asignado=codigo,
                 archivo_nombre=fname,
                 tipo_imagen=tipo_imagen,
+                es_principal=es_principal,
             )
             if row.get("estado") == "vinculado":
                 register_product_audit(

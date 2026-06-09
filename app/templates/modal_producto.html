@@ -2756,7 +2756,7 @@ window.activar360 = function () {
     var data360Json = JSON.stringify(imgs360);
     var html = '<div class="ft-viewer"><div class="ft-viewer-stage">' +
       '<img id="imgPrincipal" class="ft-img-main img-producto" data-360=\'' +
-      data360Json.replace(/'/g, '&#39;') + '\' src="' + esc(imgs[0]) + '" alt="' + esc(productoDesc) + '">' +
+      data360Json.replace(/'/g, '&#39;') + '\' src="' + esc(data.imagen_portada || imgs[0]) + '" alt="' + esc(productoDesc) + '">' +
       '</div></div><div class="ft-thumb-row">';
     imgs.forEach(function (src) {
       html += '<img class="miniatura" src="' + esc(src) + '" alt="" onclick="volverImagenNormal(this.src)">';
