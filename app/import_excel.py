@@ -147,6 +147,15 @@ def import_products_from_excel(source: Any, batch_size: int = 2000) -> dict[str,
 			text("UPDATE productos SET ACTIVO = 1 WHERE ACTIVO IS NULL")
 		)
 
+	try:
+		from app.utils.fts_productos import fts_create_table, fts_rebuild
+
+		with engine.begin() as conn:
+			fts_create_table(conn)
+			fts_rebuild(conn)
+	except Exception:
+		pass
+
 	inserted = int(len(dataframe))
 	updated = int(min(existing_count, inserted))
 	skipped = max(0, rows_before - len(dataframe))
