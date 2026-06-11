@@ -1,0 +1,261 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}{{ form_title }} | Finanzas | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+{% include 'partials/party_form_layout_styles.html' %}
+{% endblock %}
+
+{% block content %}
+<div class="form-shell">
+  <section class="panel form-card">
+    <h2>{{ form_title }}</h2>
+    <p>Ficha del emisor para gastos y pagos en el libro diario. Separada de clientes y proveedores de ventas.</p>
+
+    {% if validation_errors %}
+    <div class="party-validation-alert" role="alert">
+      <strong>Revise los siguientes campos:</strong>
+      <ul>
+        {% for err in validation_errors %}<li>{{ err }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <form method="post" id="emisorForm" action="{% if emisor_id %}{{ url_for('contabilidad.emisor_editar', eid=emisor_id) }}{% else %}{{ url_for('contabilidad.emisor_nuevo') }}{% endif %}">
+      <div class="group-title">Datos comerciales</div>
+      <div class="field-grid field-grid--contacto">
+        <div class="field full">
+          <label for="emisorNombreForm">Nombre / Razón social</label>
+          <input id="emisorNombreForm" name="nombre" value="{{ emisor.nombre or '' }}" maxlength="200" required>
+        </div>
+        <div class="field">
+          <label for="emisorRutForm">RUT</label>
+          <input id="emisorRutForm" name="rut" data-rut-input value="{{ emisor.rut or '' }}" maxlength="24" required placeholder="12.345.678-9">
+        </div>
+        <div class="field">
+          <label for="emisorGiro">Giro</label>
+          <input id="emisorGiro" name="giro" value="{{ emisor.giro or '' }}" maxlength="200">
+        </div>
+        <div class="field">
+          <label for="emisorEmail">Email</label>
+          <input id="emisorEmail" name="email" type="email" value="{{ emisor.email or '' }}" maxlength="150">
+        </div>
+        <div class="field">
+          <div class="label-with-help">
+            <label for="emisorTelefono">Teléfono</label>
+            <button type="button" class="tel-help-btn" id="telefonoHelpBtn" aria-expanded="false" aria-controls="telefonoHelpPanel" aria-label="Ayuda formato teléfono" title="Formato del teléfono">?</button>
+          </div>
+          <input id="emisorTelefono" name="telefono" type="tel" autocomplete="tel" placeholder="+56 9 …" value="{{ emisor.telefono or '' }}" maxlength="50">
+          <div id="telefonoHelpPanel" class="tel-help-panel" role="region" hidden>
+            <p><strong>Formato</strong></p>
+            <p>Ejemplos: <code>926152826</code> o <code>+56 9 2615 2826</code>.</p>
+            <button type="button" class="btn tel-help-close" id="telefonoHelpClose">Cerrar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="group-title-row">
+        <div class="group-title">Ubicación</div>
+        <button type="button" class="tel-help-btn" id="ubicacionHelpBtn" aria-expanded="false" aria-controls="ubicacionHelpPanel" aria-label="Ayuda región y comuna" title="Región, comuna y ciudad">?</button>
+      </div>
+      <div id="ubicacionHelpPanel" class="tel-help-panel ubic-help-panel" role="region" hidden>
+        <p><strong>Región, comuna y ciudad</strong></p>
+        <p>Si el país es Chile, puede elegir región y comuna del listado. La ciudad se sugiere automáticamente.</p>
+        <button type="button" class="btn tel-help-close" id="ubicacionHelpClose">Cerrar</button>
+      </div>
+      <div class="field-grid field-grid--ubic">
+        <div class="field">
+          <label for="emisorPais">País</label>
+          <select id="emisorPais" name="pais">
+            <option value="{{ emisor.pais or 'Chile' }}" selected>{{ emisor.pais or 'Chile' }}</option>
+          </select>
+        </div>
+        <div class="field" id="regionSelectWrap">
+          <label for="emisorRegion">Región</label>
+          <select id="emisorRegion" name="region">
+            <option value="">Seleccionar región</option>
+            {% for region_name in chile_regions %}
+            <option value="{{ region_name }}" {% if emisor.region == region_name %}selected{% endif %}>{{ region_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field" id="comunaSelectWrap">
+          <label for="emisorComuna">Comuna</label>
+          <select id="emisorComuna" name="comuna">
+            <option value="{{ emisor.comuna or '' }}" selected>{{ emisor.comuna or 'Seleccionar comuna' }}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="emisorCiudad">Ciudad</label>
+          <input id="emisorCiudad" name="ciudad" value="{{ emisor.ciudad or '' }}" maxlength="120">
+        </div>
+        <div class="field full hidden" id="regionTextWrap">
+          <label for="emisorRegionText">Región / Estado</label>
+          <input id="emisorRegionText" name="region_text" value="{{ emisor.region or '' }}" maxlength="120">
+        </div>
+        <div class="field full hidden" id="comunaTextWrap">
+          <label for="emisorComunaText">Comuna / Distrito</label>
+          <input id="emisorComunaText" name="comuna_text" value="{{ emisor.comuna or '' }}" maxlength="120">
+        </div>
+        <div class="field full">
+          <label for="emisorDireccion">Calle y número</label>
+          <textarea id="emisorDireccion" name="direccion" placeholder="Ej. Av. Principal 1234, of. 2" maxlength="300">{{ emisor.direccion or '' }}</textarea>
+        </div>
+      </div>
+
+      <div class="group-title">Notas internas</div>
+      <div class="field-grid">
+        <div class="field full">
+          <label for="emisorNotas">Notas</label>
+          <textarea id="emisorNotas" name="notas" maxlength="2000" placeholder="Observaciones para pagos, contacto contable, etc.">{{ emisor.notas or '' }}</textarea>
+          <span class="field-note">Solo uso interno en Finanzas; no aparece en ventas ni bodega.</span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn primary" type="submit">{{ submit_label }}</button>
+        <a class="btn" href="{{ url_for('contabilidad.emisores_lista') }}">Volver</a>
+      </div>
+    </form>
+  </section>
+
+  <aside class="panel aside-card">
+    <h3>Directorio contable</h3>
+    <ul>
+      <li>Estos emisores se usan al registrar movimientos en el libro diario.</li>
+      <li>No se mezclan con clientes ni proveedores de ventas.</li>
+      <li>Al escribir el RUT en un movimiento, se autocompleta desde esta ficha.</li>
+      <li>RUT y razón social son obligatorios; el resto es opcional.</li>
+    </ul>
+  </aside>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='rut_utils.js') }}"></script>
+<script id="chileGeoData" type="application/json">{{ chile_geo | tojson }}</script>
+<script>
+(function () {
+  const CHILE_NAME = 'Chile';
+  const chileGeo = JSON.parse(document.getElementById('chileGeoData')?.textContent || '[]');
+  const paisSelect = document.getElementById('emisorPais');
+  const regionSelect = document.getElementById('emisorRegion');
+  const comunaSelect = document.getElementById('emisorComuna');
+  const regionText = document.getElementById('emisorRegionText');
+  const comunaText = document.getElementById('emisorComunaText');
+  const ciudadInput = document.getElementById('emisorCiudad');
+  const regionSelectWrap = document.getElementById('regionSelectWrap');
+  const comunaSelectWrap = document.getElementById('comunaSelectWrap');
+  const regionTextWrap = document.getElementById('regionTextWrap');
+  const comunaTextWrap = document.getElementById('comunaTextWrap');
+  if (!paisSelect || !regionSelect) return;
+
+  const normalize = (v) => String(v || '').trim().toLowerCase();
+  const isChile = () => normalize(paisSelect.value) === 'chile' || normalize(paisSelect.value) === 'cl';
+
+  function populateCountries(selectedCountry) {
+    const current = selectedCountry || CHILE_NAME;
+    const options = [{ value: CHILE_NAME, label: CHILE_NAME }];
+    if (typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf === 'function') {
+      const seen = new Set([CHILE_NAME]);
+      Intl.supportedValuesOf('region').forEach((code) => {
+        let label = code;
+        try { label = new Intl.DisplayNames(['es'], { type: 'region' }).of(code) || code; } catch (_) {}
+        if (!label || seen.has(label)) return;
+        seen.add(label);
+        options.push({ value: label, label });
+      });
+    }
+    options.sort((a, b) => a.label.localeCompare(b.label, 'es'));
+    paisSelect.innerHTML = '';
+    options.forEach((item) => {
+      const opt = document.createElement('option');
+      opt.value = item.value;
+      opt.textContent = item.label;
+      paisSelect.appendChild(opt);
+    });
+    const match = options.find((opt) => normalize(opt.value) === normalize(current));
+    paisSelect.value = match ? match.value : CHILE_NAME;
+  }
+
+  function findRegionData(regionName) {
+    return chileGeo.find((item) => normalize(item.nombre) === normalize(regionName));
+  }
+
+  function populateComunas(regionName, selectedComuna) {
+    const comunas = (findRegionData(regionName)?.comunas) || [];
+    comunaSelect.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = 'Seleccionar comuna';
+    comunaSelect.appendChild(ph);
+    comunas.forEach((c) => {
+      const opt = document.createElement('option');
+      opt.value = c;
+      opt.textContent = c;
+      comunaSelect.appendChild(opt);
+    });
+    if (selectedComuna && comunas.some((c) => normalize(c) === normalize(selectedComuna))) {
+      comunaSelect.value = selectedComuna;
+    }
+  }
+
+  function isMetro(regionName) {
+    return normalize(regionName).includes('metropolitana');
+  }
+
+  function syncCity() {
+    if (!isChile()) return;
+    const comuna = comunaSelect.value;
+    if (!comuna) return;
+    const regionName = regionSelect.value || regionText.value;
+    const desired = isMetro(regionName) ? 'Santiago' : comuna;
+    const cur = (ciudadInput.value || '').trim();
+    if (!cur || normalize(cur) === normalize(comuna)) ciudadInput.value = desired;
+  }
+
+  function applyCountryRules() {
+    const chile = isChile();
+    regionSelectWrap.classList.toggle('hidden', !chile);
+    comunaSelectWrap.classList.toggle('hidden', !chile);
+    regionTextWrap.classList.toggle('hidden', chile);
+    comunaTextWrap.classList.toggle('hidden', chile);
+    if (chile) {
+      regionText.value = regionSelect.value || regionText.value;
+      comunaText.value = comunaSelect.value || comunaText.value;
+      populateComunas(regionSelect.value, comunaText.value || comunaSelect.value);
+      syncCity();
+    }
+  }
+
+  regionSelect.addEventListener('change', () => {
+    regionText.value = regionSelect.value || '';
+    populateComunas(regionSelect.value, '');
+    syncCity();
+  });
+  comunaSelect.addEventListener('change', () => {
+    comunaText.value = comunaSelect.value || '';
+    syncCity();
+  });
+  paisSelect.addEventListener('change', applyCountryRules);
+
+  populateCountries(paisSelect.value || CHILE_NAME);
+  populateComunas(regionSelect.value || regionText.value, comunaText.value || comunaSelect.value);
+  applyCountryRules();
+
+  function bindHelp(btnId, panelId, closeId) {
+    const btn = document.getElementById(btnId);
+    const panel = document.getElementById(panelId);
+    const closeBtn = document.getElementById(closeId);
+    if (!btn || !panel) return;
+    function setOpen(open) {
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) panel.removeAttribute('hidden'); else panel.setAttribute('hidden', '');
+    }
+    btn.addEventListener('click', () => setOpen(panel.hasAttribute('hidden')));
+    if (closeBtn) closeBtn.addEventListener('click', () => setOpen(false));
+  }
+  bindHelp('telefonoHelpBtn', 'telefonoHelpPanel', 'telefonoHelpClose');
+  bindHelp('ubicacionHelpBtn', 'ubicacionHelpPanel', 'ubicacionHelpClose');
+})();
+</script>
+{% endblock %}

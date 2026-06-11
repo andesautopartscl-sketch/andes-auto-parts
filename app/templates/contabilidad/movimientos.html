@@ -10,6 +10,7 @@
     </div>
     <div class="topbar-actions">
       <a class="link-btn" href="{{ url_for('contabilidad.index') }}">📒 Plan de cuentas</a>
+      <a class="link-btn" href="{{ url_for('contabilidad.emisores_lista') }}">🏢 Emisores</a>
       <button class="btn btn-primary" id="btnNuevoMov" type="button">+ Registrar movimiento</button>
     </div>
   </div>
@@ -105,6 +106,10 @@
               <input type="text" id="emisorRut" name="emisor_rut" maxlength="24" placeholder="12.345.678-9" inputmode="text" spellcheck="false">
             </div>
           </div>
+          <p id="emisorCatalogHint" class="contab-modal-hint" hidden style="margin:-4px 0 8px;">
+            Ficha en directorio contable:
+            <a id="emisorEditLink" href="#" target="_blank" rel="noopener">Editar dirección, comuna, email…</a>
+          </p>
           <div class="form-group">
             <label for="selectCuentaMov">Cuenta contable</label>
             <span class="contab-modal-cuenta-hint">Indica <strong>en qué rubro contable</strong> entra el movimiento según tu plan de cuentas (por ejemplo un gasto de envío, luz, banco, caja). No es el nombre del proveedor: eso va arriba en emisor y RUT.</span>
@@ -189,6 +194,7 @@
   btnNuevo.addEventListener('click', function () {
     modal.style.display = 'flex';
     closeAyuda();
+    resetEmisorHint();
     const fechaInput = modal.querySelector('[name="fecha"]');
     if (fechaInput) fechaInput.value = new Date().toISOString().slice(0, 10);
   });
@@ -221,6 +227,66 @@
   });
   const fechaInput = modal.querySelector('[name="fecha"]');
   if (fechaInput) fechaInput.value = new Date().toISOString().slice(0, 10);
+
+  const emisorRut = document.getElementById('emisorRut');
+  const emisorNombre = document.getElementById('emisorNombre');
+  const emisorCatalogHint = document.getElementById('emisorCatalogHint');
+  const emisorEditLink = document.getElementById('emisorEditLink');
+  const URL_EMISOR_RUT = '/contabilidad/api/emisor-por-rut';
+  let emisorLookupTimer = null;
+
+  function resetEmisorHint() {
+    if (emisorCatalogHint) emisorCatalogHint.hidden = true;
+  }
+
+  function lookupEmisorPorRut() {
+    if (!emisorRut || !emisorNombre) return;
+    const rut = (emisorRut.value || '').trim();
+    if (rut.replace(/[^0-9kK]/g, '').length < 7) {
+      resetEmisorHint();
+      return;
+    }
+    if ((emisorNombre.value || '').trim()) {
+      /* Si ya hay nombre, igual buscamos para hint de edición */
+    }
+    fetch(URL_EMISOR_RUT + '?rut=' + encodeURIComponent(rut), {
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok || !j.encontrado) {
+          resetEmisorHint();
+          return;
+        }
+        if (!(emisorNombre.value || '').trim() && j.emisor_nombre) {
+          emisorNombre.value = j.emisor_nombre;
+        }
+        if (j.emisor_rut) emisorRut.value = j.emisor_rut;
+        if (j.id && emisorEditLink && emisorCatalogHint) {
+          emisorEditLink.href = '/contabilidad/emisores/' + j.id + '/editar';
+          emisorCatalogHint.hidden = false;
+        } else {
+          resetEmisorHint();
+        }
+      })
+      .catch(function () { resetEmisorHint(); });
+  }
+
+  if (emisorRut) {
+    emisorRut.addEventListener('input', function () {
+      clearTimeout(emisorLookupTimer);
+      emisorLookupTimer = setTimeout(lookupEmisorPorRut, 450);
+    });
+    emisorRut.addEventListener('blur', lookupEmisorPorRut);
+    emisorRut.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        clearTimeout(emisorLookupTimer);
+        lookupEmisorPorRut();
+      }
+    });
+  }
 })();
 </script>
 {% endblock %}

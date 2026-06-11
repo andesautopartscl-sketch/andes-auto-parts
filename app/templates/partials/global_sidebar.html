@@ -639,6 +639,9 @@ html {
 				<a class="{% if active_page == 'contabilidad_movimientos' %}nav-active{% endif %}"
 				   href="{{ url_for('contabilidad.movimientos') }}"
 				   data-module-url="{{ url_for('contabilidad.movimientos') }}">🧾 Libro diario</a>
+				<a class="{% if active_page == 'contabilidad_emisores' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.emisores_lista') }}"
+				   data-module-url="{{ url_for('contabilidad.emisores_lista') }}">🏢 Emisores contables</a>
 				<a class="{% if active_page == 'contabilidad_libro_mayor' %}nav-active{% endif %}"
 				   href="{{ url_for('contabilidad.libro_mayor') }}"
 				   data-module-url="{{ url_for('contabilidad.libro_mayor') }}">📘 Libro mayor</a>

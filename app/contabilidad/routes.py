@@ -13,7 +13,18 @@ from app.bodega.models import IngresoDocumento, IngresoDocumentoItem
 from app.extensions import db
 from app.utils.decorators import login_required, permission_required
 from app.utils.permissions import has_permission
-from .models import CuentaContable, MovimientoContable, TIPOS_CUENTA
+from app.utils.rut_utils import clean_rut, format_rut
+from .models import CuentaContable, EmisorContable, MovimientoContable, TIPOS_CUENTA
+from .emisores_service import (
+    backfill_emisores_desde_movimientos,
+    emisor_form_data,
+    emisor_to_form_dict,
+    hydrate_emisor,
+    resolve_emisor_por_rut,
+    upsert_emisor_contable_desde_movimiento,
+    validate_emisor_form,
+)
+from app.ventas.routes import _chile_regions, _load_chile_geo
 from app.ventas.models import DocumentoVenta
 
 contabilidad_bp = Blueprint(
@@ -192,8 +203,10 @@ def movimiento_nuevo():
     monto_raw = request.form.get("monto", "0").strip().replace(",", ".")
     descripcion = request.form.get("descripcion", "").strip()
     documento_ref = request.form.get("documento_ref", "").strip()
-    emisor_nombre = (request.form.get("emisor_nombre") or "").strip()[:200]
-    emisor_rut = (request.form.get("emisor_rut") or "").strip()[:24]
+    emisor_nombre = (request.form.get("emisor_nombre") or "").strip().upper()[:200]
+    emisor_rut_raw = (request.form.get("emisor_rut") or "").strip()[:24]
+    emisor_rut_cr = clean_rut(emisor_rut_raw)
+    emisor_rut = (format_rut(emisor_rut_cr) or emisor_rut_cr)[:24] if emisor_rut_cr else ""
     fecha_str = request.form.get("fecha", "").strip()
 
     if not cuenta_id or not cuenta_id.isdigit():
@@ -234,6 +247,7 @@ def movimiento_nuevo():
         usuario=_current_user(),
     )
     db.session.add(mov)
+    upsert_emisor_contable_desde_movimiento(emisor_rut, emisor_nombre)
     db.session.commit()
     flash("Movimiento registrado.", "success")
     return redirect(url_for("contabilidad.movimientos"))
@@ -270,6 +284,126 @@ def api_libro_diario():
         "emisor_rut": m.emisor_rut or "",
         "usuario": m.usuario,
     } for m in movs])
+
+
+@contabilidad_bp.route("/api/emisor-por-rut", methods=["GET"])
+@login_required
+@permission_required("ver_finanzas")
+def api_emisor_por_rut():
+    """Autocompletar emisor: directorio contable o último movimiento del libro diario."""
+    rut = (request.args.get("rut") or "").strip()
+    if not rut:
+        return jsonify({"ok": False, "error": "Indique RUT."}), 400
+    cr = clean_rut(rut)
+    if len(cr) < 7:
+        return jsonify({"ok": True, "encontrado": False})
+    data = resolve_emisor_por_rut(rut)
+    if data is None:
+        return jsonify({"ok": True, "encontrado": False})
+    return jsonify({"ok": True, "encontrado": True, **data})
+
+
+@contabilidad_bp.route("/emisores", methods=["GET"])
+@login_required
+@permission_required("ver_finanzas")
+def emisores_lista():
+    q_raw = (request.args.get("q") or "").strip()
+    q = EmisorContable.query.filter_by(activo=True).order_by(EmisorContable.nombre)
+    if q_raw:
+        term = f"%{q_raw}%"
+        cr = clean_rut(q_raw)
+        filtros = [
+            EmisorContable.nombre.ilike(term),
+            EmisorContable.email.ilike(term),
+            EmisorContable.comuna.ilike(term),
+        ]
+        if cr:
+            filtros.append(EmisorContable.rut.ilike(f"%{cr}%"))
+        q = q.filter(or_(*filtros))
+    emisores = q.limit(300).all()
+    puede_registrar_mov = has_permission(
+        session.get("user"), session.get("rol"), "finanzas_registrar_movimientos"
+    )
+    return render_template(
+        "contabilidad/emisores.html",
+        emisores=emisores,
+        q=q_raw,
+        puede_registrar_mov=puede_registrar_mov,
+        active_page="contabilidad_emisores",
+    )
+
+
+@contabilidad_bp.route("/emisores/nuevo", methods=["GET", "POST"])
+@login_required
+@permission_required("ver_finanzas")
+def emisor_nuevo():
+    if request.method == "POST" and not has_permission(
+        session.get("user"), session.get("rol"), "finanzas_registrar_movimientos"
+    ):
+        flash("No tienes permiso para crear emisores contables.", "error")
+        return redirect(url_for("contabilidad.emisores_lista"))
+    form_data = emisor_form_data(request.form if request.method == "POST" else None)
+    errors: list[str] = []
+    if request.method == "POST":
+        errors = validate_emisor_form(form_data)
+        if not errors:
+            emisor = hydrate_emisor(EmisorContable(), form_data)
+            db.session.add(emisor)
+            db.session.commit()
+            flash("Emisor contable creado.", "success")
+            return redirect(url_for("contabilidad.emisores_lista"))
+        for err in errors:
+            flash(err, "error")
+    return render_template(
+        "contabilidad/emisor_form.html",
+        form_title="Nuevo emisor contable",
+        submit_label="Crear emisor",
+        emisor=form_data,
+        validation_errors=errors,
+        chile_geo=_load_chile_geo(),
+        chile_regions=_chile_regions(_load_chile_geo()),
+        active_page="contabilidad_emisores",
+    )
+
+
+@contabilidad_bp.route("/emisores/<int:eid>/editar", methods=["GET", "POST"])
+@login_required
+@permission_required("ver_finanzas")
+def emisor_editar(eid: int):
+    if request.method == "POST" and not has_permission(
+        session.get("user"), session.get("rol"), "finanzas_registrar_movimientos"
+    ):
+        flash("No tienes permiso para editar emisores contables.", "error")
+        return redirect(url_for("contabilidad.emisores_lista"))
+    emisor = db.session.get(EmisorContable, eid)
+    if emisor is None or not emisor.activo:
+        flash("Emisor no encontrado.", "error")
+        return redirect(url_for("contabilidad.emisores_lista"))
+    errors: list[str] = []
+    if request.method == "POST":
+        form_data = emisor_form_data(request.form)
+        errors = validate_emisor_form(form_data, emisor_id=eid)
+        if not errors:
+            hydrate_emisor(emisor, form_data)
+            db.session.commit()
+            flash("Emisor actualizado.", "success")
+            return redirect(url_for("contabilidad.emisores_lista"))
+        for err in errors:
+            flash(err, "error")
+    else:
+        form_data = emisor_to_form_dict(emisor)
+    chile_geo = _load_chile_geo()
+    return render_template(
+        "contabilidad/emisor_form.html",
+        form_title="Editar emisor contable",
+        submit_label="Guardar cambios",
+        emisor=form_data,
+        emisor_id=eid,
+        validation_errors=errors,
+        chile_geo=chile_geo,
+        chile_regions=_chile_regions(chile_geo),
+        active_page="contabilidad_emisores",
+    )
 
 
 @contabilidad_bp.route("/asientos", methods=["GET"])
@@ -747,6 +881,9 @@ def finanzas_home():
 
 finanzas_bp.add_url_rule("/plan_cuentas", endpoint="plan_cuentas", view_func=index)
 finanzas_bp.add_url_rule("/libro_diario", endpoint="libro_diario", view_func=movimientos)
+finanzas_bp.add_url_rule("/emisores", endpoint="emisores", view_func=emisores_lista)
+finanzas_bp.add_url_rule("/emisores/nuevo", endpoint="emisor_nuevo", view_func=emisor_nuevo)
+finanzas_bp.add_url_rule("/emisores/<int:eid>/editar", endpoint="emisor_editar", view_func=emisor_editar)
 finanzas_bp.add_url_rule("/libro_mayor", endpoint="libro_mayor", view_func=libro_mayor)
 finanzas_bp.add_url_rule("/asientos", endpoint="asientos", view_func=asientos)
 finanzas_bp.add_url_rule("/cxp", endpoint="cxp", view_func=cuentas_por_pagar)

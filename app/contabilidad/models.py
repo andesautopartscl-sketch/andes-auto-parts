@@ -41,3 +41,46 @@ class MovimientoContable(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     cuenta = db.relationship("CuentaContable", back_populates="movimientos")
+
+
+class EmisorContable(db.Model):
+    """Directorio de emisores de facturas (gastos/pagos). Separado de clientes y proveedores."""
+
+    __tablename__ = "emisores_contables"
+
+    id = db.Column(db.Integer, primary_key=True)
+    rut = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    nombre = db.Column(db.String(200), nullable=False)
+    giro = db.Column(db.String(200), default="")
+    direccion = db.Column(db.String(300), default="")
+    region = db.Column(db.String(120), default="")
+    comuna = db.Column(db.String(120), default="")
+    ciudad = db.Column(db.String(120), default="")
+    pais = db.Column(db.String(120), default="Chile")
+    telefono = db.Column(db.String(50), default="")
+    email = db.Column(db.String(150), default="")
+    notas = db.Column(db.Text, default="")
+    activo = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    def to_dict(self) -> dict:
+        from app.utils.rut_utils import format_rut
+
+        return {
+            "id": self.id,
+            "emisor_nombre": self.nombre or "",
+            "emisor_rut": format_rut(self.rut) if self.rut else "",
+            "giro": self.giro or "",
+            "direccion": self.direccion or "",
+            "region": self.region or "",
+            "comuna": self.comuna or "",
+            "ciudad": self.ciudad or "",
+            "pais": self.pais or "Chile",
+            "telefono": self.telefono or "",
+            "email": self.email or "",
+            "notas": self.notas or "",
+            "activo": bool(self.activo),
+        }

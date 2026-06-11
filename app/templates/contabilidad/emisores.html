@@ -1,0 +1,80 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Emisores contables | Finanzas | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+{% include 'partials/party_list_layout_styles.html' %}
+{% endblock %}
+
+{% block content %}
+<div class="page-stack">
+  <section class="panel hero-card">
+    <div class="hero-copy">
+      <h2>Emisores contables</h2>
+      <p>Directorio de emisores de facturas para gastos y pagos. Fichas separadas de clientes y proveedores de ventas; se usan al registrar movimientos en el libro diario.</p>
+      <div class="stats">
+        <div class="stat">
+          <strong>{{ emisores|length }}</strong>
+          <span>Registros activos</span>
+        </div>
+        <div class="stat">
+          <strong>{{ q or 'Todos' }}</strong>
+          <span>Filtro actual</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a class="btn outline" href="{{ url_for('contabilidad.movimientos') }}">Libro diario</a>
+      {% if puede_registrar_mov %}
+      <a class="btn primary" href="{{ url_for('contabilidad.emisor_nuevo') }}">Nuevo emisor</a>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel table-card">
+    <div class="toolbar">
+      <form class="search-form" method="get" action="{{ url_for('contabilidad.emisores_lista') }}">
+        <input type="search" name="q" value="{{ q or '' }}" placeholder="Buscar por nombre, RUT, email o comuna" maxlength="120">
+        <button class="btn outline" type="submit">Buscar</button>
+        {% if q %}<a class="btn" href="{{ url_for('contabilidad.emisores_lista') }}">Limpiar</a>{% endif %}
+      </form>
+    </div>
+
+    {% if emisores %}
+    <div class="party-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>RUT</th>
+            <th>Razón social</th>
+            <th>Comuna</th>
+            <th>Email</th>
+            <th>Teléfono</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in emisores %}
+          <tr>
+            <td>{{ e.rut|format_rut if e.rut else '—' }}</td>
+            <td><strong>{{ e.nombre }}</strong></td>
+            <td>{{ e.comuna or '—' }}</td>
+            <td>{{ e.email or '—' }}</td>
+            <td>{{ e.telefono or '—' }}</td>
+            <td>
+              <div class="actions">
+                <a class="btn sm" href="{{ url_for('contabilidad.emisor_editar', eid=e.id) }}">Editar</a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      {% if q %}No hay emisores que coincidan con la búsqueda.{% else %}Aún no hay emisores en el directorio. Se importan desde el libro diario o podés crear uno con «Nuevo emisor».{% endif %}
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

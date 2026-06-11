@@ -324,6 +324,25 @@ def create_app():
 
         db.create_all()
 
+        try:
+            from app.contabilidad.emisores_service import (
+                backfill_emisores_desde_movimientos,
+                normalizar_emisores_existentes_mayusculas,
+            )
+
+            n_emisores = backfill_emisores_desde_movimientos()
+            if n_emisores:
+                app.logger.info(
+                    "Emisores contables: importados %s desde libro diario", n_emisores
+                )
+            n_norm = normalizar_emisores_existentes_mayusculas()
+            if n_norm:
+                app.logger.info(
+                    "Emisores contables: normalizados a mayúsculas %s registros", n_norm
+                )
+        except Exception as exc:
+            app.logger.warning("Emisores contables: backfill omitido: %s", exc)
+
         # Keep legacy DBs compatible: add last_seen when column is missing.
         with db.engine.begin() as conn:
             cols = conn.execute(text("PRAGMA table_info(usuarios_sistema)")).fetchall()

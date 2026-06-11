@@ -1,0 +1,144 @@
+<style>
+.page-stack {
+    display: grid;
+    gap: 10px;
+}
+.hero-card,
+.table-card {
+    padding: 12px 14px;
+}
+.hero-card {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+}
+.hero-copy h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+}
+.hero-copy p {
+    color: #64748b;
+    max-width: 720px;
+    font-size: 12px;
+    line-height: 1.45;
+    margin: 0;
+}
+.stats {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+.stat {
+    background: #f8fafc;
+    border: 1px solid #e8eef5;
+    border-radius: 8px;
+    padding: 6px 10px;
+    min-width: 92px;
+}
+.stat strong {
+    display: block;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.2;
+}
+.stat span {
+    font-size: 10px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.page-stack .hero-card .btn.primary {
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 8px;
+    box-shadow: none;
+}
+.toolbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.search-form {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+.search-form input {
+    flex: 1 1 260px;
+    border: 1px solid #dbe3ef;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 12px;
+}
+.search-form .btn.outline,
+.search-form .btn:not(.primary) {
+    padding: 7px 12px;
+    font-size: 12px;
+    border-radius: 8px;
+    font-weight: 600;
+}
+.party-table-wrap {
+    overflow-x: auto;
+    border: 1px solid #e8edf2;
+    border-radius: 10px;
+}
+.party-table-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 720px;
+}
+.party-table-wrap th,
+.party-table-wrap td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    text-align: left;
+    vertical-align: middle;
+}
+.party-table-wrap th {
+    background: #f8fafc;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+.party-table-wrap td {
+    font-size: 12px;
+    color: #1e293b;
+}
+.party-table-wrap .actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.party-table-wrap .actions .btn.sm {
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 6px;
+}
+.empty {
+    padding: 18px 14px;
+    text-align: center;
+    color: #64748b;
+    font-size: 13px;
+}
+@media (max-width: 960px) {
+    .hero-card,
+    .toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+</style>
