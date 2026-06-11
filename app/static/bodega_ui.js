@@ -2845,6 +2845,25 @@
                     }
                 }
 
+                if (
+                    data.producto_cantidad != null ||
+                    data.producto_valor_neto != null
+                ) {
+                    var flatSinCodigo = {
+                        codigo_proveedor: "",
+                        descripcion: data.producto_descripcion || "",
+                        cantidad: data.producto_cantidad,
+                        valor_neto: data.producto_valor_neto,
+                    };
+                    if (
+                        flatSinCodigo.cantidad != null ||
+                        flatSinCodigo.valor_neto != null
+                    ) {
+                        data.productos = [flatSinCodigo];
+                        return [flatSinCodigo];
+                    }
+                }
+
                 var fromCrudo = parseProductosFromOcrCrudo(data.ocr_texto_crudo);
                 if (fromCrudo.length) {
                     prods = normalizeFacturaProductos(fromCrudo);
@@ -2883,7 +2902,8 @@
                 prods.forEach(function (p) {
                     var tr = document.createElement("tr");
                     var tdCode = document.createElement("td");
-                    tdCode.textContent = p.codigo_proveedor || "—";
+                    var codigo = String(p.codigo_proveedor || "").trim();
+                    tdCode.textContent = codigo || "—";
                     var tdCant = document.createElement("td");
                     tdCant.className = "num";
                     tdCant.textContent =
@@ -2937,6 +2957,16 @@
                 var p0 = prods[0] || null;
                 if (p0 && p0.codigo_proveedor) {
                     dlRow("Código producto", p0.codigo_proveedor);
+                }
+                if (
+                    p0 &&
+                    p0.descripcion &&
+                    !p0.codigo_proveedor &&
+                    !/^(xin\s*wang|xing\s*wang)$/i.test(
+                        String(p0.descripcion).trim().replace(/\s+/g, "")
+                    )
+                ) {
+                    dlRow("Descripción", p0.descripcion);
                 }
                 if (p0 && p0.cantidad != null && p0.cantidad !== "") {
                     dlRow("Cantidad", p0.cantidad);

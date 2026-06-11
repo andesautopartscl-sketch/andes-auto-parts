@@ -1574,6 +1574,23 @@ def _is_price_only_line(line: str) -> bool:
     return val is not None and val >= 500
 
 
+def _is_xinwang_monto_line(line: str) -> bool:
+    """Monto en tabla Xinwang (incluye enteros OCR sin separador, ej. 36975)."""
+    if _is_price_only_line(line):
+        return True
+    s = (line or "").strip()
+    if re.fullmatch(r"\d{4,8}", s):
+        val = _parse_monto_chileno(s)
+        return val is not None and val >= 100
+    return False
+
+
+def _parse_xinwang_monto_line(line: str) -> int | None:
+    if not _is_xinwang_monto_line(line):
+        return None
+    return _parse_monto_chileno((line or "").strip())
+
+
 def _is_sin_codigo_marker_line(line: str) -> bool:
     s = (line or "").strip()
     if not s:
@@ -1679,7 +1696,7 @@ def _is_xinwang_zone_skip_line(line: str) -> bool:
         return True
     if _is_xinwang_qty_line(s):
         return True
-    if _is_price_only_line(s):
+    if _is_xinwang_monto_line(s):
         return True
     return False
 
@@ -1711,8 +1728,8 @@ def _collect_xinwang_prices_from_zone(zone_lines: list[str]) -> list[int]:
         s = line.strip()
         if not s:
             continue
-        if _is_price_only_line(s):
-            val = _parse_monto_chileno(s)
+        if _is_xinwang_monto_line(s):
+            val = _parse_xinwang_monto_line(s)
             if val is not None:
                 prices.append(val)
     return prices
@@ -1782,8 +1799,8 @@ def _extract_xinwang_units_qty_aligned(
             if _is_xinwang_interleaved_desc_line(s):
                 j += 1
                 continue
-            if _is_price_only_line(s):
-                val = _parse_monto_chileno(s)
+            if _is_xinwang_monto_line(s):
+                val = _parse_xinwang_monto_line(s)
                 if val is not None:
                     prices.append(val)
                 j += 1
@@ -1825,8 +1842,8 @@ def _extract_xinwang_unit_prices_sequential(
                 break
             if _is_xinwang_interleaved_desc_line(s):
                 break
-            if _is_price_only_line(s):
-                val = _parse_monto_chileno(s)
+            if _is_xinwang_monto_line(s):
+                val = _parse_xinwang_monto_line(s)
                 if val is not None:
                     units.append(val)
                 i = j + 1
@@ -1837,6 +1854,18 @@ def _extract_xinwang_unit_prices_sequential(
     return units
 
 
+def _is_xinwang_invoice_text(lines: list[str]) -> bool:
+    joined = "\n".join(lines)
+    if re.search(r"xin\s*wang|xing\s*wang", joined, re.IGNORECASE):
+        return True
+    zone = _xinwang_product_zone_slice(lines)
+    if zone is not None:
+        start, end = zone
+        if any(_is_sin_codigo_marker_line(ln) for ln in lines[start:end]):
+            return True
+    return False
+
+
 def _has_xinwang_column_layout(lines: list[str]) -> bool:
     """Xinwang: columna Codigo; ítems apilados o filas intercaladas."""
     has_codigo = any(_is_codigo_column_header(ln) for ln in lines)
@@ -1844,6 +1873,8 @@ def _has_xinwang_column_layout(lines: list[str]) -> bool:
         ln.lower().strip() == "valor" for ln in lines
     )
     if not (has_codigo and has_cols):
+        return False
+    if not _is_xinwang_invoice_text(lines):
         return False
     if len(_extract_xinwang_descripciones(lines)) >= 1:
         return True
@@ -1871,16 +1902,55 @@ def _has_sin_codigo_layout(lines: list[str]) -> bool:
     return False
 
 
+def _is_xinwang_table_header_line(line: str) -> bool:
+    low = (line or "").lower().strip().strip(":").strip()
+    if low in (
+        "descripcion",
+        "descripción",
+        "cantidad",
+        "precio",
+        "valor",
+        "codigo",
+        "código",
+    ):
+        return True
+    if low.startswith("%impto") or low.startswith("%desc"):
+        return True
+    if low.startswith("adic") or re.match(r"^adic\.?\*?$", low):
+        return True
+    return False
+
+
 def _xinwang_desc_stop_line(line: str) -> bool:
     low = (line or "").lower().strip()
     if low.startswith("forma de pago"):
         return True
-    if low in ("cantidad", "precio", "valor"):
-        return True
     if low.startswith("ciudad:"):
         return True
-    if low.startswith("%impto") or low.startswith("%desc"):
+    if low.startswith("timbre"):
         return True
+    if low.startswith("monto neto"):
+        return True
+    return False
+
+
+def _is_xinwang_vendor_line(line: str) -> bool:
+    """Nombre del emisor (Xinwang SPA, etc.), no descripción de producto."""
+    s = (line or "").strip()
+    if not s:
+        return False
+    compact = re.sub(r"[^a-z0-9]", "", s.lower())
+    if compact in ("xinwang", "xingwang"):
+        return True
+    if re.search(r"xin\s*wang|xing\s*wang", s, re.IGNORECASE):
+        if re.search(
+            r"importadora|exportadora|\bspa\b|motor|repuesto",
+            s,
+            re.IGNORECASE,
+        ):
+            return True
+        if len(s.split()) <= 2:
+            return True
     return False
 
 
@@ -1888,12 +1958,18 @@ def _looks_like_xinwang_descripcion(line: str) -> bool:
     s = (line or "").strip()
     if not s or len(s) < 4:
         return False
+    if _is_xinwang_vendor_line(s):
+        return False
+    if re.match(r"^\d+\s+\S", s):
+        return False
     if _is_sin_codigo_marker_line(s):
         return False
     if not re.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}", s):
         return False
     low = s.lower().strip().strip(":").strip()
     if low in _PRODUCT_HEADER_WORDS or low in ("codigo", "código"):
+        return False
+    if low in ("neto", "total", "monto neto", "monto total", "monto iva", "iva"):
         return False
     if low.startswith(("forma de pago", "fecha ", "r.u.t", "giro:", "direccion", "dirección")):
         return False
@@ -1913,11 +1989,10 @@ def _extract_xinwang_descripciones(lines: list[str]) -> list[str]:
     descs: list[str] = []
     for line in lines[start:]:
         s = line.strip()
-        low = s.lower().strip().strip(":").strip()
-        if low in ("descripcion", "descripción"):
-            continue
         if _xinwang_desc_stop_line(line):
             break
+        if _is_xinwang_table_header_line(line):
+            continue
         if _looks_like_xinwang_descripcion(s):
             descs.append(s)
     return descs
@@ -1995,11 +2070,11 @@ def _extract_xinwang_unit_prices(lines: list[str]) -> list[int]:
                 break
             if _is_xinwang_qty_line(s):
                 break
-            if _is_price_only_line(s):
-                val = _parse_monto_chileno(s)
+            if _is_xinwang_monto_line(s):
+                val = _parse_xinwang_monto_line(s)
                 if val is not None:
                     units.append(val)
-                if j + 1 < len(lines) and _is_price_only_line(lines[j + 1].strip()):
+                if j + 1 < len(lines) and _is_xinwang_monto_line(lines[j + 1].strip()):
                     i = j + 2
                 else:
                     i = j + 1
@@ -2025,6 +2100,55 @@ def _extract_xinwang_quantities(lines: list[str]) -> list[int]:
         if _is_xinwang_qty_line(line):
             qtys.append(_parse_xinwang_qty_from_line(line))
     return qtys
+
+
+def _xinwang_guess_descripcion(lines: list[str]) -> str:
+    candidates: list[str] = []
+    for d in _extract_xinwang_descripciones(lines):
+        if d and not _is_xinwang_vendor_line(d):
+            candidates.append(d)
+    for line in lines:
+        s = line.strip()
+        if _looks_like_xinwang_descripcion(s) and not _is_xinwang_vendor_line(s):
+            candidates.append(s)
+    if candidates:
+        return max(candidates, key=len)
+    joined = "\n".join(lines)
+    for m in re.finditer(
+        r"\b([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9][A-ZÁÉÍÓÚÑ0-9\s\-]{6,60})\b",
+        joined,
+    ):
+        cand = re.sub(r"\s+", " ", m.group(1).strip())
+        if _looks_like_xinwang_descripcion(cand) and not _is_xinwang_vendor_line(cand):
+            return cand
+    return ""
+
+
+def _xinwang_fallback_from_totals(
+    lines: list[str], total_neto: int | None
+) -> list[dict[str, Any]]:
+    """Ítem único cuando hay marca Xinwang + neto del pie pero sin layout columnar completo."""
+    if not _is_xinwang_invoice_text(lines):
+        return []
+    neto = _as_monto_int(total_neto)
+    if neto is None or neto < 500:
+        neto, _, _ = _extract_montos("\n".join(lines))
+        neto = _as_monto_int(neto)
+    if neto is None or neto < 500:
+        return []
+
+    desc = _xinwang_guess_descripcion(lines)
+    if _is_xinwang_vendor_line(desc):
+        desc = ""
+    qtys = _extract_xinwang_quantities(lines)
+    qty = qtys[0] if qtys else 1
+
+    units = _extract_xinwang_unit_prices(lines)
+    valor = units[0] if units else int(neto)
+    if valor <= 0:
+        valor = int(neto)
+
+    return [_producto_sin_codigo(desc, qty, valor)]
 
 
 def _extract_productos_sin_codigo_xinwang(lines: list[str]) -> list[dict[str, Any]]:
@@ -2057,6 +2181,32 @@ def _extract_productos_sin_codigo_xinwang(lines: list[str]) -> list[dict[str, An
             seq = _extract_xinwang_unit_prices_sequential(lines, descs)
             if len(seq) == len(descs):
                 units = seq
+    if descs and not units:
+        neto, _, _ = _extract_montos("\n".join(lines))
+        if neto and neto >= 500:
+            n = len(descs)
+            total_qty = sum(qtys) if qtys else n
+            if total_qty <= 0:
+                total_qty = n
+            if n == 1:
+                return [
+                    _producto_sin_codigo(
+                        descs[0],
+                        qtys[0] if qtys else 1,
+                        int(neto),
+                    )
+                ]
+            per_item = int(round(neto / total_qty))
+            if per_item >= 100:
+                return [
+                    _producto_sin_codigo(
+                        descs[i],
+                        qtys[i] if i < len(qtys) else 1,
+                        per_item,
+                    )
+                    for i in range(n)
+                ]
+
     if not descs or not units:
         return []
     n = min(len(descs), len(units))

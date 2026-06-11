@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.utils import invoice_vision
@@ -9,20 +10,20 @@ from .registry import registry
 
 
 @registry.register
-class MundoParser(BaseInvoiceParser):
-    """Post-proceso columnar (Mundo Repuestos y DTE similares): re-extrae ítems del bundle columnar."""
+class XinwangParser(BaseInvoiceParser):
+    """Facturas Xinwang / Xingwang: ítems sin código, layout columnar intercalado."""
 
-    nombre = "mundo"
+    nombre = "xinwang"
 
     def matches(self, rut: str | None, ocr_text: str) -> bool:
-        texto = ocr_text or ""
-        if not texto.strip():
+        texto = (ocr_text or "").strip()
+        if not texto:
             return False
         texto_norm = invoice_vision._normalize_ocr_text(texto)
+        if re.search(r"xin\s*wang|xing\s*wang", texto_norm, re.IGNORECASE):
+            return True
         lines = [ln.strip() for ln in texto_norm.splitlines() if ln.strip()]
-        if invoice_vision._has_xinwang_column_layout(lines):
-            return False
-        return invoice_vision._looks_like_columnar_invoice(texto_norm, lines)
+        return invoice_vision._has_xinwang_column_layout(lines)
 
     def parse(self, data: dict[str, Any]) -> dict[str, Any]:
         texto = (data.get("ocr_texto_crudo") or "").strip()
@@ -31,17 +32,24 @@ class MundoParser(BaseInvoiceParser):
 
         texto_norm = invoice_vision._normalize_ocr_text(texto)
         lines = [ln.strip() for ln in texto_norm.splitlines() if ln.strip()]
-        if not invoice_vision._looks_like_columnar_invoice(texto_norm, lines):
+        if not invoice_vision._is_xinwang_invoice_text(lines):
             return data
         if invoice_vision._is_autotec_invoice_text(texto_norm, data.get("rut_proveedor")):
             return data
-        if invoice_vision._has_xinwang_column_layout(lines):
-            return data
 
-        rebuilt = invoice_vision._extract_productos_columnar_bundle(texto_norm, lines)
+        rebuilt: list[dict[str, Any]] = []
+        if invoice_vision._has_xinwang_column_layout(lines):
+            rebuilt = invoice_vision._extract_productos_sin_codigo_xinwang(lines)
+        if not rebuilt:
+            rebuilt = invoice_vision._xinwang_fallback_from_totals(
+                lines, data.get("total_neto")
+            )
+            if rebuilt:
+                data["productos_fuente"] = "xinwang_fallback_neto"
         if rebuilt:
             data["productos"] = rebuilt
-            data["productos_fuente"] = "mundo_columnar"
+            if not data.get("productos_fuente"):
+                data["productos_fuente"] = "xinwang_sin_codigo"
             data["productos_n"] = len(rebuilt)
             p0 = rebuilt[0]
             data["producto_codigo"] = p0.get("codigo_proveedor")
