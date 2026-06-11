@@ -3498,6 +3498,20 @@ def parsear_factura_chilena(texto: str) -> dict[str, Any]:
     reparar_productos_autotec_factura(resultado)
     resultado["productos_n"] = len(resultado.get("productos") or [])
 
+    # ── Registry de proveedores: parsers específicos toman precedencia ──
+    try:
+        from app.utils.invoice_providers import registry as _inv_registry
+        _specific = _inv_registry.find(
+            resultado.get("rut_proveedor"), texto_parse
+        )
+        if getattr(_specific, "nombre", "generico") not in ("generico", "autotec"):
+            resultado = _specific.parse(resultado)
+            resultado["productos_n"] = len(resultado.get("productos") or [])
+            resultado["ocr_parser_rev"] = getattr(_specific, "nombre", OCR_PARSER_REV)
+    except Exception:
+        pass
+    # ────────────────────────────────────────────────────────────────────
+
     if not resultado["productos"]:
         logger.warning(
             "OCR sin productos detectados (revisar codigo/cantidad en texto crudo)"
