@@ -255,6 +255,121 @@ def _extract_stacked_footer_iva_total(lines: list[str]) -> tuple[int | None, int
     return None, None
 
 
+def _dte_footer_line_value(line: str) -> int | None:
+    """Monto al final de una línea de pie DTE (ej. 'MONTO NETO 44.900')."""
+    m = re.search(r"([\d.,]+)\s*$", line or "")
+    if not m:
+        return None
+    return _parse_monto_chileno(m.group(1))
+
+
+def _extract_dte_footer_montos(lines: list[str]) -> tuple[int | None, int | None, int | None]:
+    """Pie factura electrónica chilena: MONTO NETO / IVA 19% / EXENTO / TOTAL."""
+    start = next(
+        (i for i, ln in enumerate(lines) if re.search(r"monto\s+neto", ln, re.IGNORECASE)),
+        None,
+    )
+    if start is None:
+        return None, None, None
+
+    footer = lines[start : start + 18]
+    labeled: dict[str, int] = {}
+    stacked: list[int] = []
+
+    for line in footer:
+        low = line.lower()
+        if re.search(r"monto\s+neto", low):
+            val = _dte_footer_line_value(line)
+            if val is not None and val >= 500:
+                labeled["neto"] = val
+            continue
+        if re.search(r"monto\s+(?:iva|na)\b", low) or (
+            "monto" in low and re.search(r"19\s*%", line)
+        ):
+            val = _dte_footer_line_value(line)
+            if val is not None and val >= 100:
+                labeled["iva"] = val
+            continue
+        if re.search(r"monto\s+total", low):
+            val = _dte_footer_line_value(line)
+            if val is not None and val >= 500:
+                labeled["total"] = val
+            continue
+        m = re.match(r"^[\$]?\s*([\d.,]+)\s*$", line)
+        if m:
+            val = _parse_monto_chileno(m.group(1))
+            if val is not None:
+                stacked.append(val)
+
+    neto = labeled.get("neto")
+    iva = labeled.get("iva")
+    total = labeled.get("total")
+
+    if stacked:
+        significant = [n for n in stacked if n >= 500]
+        if neto is None and significant:
+            neto = significant[0]
+        if iva is None and len(significant) >= 2:
+            iva = significant[1]
+        if total is None and significant:
+            total = significant[-1]
+
+    for idx in range(start, min(start + 18, len(lines))):
+        line = lines[idx]
+        nxt_val = None
+        for nxt in lines[idx + 1 : idx + 3]:
+            if re.search(r"monto\s", nxt, re.IGNORECASE):
+                break
+            m = re.match(r"^[\$]?\s*([\d.,]+)\s*$", nxt)
+            if m:
+                nxt_val = _parse_monto_chileno(m.group(1))
+                break
+        if nxt_val is None:
+            continue
+        low = line.lower()
+        if re.search(r"monto\s+neto", low) and neto is None:
+            neto = nxt_val
+        elif (
+            re.search(r"monto\s+(?:iva|na)\b", low)
+            or ("monto" in low and re.search(r"19\s*%", line))
+        ) and iva is None:
+            iva = nxt_val
+        elif re.search(r"monto\s+total", low) and total is None:
+            total = nxt_val
+
+    if neto is None:
+        return None, None, None
+    if iva is None and total is not None and total > neto:
+        iva = int(total - neto)
+    if total is None and iva is not None:
+        total = int(neto + iva)
+    if total is not None and iva is not None:
+        if abs(neto + iva - total) <= max(50, round(total * 0.02)):
+            return neto, iva, total
+    if neto and iva:
+        return neto, iva, int(neto + iva)
+    return None, None, None
+
+
+def _repair_swapped_dte_montos(
+    total_neto: int | None, iva: int | None, total: int | None
+) -> tuple[int | None, int | None, int | None]:
+    """Corrige OCR que pone el neto en la línea IVA y el IVA en la línea TOTAL."""
+    if iva is None or total is None or iva < 5000:
+        return total_neto, iva, total
+    esperado_iva = int(round(iva * 0.19))
+    tol = max(3, round(iva * 0.02))
+    if abs(total - esperado_iva) <= tol and iva > total * 2:
+        return iva, total, int(iva + total)
+    if (
+        total_neto is not None
+        and total < total_neto
+        and total_neto + iva > total
+    ):
+        return total_neto, iva, int(total_neto + iva)
+    return total_neto, iva, total
+
+
 def _pick_mejor_total_candidato(
     candidatos: list[int], total_neto: int | None
 ) -> int | None:
@@ -284,6 +399,10 @@ def _extract_montos(texto: str) -> tuple[int | None, int | None, int | None]:
     iva = None
     total = None
     lines = [ln.strip() for ln in (texto or "").splitlines() if ln.strip()]
+
+    dte_neto, dte_iva, dte_total = _extract_dte_footer_montos(lines)
+    if dte_neto is not None and dte_total is not None:
+        return dte_neto, dte_iva, dte_total
 
     neto_patterns = [
         r"MONTO\s+AFECTO\s*:?\s*\$?\s*([\d.,]+)",
@@ -427,6 +546,8 @@ def _extract_montos(texto: str) -> tuple[int | None, int | None, int | None]:
         if total_neto + iva != total and total_neto < 5000:
             total_neto = int(round(total / 1.19))
             iva = int(total - total_neto)
+
+    total_neto, iva, total = _repair_swapped_dte_montos(total_neto, iva, total)
 
     return total_neto, iva, total
 
