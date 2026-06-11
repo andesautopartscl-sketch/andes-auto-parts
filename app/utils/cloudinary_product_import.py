@@ -614,6 +614,26 @@ def download_image_from_url(url: str, *, max_bytes: int = 10 * 1024 * 1024) -> t
     return raw, ext, filename
 
 
+def imagen_ordenes_para_producto(sess, producto: Producto) -> dict:
+    """Órdenes ya usados en galería (compartidos por OEM si aplica)."""
+    oem = (producto.codigo_oem or "").strip().upper()
+    q = (
+        sess.query(ProductoImagen.orden)
+        .join(Producto, ProductoImagen.producto_codigo == Producto.codigo)
+        .filter(Producto.activo.is_(True))
+    )
+    if oem:
+        q = q.filter(func.upper(func.trim(Producto.codigo_oem)) == oem)
+    else:
+        q = q.filter(Producto.codigo == producto.codigo)
+    raw = [r[0] for r in q.all() if r[0] is not None]
+    ordenes = sorted({int(o) for o in raw})
+    siguiente = 0
+    while siguiente in ordenes:
+        siguiente += 1
+    return {"imagen_ordenes": ordenes, "imagen_siguiente_orden": siguiente}
+
+
 def resolver_producto_por_codigo(sess, code: str) -> dict:
     """Resuelve código escrito o detectado en nombre de archivo."""
     c = (code or "").strip().upper()
@@ -621,5 +641,14 @@ def resolver_producto_por_codigo(sess, code: str) -> dict:
         return {"found": False, "match_type": None, "codigo": ""}
     producto, match_type = find_producto_by_image_code(sess, c)
     if producto and match_type:
-        return producto_resolver_payload(producto, match_type)
-    return {"found": False, "match_type": None, "codigo": c, "display_codigo": c}
+        payload = producto_resolver_payload(producto, match_type)
+        payload.update(imagen_ordenes_para_producto(sess, producto))
+        return payload
+    return {
+        "found": False,
+        "match_type": None,
+        "codigo": c,
+        "display_codigo": c,
+        "imagen_ordenes": [],
+        "imagen_siguiente_orden": 0,
+    }

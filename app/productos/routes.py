@@ -498,12 +498,18 @@ def _collect_imagenes_producto(producto: Producto) -> list[str]:
                 own_rutas.append((img.ruta or "").strip())
     except Exception:
         pass
-    if own_rutas:
-        db_rows = own_rutas
-    else:
+    # Siempre usar OEM compartido si el producto tiene OEM configurado
+    # (incluye las propias + las de otros productos con mismo OEM)
+    oem = (getattr(producto, "codigo_oem", "") or "").strip()
+    if oem:
         db_rows = _imagenes_por_oem_compartido(producto)
-        if not db_rows and getattr(producto, "imagen_url", None):
-            db_rows.append((producto.imagen_url or "").strip())
+        # Si OEM no devolvió nada (no hay query results), usar propias
+        if not db_rows:
+            db_rows = own_rutas
+    else:
+        db_rows = own_rutas
+    if not db_rows and getattr(producto, "imagen_url", None):
+        db_rows.append((producto.imagen_url or "").strip())
     for r in db_rows:
         add(r)
 

@@ -11,12 +11,19 @@
 }
 .note { font-size:12px; color:#64748b; line-height:1.45; }
 .dropzone {
-  position:relative; border:2px dashed #94a3b8; border-radius:16px; min-height:200px;
+  position:relative; border:2px dashed #94a3b8; border-radius:16px; min-height:130px;
   background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   text-align:center; padding:28px 20px; cursor:pointer; transition:border-color .15s,background .15s;
 }
 .dropzone.is-dragover { border-color:#2563eb; background:#eff6ff; box-shadow:inset 0 0 0 1px rgba(37,99,235,.15); }
+.dropzone.has-items {
+  min-height:64px; padding:10px 24px;
+  display:flex; flex-direction:row; align-items:center; gap:14px;
+}
+.dropzone.has-items .dropzone-icon { font-size:26px; margin:0; opacity:.7; }
+.dropzone.has-items .dropzone-title { font-size:13px; margin:0; }
+.dropzone.has-items .dropzone-hint { display:none; }
 .dropzone-icon { font-size:42px; line-height:1; margin-bottom:10px; opacity:.85; }
 .dropzone-title { font-size:15px; font-weight:700; color:#0f172a; margin:0 0 6px; }
 .dropzone-hint { font-size:12px; color:#64748b; margin:0; max-width:520px; }
@@ -143,6 +150,36 @@ th.th-action,
 td.td-action {
   white-space: nowrap;
   vertical-align: middle;
+}
+.cola-nombre-input {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  width: 100%;
+  max-width: 180px;
+  background: #f8fafc;
+  color: #334155;
+}
+.cola-nombre-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  background: #fff;
+}
+.orden-wrap { min-width: 4.5em; }
+.orden-warn {
+  display: block;
+  font-size: 10px;
+  color: #b45309;
+  margin-top: 3px;
+  line-height: 1.3;
+  max-width: 140px;
+}
+.input-orden.is-conflict {
+  border-color: #f59e0b;
+  background: #fffbeb;
 }
 </style>
 {% endblock %}
@@ -433,8 +470,36 @@ td.td-action {
     return '';
   }
 
+  function stemFromNombre(nombre) {
+    return (nombre || '').replace(/\.[^.]+$/, '');
+  }
+
   function nombreCellHtml(item) {
-    return '<div class="nombre-cell"><span>' + (item.nombre || '') + '</span>' + detectBadgeHtml(item) + '</div>';
+    var stem = stemFromNombre(item.nombre);
+    return '<div class="nombre-cell">' +
+      '<span class="nombre-display">' + escapeHtml(item.nombre || '') + '</span>' +
+      detectBadgeHtml(item) +
+      '<input type="text" class="cola-nombre-input" value="' + escapeHtml(stem) + '" ' +
+      'title="Nombre en Cloudinary (sin extensión)" placeholder="nombre-archivo">' +
+      '</div>';
+  }
+
+  function bindNombreInput(item, input) {
+    if (!input || input.dataset.bound) return;
+    input.dataset.bound = '1';
+    input.addEventListener('input', function () {
+      var nuevoStem = this.value.trim().replace(/[^a-zA-Z0-9_\-]/g, '_');
+      if (nuevoStem) {
+        var ext = (item.nombre || '').match(/\.[^.]+$/) || ['.jpg'];
+        item.nombre = nuevoStem + ext[0];
+        this.value = nuevoStem;
+        var display = input.closest('.td-nombre');
+        if (display) {
+          var span = display.querySelector('.nombre-display');
+          if (span) span.textContent = item.nombre;
+        }
+      }
+    });
   }
 
   function productoCellHtml(item) {
@@ -467,14 +532,122 @@ td.td-action {
     return code + (it.descripcion ? ' — ' + it.descripcion : '');
   }
 
+  function applyOrdenesFromResolver(item, j) {
+    item.imagenOrdenes = (j && j.imagen_ordenes) ? j.imagen_ordenes.slice() : [];
+    item.imagenSiguienteOrden = (j && j.imagen_siguiente_orden != null) ? j.imagen_siguiente_orden : 0;
+  }
+
+  function ordenesOcupadosParaItem(item, excludeSelf) {
+    var ocupados = (item.imagenOrdenes || []).slice();
+    var cod = (item.codigo || '').toUpperCase();
+    if (!cod) return ocupados;
+    queue.forEach(function (q) {
+      if (excludeSelf && q.id === item.id) return;
+      if (q.status === 'done') return;
+      if (normalizeTipo(q.tipoImagen) !== 'producto') return;
+      if ((q.codigo || '').toUpperCase() !== cod) return;
+      var o = q.orden != null ? q.orden : 0;
+      if (ocupados.indexOf(o) < 0) ocupados.push(o);
+    });
+    return ocupados.sort(function (a, b) { return a - b; });
+  }
+
+  function siguienteOrdenLibre(item) {
+    var ocupados = ordenesOcupadosParaItem(item, true);
+    var sig = 0;
+    while (ocupados.indexOf(sig) >= 0) sig++;
+    return sig;
+  }
+
+  function clearOrdenWarning(tr) {
+    if (!tr) return;
+    var warn = tr.querySelector('.orden-warn');
+    var inp = tr.querySelector('.input-orden');
+    if (warn) {
+      warn.textContent = '';
+      warn.hidden = true;
+    }
+    if (inp) inp.classList.remove('is-conflict');
+  }
+
+  function showOrdenWarning(tr, text) {
+    if (!tr) return;
+    var warn = tr.querySelector('.orden-warn');
+    var inp = tr.querySelector('.input-orden');
+    if (warn) {
+      warn.textContent = text;
+      warn.hidden = false;
+    }
+    if (inp) inp.classList.add('is-conflict');
+  }
+
+  function ordenEnConflicto(item, orden) {
+    if (normalizeTipo(item.tipoImagen) !== 'producto') return false;
+    var cod = (item.codigo || '').toUpperCase();
+    if (!cod) return false;
+    var dbOrdenes = item.imagenOrdenes || [];
+    if (dbOrdenes.indexOf(orden) >= 0) return true;
+    var conflict = false;
+    queue.forEach(function (q) {
+      if (q.id === item.id || q.status === 'done') return;
+      if (normalizeTipo(q.tipoImagen) !== 'producto') return;
+      if ((q.codigo || '').toUpperCase() !== cod) return;
+      var o = q.orden != null ? q.orden : 0;
+      if (o === orden) conflict = true;
+    });
+    return conflict;
+  }
+
+  function validateOrdenItem(item, ordenVal, tr, autoFix) {
+    if (normalizeTipo(item.tipoImagen) !== 'producto') {
+      clearOrdenWarning(tr);
+      return true;
+    }
+    var orden = parseInt(ordenVal, 10);
+    if (isNaN(orden)) orden = 0;
+    orden = Math.max(0, Math.min(99, orden));
+    if (!ordenEnConflicto(item, orden)) {
+      clearOrdenWarning(tr);
+      item.orden = orden;
+      return true;
+    }
+    var sug = siguienteOrdenLibre(item);
+    showOrdenWarning(
+      tr,
+      'Ya hay una imagen con orden ' + orden + ' para este OEM. Usa orden ' + sug + '.'
+    );
+    if (autoFix) {
+      item.orden = sug;
+      var inp = tr ? tr.querySelector('.input-orden') : null;
+      if (inp) inp.value = String(sug);
+    }
+    return false;
+  }
+
+  function syncOrdenTrasResolver(item) {
+    var tr = tbody.querySelector('tr[data-id="' + item.id + '"]');
+    if (!tr || normalizeTipo(item.tipoImagen) !== 'producto') return;
+    var inp = tr.querySelector('.input-orden');
+    var cur = inp ? parseInt(inp.value, 10) : (item.orden != null ? item.orden : 0);
+    if (isNaN(cur)) cur = 0;
+    if (ordenEnConflicto(item, cur)) {
+      var sug = siguienteOrdenLibre(item);
+      item.orden = sug;
+      if (inp) inp.value = String(sug);
+      validateOrdenItem(item, sug, tr, false);
+    }
+  }
+
   function applyResolverToItem(item, j, stemForDetect) {
     if (j && j.found) {
       item.producto = j;
       item.codigo = j.display_codigo || j.oem || j.codigo || stemForDetect || '';
       item.detectMatchType = j.match_type || 'oem';
+      applyOrdenesFromResolver(item, j);
     } else {
       item.producto = j ? j : { found: false };
       item.detectMatchType = (stemForDetect || item.codigo) ? 'sin' : null;
+      applyOrdenesFromResolver(item, j || {});
     }
   }
 
@@ -496,6 +669,7 @@ td.td-action {
     var conCodigo = queue.filter(function (q) { return (q.codigo || '').trim(); }).length;
     colaResumen.textContent = queue.length + ' imagen(es) en cola · ' + conCodigo + ' con código asignado';
     secAsign.hidden = queue.length === 0;
+    dropzone.classList.toggle('has-items', queue.length > 0);
   }
 
   function removeFromQueue(item) {
@@ -516,6 +690,31 @@ td.td-action {
     }
   }
 
+  function bindOrdenInput(item, input) {
+    if (!input || input.dataset.boundOrden) return;
+    input.dataset.boundOrden = '1';
+    function onOrdenChange() {
+      var v = parseInt(input.value, 10);
+      item.orden = isNaN(v) ? 0 : Math.max(0, Math.min(99, v));
+      input.value = String(item.orden);
+      validateOrdenItem(item, item.orden, input.closest('tr'), true);
+    }
+    input.addEventListener('change', onOrdenChange);
+    input.addEventListener('blur', onOrdenChange);
+  }
+
+  function registrarOrdenSubido(codigo, orden) {
+    var cod = (codigo || '').toUpperCase();
+    if (!cod) return;
+    queue.forEach(function (q) {
+      if ((q.codigo || '').toUpperCase() !== cod) return;
+      if (!q.imagenOrdenes) q.imagenOrdenes = [];
+      if (q.imagenOrdenes.indexOf(orden) < 0) q.imagenOrdenes.push(orden);
+      q.imagenOrdenes.sort(function (a, b) { return a - b; });
+      q.imagenSiguienteOrden = siguienteOrdenLibre(q);
+    });
+  }
+
   function bindCodigoInput(item, input, suggestUl) {
     var debounceSearch = null;
     var debounceResolve = null;
@@ -533,6 +732,10 @@ td.td-action {
       suggestUl.hidden = true;
       refreshProducto();
       refreshNombreBadge(item);
+      fetchResolver(item.codigo).then(function (j) {
+        applyOrdenesFromResolver(item, j);
+        syncOrdenTrasResolver(item);
+      });
     }
 
     input.addEventListener('input', function () {
@@ -565,6 +768,7 @@ td.td-action {
           if (j.found) input.value = item.codigo;
           refreshProducto();
           refreshNombreBadge(item);
+          syncOrdenTrasResolver(item);
         });
       }, 420);
     });
@@ -584,22 +788,19 @@ td.td-action {
       '<td class="td-codigo"><div class="codigo-wrap"><input type="text" autocomplete="off" spellcheck="false" placeholder="Código OEM o interno" value="' + (item.codigo || '') + '"><ul class="codigo-suggest" hidden></ul></div></td>' +
       '<td class="td-producto"></td>' +
       '<td class="td-progress"></td>' +
-      '<td class="td-orden"><input type="number" min="0" max="99" value="' + (item.orden != null ? item.orden : 0) + '" class="input-orden" style="width:4em" title="0 = principal"></td>' +
+      '<td class="td-orden"><div class="orden-wrap"><input type="number" min="0" max="99" value="' + (item.orden != null ? item.orden : 0) + '" class="input-orden" style="width:4em" title="0 = principal (portada)"><span class="orden-warn" hidden></span></div></td>' +
       '<td class="td-action"><div class="cola-action-cell">' +
       '<button type="button" class="btn btn-primary btn-subir-uno">Subir</button>' +
       '<button type="button" class="btn-remove-cola" title="Quitar de la lista" aria-label="Quitar de la lista">&#10005;</button>' +
       '</div></td>';
     tbody.appendChild(tr);
     tr.querySelector('.td-nombre').innerHTML = nombreCellHtml(item);
+    bindNombreInput(item, tr.querySelector('.cola-nombre-input'));
     bindTipoCell(item, tr.querySelector('.td-tipo'));
     tr.querySelector('.td-producto').innerHTML = productoCellHtml(item);
     tr.querySelector('.td-progress').innerHTML = progressCellHtml(item);
     bindCodigoInput(item, tr.querySelector('.codigo-wrap input'), tr.querySelector('.codigo-suggest'));
-    tr.querySelector('.input-orden').addEventListener('change', function () {
-      var v = parseInt(this.value, 10);
-      item.orden = isNaN(v) ? 0 : Math.max(0, Math.min(99, v));
-      this.value = String(item.orden);
-    });
+    bindOrdenInput(item, tr.querySelector('.input-orden'));
     tr.querySelector('.btn-subir-uno').addEventListener('click', function () {
       uploadItem(item);
     });
@@ -642,7 +843,9 @@ td.td-action {
       status: 'pending',
       progress: 0,
       uploadResult: null,
-      orden: queue.filter(function (q) { return (q.codigo || '').toUpperCase() === (stem || '').toUpperCase() && stem; }).length
+      orden: 0,
+      imagenOrdenes: [],
+      imagenSiguienteOrden: 0
     };
     queue.push(item);
     renderRow(item);
@@ -661,6 +864,8 @@ td.td-action {
         tr.querySelector('.codigo-wrap input').value = item.codigo || '';
         tr.querySelector('.td-producto').innerHTML = productoCellHtml(item);
         tr.querySelector('.td-nombre').innerHTML = nombreCellHtml(item);
+        bindNombreInput(item, tr.querySelector('.cola-nombre-input'));
+        syncOrdenTrasResolver(item);
       }
     });
   }
@@ -682,7 +887,9 @@ td.td-action {
       status: 'pending',
       progress: 0,
       uploadResult: null,
-      detectMatchType: 'sin'
+      detectMatchType: 'sin',
+      imagenOrdenes: [],
+      imagenSiguienteOrden: 0
     };
     queue.push(item);
     renderRow(item);
@@ -694,7 +901,24 @@ td.td-action {
 
   function refreshNombreBadge(it) {
     var tr = tbody.querySelector('tr[data-id="' + it.id + '"]');
-    if (tr) tr.querySelector('.td-nombre').innerHTML = nombreCellHtml(it);
+    if (!tr) return;
+    var cell = tr.querySelector('.td-nombre');
+    var input = cell.querySelector('.cola-nombre-input');
+    if (input) {
+      var display = cell.querySelector('.nombre-display');
+      if (display) display.textContent = it.nombre || '';
+      cell.querySelectorAll('.badge-detect').forEach(function (el) { el.remove(); });
+      if (display) {
+        var badge = detectBadgeHtml(it);
+        if (badge) display.insertAdjacentHTML('afterend', badge);
+      }
+      if (document.activeElement !== input) {
+        input.value = stemFromNombre(it.nombre);
+      }
+    } else {
+      cell.innerHTML = nombreCellHtml(it);
+      bindNombreInput(it, cell.querySelector('.cola-nombre-input'));
+    }
   }
 
   function addFilesFromList(fileList) {
@@ -820,6 +1044,14 @@ td.td-action {
         resolve(item);
         return;
       }
+      var trPre = tbody.querySelector('tr[data-id="' + item.id + '"]');
+      var ordInpPre = trPre ? trPre.querySelector('.input-orden') : null;
+      var ordenPre = ordInpPre ? parseInt(ordInpPre.value, 10) : (item.orden != null ? item.orden : 0);
+      if (isNaN(ordenPre)) ordenPre = 0;
+      if (!validateOrdenItem(item, ordenPre, trPre, true)) {
+        ordenPre = item.orden;
+      }
+
       item.status = 'uploading';
       item.progress = 5;
       refreshRow(item);
@@ -872,6 +1104,9 @@ td.td-action {
               codigo: j.producto_codigo || item.codigo,
               descripcion: j.producto_descripcion || ''
             };
+          }
+          if (normalizeTipo(item.tipoImagen) === 'producto') {
+            registrarOrdenSubido(item.codigo, item.orden);
           }
           refreshRow(item);
           resolve(item);
@@ -934,11 +1169,12 @@ td.td-action {
       resumenFinal.textContent =
         'Completado: ' + ok + ' vinculada(s), ' + sinProd + ' subida(s) sin producto en BD, ' +
         err + ' error(es). Total procesadas: ' + pending.length + '.';
-      showMsg('Subida masiva finalizada.', true);
+      showMsg('Subida masiva finalizada. La lista se limpiará en 8 segundos…', true);
+      setTimeout(limpiarCola, 8000);
     });
   });
 
-  btnLimpiar.addEventListener('click', function () {
+  function limpiarCola() {
     if (uploadingAll) return;
     queue.forEach(function (q) {
       if (q.preview) URL.revokeObjectURL(q.preview);
@@ -948,8 +1184,11 @@ td.td-action {
     secAsign.hidden = true;
     secResumen.hidden = true;
     msg.style.display = 'none';
+    toolbarHint.textContent = '';
     updateColaResumen();
-  });
+  }
+
+  btnLimpiar.addEventListener('click', limpiarCola);
 
   document.addEventListener('paste', function (e) {
     try {
