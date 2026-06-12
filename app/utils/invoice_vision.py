@@ -1105,8 +1105,75 @@ def _extract_cantidades_seccion(lines: list[str], indices: dict[str, int]) -> li
     return _extract_cantidades_descripciones(lines)
 
 
+def _is_mundo_footer_price_stop(line: str) -> bool:
+    low = (line or "").lower().strip().strip(":").strip()
+    if any(low.startswith(p) for p in _SECTION_STOP_PREFIXES):
+        return True
+    if re.fullmatch(r"(?:neto|total)\s*:?\s*", low, re.IGNORECASE):
+        return True
+    if low.startswith("19%") or "i.v.a" in low or low.startswith("iva"):
+        return True
+    return False
+
+
+def _footer_montos_factura(texto: str) -> set[int]:
+    neto, iva, total = _extract_montos(texto)
+    return {int(x) for x in (neto, iva, total) if x}
+
+
+def _filter_footer_montos_from_precios(
+    precios: list[int], texto: str | None = None
+) -> list[int]:
+    if not precios or not texto:
+        return precios
+    footer = _footer_montos_factura(texto)
+    if not footer:
+        return precios
+    return [p for p in precios if p not in footer]
+
+
+def _append_chilean_price_line(precios: list[int], line: str) -> None:
+    if not _is_chilean_price_line(line):
+        return
+    m = _PRICE_LINE_RE.match((line or "").strip())
+    if not m:
+        return
+    val = _parse_monto_chileno(m.group(1))
+    if val is not None and val >= 50:
+        precios.append(val)
+
+
+def _find_precio_unit_header_index(lines: list[str]) -> int | None:
+    for idx, line in enumerate(lines):
+        low = line.lower().strip().strip(":").strip()
+        if low.startswith("precio unit"):
+            return idx
+    return None
+
+
+def _extract_precios_unit_seccion(lines: list[str], indices: dict[str, int]) -> list[int]:
+    """Bloque Precio Unit.: montos unitarios (Mundo Repuestos, a veces tras el timbre)."""
+    start_idx = _find_precio_unit_header_index(lines)
+    if start_idx is None:
+        return []
+
+    precios: list[int] = []
+    for line in lines[start_idx + 1 :]:
+        if _line_section_header(line) == "valor":
+            break
+        if _is_mundo_footer_price_stop(line):
+            break
+        if _QTY_DESC_RE.match(line):
+            continue
+        parsed = _parse_codigo_line_producto(line)
+        if parsed and _is_product_code_token(parsed):
+            continue
+        _append_chilean_price_line(precios, line)
+    return precios
+
+
 def _extract_precios_valor_seccion(lines: list[str], indices: dict[str, int]) -> list[int]:
-    """Bloque Valor: precios sueltos tras encabezado Valor."""
+    """Bloque Valor: totales de línea tras encabezado Valor."""
     if "valor" not in indices:
         return []
 
@@ -1117,17 +1184,9 @@ def _extract_precios_valor_seccion(lines: list[str], indices: dict[str, int]) ->
             continue
         if _QTY_DESC_RE.match(line):
             continue
-        low = line.lower().strip().strip(":").strip()
-        if any(low.startswith(p) for p in _SECTION_STOP_PREFIXES):
+        if _is_mundo_footer_price_stop(line):
             break
-        if re.fullmatch(r"(?:neto|total)\s*:?\s*", low, re.IGNORECASE):
-            break
-        m = _PRICE_LINE_RE.match(line)
-        if not m:
-            continue
-        val = _parse_monto_chileno(m.group(1))
-        if val is not None and val >= 50:
-            precios.append(val)
+        _append_chilean_price_line(precios, line)
     return precios
 
 
@@ -1143,22 +1202,47 @@ def _extract_precios_valor_antes_tabla(lines: list[str]) -> list[int]:
                 break
             if _line_section_header(lines[j]) in ("codigo", "cantidad", "descripcion"):
                 break
+            if _is_mundo_footer_price_stop(lines[j]):
+                break
             parsed = _parse_codigo_line_producto(lines[j])
             if parsed and _is_product_code_token(parsed):
                 break
             if _QTY_DESC_RE.match(lines[j]):
                 break
-            if not _is_chilean_price_line(lines[j]):
-                continue
-            m = _PRICE_LINE_RE.match(lines[j].strip())
-            if not m:
-                continue
-            val = _parse_monto_chileno(m.group(1))
-            if val is not None and val >= 50:
-                bloque.append(val)
-        if len(bloque) >= 4:
+            _append_chilean_price_line(bloque, lines[j])
+        if len(bloque) > len(precios):
             precios = bloque
     return precios
+
+
+def _extract_precios_mundo_columnar(
+    lines: list[str],
+    indices: dict[str, int],
+    texto: str,
+    n_items: int,
+) -> tuple[list[int], bool]:
+    """Unitarios Mundo: Precio Unit. > bloque mixto > Valor (totales de línea).
+
+    Returns (precios, son_unitarios).
+    """
+    unit = _filter_footer_montos_from_precios(
+        _extract_precios_unit_seccion(lines, indices), texto
+    )
+    if n_items > 0 and len(unit) >= n_items:
+        return unit[:n_items], True
+
+    valor = _filter_footer_montos_from_precios(
+        _extract_precios_valor_seccion(lines, indices), texto
+    )
+    candidatos = _filter_footer_montos_from_precios(
+        _extract_precios_valor_antes_tabla(lines), texto
+    )
+    merged = candidatos or valor
+    if merged:
+        return merged, False
+    if unit:
+        return unit, True
+    return valor, False
 
 
 def _suma_productos_neto(productos: list[dict[str, Any]]) -> int:
@@ -1338,8 +1422,12 @@ def _extract_productos_columnas(lines: list[str]) -> list[dict[str, Any]]:
         codigos_zone = _collect_codigos_columnas_zone(lines, start, end)
         cantidades_zone = _collect_cantidades_columnas_zone(lines, start, end)
         precios_zone = _collect_precios_columnas_zone(lines, start, end)
+        precios_son_unitarios = False
         if not precios_zone:
-            precios_zone = _extract_precios_valor_antes_tabla(lines)
+            precios_zone, precios_son_unitarios = _extract_precios_mundo_columnar(
+                lines, indices, "\n".join(lines), len(codigos_zone)
+            )
+        texto_col = "\n".join(lines)
         if len(codigos_zone) >= 2:
             n = len(codigos_zone)
             if len(precios_zone) >= 2 * n:
@@ -1367,7 +1455,12 @@ def _extract_productos_columnas(lines: list[str]) -> list[dict[str, Any]]:
                     )
                 return productos
             if cantidades_zone and precios_zone:
-                unit_prices = _select_unit_prices(precios_zone, cantidades_zone)
+                unit_prices = _select_unit_prices(
+                    precios_zone,
+                    cantidades_zone,
+                    texto_col,
+                    precios_son_unitarios,
+                )
                 n = min(len(codigos_zone), len(cantidades_zone), len(unit_prices))
                 if n > 0:
                     return [
@@ -1384,11 +1477,17 @@ def _extract_productos_columnas(lines: list[str]) -> list[dict[str, Any]]:
         return []
 
     cantidades = _extract_cantidades_seccion(lines, indices)
-    precios_raw = _extract_precios_valor_seccion(lines, indices)
+    texto_col = "\n".join(lines)
+    precios_raw, precios_son_unitarios = _extract_precios_mundo_columnar(
+        lines, indices, texto_col, len(codigos)
+    )
     if not precios_raw:
         precios_raw = _extract_precios_candidatos(lines, codigos)
+        precios_son_unitarios = False
 
-    unit_prices = _select_unit_prices(precios_raw, cantidades)
+    unit_prices = _select_unit_prices(
+        precios_raw, cantidades, texto_col, precios_son_unitarios
+    )
 
     n = min(len(codigos), len(cantidades), len(unit_prices))
     if n <= 0:
@@ -1476,15 +1575,67 @@ def _extract_precios_candidatos(lines: list[str], codigos: list[str]) -> list[in
     return precios
 
 
-def _select_unit_prices(precios: list[int], cantidades: list[int]) -> list[int]:
+def _mundo_unit_total_pairs_match(
+    units: list[int], totals: list[int], cantidades: list[int]
+) -> bool:
+    if len(units) != len(totals) or not units:
+        return False
+    ok = 0
+    for unit, total, qty_raw in zip(units, totals, cantidades):
+        qty = max(1, int(qty_raw or 1))
+        tol = max(5, int(round(unit * 0.02)))
+        if abs(unit * qty - total) <= max(tol, 5):
+            ok += 1
+    return ok >= max(1, len(units) - 1)
+
+
+def _unit_prices_from_line_totals(
+    precios: list[int], cantidades: list[int]
+) -> list[int]:
+    """Convierte totales de línea a unitario cuando cantidad > 1."""
+    units: list[int] = []
+    for precio, qty_raw in zip(precios, cantidades):
+        qty = max(1, int(qty_raw or 1))
+        if qty > 1:
+            implied = int(precio) // qty
+            tol = max(5, int(round(implied * 0.02)))
+            if abs(implied * qty - int(precio)) <= max(tol, 5):
+                units.append(implied)
+                continue
+        units.append(int(precio))
+    return units
+
+
+def _select_unit_prices(
+    precios: list[int],
+    cantidades: list[int],
+    texto: str | None = None,
+    precios_son_unitarios: bool = False,
+) -> list[int]:
     """Elige precio unitario por ítem, en orden de aparición en el OCR."""
     if not precios or not cantidades:
         return []
     n = len(cantidades)
+    precios = _filter_footer_montos_from_precios(list(precios), texto)
+    if not precios:
+        return []
+
     if len(precios) == n:
+        if precios_son_unitarios:
+            return precios[:n]
+        as_units = _unit_prices_from_line_totals(precios[:n], cantidades)
+        if as_units != precios[:n]:
+            return as_units
         return precios[:n]
 
-    # PDF columnas (Mundo Repuestos, etc.): N ítems → 2N montos (unitario, total línea).
+    # Mundo: bloque unitarios + bloque totales (no intercalados).
+    if len(precios) >= 2 * n:
+        units_split = precios[:n]
+        totals_split = precios[n : 2 * n]
+        if _mundo_unit_total_pairs_match(units_split, totals_split, cantidades):
+            return units_split
+
+    # PDF columnas: N ítems → 2N montos intercalados (unitario, total línea).
     if len(precios) >= 2 * n:
         units: list[int] = []
         for i in range(n):
@@ -1502,6 +1653,14 @@ def _select_unit_prices(precios: list[int], cantidades: list[int]) -> list[int]:
                         units.append(implied)
                         continue
             units.append(unit)
+        if _mundo_unit_total_pairs_match(
+            units,
+            [precios[i * 2 + 1] for i in range(n) if i * 2 + 1 < len(precios)],
+            cantidades,
+        ):
+            return units
+        if _mundo_unit_total_pairs_match(units_split, totals_split, cantidades):
+            return units_split
         return units
 
     price_set = set(precios)
@@ -3500,10 +3659,15 @@ def _extract_productos_columnar_bundle(
         if len(zone_qty) > len(cantidades):
             cantidades = zone_qty
 
-    precios_raw = _extract_precios_candidatos(lines, codigos)
+    precios_raw, precios_son_unitarios = _extract_precios_mundo_columnar(
+        lines, indices, texto_norm, len(codigos)
+    )
     if not precios_raw:
-        precios_raw = _extract_precios_valor_antes_tabla(lines)
-    unit_prices = _select_unit_prices(precios_raw, cantidades)
+        precios_raw = _extract_precios_candidatos(lines, codigos)
+        precios_son_unitarios = False
+    unit_prices = _select_unit_prices(
+        precios_raw, cantidades, texto_norm, precios_son_unitarios
+    )
 
     n = min(len(codigos), len(cantidades), len(unit_prices))
     productos: list[dict[str, Any]] = []
