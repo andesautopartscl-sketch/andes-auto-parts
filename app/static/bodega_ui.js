@@ -2675,6 +2675,26 @@
                 extractedList.appendChild(dd);
             }
 
+            function dlRowFactura(label, value, missingText) {
+                var dt = document.createElement("dt");
+                dt.textContent = label;
+                var dd = document.createElement("dd");
+                if (value === null || value === undefined || value === "") {
+                    dd.className = "ingreso-factura-missing";
+                    dd.textContent =
+                        missingText || "No detectada — revisá en el documento";
+                } else {
+                    dd.appendChild(document.createTextNode(String(value)));
+                    var tag = document.createElement("span");
+                    tag.className = "ingreso-factura-auto-tag";
+                    tag.textContent = "Auto";
+                    dd.appendChild(document.createTextNode(" "));
+                    dd.appendChild(tag);
+                }
+                extractedList.appendChild(dt);
+                extractedList.appendChild(dd);
+            }
+
             function coerceFacturaProductosArray(raw) {
                 if (Array.isArray(raw)) return raw;
                 if (raw && typeof raw === "object") {
@@ -3131,12 +3151,16 @@
                     markAutoFilled(numeroDocInput);
                     count++;
                 }
-                if (data.fecha && fechaInput) {
-                    var fv = fechaToInputValue(data.fecha);
-                    if (fv) {
-                        fechaInput.value = fv;
-                        markAutoFilled(fechaInput);
-                        count++;
+                if (fechaInput) {
+                    if (data.fecha) {
+                        var fv = fechaToInputValue(data.fecha);
+                        if (fv) {
+                            fechaInput.value = fv;
+                            markAutoFilled(fechaInput);
+                            count++;
+                        }
+                    } else {
+                        fechaInput.classList.remove("ingreso-auto-filled");
                     }
                 }
                 if (metodoPagoSel && data.metodo_pago) {
@@ -3235,7 +3259,12 @@
                         }
                         renderExtractedPreview(extractedData);
                         if (btnApply) btnApply.disabled = false;
-                        setStatus("Análisis listo. Revisá los datos y presioná «Aplicar datos».", null);
+                        setStatus(
+                            !extractedData.fecha
+                                ? "Análisis listo. No se pudo leer la fecha — revisá el documento o subí el PDF original."
+                                : "Análisis listo. Revisá los datos y presioná «Aplicar datos».",
+                            !extractedData.fecha ? "error" : null
+                        );
                     })
                     .catch(function (err) {
                         setStatus(err.message || "Error al analizar la factura.", "error");
@@ -3316,7 +3345,14 @@
                 btnApply.addEventListener("click", function () {
                     if (!extractedData) return;
                     applyExtractedData(extractedData);
-                    setStatus("Datos aplicados al formulario.", null);
+                    if (!extractedData.fecha) {
+                        setStatus(
+                            "Datos aplicados. Fecha no detectada: corregila manualmente en el formulario.",
+                            "error"
+                        );
+                    } else {
+                        setStatus("Datos aplicados al formulario.", null);
+                    }
                     closeModal();
                 });
             }

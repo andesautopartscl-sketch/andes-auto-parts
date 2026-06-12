@@ -6,6 +6,7 @@ import io
 import logging
 import os
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,7 @@ from google.cloud import vision
 from google.oauth2 import service_account
 
 # Identificador de revisión del parser (visible en respuesta API para depuración).
-OCR_PARSER_REV = "autotec-v7"
+OCR_PARSER_REV = "fecha-mundo-v8"
 
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 MAX_PDF_BYTES = 12 * 1024 * 1024
@@ -133,34 +134,231 @@ def _extract_rut_emisor(texto: str) -> str | None:
     return candidates[0][2]
 
 
+def _is_sii_resolution_date_context(texto: str, pos: int) -> bool:
+    """Fecha del pie timbre (Res. 80 del … / Verifique documento), no de emisión."""
+    ctx = texto[max(0, pos - 90) : min(len(texto), pos + 50)].lower()
+    if re.search(r"res\.?\s*\d+\s+del", ctx):
+        return True
+    if "verifique documento" in ctx or "www.sii.cl" in ctx or "sii.cl" in ctx:
+        return True
+    if "timbre electr" in ctx or "timbre electron" in ctx:
+        return True
+    if "resoluci" in ctx and ("sii" in ctx or "exenta" in ctx):
+        return True
+    return False
+
+
+def _fecha_iso_a_dd_mm_yyyy(y: int, mo: int, d: int) -> str | None:
+    if not (1 <= d <= 31 and 1 <= mo <= 12 and 1990 <= y <= 2100):
+        return None
+    return f"{d:02d}-{mo:02d}-{y}"
+
+
+def _extract_fecha_from_dte_pdf(pdf_bytes: bytes) -> str | None:
+    """Fecha de emisión desde XML embebido en PDF DTE chileno (FchEmis)."""
+    if not pdf_bytes:
+        return None
+
+    def from_text(blob: str) -> str | None:
+        for pat in (
+            r"<FchEmis>(\d{4})-(\d{2})-(\d{2})</FchEmis>",
+            r"FchEmis>(\d{4})-(\d{2})-(\d{2})",
+            r"FchEmis[\"']?\s*[:=]\s*[\"']?(\d{4})-(\d{2})-(\d{2})",
+        ):
+            m = re.search(pat, blob, re.IGNORECASE)
+            if m:
+                parsed = _fecha_iso_a_dd_mm_yyyy(
+                    int(m.group(1)), int(m.group(2)), int(m.group(3))
+                )
+                if parsed and int(m.group(1)) >= 2020:
+                    return parsed
+        return None
+
+    for encoding in ("utf-8", "latin-1"):
+        found = from_text(pdf_bytes.decode(encoding, errors="ignore"))
+        if found:
+            return found
+
+    try:
+        import fitz  # PyMuPDF
+
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+            for i in range(doc.embfile_count()):
+                content = doc.embfile_get(i)
+                if not content:
+                    continue
+                if isinstance(content, bytes):
+                    for encoding in ("utf-8", "latin-1"):
+                        found = from_text(content.decode(encoding, errors="ignore"))
+                        if found:
+                            return found
+                else:
+                    found = from_text(str(content))
+                    if found:
+                        return found
+            for xref in range(1, doc.xref_length()):
+                try:
+                    stream = doc.xref_stream(xref)
+                except Exception:
+                    continue
+                if not stream:
+                    continue
+                found = from_text(stream.decode("latin-1", errors="ignore"))
+                if found:
+                    return found
+    except Exception:
+        pass
+    return None
+
+
+def _extract_pdf_native_text(pdf_bytes: bytes) -> str:
+    """Texto nativo de la 1ª página (más fiable que OCR en PDFs DTE)."""
+    try:
+        import fitz  # PyMuPDF
+
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+            if doc.page_count < 1:
+                return ""
+            return (doc.load_page(0).get_text("text") or "").strip()
+    except Exception:
+        return ""
+
+
+def _ocr_document_header_text(image_bytes: bytes, cred_path: Path) -> str:
+    """OCR solo del encabezado (fechas de emisión suelen quedar arriba)."""
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        if img.mode in ("RGBA", "LA", "P"):
+            img = img.convert("RGB")
+        w, h = img.size
+        if w < 1 or h < 1:
+            return ""
+        top_h = max(int(h * 0.52), min(400, h))
+        crop = img.crop((0, 0, w, top_h))
+        cw, ch = crop.size
+        if cw < 1800:
+            scale = 1800 / cw
+            crop = crop.resize((int(cw * scale), int(ch * scale)), Image.LANCZOS)
+        buf = io.BytesIO()
+        crop.save(buf, format="PNG")
+        return _vision_ocr_text(buf.getvalue(), cred_path).strip()
+    except Exception:
+        return ""
+
+
+def _is_folio_day_confusion(texto: str, pos: int, d: int) -> bool:
+    """Evita tomar el prefijo del folio (Nº 123310 → día 12) como fecha."""
+    ctx = texto[max(0, pos - 50) : min(len(texto), pos + 30)]
+    m = re.search(r"N[°º]?\s*(\d{3,8})\b", ctx, re.IGNORECASE)
+    if not m:
+        return False
+    return m.group(1).startswith(f"{d:02d}")
+
+
 def _extract_fecha_emision(texto: str) -> str | None:
     """Detecta fecha de emisión; prioriza etiquetas y fechas recientes (>= 2020)."""
-    candidates: list[tuple[int, tuple[int, int, int]]] = []
+    candidates: list[tuple[int, int, tuple[int, int, int]]] = []
 
-    def add(d: int, mo: int, y: int, score: int) -> None:
+    def add(d: int, mo: int, y: int, score: int, pos: int = 0) -> None:
         if y < 100:
             y += 2000
         if not (1 <= d <= 31 and 1 <= mo <= 12 and 1990 <= y <= 2100):
             return
+        if _is_sii_resolution_date_context(texto, pos):
+            return
+        if score <= 60 and _is_folio_day_confusion(texto, pos, d):
+            return
         if y < 2020:
             score -= 40
-        candidates.append((score, (y, mo, d)))
+        candidates.append((score, pos, (y, mo, d)))
 
-    emision_label = r"(?:fecha\s*(?:de\s*)?emisi[oó]n|fecha\s+documento|fch\s*emisi[oó]n)"
+    emision_label = (
+        r"(?:emisi[oó]n|fecha\s*(?:de\s*)?emisi[oó]n|fecha\s+documento|fch\s*emisi[oó]n)"
+    )
+    otras_fechas_label = r"(?:fecha\s+de\s+compromiso|fecha\s+de\s+vencimiento)"
+    for m in re.finditer(
+        emision_label + r"[\s:]{0,30}(\d{4})\s+(\d{1,2})\s+(\d{1,2})\b",
+        texto,
+        re.IGNORECASE,
+    ):
+        add(int(m.group(3)), int(m.group(2)), int(m.group(1)), 155, m.start())
+    for m in re.finditer(
+        otras_fechas_label + r"[\s:]{0,30}(\d{4})\s+(\d{1,2})\s+(\d{1,2})\b",
+        texto,
+        re.IGNORECASE,
+    ):
+        add(int(m.group(3)), int(m.group(2)), int(m.group(1)), 140, m.start())
+    for m in re.finditer(
+        emision_label + r"[\s:]{0,20}(\d{4})-(\d{1,2})-(\d{1,2})\b",
+        texto,
+        re.IGNORECASE,
+    ):
+        add(int(m.group(3)), int(m.group(2)), int(m.group(1)), 155, m.start())
+    for m in re.finditer(
+        otras_fechas_label + r"[\s:]{0,20}(\d{4})-(\d{1,2})-(\d{1,2})\b",
+        texto,
+        re.IGNORECASE,
+    ):
+        add(int(m.group(3)), int(m.group(2)), int(m.group(1)), 140, m.start())
     for m in re.finditer(
         emision_label + r"[\s\S]{0,40}?(\d{4})\s*[-/.\s]\s*(\d{1,2})\s*[-/.\s]\s*(\d{1,2})",
         texto,
         re.IGNORECASE,
     ):
         if m.group(1) and m.group(2) and m.group(3):
-            add(int(m.group(3)), int(m.group(2)), int(m.group(1)), 130)
+            add(int(m.group(3)), int(m.group(2)), int(m.group(1)), 145, m.start())
+    for m in re.finditer(
+        otras_fechas_label + r"[\s\S]{0,40}?(\d{4})\s*[-/.\s]\s*(\d{1,2})\s*[-/.\s]\s*(\d{1,2})",
+        texto,
+        re.IGNORECASE,
+    ):
+        if m.group(1) and m.group(2) and m.group(3):
+            add(int(m.group(3)), int(m.group(2)), int(m.group(1)), 130, m.start())
     for m in re.finditer(
         emision_label + r"[\s\S]{0,40}?(\d{1,2})\s*[-/.\s]\s*(\d{1,2})\s*[-/.\s]\s*(\d{4})",
         texto,
         re.IGNORECASE,
     ):
         if m.group(1) and m.group(2) and m.group(3):
-            add(int(m.group(1)), int(m.group(2)), int(m.group(3)), 130)
+            add(int(m.group(1)), int(m.group(2)), int(m.group(3)), 145, m.start())
+    for m in re.finditer(
+        otras_fechas_label + r"[\s\S]{0,40}?(\d{1,2})\s*[-/.\s]\s*(\d{1,2})\s*[-/.\s]\s*(\d{4})",
+        texto,
+        re.IGNORECASE,
+    ):
+        if m.group(1) and m.group(2) and m.group(3):
+            add(int(m.group(1)), int(m.group(2)), int(m.group(3)), 130, m.start())
+
+    for m in re.finditer(r":\s*(\d{4})-(\d{1,2})-(\d{1,2})\b", texto):
+        add(int(m.group(3)), int(m.group(2)), int(m.group(1)), 120, m.start())
+
+    for m in re.finditer(r":\s*(\d{4})\s+(\d{1,2})\s+(\d{1,2})\b", texto):
+        add(int(m.group(3)), int(m.group(2)), int(m.group(1)), 120, m.start())
+
+    # DTE columnar: etiqueta en una línea, fecha varias líneas más abajo en la misma columna.
+    lines = texto.splitlines()
+    fecha_hdr = (
+        r"(?:emisi[oó]n|fecha\s*(?:de\s*)?emisi[oó]n|fecha\s+documento|fch\s*emisi[oó]n|"
+        r"fecha\s+de\s+vencimiento|fecha\s+de\s+compromiso)"
+    )
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not re.match(rf"^{fecha_hdr}\s*:?\s*$", stripped, re.IGNORECASE):
+            continue
+        pos = sum(len(lines[k]) + 1 for k in range(i))
+        is_emision = bool(re.search(r"emisi", stripped, re.IGNORECASE))
+        for j in range(i + 1, min(i + 28, len(lines))):
+            ln = lines[j].strip()
+            if re.match(rf"^{fecha_hdr}\s*:?\s*$", ln, re.IGNORECASE):
+                break
+            m = re.match(
+                r"^:?\s*(\d{4})[\s\-/]+(\d{1,2})[\s\-/]+(\d{1,2})\b",
+                ln,
+            )
+            if m:
+                score = 168 if is_emision else 148
+                add(int(m.group(3)), int(m.group(2)), int(m.group(1)), score, pos)
+                break
 
     _meses_es = (
         "enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|"
@@ -188,21 +386,41 @@ def _extract_fecha_emision(texto: str) -> str | None:
         }
         mo = meses_map.get(m.group(2).lower())
         if mo:
-            add(int(m.group(1)), mo, int(m.group(3)), 135)
+            add(int(m.group(1)), mo, int(m.group(3)), 135, m.start())
 
     for m in re.finditer(r"(\d{4})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})\b", texto):
-        add(int(m.group(3)), int(m.group(2)), int(m.group(1)), 85)
+        add(int(m.group(3)), int(m.group(2)), int(m.group(1)), 85, m.start())
 
     for m in re.finditer(r"\b(\d{2})[/-](\d{2})[/-](\d{4})\b", texto):
-        add(int(m.group(1)), int(m.group(2)), int(m.group(3)), 55)
+        add(int(m.group(1)), int(m.group(2)), int(m.group(3)), 55, m.start())
 
     if not candidates:
         return None
 
-    recent = [c for c in candidates if c[1][0] >= 2020]
-    pool = recent if recent else candidates
-    pool.sort(key=lambda c: (-c[0], -c[1][0], -c[1][1], -c[1][2]))
-    y, mo, d = pool[0][1]
+    recent = [c for c in candidates if c[2][0] >= 2020]
+    if not recent:
+        return None
+
+    max_score = max(c[0] for c in recent)
+    top = [c for c in recent if c[0] >= max_score - 5]
+    top.sort(key=lambda c: (-c[0], c[1]))
+
+    # Mismo mes/año con distinto día: preferir el día más repetido (no el mayor).
+    ym_groups: dict[tuple[int, int], list[tuple[int, int, tuple[int, int, int]]]] = {}
+    for c in top:
+        y, mo, d = c[2]
+        ym_groups.setdefault((y, mo), []).append(c)
+    if len(ym_groups) == 1:
+        group = next(iter(ym_groups.values()))
+        days = [c[2][2] for c in group]
+        if len(set(days)) > 1:
+            best_day = Counter(days).most_common(1)[0][0]
+            for c in sorted(group, key=lambda x: (-x[0], x[1])):
+                if c[2][2] == best_day:
+                    y, mo, d = c[2]
+                    return f"{d:02d}-{mo:02d}-{y}"
+
+    y, mo, d = top[0][2]
     return f"{d:02d}-{mo:02d}-{y}"
 
 
@@ -4089,12 +4307,44 @@ def analizar_factura(image_base64: str, media_type: str) -> dict[str, Any]:
     if len(image_bytes) > MAX_IMAGE_BYTES:
         raise ValueError("La imagen generada desde el PDF es demasiado grande (máx. 12 MB)")
 
-    texto = _vision_ocr_text(image_bytes, cred_path).strip()
-    if not texto:
+    texto_ocr = _vision_ocr_text(image_bytes, cred_path).strip()
+    if not texto_ocr:
         raise ValueError("No se detectó texto en el documento. Pruebe con mejor calidad.")
+
+    texto_parts: list[str] = []
+    pdf_native = ""
+    if mt == "application/pdf":
+        pdf_native = _extract_pdf_native_text(file_bytes)
+        if pdf_native:
+            texto_parts.append(pdf_native)
+    texto_parts.append(texto_ocr)
+    texto = "\n".join(texto_parts)
 
     resultado = parsear_factura_chilena(texto)
     resultado["ocr_texto_crudo"] = texto
+
+    if not resultado.get("fecha"):
+        if mt == "application/pdf":
+            fecha_xml = _extract_fecha_from_dte_pdf(file_bytes)
+            if fecha_xml:
+                resultado["fecha"] = fecha_xml
+                resultado["fecha_fuente"] = "dte_xml"
+            elif pdf_native:
+                fecha_native = _extract_fecha_emision(_normalize_ocr_text(pdf_native))
+                if fecha_native:
+                    resultado["fecha"] = fecha_native
+                    resultado["fecha_fuente"] = "pdf_text"
+
+    if not resultado.get("fecha"):
+        header_text = _ocr_document_header_text(image_bytes, cred_path)
+        if header_text:
+            fecha_hdr = _extract_fecha_emision(_normalize_ocr_text(header_text))
+            if fecha_hdr:
+                resultado["fecha"] = fecha_hdr
+                resultado["fecha_fuente"] = "ocr_header"
+                if header_text not in texto:
+                    resultado["ocr_texto_crudo"] = texto + "\n" + header_text
+
     if preview_base64:
         resultado["preview_base64"] = preview_base64
     return resultado

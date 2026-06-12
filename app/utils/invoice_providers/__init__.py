@@ -2,6 +2,9 @@
 
 Cada proveedor nuevo: crear un módulo en este paquete con @registry.register.
 Los parsers en invoice_vision.py no se modifican; solo se importan desde aquí.
+
+Antes de cambiar invoice_vision o un parser, correr regresión:
+  python scripts/test_invoice_parsers_regression.py
 """
 from __future__ import annotations
 

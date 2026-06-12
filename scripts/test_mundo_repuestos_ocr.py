@@ -16,7 +16,12 @@ try:
 except ImportError:
     pass
 
-from app.utils.invoice_vision import garantizar_producto_factura, parsear_factura_chilena
+from app.utils.invoice_vision import (
+    _extract_fecha_emision,
+    _extract_fecha_from_dte_pdf,
+    garantizar_producto_factura,
+    parsear_factura_chilena,
+)
 
 # OCR real (layout columnas separadas) — factura 122348
 OCR_FIXTURE_122348 = """
@@ -126,6 +131,67 @@ def test_fixture() -> None:
     _assert_productos(productos, EXPECTED_122348, "fixture 122348")
 
 
+def test_fecha_dte_xml() -> None:
+    pdf_stub = b"""%PDF-1.4
+1 0 obj<<>>endobj
+trailer<<>>
+<FchEmis>2026-06-11</FchEmis>
+%%EOF"""
+    fecha = _extract_fecha_from_dte_pdf(pdf_stub)
+    assert fecha == "11-06-2026", f"fecha XML esperada 11-06-2026, got {fecha}"
+    print("OK fecha DTE XML embebido\n")
+
+
+def test_fecha_emision_mundo_multiline() -> None:
+    ocr = """
+Emisión
+: 2026 06 11
+Fecha de Vencimiento
+Fecha de Compromiso
+: 2026 06 11
+"""
+    fecha = _extract_fecha_emision(ocr)
+    assert fecha == "11-06-2026", f"fecha multilínea esperada 11-06-2026, got {fecha}"
+    print("OK fecha emisión multilínea Mundo\n")
+
+
+def test_fecha_emision_mundo_columnar_lejos() -> None:
+    """Layout Mundo: fecha de emisión ~10 líneas bajo la etiqueta."""
+    ocr = """
+Emisión
+:ANDES AUTO PARTS LTDA
+78.074.288-7
+: LA CONCEPCION 81
+: Providencia
+: Santiago
+: 954806153
+: 2026-06-11
+Fecha de Vencimiento
+Fecha de Compromiso
+: 2026 06 11
+"""
+    fecha = _extract_fecha_emision(ocr)
+    assert fecha == "11-06-2026", f"fecha columnar esperada 11-06-2026, got {fecha}"
+    print("OK fecha emisión columnar Mundo (fecha lejos de etiqueta)\n")
+
+
+def test_fecha_emision_123310() -> None:
+    """Folio 123310 no debe empujar el día a 12 cuando emisión es 11."""
+    ocr = """
+MR MUNDO REPUESTOS S.A.
+FACTURA ELECTRONICA
+Nº 123310
+Emisión : 2026 06 11
+Fecha de Vencimiento : 2026 06 11
+Fecha de Compromiso : 2026 06 11
+: 2026-06-11
+: 2026-06-12
+"""
+    fecha = _extract_fecha_emision(ocr)
+    assert fecha == "11-06-2026", f"fecha esperada 11-06-2026, got {fecha}"
+    print("OK fecha emisión 123310 (día 11, no 12)\n")
+
+
 def test_fixture_123310() -> None:
     print("=" * 80)
     print("TEST FIXTURE OCR 123310 (2 ítems, bloques unit/total)")
@@ -154,6 +220,10 @@ def test_pdf_if_available() -> None:
 
 
 if __name__ == "__main__":
+    test_fecha_dte_xml()
+    test_fecha_emision_mundo_multiline()
+    test_fecha_emision_mundo_columnar_lejos()
+    test_fecha_emision_123310()
     test_fixture()
     test_fixture_123310()
     test_pdf_if_available()
