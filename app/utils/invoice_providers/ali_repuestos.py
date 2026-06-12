@@ -171,6 +171,29 @@ def _extract_footer(texto: str) -> dict[str, int | None]:
     }
 
 
+def _prorate_descuento_en_productos(
+    productos: list[dict[str, Any]], total_neto: int
+) -> list[dict[str, Any]]:
+    """Reparte el neto del pie cuando hay descuento y varios ítems (suma bruta > neto)."""
+    if not productos or total_neto <= 0:
+        return productos
+    gross = sum((p.get("cantidad") or 1) * (p.get("valor_neto") or 0) for p in productos)
+    if gross <= total_neto:
+        return productos
+    allocated = 0
+    last = len(productos) - 1
+    for i, p in enumerate(productos):
+        qty = p.get("cantidad") or 1
+        line_gross = qty * (p.get("valor_neto") or 0)
+        if i == last:
+            line_net = total_neto - allocated
+        else:
+            line_net = round(total_neto * line_gross / gross)
+            allocated += line_net
+        p["valor_neto"] = round(line_net / qty) if qty > 0 else line_net
+    return productos
+
+
 @registry.register
 class AliRepuestosParser(BaseInvoiceParser):
     """Factura térmica simple: Cant | Detalle | Precio Unit. | Total."""
@@ -187,19 +210,6 @@ class AliRepuestosParser(BaseInvoiceParser):
         texto = (data.get("ocr_texto_crudo") or "").strip()
         if not texto:
             return data
-
-        # DEBUG temporal — escribir OCR a archivo para diagnóstico
-        try:
-            import pathlib
-            _dbg_path = pathlib.Path("C:/AndesAutoParts/debug_ali_ocr.txt")
-            _dbg_path.write_text(
-                f"=== OCR CRUDO ===\n{texto}\n\n"
-                f"=== DATA KEYS ===\n{list(data.keys())}\n",
-                encoding="utf-8"
-            )
-        except Exception:
-            pass
-        # FIN DEBUG
 
         if not self.matches(data.get("rut_proveedor"), texto):
             return data
@@ -226,18 +236,19 @@ class AliRepuestosParser(BaseInvoiceParser):
         if footer.get("total") is not None:
             data["total"] = footer["total"]
 
-        # Recalcular valor_neto por unidad: total real ÷ cantidad
-        # (total ya tiene el descuento aplicado; esto reemplaza el
-        #  precio de lista que venía del OCR)
-        _total_real = data.get("total_neto")
-        if _total_real and data.get("productos"):
-            _prods = data["productos"]
-            for _p in _prods:
-                _qty = _p.get("cantidad") or 1
-                if _qty > 0:
-                    _p["valor_neto"] = round(_total_real / _qty)
-            data["productos"] = _prods
-            data["producto_valor_neto"] = _prods[0].get("valor_neto")
+        productos_list = data.get("productos") or []
+        total_neto = data.get("total_neto")
+        descuento = data.get("descuento") or 0
+        if productos_list and total_neto and descuento > 0:
+            if len(productos_list) == 1:
+                p0 = productos_list[0]
+                qty = p0.get("cantidad") or 1
+                if qty > 0:
+                    p0["valor_neto"] = round(total_neto / qty)
+            else:
+                productos_list = _prorate_descuento_en_productos(productos_list, total_neto)
+                data["productos"] = productos_list
+            data["producto_valor_neto"] = productos_list[0].get("valor_neto")
 
         if _rut_matches(data.get("rut_proveedor")) or not data.get("rut_proveedor"):
             data["rut_proveedor"] = _ALI_RUT

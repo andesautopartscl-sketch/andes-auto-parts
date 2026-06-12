@@ -70,6 +70,13 @@ def main() -> int:
     parachoque = _load_module("_test_xinwang_parachoque", "_test_xinwang_parachoque.py")
     _register(parachoque, "main", "xinwang.parachoque")
 
+    ali = _load_module("test_ali_repuestos_ocr", "test_ali_repuestos_ocr.py")
+    for fn_name in (
+        "test_fixture_34084_productos",
+        "test_fixture_single_item_descuento",
+    ):
+        _register(ali, fn_name, f"ali.{fn_name}")
+
     failed: list[str] = []
     print("=" * 72)
     print("REGRESIÓN PARSERS OCR (fixtures locales)")
