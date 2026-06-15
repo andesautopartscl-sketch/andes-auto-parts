@@ -77,6 +77,9 @@ def main() -> int:
     ):
         _register(ali, fn_name, f"ali.{fn_name}")
 
+    tecnicor = _load_module("test_tecnicor_ocr", "test_tecnicor_ocr.py")
+    _register(tecnicor, "test_fixture_3636124", "tecnicor.fixture_3636124")
+
     failed: list[str] = []
     print("=" * 72)
     print("REGRESIÓN PARSERS OCR (fixtures locales)")

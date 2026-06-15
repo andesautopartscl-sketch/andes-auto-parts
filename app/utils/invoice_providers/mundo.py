@@ -22,6 +22,10 @@ class MundoParser(BaseInvoiceParser):
         lines = [ln.strip() for ln in texto_norm.splitlines() if ln.strip()]
         if invoice_vision._has_xinwang_column_layout(lines):
             return False
+        from .tecnicor import is_tecnicor_invoice
+
+        if is_tecnicor_invoice(rut, texto_norm):
+            return False
         return invoice_vision._looks_like_columnar_invoice(texto_norm, lines)
 
     def parse(self, data: dict[str, Any]) -> dict[str, Any]:
