@@ -98,5 +98,23 @@ def test_repair_folio_en_neto() -> None:
     print("OK repuesto_center repair folio+total OCR\n")
 
 
+def test_repair_neto_cuadra_total_polluido() -> None:
+    """Neto correcto pero total OCR 652025 (folio+87560) → total 87560."""
+    from app.utils.invoice_vision import reconcile_factura_totals_con_lineas
+
+    productos = [
+        {"cantidad": 1, "valor_neto": 45680},
+        {"cantidad": 1, "valor_neto": 27900},
+    ]
+    neto, iva, total = reconcile_factura_totals_con_lineas(
+        productos, 73580, None, 652025
+    )
+    assert neto == 73580
+    assert iva == 13980
+    assert total == 87560
+
+
 if __name__ == "__main__":
     test_fixture_564465()
+    test_repair_folio_en_neto()
+    test_repair_neto_cuadra_total_polluido()

@@ -3056,6 +3056,31 @@
                 }
             }
 
+            function totalConIvaDesdeProductos(prods) {
+                if (!prods || !prods.length) return null;
+                var sum = 0;
+                prods.forEach(function (p) {
+                    var c = Number(p.cantidad);
+                    if (!isFinite(c) || c <= 0) c = 1;
+                    var v = Number(p.valor_neto);
+                    if (!isFinite(v) || v <= 0) return;
+                    sum += c * v;
+                });
+                if (sum <= 0) return null;
+                return Math.round(sum * 1.19);
+            }
+
+            function reconcileExtractedTotal(data) {
+                var prods = ensureFacturaProductos(data);
+                var esperado = totalConIvaDesdeProductos(prods);
+                if (esperado == null) return data.total;
+                var total = Number(data.total);
+                if (!isFinite(total) || total <= 0) return esperado;
+                var tol = Math.max(50, Math.round(esperado * 0.02));
+                if (Math.abs(total - esperado) > tol) return esperado;
+                return total;
+            }
+
             function isIngresoRowEmpty(row) {
                 if (!row) return true;
                 var code = row.querySelector("input[name='codigo_producto[]']");
@@ -3171,18 +3196,19 @@
                         count++;
                     }
                 }
-                if (inpTotalFactura && data.total != null && data.total !== "") {
-                    inpTotalFactura.value = formatMontoInput(data.total);
-                    markAutoFilled(inpTotalFactura);
-                    count++;
-                }
-
                 if (data.rut_proveedor && setIngresoSupplierRut(data.rut_proveedor, { search: true })) {
                     markAutoFilled(rutInput);
                     count++;
                 }
 
                 count += applyProductsFromFactura(ensureFacturaProductos(data));
+
+                var totalAplicar = reconcileExtractedTotal(data);
+                if (inpTotalFactura && totalAplicar != null && totalAplicar !== "") {
+                    inpTotalFactura.value = formatMontoInput(totalAplicar);
+                    markAutoFilled(inpTotalFactura);
+                    count++;
+                }
 
                 showFacturaAutoBadge(count);
                 return count;
@@ -3397,6 +3423,7 @@
         var fpInput = root.querySelector("#fp");
         var fpPorCodigoJsonInput = root.querySelector("#fp_por_codigo_json");
         var labelSearchInput = root.querySelector("#label-search");
+        var labelSearchBtn = root.querySelector("#label-search-btn");
         var labelSearchResults = root.querySelector("#label-search-results");
         var sheet = root.querySelector("#sheet");
         var printModeSelect = root.querySelector("#printMode");
@@ -3860,9 +3887,28 @@
             timer = setTimeout(refreshPreview, 380);
         }
 
+        function runLabelProductSearchNow() {
+            if (searchTimer) clearTimeout(searchTimer);
+            searchProductsForLabels();
+        }
+
         if (codigosInput) codigosInput.addEventListener("input", debounce);
         if (fpInput) fpInput.addEventListener("input", debounce);
-        if (labelSearchInput) labelSearchInput.addEventListener("input", debounceProductSearch);
+        if (labelSearchInput) {
+            labelSearchInput.addEventListener("input", debounceProductSearch);
+            labelSearchInput.addEventListener("keydown", function (e) {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    runLabelProductSearchNow();
+                }
+            });
+        }
+        if (labelSearchBtn) {
+            labelSearchBtn.addEventListener("click", function () {
+                if (labelSearchInput) labelSearchInput.focus();
+                runLabelProductSearchNow();
+            });
+        }
         if (printModeSelect) {
             printModeSelect.addEventListener("change", function () {
                 applyPrintMode(printModeSelect.value);

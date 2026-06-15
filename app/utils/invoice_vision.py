@@ -645,13 +645,13 @@ def reconcile_factura_totals_con_lineas(
     if total is None and total_neto and iva:
         total = int(total_neto + iva)
 
-    if (
-        total_neto
-        and iva
-        and total
-        and abs(total_neto + iva - total) > max(50, round(total * 0.02))
-        and neto_cuadra
-    ):
+    total_esperado_civa = int(round(suma * 1.19))
+    tol_cierre = max(50, round(suma * 0.02))
+    neto_ok = total_neto is not None and abs(suma - total_neto) <= max(2, len(productos))
+
+    if neto_ok and suma > 0:
+        if total is None or abs(total - total_esperado_civa) > tol_cierre:
+            total = total_esperado_civa
         iva = int(total - total_neto)
 
     return total_neto, iva, total

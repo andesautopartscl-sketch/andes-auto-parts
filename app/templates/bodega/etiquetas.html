@@ -542,12 +542,49 @@
     gap: 8px;
 }
 
+.search-assist-input-wrap {
+    position: relative;
+    width: 100%;
+    display: block;
+}
+
 .search-assist-input {
     width: 100%;
     border: 1px solid #dbe3ef;
     border-radius: 10px;
-    padding: 8px 10px;
+    padding: 8px 40px 8px 10px;
     font-size: 13px;
+    box-sizing: border-box;
+}
+
+.search-assist-search-btn {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 0;
+    background: transparent;
+    color: #475569;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 2;
+    padding: 0;
+}
+
+.search-assist-search-btn:hover {
+    background: #eef6ff;
+    color: #1d4ed8;
+}
+
+.search-assist-search-btn:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 1px;
 }
 
 .search-assist-results {
@@ -1245,8 +1282,13 @@ html[data-print-mode="thermal"] .barcode img {
         <div class="search-assist">
             <p class="search-assist-title">Búsqueda Inteligente de Productos</p>
             <div class="search-assist-row">
-                <input id="label-search" class="search-assist-input" type="text" placeholder="Buscar por código, OEM o descripción..." autocomplete="off">
-                <div class="search-help">Escribe al menos 2 caracteres. Elige cantidad y pulsa <strong>Agregar</strong> (o escribe a mano en el campo de arriba).</div>
+                <div class="search-assist-input-wrap">
+                    <input id="label-search" class="search-assist-input" type="search" placeholder="Buscar por código, OEM o descripción..." autocomplete="off" enterkeyhint="search">
+                    <button type="button" id="label-search-btn" class="search-assist-search-btn" title="Buscar productos" aria-label="Buscar productos">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    </button>
+                </div>
+                <div class="search-help">Escribe al menos 2 caracteres y pulsa la <strong>lupa</strong> o <strong>Enter</strong>. Elige cantidad y pulsa <strong>Agregar</strong> (o escribe a mano en el campo de arriba).</div>
                 <div id="label-search-results" class="search-assist-results"></div>
             </div>
         </div>
@@ -1315,12 +1357,30 @@ html[data-print-mode="thermal"] .barcode img {
     const codigosInput = document.getElementById('codigos');
     const fpInput = document.getElementById('fp');
     const labelSearchInput = document.getElementById('label-search');
+    const labelSearchBtn = document.getElementById('label-search-btn');
     const labelSearchResults = document.getElementById('label-search-results');
     const sheet = document.getElementById('sheet');
 
+    function runLabelProductSearchNow() {
+        if (searchTimer) {
+            clearTimeout(searchTimer);
+            searchTimer = null;
+        }
+        searchProductsForLabels();
+    }
+
     if (labelSearchInput) {
         labelSearchInput.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') e.preventDefault();
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                runLabelProductSearchNow();
+            }
+        });
+    }
+    if (labelSearchBtn) {
+        labelSearchBtn.addEventListener('click', function () {
+            if (labelSearchInput) labelSearchInput.focus();
+            runLabelProductSearchNow();
         });
     }
     if (labelSearchResults) {
