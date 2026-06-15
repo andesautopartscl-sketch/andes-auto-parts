@@ -17,7 +17,7 @@ from app.extensions import db
 from app.seguridad.models import Usuario
 from app.ventas.models import DocumentoVenta, Proveedor
 from app.utils.decorators import admin_required, login_required
-from app.utils.invoice_vision import analizar_factura, garantizar_producto_factura
+from app.utils.invoice_vision import analizar_factura, garantizar_producto_factura, reconcile_factura_totals_con_lineas
 from app.utils.invoice_providers import registry as invoice_parser_registry
 from app.utils.codigo_matcher import aplicar_fuzzy_a_productos
 from app.utils.permissions import has_permission
@@ -2075,6 +2075,22 @@ def api_analizar_factura():
             data.get("rut_proveedor"), data.get("ocr_texto_crudo") or ""
         )
         data = parser.parse(data)
+        data["ocr_parser_rev"] = getattr(parser, "nombre", data.get("ocr_parser_rev"))
+
+        productos = data.get("productos") or []
+        if productos:
+            neto, iva, total = reconcile_factura_totals_con_lineas(
+                productos,
+                data.get("total_neto"),
+                data.get("iva"),
+                data.get("total"),
+            )
+            if neto is not None:
+                data["total_neto"] = neto
+            if iva is not None:
+                data["iva"] = iva
+            if total is not None:
+                data["total"] = total
 
         total_neto = data.get("total_neto")
         productos = data.get("productos") or []

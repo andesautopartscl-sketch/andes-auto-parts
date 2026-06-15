@@ -80,6 +80,10 @@ def main() -> int:
     tecnicor = _load_module("test_tecnicor_ocr", "test_tecnicor_ocr.py")
     _register(tecnicor, "test_fixture_3636124", "tecnicor.fixture_3636124")
 
+    rc = _load_module("test_repuesto_center_ocr", "test_repuesto_center_ocr.py")
+    for fn_name in ("test_fixture_564465", "test_repair_folio_en_neto"):
+        _register(rc, fn_name, f"repuesto_center.{fn_name}")
+
     failed: list[str] = []
     print("=" * 72)
     print("REGRESIÓN PARSERS OCR (fixtures locales)")

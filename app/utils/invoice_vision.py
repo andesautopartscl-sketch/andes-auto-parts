@@ -588,6 +588,75 @@ def _repair_swapped_dte_montos(
     return total_neto, iva, total
 
 
+def reconcile_factura_totals_con_lineas(
+    productos: list[dict[str, Any]],
+    total_neto: int | None,
+    iva: int | None,
+    total: int | None,
+) -> tuple[int | None, int | None, int | None]:
+    """Alinea neto/IVA/total con la suma de líneas cuando el OCR mezcla folio o totales."""
+    suma = sum((p.get("cantidad") or 1) * (p.get("valor_neto") or 0) for p in productos)
+    if suma <= 0:
+        return total_neto, iva, total
+
+    total_con_iva_esperado = int(round(suma * 1.19))
+    tol = max(50, round(suma * 0.02))
+    neto_cuadra = total_neto is not None and abs(suma - total_neto) <= max(2, len(productos))
+
+    if iva and abs(iva - total_con_iva_esperado) <= tol and not neto_cuadra:
+        total = iva
+        total_neto = suma
+        iva = int(total - total_neto)
+        return total_neto, iva, total
+
+    if total_neto and abs(total_neto - total_con_iva_esperado) <= tol:
+        if total is None or total == total_neto:
+            total = total_neto
+        total_neto = suma
+        iva = int(total - total_neto) if total else int(round(suma * 0.19))
+
+    if iva is not None and (iva > 500_000 or (total_neto and iva > total_neto and neto_cuadra)):
+        iva = None
+
+    if total_neto and not neto_cuadra:
+        if total and abs(total_con_iva_esperado - total) <= tol:
+            total_neto = suma
+            iva = int(total - suma)
+        elif total and total_neto and abs(total_neto + (iva or 0) - total) <= max(
+            50, round(total * 0.02)
+        ):
+            if iva and abs(iva - total_con_iva_esperado) <= tol:
+                total = iva
+                total_neto = suma
+                iva = int(total - total_neto)
+            else:
+                total_neto = suma
+                iva = int(round(suma * 0.19))
+                total = int(total_neto + iva)
+        elif total and abs(total - total_con_iva_esperado) > tol:
+            total_neto = suma
+            iva = int(round(suma * 0.19))
+            total = int(total_neto + iva)
+
+    if total_neto is None and suma:
+        total_neto = suma
+    if iva is None and total_neto:
+        iva = int(round(total_neto * 0.19))
+    if total is None and total_neto and iva:
+        total = int(total_neto + iva)
+
+    if (
+        total_neto
+        and iva
+        and total
+        and abs(total_neto + iva - total) > max(50, round(total * 0.02))
+        and neto_cuadra
+    ):
+        iva = int(total - total_neto)
+
+    return total_neto, iva, total
+
+
 def _pick_mejor_total_candidato(
     candidatos: list[int], total_neto: int | None
 ) -> int | None:
