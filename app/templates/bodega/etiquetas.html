@@ -673,6 +673,81 @@
     padding: 0 2px;
 }
 
+.etiquetas-product-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 1200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.etiquetas-product-modal.open {
+    display: flex;
+}
+
+.etiquetas-product-modal-card {
+    width: min(920px, 100%);
+    max-height: min(85vh, 720px);
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #dbe4f0;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.etiquetas-product-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 14px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.etiquetas-product-modal-head h3 {
+    margin: 0;
+    font-size: 15px;
+    color: #0f172a;
+}
+
+.etiquetas-product-modal-body {
+    padding: 12px 14px;
+    overflow: auto;
+}
+
+.etiquetas-product-search {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.etiquetas-product-search input {
+    min-height: 38px;
+    padding: 8px 12px;
+    font-size: 13px;
+    border: 1px solid #dbe3ef;
+    border-radius: 10px;
+}
+
+.etiquetas-product-search-status {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 8px;
+}
+
+.etiquetas-product-modal-results {
+    display: grid;
+    gap: 6px;
+    max-height: 52vh;
+    overflow: auto;
+}
+
 #printMode {
     width: auto;
     min-width: 6.75rem;
@@ -1288,11 +1363,28 @@ html[data-print-mode="thermal"] .barcode img {
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                     </button>
                 </div>
-                <div class="search-help">Escribe al menos 2 caracteres y pulsa la <strong>lupa</strong> o <strong>Enter</strong>. Elige cantidad y pulsa <strong>Agregar</strong> (o escribe a mano en el campo de arriba).</div>
-                <div id="label-search-results" class="search-assist-results"></div>
+                <div class="search-help">Escribe al menos 2 caracteres y pulsa la <strong>lupa</strong> para abrir el buscador. Elige cantidad y pulsa <strong>Agregar</strong> (o escribe a mano en el campo de códigos de arriba).</div>
+                <div id="label-search-results" class="search-assist-results" hidden></div>
             </div>
         </div>
     </form>
+</div>
+
+<div id="etiquetasProductModal" class="etiquetas-product-modal no-print" aria-hidden="true">
+    <div class="etiquetas-product-modal-card" role="dialog" aria-modal="true" aria-labelledby="etiquetasProductModalTitle">
+        <div class="etiquetas-product-modal-head">
+            <h3 id="etiquetasProductModalTitle">Buscar y agregar productos</h3>
+            <button type="button" class="btn" id="etiquetasProductModalClose">Cerrar</button>
+        </div>
+        <div class="etiquetas-product-modal-body">
+            <div class="etiquetas-product-search">
+                <input id="etiquetasProductSearchInput" type="search" placeholder="Buscar por código, OEM o descripción..." autocomplete="off" enterkeyhint="search">
+                <button type="button" class="btn btn-primary" id="etiquetasProductSearchBtn">Buscar</button>
+            </div>
+            <div id="etiquetasProductSearchStatus" class="etiquetas-product-search-status">Escribe al menos 2 caracteres y pulsa Buscar.</div>
+            <div id="etiquetasProductSearchResults" class="etiquetas-product-modal-results"></div>
+        </div>
+    </div>
 </div>
 
 <section id="sheet" class="sheet">
@@ -1359,30 +1451,156 @@ html[data-print-mode="thermal"] .barcode img {
     const labelSearchInput = document.getElementById('label-search');
     const labelSearchBtn = document.getElementById('label-search-btn');
     const labelSearchResults = document.getElementById('label-search-results');
+    const etiquetasProductModal = document.getElementById('etiquetasProductModal');
+    const etiquetasProductModalClose = document.getElementById('etiquetasProductModalClose');
+    const etiquetasProductSearchInput = document.getElementById('etiquetasProductSearchInput');
+    const etiquetasProductSearchBtn = document.getElementById('etiquetasProductSearchBtn');
+    const etiquetasProductSearchStatus = document.getElementById('etiquetasProductSearchStatus');
+    const etiquetasProductSearchResults = document.getElementById('etiquetasProductSearchResults');
+    const URL_ETIQUETAS_BUSCAR = '{{ url_for("bodega.etiquetas_buscar_productos") }}';
     const sheet = document.getElementById('sheet');
 
-    function runLabelProductSearchNow() {
-        if (searchTimer) {
-            clearTimeout(searchTimer);
-            searchTimer = null;
+    function bindSearchResultRows(container) {
+        if (!container) return;
+        container.querySelectorAll('.search-add-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var row = btn.closest('.search-assist-item');
+                var qtyIn = row ? row.querySelector('.search-qty-input') : null;
+                var q = qtyIn ? qtyIn.value : 1;
+                mergeCodeIntoField(btn.getAttribute('data-code'), q);
+                if (codigosInput) codigosInput.focus();
+            });
+        });
+    }
+
+    function buildSearchResultsHtml(items, searchTerm) {
+        return items.map(function (item) {
+            return '' +
+                '<div class="search-assist-item">' +
+                    '<div class="search-chip"><strong>' + highlightText(item.codigo || '', searchTerm) + '</strong></div>' +
+                    '<div class="search-chip muted">OEM: ' + highlightText(item.codigo_oem || '—', searchTerm) + '</div>' +
+                    '<div class="search-chip" title="' + escapeHtml(item.descripcion || '') + '">' + highlightText(item.descripcion || '', searchTerm) + '</div>' +
+                    '<div class="search-assist-actions">' +
+                        '<label class="search-qty-label">Cant. <input type="number" class="search-qty-input" min="1" max="50" step="1" value="1" aria-label="Cantidad"></label>' +
+                        '<button type="button" class="search-add-btn" data-code="' + escapeHtml(item.codigo || '') + '">Agregar</button>' +
+                    '</div>' +
+                '</div>';
+        }).join('');
+    }
+
+    function renderSearchResultsIn(container, items, searchTerm) {
+        if (!container) return;
+        if (!items || !items.length) {
+            container.innerHTML = '<div class="search-help">Sin resultados para esta búsqueda.</div>';
+            return;
         }
-        searchProductsForLabels();
+        container.innerHTML = buildSearchResultsHtml(items, searchTerm);
+        bindSearchResultRows(container);
+    }
+
+    function closeEtiquetasProductModal() {
+        if (!etiquetasProductModal) return;
+        etiquetasProductModal.classList.remove('open');
+        etiquetasProductModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function searchProductsInModal() {
+        var q = (etiquetasProductSearchInput && etiquetasProductSearchInput.value || '').trim();
+        if (!etiquetasProductSearchResults) return;
+        if (q.length < 2) {
+            if (etiquetasProductSearchStatus) {
+                etiquetasProductSearchStatus.textContent = 'Escribe al menos 2 caracteres.';
+            }
+            etiquetasProductSearchResults.innerHTML = '';
+            return;
+        }
+        if (etiquetasProductSearchStatus) etiquetasProductSearchStatus.textContent = 'Buscando...';
+        fetch(URL_ETIQUETAS_BUSCAR + '?q=' + encodeURIComponent(q), {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (!data || !data.success) {
+                    if (etiquetasProductSearchStatus) {
+                        etiquetasProductSearchStatus.textContent = 'No se pudo obtener resultados.';
+                    }
+                    etiquetasProductSearchResults.innerHTML = '';
+                    return;
+                }
+                var items = data.items || [];
+                if (etiquetasProductSearchStatus) {
+                    etiquetasProductSearchStatus.textContent = items.length
+                        ? (items.length + ' resultado(s).')
+                        : 'Sin resultados para esta búsqueda.';
+                }
+                renderSearchResultsIn(etiquetasProductSearchResults, items, q);
+            })
+            .catch(function () {
+                if (etiquetasProductSearchStatus) {
+                    etiquetasProductSearchStatus.textContent = 'Error al buscar productos.';
+                }
+                etiquetasProductSearchResults.innerHTML = '';
+            });
+    }
+
+    function openEtiquetasProductModal() {
+        if (!etiquetasProductModal) return;
+        var preset = (labelSearchInput && labelSearchInput.value || '').trim();
+        etiquetasProductModal.classList.add('open');
+        etiquetasProductModal.setAttribute('aria-hidden', 'false');
+        if (etiquetasProductSearchInput) {
+            etiquetasProductSearchInput.value = preset;
+            setTimeout(function () {
+                etiquetasProductSearchInput.focus();
+                if (preset.length >= 2) searchProductsInModal();
+            }, 20);
+        } else if (preset.length >= 2) {
+            searchProductsInModal();
+        } else if (etiquetasProductSearchStatus) {
+            etiquetasProductSearchStatus.textContent = 'Escribe al menos 2 caracteres y pulsa Buscar.';
+        }
+        if (etiquetasProductSearchResults) etiquetasProductSearchResults.innerHTML = '';
     }
 
     if (labelSearchInput) {
         labelSearchInput.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                runLabelProductSearchNow();
+                openEtiquetasProductModal();
             }
         });
     }
     if (labelSearchBtn) {
         labelSearchBtn.addEventListener('click', function () {
-            if (labelSearchInput) labelSearchInput.focus();
-            runLabelProductSearchNow();
+            openEtiquetasProductModal();
         });
     }
+    if (etiquetasProductModalClose) {
+        etiquetasProductModalClose.addEventListener('click', closeEtiquetasProductModal);
+    }
+    if (etiquetasProductModal) {
+        etiquetasProductModal.addEventListener('click', function (e) {
+            if (e.target === etiquetasProductModal) closeEtiquetasProductModal();
+        });
+    }
+    if (etiquetasProductSearchBtn) {
+        etiquetasProductSearchBtn.addEventListener('click', searchProductsInModal);
+    }
+    if (etiquetasProductSearchInput) {
+        etiquetasProductSearchInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                searchProductsInModal();
+            }
+            if (e.key === 'Escape') closeEtiquetasProductModal();
+        });
+    }
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && etiquetasProductModal && etiquetasProductModal.classList.contains('open')) {
+            closeEtiquetasProductModal();
+        }
+    });
     if (labelSearchResults) {
         labelSearchResults.addEventListener('keydown', function (e) {
             if (e.key === 'Enter' && e.target && e.target.classList && e.target.classList.contains('search-qty-input')) {
@@ -2058,34 +2276,7 @@ html[data-print-mode="thermal"] .barcode img {
     }
 
     function renderSearchResults(items, searchTerm) {
-        if (!labelSearchResults) return;
-        if (!items || !items.length) {
-            labelSearchResults.innerHTML = '<div class="search-help">Sin resultados para esta búsqueda.</div>';
-            return;
-        }
-
-        labelSearchResults.innerHTML = items.map(function (item) {
-            return '' +
-                '<div class="search-assist-item">' +
-                    '<div class="search-chip"><strong>' + highlightText(item.codigo || '', searchTerm) + '</strong></div>' +
-                    '<div class="search-chip muted">OEM: ' + highlightText(item.codigo_oem || '—', searchTerm) + '</div>' +
-                    '<div class="search-chip" title="' + escapeHtml(item.descripcion || '') + '">' + highlightText(item.descripcion || '', searchTerm) + '</div>' +
-                    '<div class="search-assist-actions">' +
-                        '<label class="search-qty-label">Cant. <input type="number" class="search-qty-input" min="1" max="50" step="1" value="1" aria-label="Cantidad"></label>' +
-                        '<button type="button" class="search-add-btn" data-code="' + escapeHtml(item.codigo || '') + '">Agregar</button>' +
-                    '</div>' +
-                '</div>';
-        }).join('');
-
-        labelSearchResults.querySelectorAll('.search-add-btn').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                var row = btn.closest('.search-assist-item');
-                var qtyIn = row ? row.querySelector('.search-qty-input') : null;
-                var q = qtyIn ? qtyIn.value : 1;
-                mergeCodeIntoField(btn.getAttribute('data-code'), q);
-                codigosInput.focus();
-            });
-        });
+        renderSearchResultsIn(labelSearchResults, items, searchTerm);
     }
 
     let searchTimer = null;
@@ -2097,7 +2288,7 @@ html[data-print-mode="thermal"] .barcode img {
             return;
         }
 
-        fetch('{{ url_for("bodega.etiquetas_buscar_productos") }}?q=' + encodeURIComponent(q), {
+        fetch(URL_ETIQUETAS_BUSCAR + '?q=' + encodeURIComponent(q), {
             method: 'GET',
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
@@ -2601,7 +2792,7 @@ html[data-print-mode="thermal"] .barcode img {
             refreshPreviewAfterFpSync();
         });
     }
-    if (labelSearchInput) labelSearchInput.addEventListener('input', debounceProductSearch);
+    /* Búsqueda inline desactivada: resultados van al modal (lupa / Enter). */
     if (printModeSelect) {
         printModeSelect.addEventListener('change', function () {
             applyPrintMode(printModeSelect.value);
