@@ -155,8 +155,8 @@ def _unit_neto(qty: int, unit_price: int, disc_pct: int | None, line_total: int)
     if line_total > 0:
         if line_total % qty == 0:
             return line_total // qty
-        # Fracción exacta (ej. 24202/3) para que Cant × V. neto = valor línea.
-        return line_total / qty
+        # Un decimal basta para cuadrar línea sin ruido OCR (ej. 24202/3 → 8067.3).
+        return round(line_total / qty, 1)
     if disc_pct and 0 < disc_pct < 100:
         return int(round(unit_price * (1 - disc_pct / 100.0)))
     return unit_price

@@ -419,6 +419,34 @@
             return v;
         }
 
+        /** Redondeo unitario: entero o 1 decimal (sin 8067.333333…). */
+        function roundValorNetoUnitario(n) {
+            var v = Number(n);
+            if (!isFinite(v)) {
+                return null;
+            }
+            if (Math.abs(v - Math.round(v)) < 1e-9) {
+                return Math.round(v);
+            }
+            return Math.round(v * 10) / 10;
+        }
+
+        function formatValorNetoUnitario(n) {
+            var v = roundValorNetoUnitario(n);
+            if (v === null) {
+                return String(n == null ? "" : n);
+            }
+            try {
+                var frac = Math.abs(v - Math.round(v)) < 1e-9 ? 0 : 1;
+                return v.toLocaleString("es-CL", {
+                    minimumFractionDigits: frac,
+                    maximumFractionDigits: 1,
+                });
+            } catch (fmtErr) {
+                return String(v);
+            }
+        }
+
         /** Valor neto unitario para POST: sin separador de miles (evita 8.500 → 8.5 en Python). */
         function valorNetoToRawString(n) {
             if (n === null || n === undefined || n === "") {
@@ -428,10 +456,14 @@
             if (isNaN(v)) {
                 return String(n).trim();
             }
-            if (Math.abs(v - Math.round(v)) < 1e-9) {
-                return String(Math.round(v));
+            var rounded = roundValorNetoUnitario(v);
+            if (rounded === null) {
+                return "";
             }
-            return String(v);
+            if (Math.abs(rounded - Math.round(rounded)) < 1e-9) {
+                return String(Math.round(rounded));
+            }
+            return rounded.toFixed(1);
         }
 
         function readValorNetoIngresoInput(inp) {
@@ -462,9 +494,7 @@
                     var rawStr = valorNetoToRawString(parsed);
                     inp.setAttribute("data-raw", rawStr);
                     try {
-                        inp.value = Number(rawStr).toLocaleString("es-CL", {
-                            maximumFractionDigits: 2,
-                        });
+                        inp.value = formatValorNetoUnitario(rawStr);
                     } catch (fmtErr) {
                         inp.value = rawStr;
                     }
@@ -486,7 +516,11 @@
                 return;
             }
             inp.setAttribute("data-raw", raw);
-            inp.value = raw;
+            try {
+                inp.value = formatValorNetoUnitario(raw);
+            } catch (fmtSetErr) {
+                inp.value = raw;
+            }
         }
 
         function syncValorNetoInputsForSubmit() {
@@ -2932,7 +2966,7 @@
                     tdNeto.className = "num";
                     tdNeto.textContent =
                         p.valor_neto != null && p.valor_neto !== ""
-                            ? formatMontoInput(p.valor_neto)
+                            ? formatValorNetoUnitario(p.valor_neto)
                             : "—";
                     tr.appendChild(tdCode);
                     tr.appendChild(tdCant);
@@ -2992,7 +3026,7 @@
                     dlRow("Cantidad", p0.cantidad);
                 }
                 if (p0 && p0.valor_neto != null && p0.valor_neto !== "") {
-                    dlRow("V. neto unit.", p0.valor_neto);
+                    dlRow("V. neto unit.", formatValorNetoUnitario(p0.valor_neto));
                 }
                 extractedBox.hidden = false;
                 window.setTimeout(function () {
