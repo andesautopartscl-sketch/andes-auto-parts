@@ -3210,6 +3210,7 @@
                     count++;
                 }
 
+                updateIngresoTotals();
                 showFacturaAutoBadge(count);
                 return count;
             }

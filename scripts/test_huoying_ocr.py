@@ -67,7 +67,8 @@ def test_fixture_39039() -> None:
     p = productos[0]
     assert p.get("cantidad") == 3
     assert p.get("descripcion", "").lower().startswith("balancin maxus")
-    assert p.get("valor_neto") == 8067, p.get("valor_neto")
+    vn = p.get("valor_neto")
+    assert vn is not None and abs(float(vn) * 3 - 24202) < 0.01, vn
     assert data.get("metodo_pago") == "contado"
     assert data.get("productos_fuente") == "huoying_columnar"
     print("OK huoying fixture 39039\n")

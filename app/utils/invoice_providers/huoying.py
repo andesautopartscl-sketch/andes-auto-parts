@@ -149,11 +149,14 @@ def _extract_value_rows(lines: list[str]) -> list[tuple[int, int, int | None, in
     return rows
 
 
-def _unit_neto(qty: int, unit_price: int, disc_pct: int | None, line_total: int) -> int:
+def _unit_neto(qty: int, unit_price: int, disc_pct: int | None, line_total: int) -> int | float:
     if qty <= 0:
         return unit_price
-    if line_total > 0 and line_total < unit_price * qty * 0.99:
-        return int(round(line_total / qty))
+    if line_total > 0:
+        if line_total % qty == 0:
+            return line_total // qty
+        # Fracción exacta (ej. 24202/3) para que Cant × V. neto = valor línea.
+        return line_total / qty
     if disc_pct and 0 < disc_pct < 100:
         return int(round(unit_price * (1 - disc_pct / 100.0)))
     return unit_price
