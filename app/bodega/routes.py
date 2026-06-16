@@ -585,9 +585,18 @@ def _buscar_productos_para_etiquetas(search_term: str, limit: int = 30):
     is_numeric = compact.isdigit()
     like = f"%{term}%"
     starts = f"{term}%"
+    safe_limit = max(1, min(limit, 100))
+
+    _like_fields = """
+        UPPER(CODIGO) LIKE UPPER(:like)
+        OR UPPER(COALESCE([CODIGO OEM], '')) LIKE UPPER(:like)
+        OR UPPER(COALESCE(DESCRIPCION, '')) LIKE UPPER(:like)
+        OR UPPER(COALESCE(MODELO, '')) LIKE UPPER(:like)
+        OR UPPER(COALESCE(MARCA, '')) LIKE UPPER(:like)
+    """
 
     query = text(
-        """
+        f"""
         SELECT
             CODIGO AS codigo,
             COALESCE(DESCRIPCION, '') AS descripcion,
@@ -595,20 +604,17 @@ def _buscar_productos_para_etiquetas(search_term: str, limit: int = 30):
             COALESCE([CODIGO OEM], '') AS codigo_oem
         FROM productos
         WHERE COALESCE(ACTIVO, 1) = 1
-          AND (
-            UPPER(CODIGO) LIKE UPPER(:like)
-            OR UPPER(COALESCE([CODIGO OEM], '')) LIKE UPPER(:like)
-            OR UPPER(COALESCE(DESCRIPCION, '')) LIKE UPPER(:like)
-          )
+          AND ({_like_fields})
         ORDER BY
             CASE
                 WHEN :is_numeric = 1 AND UPPER(CODIGO) LIKE UPPER(:starts) THEN 0
                 WHEN :is_numeric = 1 AND UPPER(COALESCE([CODIGO OEM], '')) LIKE UPPER(:starts) THEN 1
                 WHEN :is_numeric = 1 AND UPPER(COALESCE(DESCRIPCION, '')) LIKE UPPER(:starts) THEN 2
                 WHEN :is_numeric = 0 AND UPPER(COALESCE(DESCRIPCION, '')) LIKE UPPER(:starts) THEN 0
-                WHEN :is_numeric = 0 AND UPPER(COALESCE([CODIGO OEM], '')) LIKE UPPER(:starts) THEN 1
-                WHEN :is_numeric = 0 AND UPPER(CODIGO) LIKE UPPER(:starts) THEN 2
-                ELSE 3
+                WHEN :is_numeric = 0 AND UPPER(COALESCE(MODELO, '')) LIKE UPPER(:starts) THEN 1
+                WHEN :is_numeric = 0 AND UPPER(COALESCE([CODIGO OEM], '')) LIKE UPPER(:starts) THEN 2
+                WHEN :is_numeric = 0 AND UPPER(CODIGO) LIKE UPPER(:starts) THEN 3
+                ELSE 4
             END,
             LENGTH(CODIGO) ASC,
             CODIGO ASC
@@ -622,9 +628,45 @@ def _buscar_productos_para_etiquetas(search_term: str, limit: int = 30):
             "like": like,
             "starts": starts,
             "is_numeric": 1 if is_numeric else 0,
-            "limit": max(1, min(limit, 100)),
+            "limit": safe_limit,
         },
     ).mappings().all()
+
+    if not rows:
+        tokens = [t.strip().upper() for t in term.split() if t.strip()]
+        stop_tokens = {"DE", "DEL", "LA", "EL", "LOS", "LAS", "Y", "PARA", "CON", "SIN"}
+        sig_tokens = [t for t in tokens if t not in stop_tokens] or tokens
+        if sig_tokens:
+            params: dict[str, object] = {"limit": safe_limit}
+            token_predicates = []
+            for idx, tok in enumerate(sig_tokens):
+                key = f"tk{idx}"
+                params[key] = f"%{tok}%"
+                token_predicates.append(
+                    f"""(
+                        UPPER(CODIGO) LIKE UPPER(:{key})
+                        OR UPPER(COALESCE([CODIGO OEM], '')) LIKE UPPER(:{key})
+                        OR UPPER(COALESCE(DESCRIPCION, '')) LIKE UPPER(:{key})
+                        OR UPPER(COALESCE(MODELO, '')) LIKE UPPER(:{key})
+                        OR UPPER(COALESCE(MARCA, '')) LIKE UPPER(:{key})
+                    )"""
+                )
+            token_query = text(
+                f"""
+                SELECT
+                    CODIGO AS codigo,
+                    COALESCE(DESCRIPCION, '') AS descripcion,
+                    COALESCE(MODELO, '') AS modelo,
+                    COALESCE([CODIGO OEM], '') AS codigo_oem
+                FROM productos
+                WHERE COALESCE(ACTIVO, 1) = 1
+                  AND ({" AND ".join(token_predicates)})
+                ORDER BY LENGTH(CODIGO) ASC, CODIGO ASC
+                LIMIT :limit
+                """
+            )
+            rows = db.session.execute(token_query, params).mappings().all()
+
     return [dict(r) for r in rows]
 
 
