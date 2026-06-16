@@ -19,6 +19,7 @@ from . import fitalia as _fitalia  # noqa: F401
 from . import xinwang as _xinwang  # noqa: F401
 from . import tecnicor as _tecnicor  # noqa: F401
 from . import repuesto_center as _repuesto_center  # noqa: F401
+from . import huoying as _huoying  # noqa: F401
 from . import mundo as _mundo  # noqa: F401
 
 __all__ = [

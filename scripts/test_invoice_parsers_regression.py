@@ -84,6 +84,9 @@ def main() -> int:
     for fn_name in ("test_fixture_564465", "test_repair_folio_en_neto"):
         _register(rc, fn_name, f"repuesto_center.{fn_name}")
 
+    huoying = _load_module("test_huoying_ocr", "test_huoying_ocr.py")
+    _register(huoying, "test_fixture_39039", "huoying.fixture_39039")
+
     failed: list[str] = []
     print("=" * 72)
     print("REGRESIÓN PARSERS OCR (fixtures locales)")
