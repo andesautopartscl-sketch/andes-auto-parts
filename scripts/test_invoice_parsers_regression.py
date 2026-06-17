@@ -87,6 +87,7 @@ def main() -> int:
     _register(rc, "test_fixture_565092_pdf_row", "repuesto_center.fixture_565092_pdf_row")
     _register(rc, "test_fixture_565092_pdf_compact", "repuesto_center.fixture_565092_pdf_compact")
     _register(rc, "test_fixture_565092_h_codes", "repuesto_center.fixture_565092_h_codes")
+    _register(rc, "test_fixture_565092_050327", "repuesto_center.fixture_565092_050327")
     _register(rc, "test_dte_xml_productos", "repuesto_center.dte_xml")
     _register(rc, "test_folio_no_es_codigo", "repuesto_center.folio_filter")
 

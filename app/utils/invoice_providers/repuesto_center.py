@@ -11,9 +11,15 @@ from .registry import registry
 
 _RC_RUT = "79.656.210-2"
 _CODE_RE = re.compile(r"^[A-Z]{1,6}\d{2,6}[A-Z0-9]{0,6}$")
+_DIGIT_PREFIX_CODE_RE = re.compile(r"^\d{3,6}[A-Z]{1,6}$")
+_RC_TOKEN_RE = re.compile(
+    r"^(?:[A-Z]{1,6}\d{2,6}[A-Z0-9]{0,6}|\d{3,6}[A-Z]{1,6})$",
+    re.IGNORECASE,
+)
 _NUM_CODE_RE = re.compile(r"^\d{9,11}$")
 _INLINE_CODE_RE = re.compile(
-    r"\b([A-Z]{1,6}\d{2,6}[A-Z0-9]{0,6})\b", re.IGNORECASE
+    r"\b((?:[A-Z]{1,6}\d{2,6}[A-Z0-9]{0,6})|(?:\d{3,6}[A-Z]{1,6}))\b",
+    re.IGNORECASE,
 )
 _INLINE_NUM_CODE_RE = re.compile(r"\b(\d{9,11})\b")
 _CUSTOMER_CODE_RE = re.compile(r"^C\d{7,9}", re.IGNORECASE)
@@ -21,7 +27,7 @@ _QTY_PRICE_LINE_RE = re.compile(
     r"^\s*(\d{1,3})\s+([\d$][\d.,]*)\s*(?:([\d$][\d.,]*)\s*)?$"
 )
 _FULL_PRODUCT_ROW_RE = re.compile(
-    r"^([A-Z]{1,6}\d{2,6}[A-Z0-9]{0,6})\b.*?\b(\d{1,3})\s+([\d.,]+)",
+    r"^((?:[A-Z]{1,6}\d{2,6}[A-Z0-9]{0,6})|(?:\d{3,6}[A-Z]{1,6}))\b.*?\b(\d{1,3})\s+([\d.,]+)",
     re.IGNORECASE,
 )
 
@@ -89,8 +95,8 @@ def _is_rc_product_code(line: str, folio: str | None = None) -> bool:
     if folio and _is_folio_token(c, folio):
         return False
     if _is_rc_numeric_code(c):
-        if folio and _is_folio_token(c, folio):
-            return False
+        return True
+    if _DIGIT_PREFIX_CODE_RE.match(c):
         return True
     if not _CODE_RE.match(c) or len(c) < 5:
         return False

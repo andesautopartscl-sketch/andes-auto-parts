@@ -129,6 +129,19 @@ MONTO TOTAL 145.180
 """
 
 
+OCR_FIXTURE_565092_050327 = """
+R.U.T. 79.656.210-2
+FACTURA ELECTRÓNICA
+N° 0000565092
+CÓDIGO DETALLE CANTIDAD PRECIO UNITARIO PRECIO ÍTEM
+050327RC KIT DE DISTRIBUCION CON BOMBA 1 47.200,00 47.200
+050328RC KIT DE DISTRIBUCION CON BOMBA 1 74.800,00 74.800
+MONTO NETO 122.000
+MONTO IVA 19% 23.180
+MONTO TOTAL 145.180
+"""
+
+
 DTE_XML_FIXTURE_565092 = """<?xml version="1.0"?>
 <DTE><Documento><Detalle>
 <NroLinDet>1</NroLinDet>
@@ -268,6 +281,32 @@ def test_fixture_565092_h_codes() -> None:
     print("OK repuesto_center fixture 565092 H-codes\n")
 
 
+def test_fixture_565092_050327() -> None:
+    """Códigos con prefijo numérico 050327RC / 050328RC (PDF Facele)."""
+    parser = RepuestoCenterParser()
+    data = parser.parse(
+        {
+            "rut_proveedor": "79.656.210-2",
+            "ocr_texto_crudo": OCR_FIXTURE_565092_050327,
+            "productos": [],
+            "total_neto": 145180,
+            "iva": 565092,
+            "total": 710272,
+            "numero_documento": "565092",
+        }
+    )
+    productos = data.get("productos") or []
+    assert len(productos) == 2, productos
+    assert productos[0]["codigo_proveedor"] == "050327RC"
+    assert productos[0]["valor_neto"] == 47200
+    assert productos[1]["codigo_proveedor"] == "050328RC"
+    assert productos[1]["valor_neto"] == 74800
+    assert data.get("total_neto") == 122000
+    assert data.get("iva") == 23180
+    assert data.get("total") == 145180
+    print("OK repuesto_center fixture 565092 050327RC\n")
+
+
 def test_dte_xml_productos() -> None:
     from app.utils.invoice_vision import (
         _extract_montos_from_dte_xml,
@@ -349,6 +388,7 @@ if __name__ == "__main__":
     test_fixture_565092_pdf_row()
     test_fixture_565092_pdf_compact()
     test_fixture_565092_h_codes()
+    test_fixture_565092_050327()
     test_dte_xml_productos()
     test_folio_no_es_codigo()
     test_repair_folio_en_neto()
