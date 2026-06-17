@@ -27,25 +27,70 @@ _FULL_PRODUCT_ROW_RE = re.compile(
 
 
 def _normalize_rc_code_ocr(code: str) -> str:
-    """Corrige O/0 en códigos RC (MAXD07ORC → MAXD070RC)."""
+    """Corrige O/0 en códigos RC (MAXD07ORC / MAXDO7ORC → MAXD070RC)."""
     c = (code or "").strip().upper()
     if not c:
         return c
+    c = re.sub(r"(?<=[A-Z])O(?=\d)", "0", c)
+    c = re.sub(r"(?<=\d)O(?=\d)", "0", c)
+    c = re.sub(r"(?<=\d)O(?=[A-Z])", "0", c)
     c = re.sub(r"(\d)O(\d)", r"\g<1>0\2", c)
     c = re.sub(r"(\d)O([A-Z])", r"\g<1>0\2", c)
     c = re.sub(r"([A-Z])O(\d)", r"\g<1>0\2", c)
     return c
 
 
+def _digits_key(value: str | None) -> str:
+    return re.sub(r"\D", "", (value or "")).lstrip("0") or "0"
+
+
+def _is_folio_token(code: str, folio: str | None) -> bool:
+    if not folio:
+        return False
+    return _digits_key(code) == _digits_key(folio)
+
+
+def _is_folio_context_line(line: str) -> bool:
+    return bool(
+        re.search(
+            r"(?:^N[°º]?\s*0*\d{3,8}\b|factura\s+electr)",
+            (line or "").strip(),
+            re.IGNORECASE,
+        )
+    )
+
+
+def _is_ui_noise_line(line: str) -> bool:
+    low = (line or "").strip().lower()
+    if not low:
+        return True
+    noise = (
+        "analizar factura",
+        "datos detectados",
+        "aplicar datos",
+        "cancelar",
+        "cerrar",
+        "ítems api",
+        "parser ocr",
+        "fuente ítems",
+        "análisis listo",
+    )
+    return low in noise or low == "auto"
+
+
 def _is_rc_numeric_code(code: str) -> bool:
     return bool(_NUM_CODE_RE.match((code or "").strip()))
 
 
-def _is_rc_product_code(line: str) -> bool:
+def _is_rc_product_code(line: str, folio: str | None = None) -> bool:
     c = _normalize_rc_code_ocr((line or "").strip())
     if not c or _CUSTOMER_CODE_RE.match(c):
         return False
+    if folio and _is_folio_token(c, folio):
+        return False
     if _is_rc_numeric_code(c):
+        if folio and _is_folio_token(c, folio):
+            return False
         return True
     if not _CODE_RE.match(c) or len(c) < 5:
         return False
@@ -90,17 +135,32 @@ def _emitter_rut(texto: str) -> str:
     return _RC_RUT if m else _RC_RUT
 
 
-def _extract_item_codes(lines: list[str]) -> list[str]:
-    codes = _extract_item_codes_columnar(lines)
-    if len(codes) >= 2:
-        return codes
-    inline = _extract_item_codes_inline(lines)
-    if inline:
-        return inline
-    return codes
+def _extract_item_codes(lines: list[str], folio: str | None = None) -> list[str]:
+    columnar = _extract_item_codes_columnar(lines, folio)
+    inline = _extract_item_codes_inline(lines, folio)
+    loose = _extract_item_codes_loose(lines, folio)
+    return max((columnar, inline, loose), key=len)
 
 
-def _extract_item_codes_columnar(lines: list[str]) -> list[str]:
+def _extract_item_codes_loose(lines: list[str], folio: str | None = None) -> list[str]:
+    """Escaneo amplio: códigos en DETALLE aunque vayan antes de CANTIDAD."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for line in lines:
+        if re.search(r"monto\s+neto", line, re.IGNORECASE):
+            break
+        if line.lower().startswith("observacion"):
+            break
+        if _is_ui_noise_line(line) or _is_folio_context_line(line):
+            continue
+        for code in _codes_from_line(line, folio):
+            if code not in seen:
+                seen.add(code)
+                out.append(code)
+    return out
+
+
+def _extract_item_codes_columnar(lines: list[str], folio: str | None = None) -> list[str]:
     """Bloque vertical CÓDIGO → líneas de código (layout Facele clásico)."""
     codigo_idxs = [
         i
@@ -115,10 +175,12 @@ def _extract_item_codes_columnar(lines: list[str]) -> list[str]:
                 continue
             if _CUSTOMER_CODE_RE.match(nxt):
                 break
-            if _is_rc_product_code(nxt):
+            if _is_folio_context_line(nxt):
+                continue
+            if _is_rc_product_code(nxt, folio):
                 start = j
                 break
-            inline = _inline_code_from_line(nxt)
+            inline = _inline_code_from_line(nxt, folio)
             if inline:
                 start = j
                 break
@@ -133,42 +195,49 @@ def _extract_item_codes_columnar(lines: list[str]) -> list[str]:
         low = line.lower()
         if low.startswith("observacion"):
             break
-        for candidate in _codes_from_line(line):
+        if _is_ui_noise_line(line) or _is_folio_context_line(line):
+            continue
+        for candidate in _codes_from_line(line, folio):
             if candidate not in seen:
                 seen.add(candidate)
                 out.append(candidate)
     return out
 
 
-def _inline_code_from_line(line: str) -> str | None:
-    for candidate in _codes_from_line(line):
+def _inline_code_from_line(line: str, folio: str | None = None) -> str | None:
+    for candidate in _codes_from_line(line, folio):
         return candidate
     return None
 
 
-def _codes_from_line(line: str) -> list[str]:
+def _codes_from_line(line: str, folio: str | None = None) -> list[str]:
     found: list[str] = []
     seen: set[str] = set()
     stripped = (line or "").strip()
-    if _is_rc_product_code(stripped):
-        code = _normalize_rc_code_ocr(stripped)
-        if code not in seen:
+    if _is_folio_context_line(stripped):
+        return found
+
+    def add_code(raw: str) -> None:
+        code = _normalize_rc_code_ocr(raw)
+        if _is_rc_product_code(code, folio) and code not in seen:
             seen.add(code)
             found.append(code)
+
+    if _is_rc_product_code(stripped, folio):
+        add_code(stripped)
+    for token in re.split(r"\s+", stripped):
+        add_code(token)
     for m in _INLINE_CODE_RE.finditer(stripped):
-        raw = _normalize_rc_code_ocr(m.group(1))
-        if _is_rc_product_code(raw) and raw not in seen:
-            seen.add(raw)
-            found.append(raw)
+        add_code(m.group(1))
     for m in _INLINE_NUM_CODE_RE.finditer(stripped):
         raw = m.group(1)
-        if _is_rc_numeric_code(raw) and raw not in seen:
+        if _is_rc_numeric_code(raw) and not _is_folio_token(raw, folio) and raw not in seen:
             seen.add(raw)
             found.append(raw)
     return found
 
 
-def _extract_item_codes_inline(lines: list[str]) -> list[str]:
+def _extract_item_codes_inline(lines: list[str], folio: str | None = None) -> list[str]:
     """Códigos embebidos en DETALLE cuando cantidades van antes (foto OCR)."""
     start: int | None = None
     end = len(lines)
@@ -192,7 +261,9 @@ def _extract_item_codes_inline(lines: list[str]) -> list[str]:
     for line in lines[start:end]:
         if re.fullmatch(r"c[oó]digo", line.strip(), re.IGNORECASE):
             continue
-        for code in _codes_from_line(line):
+        if _is_ui_noise_line(line):
+            continue
+        for code in _codes_from_line(line, folio):
             if code not in seen:
                 seen.add(code)
                 out.append(code)
@@ -256,7 +327,9 @@ def _unit_prices(prices: list[int], n: int) -> list[int]:
     return units[:n]
 
 
-def _extract_productos_pdf_rows(lines: list[str]) -> list[dict[str, Any]]:
+def _extract_productos_pdf_rows(
+    lines: list[str], folio: str | None = None
+) -> list[dict[str, Any]]:
     """PDF nativo Facele: fila completa código + cantidad + precio."""
     productos: list[dict[str, Any]] = []
     for line in lines:
@@ -264,11 +337,13 @@ def _extract_productos_pdf_rows(lines: list[str]) -> list[dict[str, Any]]:
             break
         if line.lower().startswith("observacion"):
             break
+        if _is_ui_noise_line(line):
+            continue
         m = _FULL_PRODUCT_ROW_RE.match(line.strip())
         if not m:
             continue
         code = _normalize_rc_code_ocr(m.group(1))
-        if not _is_rc_product_code(code):
+        if not _is_rc_product_code(code, folio):
             continue
         unit = invoice_vision._parse_monto_chileno(m.group(3))
         if unit is None or unit < 1000:
@@ -283,12 +358,14 @@ def _extract_productos_pdf_rows(lines: list[str]) -> list[dict[str, Any]]:
     return productos
 
 
-def _extract_repuesto_center_productos(lines: list[str]) -> list[dict[str, Any]]:
-    row_products = _extract_productos_pdf_rows(lines)
+def _extract_repuesto_center_productos(
+    lines: list[str], folio: str | None = None
+) -> list[dict[str, Any]]:
+    row_products = _extract_productos_pdf_rows(lines, folio)
     if row_products:
         return row_products
 
-    codes = _extract_item_codes(lines)
+    codes = _extract_item_codes(lines, folio)
     if not codes:
         return []
     qtys, prices = _extract_qty_and_prices(lines)
@@ -307,6 +384,20 @@ def _extract_repuesto_center_productos(lines: list[str]) -> list[dict[str, Any]]
             }
         )
     return productos
+
+
+def _apply_productos_to_data(
+    data: dict[str, Any], productos: list[dict[str, Any]], fuente: str
+) -> None:
+    if not productos:
+        return
+    data["productos"] = productos
+    data["productos_fuente"] = fuente
+    data["productos_n"] = len(productos)
+    p0 = productos[0]
+    data["producto_codigo"] = p0.get("codigo_proveedor")
+    data["producto_cantidad"] = p0.get("cantidad")
+    data["producto_valor_neto"] = p0.get("valor_neto")
 
 
 def _extract_repuesto_center_footer_montos(
@@ -340,23 +431,38 @@ class RepuestoCenterParser(BaseInvoiceParser):
             return data
 
         texto_norm = invoice_vision._normalize_ocr_text(texto)
-        lines = [ln.strip() for ln in texto_norm.splitlines() if ln.strip()]
+        lines = [
+            ln.strip()
+            for ln in texto_norm.splitlines()
+            if ln.strip() and not _is_ui_noise_line(ln.strip())
+        ]
 
-        productos = _extract_repuesto_center_productos(lines)
-        if productos:
-            data["productos"] = productos
-            data["productos_fuente"] = "repuesto_center"
-            data["productos_n"] = len(productos)
-            p0 = productos[0]
-            data["producto_codigo"] = p0.get("codigo_proveedor")
-            data["producto_cantidad"] = p0.get("cantidad")
-            data["producto_valor_neto"] = p0.get("valor_neto")
+        folio = data.get("numero_documento")
+        if not folio:
+            m = re.search(r"N[°º]?\s*0*(\d{6,8})\b", texto_norm, re.IGNORECASE)
+            if m:
+                folio = m.group(1).lstrip("0") or m.group(1)
+
+        dte_productos = data.get("_dte_productos") or []
+        if dte_productos:
+            productos = dte_productos
+            _apply_productos_to_data(data, productos, "repuesto_center_dte_xml")
+        else:
+            productos = _extract_repuesto_center_productos(lines, folio)
+            if productos:
+                _apply_productos_to_data(data, productos, "repuesto_center")
 
         neto, iva, total = _extract_repuesto_center_footer_montos(lines)
+        if neto is None and data.get("_dte_neto") is not None:
+            neto = data.get("_dte_neto")
+            iva = data.get("_dte_iva")
+            total = data.get("_dte_total")
         if neto is None:
             neto, iva, total = invoice_vision._extract_montos(texto_norm)
 
-        neto, iva, total = _repair_montos(neto, iva, total, productos)
+        neto, iva, total = _repair_montos(
+            neto, iva, total, data.get("productos") or productos
+        )
 
         if neto is not None:
             data["total_neto"] = neto

@@ -129,6 +129,20 @@ MONTO TOTAL 145.180
 """
 
 
+DTE_XML_FIXTURE_565092 = """<?xml version="1.0"?>
+<DTE><Documento><Detalle>
+<NroLinDet>1</NroLinDet>
+<CdgItem><VlrCodigo>MAXD070RC</VlrCodigo></CdgItem>
+<QtyItem>1</QtyItem><PrcItem>67000</PrcItem>
+</Detalle><Detalle>
+<NroLinDet>2</NroLinDet>
+<CdgItem><VlrCodigo>MAXD083RC</VlrCodigo></CdgItem>
+<QtyItem>1</QtyItem><PrcItem>55000</PrcItem>
+</Detalle>
+<Totales><MntNeto>122000</MntNeto><IVA>23180</IVA><MntTotal>145180</MntTotal></Totales>
+</Documento></DTE>"""
+
+
 def test_fixture_564465() -> None:
     parser = RepuestoCenterParser()
     data = parser.parse(
@@ -254,6 +268,43 @@ def test_fixture_565092_h_codes() -> None:
     print("OK repuesto_center fixture 565092 H-codes\n")
 
 
+def test_dte_xml_productos() -> None:
+    from app.utils.invoice_vision import (
+        _extract_montos_from_dte_xml,
+        _extract_productos_from_dte_xml,
+    )
+
+    productos = _extract_productos_from_dte_xml(DTE_XML_FIXTURE_565092)
+    assert len(productos) == 2, productos
+    assert productos[0]["codigo_proveedor"] == "MAXD070RC"
+    assert productos[0]["valor_neto"] == 67000
+    neto, iva, total = _extract_montos_from_dte_xml(DTE_XML_FIXTURE_565092)
+    assert neto == 122000
+    assert iva == 23180
+    assert total == 145180
+    print("OK repuesto_center DTE XML\n")
+
+
+def test_folio_no_es_codigo() -> None:
+    from app.utils.invoice_providers.repuesto_center import (
+        _extract_item_codes,
+        _normalize_rc_code_ocr,
+    )
+    from app.utils import invoice_vision as iv
+
+    lines = [
+        ln.strip()
+        for ln in iv._normalize_ocr_text(
+            "N° 0000565092\nMAXDO7ORC EJE\nMAXD083RC EJE"
+        ).splitlines()
+        if ln.strip()
+    ]
+    codes = _extract_item_codes(lines, "565092")
+    assert "0000565092" not in codes, codes
+    assert _normalize_rc_code_ocr("MAXDO7ORC") == "MAXD070RC"
+    print("OK repuesto_center folio filter\n")
+
+
 def test_repair_folio_en_neto() -> None:
     """Folio 564465 en neto + total 87560 en IVA → no debe quedar 652025."""
     parser = RepuestoCenterParser()
@@ -298,5 +349,7 @@ if __name__ == "__main__":
     test_fixture_565092_pdf_row()
     test_fixture_565092_pdf_compact()
     test_fixture_565092_h_codes()
+    test_dte_xml_productos()
+    test_folio_no_es_codigo()
     test_repair_folio_en_neto()
     test_repair_neto_cuadra_total_polluido()

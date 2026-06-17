@@ -154,6 +154,47 @@ def _fecha_iso_a_dd_mm_yyyy(y: int, mo: int, d: int) -> str | None:
     return f"{d:02d}-{mo:02d}-{y}"
 
 
+def _iter_dte_pdf_text_blobs(pdf_bytes: bytes) -> list[str]:
+    """Texto/XML embebido en PDF DTE (streams, archivos adjuntos, cuerpo)."""
+    if not pdf_bytes:
+        return []
+    blobs: list[str] = []
+    seen: set[str] = set()
+
+    def add_blob(raw: bytes | str | None) -> None:
+        if not raw:
+            return
+        if isinstance(raw, bytes):
+            for encoding in ("utf-8", "latin-1"):
+                text = raw.decode(encoding, errors="ignore")
+                if text and text not in seen and len(text) >= 40:
+                    seen.add(text)
+                    blobs.append(text)
+                break
+        else:
+            text = str(raw)
+            if text and text not in seen and len(text) >= 40:
+                seen.add(text)
+                blobs.append(text)
+
+    add_blob(pdf_bytes)
+
+    try:
+        import fitz  # PyMuPDF
+
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+            for i in range(doc.embfile_count()):
+                add_blob(doc.embfile_get(i))
+            for xref in range(1, doc.xref_length()):
+                try:
+                    add_blob(doc.xref_stream(xref))
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return blobs
+
+
 def _extract_fecha_from_dte_pdf(pdf_bytes: bytes) -> str | None:
     """Fecha de emisión desde XML embebido en PDF DTE chileno (FchEmis)."""
     if not pdf_bytes:
@@ -174,41 +215,99 @@ def _extract_fecha_from_dte_pdf(pdf_bytes: bytes) -> str | None:
                     return parsed
         return None
 
-    for encoding in ("utf-8", "latin-1"):
-        found = from_text(pdf_bytes.decode(encoding, errors="ignore"))
+    for blob in _iter_dte_pdf_text_blobs(pdf_bytes):
+        found = from_text(blob)
         if found:
             return found
-
-    try:
-        import fitz  # PyMuPDF
-
-        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-            for i in range(doc.embfile_count()):
-                content = doc.embfile_get(i)
-                if not content:
-                    continue
-                if isinstance(content, bytes):
-                    for encoding in ("utf-8", "latin-1"):
-                        found = from_text(content.decode(encoding, errors="ignore"))
-                        if found:
-                            return found
-                else:
-                    found = from_text(str(content))
-                    if found:
-                        return found
-            for xref in range(1, doc.xref_length()):
-                try:
-                    stream = doc.xref_stream(xref)
-                except Exception:
-                    continue
-                if not stream:
-                    continue
-                found = from_text(stream.decode("latin-1", errors="ignore"))
-                if found:
-                    return found
-    except Exception:
-        pass
     return None
+
+
+def _dte_xml_float(token: str | None) -> float | None:
+    if token is None:
+        return None
+    s = str(token).strip().replace(",", ".")
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _extract_productos_from_dte_xml(blob: str) -> list[dict[str, Any]]:
+    """Ítems desde XML DTE chileno (CdgItem / QtyItem / PrcItem)."""
+    if not blob or "<" not in blob:
+        return []
+    productos: list[dict[str, Any]] = []
+    blocks = re.findall(r"<Detalle\b[^>]*>.*?</Detalle>", blob, re.IGNORECASE | re.DOTALL)
+    if not blocks:
+        blocks = [blob]
+    for block in blocks:
+        code_m = re.search(r"<VlrCodigo>([^<]+)</VlrCodigo>", block, re.IGNORECASE)
+        qty_m = re.search(r"<QtyItem>([^<]+)</QtyItem>", block, re.IGNORECASE)
+        prc_m = re.search(r"<PrcItem>([^<]+)</PrcItem>", block, re.IGNORECASE)
+        if not code_m or not prc_m:
+            continue
+        codigo = (code_m.group(1) or "").strip()
+        if not codigo:
+            continue
+        qty_val = _dte_xml_float(qty_m.group(1) if qty_m else None)
+        prc_val = _dte_xml_float(prc_m.group(1))
+        if prc_val is None or prc_val <= 0:
+            continue
+        qty = max(1, int(round(qty_val or 1)))
+        productos.append(
+            {
+                "codigo_proveedor": codigo.upper(),
+                "cantidad": qty,
+                "valor_neto": int(round(prc_val)),
+            }
+        )
+    return productos
+
+
+def _extract_montos_from_dte_xml(blob: str) -> tuple[int | None, int | None, int | None]:
+    if not blob or "<" not in blob:
+        return None, None, None
+
+    def pick_int(*patterns: str) -> int | None:
+        for pat in patterns:
+            m = re.search(pat, blob, re.IGNORECASE | re.DOTALL)
+            if not m:
+                continue
+            val = _dte_xml_float(m.group(1))
+            if val is not None and val >= 0:
+                return int(round(val))
+        return None
+
+    neto = pick_int(r"<MntNeto>([^<]+)</MntNeto>", r"MntNeto>(\d+)")
+    iva = pick_int(r"<IVA>([^<]+)</IVA>", r"<MntIVA>([^<]+)</MntIVA>")
+    total = pick_int(r"<MntTotal>([^<]+)</MntTotal>", r"MntTotal>(\d+)")
+    if neto is not None and total is None and iva is not None:
+        total = int(neto + iva)
+    if total is not None and neto is not None and iva is None and total > neto:
+        iva = int(total - neto)
+    return neto, iva, total
+
+
+def _extract_productos_from_dte_pdf(pdf_bytes: bytes) -> list[dict[str, Any]]:
+    """Productos desde XML embebido en PDF DTE (Facele y similares)."""
+    best: list[dict[str, Any]] = []
+    for blob in _iter_dte_pdf_text_blobs(pdf_bytes):
+        productos = _extract_productos_from_dte_xml(blob)
+        if len(productos) > len(best):
+            best = productos
+    return best
+
+
+def _extract_montos_from_dte_pdf(
+    pdf_bytes: bytes,
+) -> tuple[int | None, int | None, int | None]:
+    for blob in _iter_dte_pdf_text_blobs(pdf_bytes):
+        neto, iva, total = _extract_montos_from_dte_xml(blob)
+        if neto is not None and total is not None:
+            return neto, iva, total
+    return None, None, None
 
 
 def _extract_pdf_native_text(pdf_bytes: bytes) -> str:
@@ -4391,6 +4490,29 @@ def analizar_factura(image_base64: str, media_type: str) -> dict[str, Any]:
 
     resultado = parsear_factura_chilena(texto)
     resultado["ocr_texto_crudo"] = texto
+
+    if mt == "application/pdf":
+        dte_productos = _extract_productos_from_dte_pdf(file_bytes)
+        if dte_productos:
+            resultado["_dte_productos"] = dte_productos
+            dte_neto, dte_iva, dte_total = _extract_montos_from_dte_pdf(file_bytes)
+            if dte_neto is not None:
+                resultado["_dte_neto"] = dte_neto
+            if dte_iva is not None:
+                resultado["_dte_iva"] = dte_iva
+            if dte_total is not None:
+                resultado["_dte_total"] = dte_total
+            try:
+                from app.utils.invoice_providers import registry as _inv_registry
+
+                _specific = _inv_registry.find(
+                    resultado.get("rut_proveedor"), texto
+                )
+                if getattr(_specific, "nombre", "") == "repuesto_center":
+                    resultado = _specific.parse(resultado)
+                    resultado["productos_n"] = len(resultado.get("productos") or [])
+            except Exception:
+                pass
 
     if not resultado.get("fecha"):
         if mt == "application/pdf":
