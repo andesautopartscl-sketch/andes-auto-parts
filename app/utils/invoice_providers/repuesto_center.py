@@ -1,8 +1,11 @@
 """Parser OCR Repuesto Center (Facele DTE): precios y pie sin mezclar con totales."""
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from app.utils import invoice_vision
 
@@ -333,6 +336,141 @@ def _unit_prices(prices: list[int], n: int) -> list[int]:
     return units[:n]
 
 
+def _is_facele_tail_stop_line(line: str) -> bool:
+    low = (line or "").strip().lower()
+    if not low:
+        return True
+    if low.startswith("res. 80 de") or "verifique documento" in low:
+        return True
+    if low.startswith("timbre electronico"):
+        return True
+    return False
+
+
+def _facele_tail_unit_qty_after(
+    lines: list[str], code_idx: int, folio: str | None
+) -> tuple[int | None, int]:
+    """Tras un código Facele: precio unitario (coma) y cantidad en líneas siguientes."""
+    n = len(lines)
+    for j in range(code_idx + 1, min(code_idx + 10, n)):
+        nxt = (lines[j] or "").strip()
+        if _is_facele_tail_stop_line(nxt):
+            break
+        if re.search(r"monto\s+neto", nxt, re.IGNORECASE):
+            break
+        if nxt.lower().startswith("observacion"):
+            break
+        nxt_codes = _codes_from_line(nxt, folio)
+        if (
+            j > code_idx + 1
+            and nxt_codes
+            and _is_rc_product_code(nxt_codes[0], folio)
+        ):
+            break
+        qp = _parse_qty_price_line(nxt)
+        if qp:
+            return qp[1], qp[0]
+        if "," in nxt and invoice_vision._is_chilean_price_line(nxt):
+            m = invoice_vision._PRICE_LINE_RE.match(nxt)
+            if not m:
+                continue
+            val = invoice_vision._parse_monto_chileno(m.group(1))
+            if val is None or val < 1000:
+                continue
+            qty = 1
+            for k in range(j + 1, min(j + 4, n)):
+                qline = (lines[k] or "").strip()
+                if re.fullmatch(r"\d{1,2}", qline):
+                    qty = int(qline)
+                    break
+                if (
+                    _is_facele_tail_stop_line(qline)
+                    or _codes_from_line(qline, folio)
+                    or re.search(r"monto\s+neto", qline, re.IGNORECASE)
+                ):
+                    break
+            return val, qty
+    return None, 1
+
+
+def _extract_productos_facele_pdf_tail(
+    lines: list[str], folio: str | None = None
+) -> list[dict[str, Any]]:
+    """PDF Facele: bloque columnar al final (código, detalle, precio, cantidad)."""
+    productos: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for i, line in enumerate(lines):
+        if _is_ui_noise_line(line) or _is_folio_context_line(line):
+            continue
+        codes = _codes_from_line(line, folio)
+        if not codes:
+            continue
+        code = _normalize_rc_code_ocr(codes[0])
+        if not _is_rc_product_code(code, folio) or code in seen:
+            continue
+        unit, qty = _facele_tail_unit_qty_after(lines, i, folio)
+        if unit is None:
+            continue
+        seen.add(code)
+        productos.append(
+            {
+                "codigo_proveedor": code,
+                "cantidad": max(1, qty),
+                "valor_neto": unit,
+            }
+        )
+    return productos
+
+
+def _log_repuesto_center_extraction_debug(
+    lines: list[str],
+    folio: str | None,
+    ocr_text: str,
+    productos: list[dict[str, Any]],
+) -> None:
+    """Logging temporal: OCR crudo y líneas descartadas cuando no hay ítems."""
+    if productos:
+        return
+    discarded: list[str] = []
+    for i, line in enumerate(lines):
+        stripped = (line or "").strip()
+        if not stripped:
+            discarded.append(f"[{i}] vacía")
+            continue
+        if _is_ui_noise_line(stripped):
+            discarded.append(f"[{i}] ui_noise: {stripped!r}")
+            continue
+        if _is_folio_context_line(stripped):
+            discarded.append(f"[{i}] folio_ctx: {stripped!r}")
+            continue
+        codes = _codes_from_line(stripped, folio)
+        if codes and _is_rc_product_code(_normalize_rc_code_ocr(codes[0]), folio):
+            unit, qty = _facele_tail_unit_qty_after(lines, i, folio)
+            if unit is None:
+                discarded.append(
+                    f"[{i}] código sin precio: {stripped!r} codes={codes}"
+                )
+            continue
+        if re.search(r"monto\s+neto", stripped, re.IGNORECASE):
+            discarded.append(f"[{i}] stop_monto_neto: {stripped!r}")
+        if stripped.lower().startswith("observacion"):
+            discarded.append(f"[{i}] stop_observacion: {stripped!r}")
+    logger.info(
+        "[repuesto_center_debug] folio=%s sin productos; líneas=%s",
+        folio,
+        len(lines),
+    )
+    logger.info(
+        "[repuesto_center_debug] OCR crudo (hasta 4000 chars):\n%s",
+        (ocr_text or "")[:4000],
+    )
+    logger.info(
+        "[repuesto_center_debug] descartadas/seguimiento (%s):\n%s",
+        len(discarded),
+        "\n".join(discarded[:80]),
+    )
+
+
 def _extract_productos_pdf_rows(
     lines: list[str], folio: str | None = None
 ) -> list[dict[str, Any]]:
@@ -370,6 +508,10 @@ def _extract_repuesto_center_productos(
     row_products = _extract_productos_pdf_rows(lines, folio)
     if row_products:
         return row_products
+
+    tail_products = _extract_productos_facele_pdf_tail(lines, folio)
+    if tail_products:
+        return tail_products
 
     codes = _extract_item_codes(lines, folio)
     if not codes:
@@ -457,6 +599,8 @@ class RepuestoCenterParser(BaseInvoiceParser):
             productos = _extract_repuesto_center_productos(lines, folio)
             if productos:
                 _apply_productos_to_data(data, productos, "repuesto_center")
+            elif not (data.get("productos") or []):
+                _log_repuesto_center_extraction_debug(lines, folio, texto, [])
 
         neto, iva, total = _extract_repuesto_center_footer_montos(lines)
         if neto is None and data.get("_dte_neto") is not None:

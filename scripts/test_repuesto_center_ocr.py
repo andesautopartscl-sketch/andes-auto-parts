@@ -156,6 +156,53 @@ DTE_XML_FIXTURE_565092 = """<?xml version="1.0"?>
 </Documento></DTE>"""
 
 
+OCR_FIXTURE_565092_PDF_NATIVE = """
+R.U.T. 79.656.210-2
+FACTURA ELECTRÓNICA
+N° 0000565092
+MONTO NETO
+MONTO IVA 19%
+MONTO TOTAL
+122.000
+23.180
+145.180
+Galvarino 8601, Oficinas 6 y 7
+MAXD070RC
+67.000
+EJE DE LEVAS (ADMISION) CON PIÑON
+EJE DE LEVAS (ADMISION) CON PIÑON
+67.000,00
+1
+MAXD083RC
+55.000
+EJE DE LEVAS (ESCAPE)
+EJE DE LEVAS (ESCAPE)
+55.000,00
+1
+"""
+
+
+def test_fixture_565092_pdf_native() -> None:
+    """PDF Facele nativo: ítems al final, después de etiquetas MONTO NETO."""
+    parser = RepuestoCenterParser()
+    data = parser.parse(
+        {
+            "rut_proveedor": "79.656.210-2",
+            "ocr_texto_crudo": OCR_FIXTURE_565092_PDF_NATIVE,
+            "productos": [],
+            "numero_documento": "565092",
+        }
+    )
+    productos = data.get("productos") or []
+    assert len(productos) == 2, productos
+    assert productos[0]["codigo_proveedor"] == "MAXD070RC"
+    assert productos[0]["valor_neto"] == 67000
+    assert productos[1]["codigo_proveedor"] == "MAXD083RC"
+    assert productos[1]["valor_neto"] == 55000
+    assert data.get("productos_fuente") == "repuesto_center"
+    print("OK repuesto_center fixture 565092 PDF native\n")
+
+
 def test_fixture_564465() -> None:
     parser = RepuestoCenterParser()
     data = parser.parse(
@@ -385,6 +432,7 @@ def test_repair_neto_cuadra_total_polluido() -> None:
 if __name__ == "__main__":
     test_fixture_564465()
     test_fixture_565092()
+    test_fixture_565092_pdf_native()
     test_fixture_565092_pdf_row()
     test_fixture_565092_pdf_compact()
     test_fixture_565092_h_codes()

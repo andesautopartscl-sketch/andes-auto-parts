@@ -1119,9 +1119,9 @@ def buscar():
 
                 _fts_used = False
                 try:
-                    from app.utils.fts_productos import _fts_norm
+                    from app.utils.fts_productos import fts_match_query
 
-                    fts_terms = " ".join(_fts_norm(p) for p in palabras)
+                    fts_terms = fts_match_query(palabras)
                     if fts_terms.strip():
                         fts_rows = sess.execute(
                             text(
@@ -1131,11 +1131,15 @@ def buscar():
                             {"q": fts_terms},
                         ).fetchall()
                         codigos_fts = [r[0] for r in fts_rows]
-                        total_count = len(codigos_fts)
-                        total_pages = max(1, (total_count + per_page - 1) // per_page)
-                        page = max(1, min(page, total_pages))
-                        page_codes = codigos_fts[(page - 1) * per_page : page * per_page]
-                        if page_codes:
+                        if codigos_fts:
+                            total_count = len(codigos_fts)
+                            total_pages = max(
+                                1, (total_count + per_page - 1) // per_page
+                            )
+                            page = max(1, min(page, total_pages))
+                            page_codes = codigos_fts[
+                                (page - 1) * per_page : page * per_page
+                            ]
                             prods_dict = {
                                 p.codigo: p
                                 for p in _producto_q(sess)
@@ -1146,9 +1150,7 @@ def buscar():
                             productos = [
                                 prods_dict[c] for c in page_codes if c in prods_dict
                             ]
-                        else:
-                            productos = []
-                        _fts_used = True
+                            _fts_used = True
                 except Exception:
                     pass
 

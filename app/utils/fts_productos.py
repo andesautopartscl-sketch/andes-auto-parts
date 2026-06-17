@@ -11,6 +11,31 @@ def _fts_norm(s: str) -> str:
     return "".join(c for c in nk if unicodedata.category(c) != "Mn")
 
 
+def _fts_escape_token(t: str) -> str:
+    return (t or "").replace('"', '""')
+
+
+def _fts_match_token(raw: str) -> str:
+    """
+    Término FTS5 con prefijo (*) para tolerar singular/plural y búsquedas parciales.
+    Ej.: pastilla → pastillas, past → pastillas.
+    """
+    t = _fts_norm(raw)
+    if not t:
+        return ""
+    esc = _fts_escape_token(t)
+    if len(t) >= 2:
+        if esc.isalnum():
+            return f"{esc}*"
+        return f'"{esc}"*'
+    return f'"{esc}"' if not esc.isalnum() else esc
+
+
+def fts_match_query(palabras: list[str]) -> str:
+    """AND de términos FTS5 (cada uno con prefijo cuando aplica)."""
+    return " ".join(p for p in (_fts_match_token(w) for w in palabras) if p)
+
+
 def _fts_blob(
     codigo,
     codigo_oem,
