@@ -80,6 +80,54 @@ MONTO TOTAL
 145.180
 """
 
+OCR_FIXTURE_565092_PDF_ROW = """
+R.U.T. 79.656.210-2
+FACTURA ELECTRÓNICA
+N° 0000565092
+SEÑORES ANDES AUTO PARTS
+CÓDIGO : C78074288-7
+FORMA DE PAGO: Crédito
+CÓDIGO DETALLE CANTIDAD PRECIO UNITARIO PRECIO ÍTEM
+MAXD070RC EJE DE LEVAS (ADMISION) CON PIÑON 1 67.000,00 67.000
+MAXD083RC EJE DE LEVAS (ESCAPE) 1 55.000,00 55.000
+OBSERVACIONES: Basado en la Orden de Venta: 10411526
+MONTO NETO 122.000
+MONTO IVA 19% 23.180
+MONTO TOTAL 145.180
+"""
+
+OCR_FIXTURE_565092_PDF_COMPACT = """
+R.U.T. 79.656.210-2
+N° 0000565092
+CÓDIGO
+: C78074288-7
+PRECIO DETALLE CANTIDAD PRECIO ÍTEM UNITARIO
+1 67.000,00 67.000
+1 55.000,00 55.000
+CÓDIGO
+MAXD070RC EJE DE LEVAS (ADMISION)
+MAXD083RC EJE DE LEVAS (ESCAPE)
+MONTO NETO
+122.000
+MONTO IVA 19%
+23.180
+MONTO TOTAL
+145.180
+"""
+
+OCR_FIXTURE_565092_H_CODES = """
+R.U.T. 79.656.210-2
+FACTURA ELECTRÓNICA
+N° 0000565092
+FORMA DE PAGO: Crédito
+CÓDIGO DETALLE CANTIDAD PRECIO UNITARIO PRECIO ÍTEM
+H6007AC KIT DE DISTR. (CADENA) CON PIÑON 1 87.000,00 87.000
+H400040 KIT DE DISTR. (CADENA) CON PIÑON 1 35.000,00 35.000
+MONTO NETO 122.000
+MONTO IVA 19% 23.180
+MONTO TOTAL 145.180
+"""
+
 
 def test_fixture_564465() -> None:
     parser = RepuestoCenterParser()
@@ -143,6 +191,69 @@ def test_fixture_565092() -> None:
     print("OK repuesto_center fixture 565092\n")
 
 
+def test_fixture_565092_pdf_row() -> None:
+    """PDF nativo: código, cantidad y precio en la misma fila."""
+    parser = RepuestoCenterParser()
+    data = parser.parse(
+        {
+            "rut_proveedor": "79.656.210-2",
+            "ocr_texto_crudo": OCR_FIXTURE_565092_PDF_ROW,
+            "productos": [],
+        }
+    )
+    productos = data.get("productos") or []
+    assert len(productos) == 2, productos
+    assert productos[0]["codigo_proveedor"] == "MAXD070RC"
+    assert productos[0]["valor_neto"] == 67000
+    assert productos[1]["codigo_proveedor"] == "MAXD083RC"
+    assert productos[1]["valor_neto"] == 55000
+    assert data.get("total_neto") == 122000
+    assert data.get("total") == 145180
+    print("OK repuesto_center fixture 565092 PDF row\n")
+
+
+def test_fixture_565092_pdf_compact() -> None:
+    """PDF nativo: cantidad y precios compactos antes del bloque CÓDIGO."""
+    parser = RepuestoCenterParser()
+    data = parser.parse(
+        {
+            "rut_proveedor": "79.656.210-2",
+            "ocr_texto_crudo": OCR_FIXTURE_565092_PDF_COMPACT,
+            "productos": [],
+        }
+    )
+    productos = data.get("productos") or []
+    assert len(productos) == 2, productos
+    assert productos[0]["cantidad"] == 1
+    assert productos[0]["valor_neto"] == 67000
+    assert productos[1]["valor_neto"] == 55000
+    print("OK repuesto_center fixture 565092 PDF compact\n")
+
+
+def test_fixture_565092_h_codes() -> None:
+    """PDF fila con códigos cortos H6007AC / H400040 (1 letra + dígitos)."""
+    parser = RepuestoCenterParser()
+    data = parser.parse(
+        {
+            "rut_proveedor": "79.656.210-2",
+            "ocr_texto_crudo": OCR_FIXTURE_565092_H_CODES,
+            "productos": [],
+            "total_neto": 145180,
+            "iva": 565092,
+            "total": 710272,
+        }
+    )
+    productos = data.get("productos") or []
+    assert len(productos) == 2, productos
+    assert productos[0]["codigo_proveedor"] == "H6007AC"
+    assert productos[0]["valor_neto"] == 87000
+    assert productos[1]["codigo_proveedor"] == "H400040"
+    assert productos[1]["valor_neto"] == 35000
+    assert data.get("total_neto") == 122000
+    assert data.get("total") == 145180
+    print("OK repuesto_center fixture 565092 H-codes\n")
+
+
 def test_repair_folio_en_neto() -> None:
     """Folio 564465 en neto + total 87560 en IVA → no debe quedar 652025."""
     parser = RepuestoCenterParser()
@@ -184,5 +295,8 @@ def test_repair_neto_cuadra_total_polluido() -> None:
 if __name__ == "__main__":
     test_fixture_564465()
     test_fixture_565092()
+    test_fixture_565092_pdf_row()
+    test_fixture_565092_pdf_compact()
+    test_fixture_565092_h_codes()
     test_repair_folio_en_neto()
     test_repair_neto_cuadra_total_polluido()

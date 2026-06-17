@@ -11,8 +11,19 @@ from .registry import registry
 
 _RC_RUT = "79.656.210-2"
 _CODE_RE = re.compile(r"^[A-Z]{1,6}\d{2,6}[A-Z0-9]{0,6}$")
-_INLINE_CODE_RE = re.compile(r"\b([A-Z]{2,6}\d{2,5}[A-Z0-9]{2,6})\b", re.IGNORECASE)
+_NUM_CODE_RE = re.compile(r"^\d{9,11}$")
+_INLINE_CODE_RE = re.compile(
+    r"\b([A-Z]{1,6}\d{2,6}[A-Z0-9]{0,6})\b", re.IGNORECASE
+)
+_INLINE_NUM_CODE_RE = re.compile(r"\b(\d{9,11})\b")
 _CUSTOMER_CODE_RE = re.compile(r"^C\d{7,9}", re.IGNORECASE)
+_QTY_PRICE_LINE_RE = re.compile(
+    r"^\s*(\d{1,3})\s+([\d$][\d.,]*)\s*(?:([\d$][\d.,]*)\s*)?$"
+)
+_FULL_PRODUCT_ROW_RE = re.compile(
+    r"^([A-Z]{1,6}\d{2,6}[A-Z0-9]{0,6})\b.*?\b(\d{1,3})\s+([\d.,]+)",
+    re.IGNORECASE,
+)
 
 
 def _normalize_rc_code_ocr(code: str) -> str:
@@ -26,13 +37,31 @@ def _normalize_rc_code_ocr(code: str) -> str:
     return c
 
 
+def _is_rc_numeric_code(code: str) -> bool:
+    return bool(_NUM_CODE_RE.match((code or "").strip()))
+
+
 def _is_rc_product_code(line: str) -> bool:
     c = _normalize_rc_code_ocr((line or "").strip())
     if not c or _CUSTOMER_CODE_RE.match(c):
         return False
+    if _is_rc_numeric_code(c):
+        return True
     if not _CODE_RE.match(c) or len(c) < 5:
         return False
     return any(ch.isalpha() for ch in c) and any(ch.isdigit() for ch in c)
+
+
+def _parse_qty_price_line(line: str) -> tuple[int, int] | None:
+    """PDF Facele: «1 67.000,00 67.000» en una sola línea."""
+    m = _QTY_PRICE_LINE_RE.match((line or "").strip())
+    if not m:
+        return None
+    qty = int(m.group(1))
+    unit = invoice_vision._parse_monto_chileno(m.group(2))
+    if unit is None or unit < 1000:
+        return None
+    return qty, unit
 
 
 def _norm_rut(rut: str | None) -> str:
@@ -131,6 +160,11 @@ def _codes_from_line(line: str) -> list[str]:
         if _is_rc_product_code(raw) and raw not in seen:
             seen.add(raw)
             found.append(raw)
+    for m in _INLINE_NUM_CODE_RE.finditer(stripped):
+        raw = m.group(1)
+        if _is_rc_numeric_code(raw) and raw not in seen:
+            seen.add(raw)
+            found.append(raw)
     return found
 
 
@@ -188,6 +222,11 @@ def _extract_qty_and_prices(lines: list[str]) -> tuple[list[int], list[int]]:
             break
         if re.fullmatch(r"c[oó]digo", line.strip(), re.IGNORECASE):
             break
+        qty_price = _parse_qty_price_line(line)
+        if qty_price:
+            qtys.append(qty_price[0])
+            prices.append(qty_price[1])
+            continue
         if re.fullmatch(r"\d{1,2}", line.strip()):
             qtys.append(int(line.strip()))
             continue
@@ -217,7 +256,38 @@ def _unit_prices(prices: list[int], n: int) -> list[int]:
     return units[:n]
 
 
+def _extract_productos_pdf_rows(lines: list[str]) -> list[dict[str, Any]]:
+    """PDF nativo Facele: fila completa código + cantidad + precio."""
+    productos: list[dict[str, Any]] = []
+    for line in lines:
+        if re.search(r"monto\s+neto", line, re.IGNORECASE):
+            break
+        if line.lower().startswith("observacion"):
+            break
+        m = _FULL_PRODUCT_ROW_RE.match(line.strip())
+        if not m:
+            continue
+        code = _normalize_rc_code_ocr(m.group(1))
+        if not _is_rc_product_code(code):
+            continue
+        unit = invoice_vision._parse_monto_chileno(m.group(3))
+        if unit is None or unit < 1000:
+            continue
+        productos.append(
+            {
+                "codigo_proveedor": code,
+                "cantidad": max(1, int(m.group(2))),
+                "valor_neto": unit,
+            }
+        )
+    return productos
+
+
 def _extract_repuesto_center_productos(lines: list[str]) -> list[dict[str, Any]]:
+    row_products = _extract_productos_pdf_rows(lines)
+    if row_products:
+        return row_products
+
     codes = _extract_item_codes(lines)
     if not codes:
         return []

@@ -84,6 +84,9 @@ def main() -> int:
     for fn_name in ("test_fixture_564465", "test_repair_folio_en_neto"):
         _register(rc, fn_name, f"repuesto_center.{fn_name}")
     _register(rc, "test_fixture_565092", "repuesto_center.fixture_565092")
+    _register(rc, "test_fixture_565092_pdf_row", "repuesto_center.fixture_565092_pdf_row")
+    _register(rc, "test_fixture_565092_pdf_compact", "repuesto_center.fixture_565092_pdf_compact")
+    _register(rc, "test_fixture_565092_h_codes", "repuesto_center.fixture_565092_h_codes")
 
     huoying = _load_module("test_huoying_ocr", "test_huoying_ocr.py")
     _register(huoying, "test_fixture_39039", "huoying.fixture_39039")
