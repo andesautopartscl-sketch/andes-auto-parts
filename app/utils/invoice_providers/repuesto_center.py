@@ -10,12 +10,27 @@ from .base import BaseInvoiceParser
 from .registry import registry
 
 _RC_RUT = "79.656.210-2"
-_CODE_RE = re.compile(r"^[A-Z]{1,4}\d{2,6}[A-Z]{0,4}$")
+_CODE_RE = re.compile(r"^[A-Z]{1,6}\d{2,6}[A-Z0-9]{0,6}$")
+_INLINE_CODE_RE = re.compile(r"\b([A-Z]{2,6}\d{2,5}[A-Z0-9]{2,6})\b", re.IGNORECASE)
+_CUSTOMER_CODE_RE = re.compile(r"^C\d{7,9}", re.IGNORECASE)
+
+
+def _normalize_rc_code_ocr(code: str) -> str:
+    """Corrige O/0 en códigos RC (MAXD07ORC → MAXD070RC)."""
+    c = (code or "").strip().upper()
+    if not c:
+        return c
+    c = re.sub(r"(\d)O(\d)", r"\g<1>0\2", c)
+    c = re.sub(r"(\d)O([A-Z])", r"\g<1>0\2", c)
+    c = re.sub(r"([A-Z])O(\d)", r"\g<1>0\2", c)
+    return c
 
 
 def _is_rc_product_code(line: str) -> bool:
-    c = (line or "").strip().upper()
-    if not _CODE_RE.match(c) or len(c) < 4:
+    c = _normalize_rc_code_ocr((line or "").strip())
+    if not c or _CUSTOMER_CODE_RE.match(c):
+        return False
+    if not _CODE_RE.match(c) or len(c) < 5:
         return False
     return any(ch.isalpha() for ch in c) and any(ch.isdigit() for ch in c)
 
@@ -47,16 +62,35 @@ def _emitter_rut(texto: str) -> str:
 
 
 def _extract_item_codes(lines: list[str]) -> list[str]:
-    codes: list[str] = []
+    codes = _extract_item_codes_columnar(lines)
+    if len(codes) >= 2:
+        return codes
+    inline = _extract_item_codes_inline(lines)
+    if inline:
+        return inline
+    return codes
+
+
+def _extract_item_codes_columnar(lines: list[str]) -> list[str]:
+    """Bloque vertical CÓDIGO → líneas de código (layout Facele clásico)."""
+    codigo_idxs = [
+        i
+        for i, line in enumerate(lines)
+        if re.fullmatch(r"c[oó]digo", line.strip(), re.IGNORECASE)
+    ]
     start: int | None = None
-    for i, line in enumerate(lines):
-        if not re.fullmatch(r"c[oó]digo", line.strip(), re.IGNORECASE):
-            continue
-        for j in range(i + 1, min(i + 5, len(lines))):
+    for idx in codigo_idxs:
+        for j in range(idx + 1, min(idx + 6, len(lines))):
             nxt = lines[j].strip()
             if nxt.startswith(":"):
+                continue
+            if _CUSTOMER_CODE_RE.match(nxt):
                 break
             if _is_rc_product_code(nxt):
+                start = j
+                break
+            inline = _inline_code_from_line(nxt)
+            if inline:
                 start = j
                 break
         if start is not None:
@@ -64,18 +98,70 @@ def _extract_item_codes(lines: list[str]) -> list[str]:
     if start is None:
         return []
 
+    out: list[str] = []
+    seen: set[str] = set()
     for line in lines[start:]:
         low = line.lower()
         if low.startswith("observacion"):
             break
-        if _is_rc_product_code(line):
-            codes.append(line.upper())
+        for candidate in _codes_from_line(line):
+            if candidate not in seen:
+                seen.add(candidate)
+                out.append(candidate)
+    return out
+
+
+def _inline_code_from_line(line: str) -> str | None:
+    for candidate in _codes_from_line(line):
+        return candidate
+    return None
+
+
+def _codes_from_line(line: str) -> list[str]:
+    found: list[str] = []
     seen: set[str] = set()
+    stripped = (line or "").strip()
+    if _is_rc_product_code(stripped):
+        code = _normalize_rc_code_ocr(stripped)
+        if code not in seen:
+            seen.add(code)
+            found.append(code)
+    for m in _INLINE_CODE_RE.finditer(stripped):
+        raw = _normalize_rc_code_ocr(m.group(1))
+        if _is_rc_product_code(raw) and raw not in seen:
+            seen.add(raw)
+            found.append(raw)
+    return found
+
+
+def _extract_item_codes_inline(lines: list[str]) -> list[str]:
+    """Códigos embebidos en DETALLE cuando cantidades van antes (foto OCR)."""
+    start: int | None = None
+    end = len(lines)
+    for i, line in enumerate(lines):
+        low = line.lower()
+        if re.search(r"\bunitario\b", low) or re.search(r"precio\s+[ií]tem", low):
+            start = i + 1
+        if low.startswith("observacion"):
+            end = i
+            break
+    if start is None:
+        for i, line in enumerate(lines):
+            if re.fullmatch(r"cantidad", line.strip(), re.IGNORECASE):
+                start = i + 1
+                break
+    if start is None:
+        return []
+
     out: list[str] = []
-    for c in codes:
-        if c not in seen:
-            seen.add(c)
-            out.append(c)
+    seen: set[str] = set()
+    for line in lines[start:end]:
+        if re.fullmatch(r"c[oó]digo", line.strip(), re.IGNORECASE):
+            continue
+        for code in _codes_from_line(line):
+            if code not in seen:
+                seen.add(code)
+                out.append(code)
     return out
 
 
@@ -86,12 +172,21 @@ def _extract_qty_and_prices(lines: list[str]) -> tuple[list[int], list[int]]:
             start = i + 1
             break
     if start is None:
+        for i, line in enumerate(lines):
+            if re.search(r"\bunitario\b", line, re.IGNORECASE):
+                start = i + 1
+                break
+    if start is None:
         return [], []
 
     qtys: list[int] = []
     prices: list[int] = []
     for line in lines[start:]:
         if re.search(r"monto\s+neto", line, re.IGNORECASE):
+            break
+        if line.lower().startswith("observacion"):
+            break
+        if re.fullmatch(r"c[oó]digo", line.strip(), re.IGNORECASE):
             break
         if re.fullmatch(r"\d{1,2}", line.strip()):
             qtys.append(int(line.strip()))
@@ -135,9 +230,20 @@ def _extract_repuesto_center_productos(lines: list[str]) -> list[dict[str, Any]]
         if unit is None:
             continue
         productos.append(
-            {"codigo_proveedor": codigo, "cantidad": max(1, qty), "valor_neto": unit}
+            {
+                "codigo_proveedor": _normalize_rc_code_ocr(codigo),
+                "cantidad": max(1, qty),
+                "valor_neto": unit,
+            }
         )
     return productos
+
+
+def _extract_repuesto_center_footer_montos(
+    lines: list[str],
+) -> tuple[int | None, int | None, int | None]:
+    """Pie Facele: prioriza bloque MONTO NETO / IVA / TOTAL del documento."""
+    return invoice_vision._extract_dte_footer_montos(lines)
 
 
 def _repair_montos(
@@ -176,7 +282,7 @@ class RepuestoCenterParser(BaseInvoiceParser):
             data["producto_cantidad"] = p0.get("cantidad")
             data["producto_valor_neto"] = p0.get("valor_neto")
 
-        neto, iva, total = invoice_vision._extract_dte_footer_montos(lines)
+        neto, iva, total = _extract_repuesto_center_footer_montos(lines)
         if neto is None:
             neto, iva, total = invoice_vision._extract_montos(texto_norm)
 

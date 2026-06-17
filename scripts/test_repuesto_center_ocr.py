@@ -44,6 +44,42 @@ MONTO TOTAL
 FacEle Facturación Electrónica www.facele.cl
 """
 
+OCR_FIXTURE_565092 = """
+RC REPUESTOS CENTER S.A.
+R.U.T. 79.656.210-2
+FACTURA ELECTRÓNICA
+N° 0000565092
+SEÑORES ANDES AUTO PARTS
+CÓDIGO
+: C78074288-7
+FORMA DE PAGO: Crédito
+PRECIO
+DETALLE
+CANTIDAD
+PRECIO ÍTEM
+UNITARIO
+1
+67.000,00
+67.000
+1
+55.000,00
+55.000
+CÓDIGO
+MAXD07ORC EJE DE LEVAS (ADMISION) CON PIÑON
+EJE DE LEVAS (ADMISION) CON PIÑON
+MAXD083RC
+EJE DE LEVAS (ESCAPE)
+OBSERVACIONES: Basado en la Orden de Venta: 10411526
+MONTO NETO
+122.000
+MONTO IVA 19%
+23.180
+MONTO EXENTO
+0
+MONTO TOTAL
+145.180
+"""
+
 
 def test_fixture_564465() -> None:
     parser = RepuestoCenterParser()
@@ -74,6 +110,37 @@ def test_fixture_564465() -> None:
     suma = sum((p.get("cantidad") or 1) * (p.get("valor_neto") or 0) for p in productos)
     assert suma == 73580
     print("OK repuesto_center fixture 564465\n")
+
+
+def test_fixture_565092() -> None:
+    """Layout foto: cantidades antes, códigos en DETALLE (MAXD07ORC OCR)."""
+    parser = RepuestoCenterParser()
+    data = parser.parse(
+        {
+            "rut_proveedor": "79.656.210-2",
+            "ocr_texto_crudo": OCR_FIXTURE_565092,
+            "productos": [],
+            "total_neto": 145180,
+            "iva": 565092,
+            "total": 710272,
+            "numero_documento": "565092",
+        }
+    )
+    productos = data.get("productos") or []
+    assert len(productos) == 2, productos
+    assert productos[0]["codigo_proveedor"] == "MAXD070RC"
+    assert productos[0]["cantidad"] == 1
+    assert productos[0]["valor_neto"] == 67000
+    assert productos[1]["codigo_proveedor"] == "MAXD083RC"
+    assert productos[1]["cantidad"] == 1
+    assert productos[1]["valor_neto"] == 55000
+    assert data.get("total_neto") == 122000
+    assert data.get("iva") == 23180
+    assert data.get("total") == 145180
+    assert data.get("metodo_pago") == "credito"
+    suma = sum((p.get("cantidad") or 1) * (p.get("valor_neto") or 0) for p in productos)
+    assert suma == 122000
+    print("OK repuesto_center fixture 565092\n")
 
 
 def test_repair_folio_en_neto() -> None:
@@ -116,5 +183,6 @@ def test_repair_neto_cuadra_total_polluido() -> None:
 
 if __name__ == "__main__":
     test_fixture_564465()
+    test_fixture_565092()
     test_repair_folio_en_neto()
     test_repair_neto_cuadra_total_polluido()
