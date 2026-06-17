@@ -1,11 +1,8 @@
 """Parser OCR Repuesto Center (Facele DTE): precios y pie sin mezclar con totales."""
 from __future__ import annotations
 
-import logging
 import re
 from typing import Any
-
-logger = logging.getLogger(__name__)
 
 from app.utils import invoice_vision
 
@@ -422,55 +419,6 @@ def _extract_productos_facele_pdf_tail(
     return productos
 
 
-def _log_repuesto_center_extraction_debug(
-    lines: list[str],
-    folio: str | None,
-    ocr_text: str,
-    productos: list[dict[str, Any]],
-) -> None:
-    """Logging temporal: OCR crudo y líneas descartadas cuando no hay ítems."""
-    if productos:
-        return
-    discarded: list[str] = []
-    for i, line in enumerate(lines):
-        stripped = (line or "").strip()
-        if not stripped:
-            discarded.append(f"[{i}] vacía")
-            continue
-        if _is_ui_noise_line(stripped):
-            discarded.append(f"[{i}] ui_noise: {stripped!r}")
-            continue
-        if _is_folio_context_line(stripped):
-            discarded.append(f"[{i}] folio_ctx: {stripped!r}")
-            continue
-        codes = _codes_from_line(stripped, folio)
-        if codes and _is_rc_product_code(_normalize_rc_code_ocr(codes[0]), folio):
-            unit, qty = _facele_tail_unit_qty_after(lines, i, folio)
-            if unit is None:
-                discarded.append(
-                    f"[{i}] código sin precio: {stripped!r} codes={codes}"
-                )
-            continue
-        if re.search(r"monto\s+neto", stripped, re.IGNORECASE):
-            discarded.append(f"[{i}] stop_monto_neto: {stripped!r}")
-        if stripped.lower().startswith("observacion"):
-            discarded.append(f"[{i}] stop_observacion: {stripped!r}")
-    logger.info(
-        "[repuesto_center_debug] folio=%s sin productos; líneas=%s",
-        folio,
-        len(lines),
-    )
-    logger.info(
-        "[repuesto_center_debug] OCR crudo (hasta 4000 chars):\n%s",
-        (ocr_text or "")[:4000],
-    )
-    logger.info(
-        "[repuesto_center_debug] descartadas/seguimiento (%s):\n%s",
-        len(discarded),
-        "\n".join(discarded[:80]),
-    )
-
-
 def _extract_productos_pdf_rows(
     lines: list[str], folio: str | None = None
 ) -> list[dict[str, Any]]:
@@ -599,8 +547,6 @@ class RepuestoCenterParser(BaseInvoiceParser):
             productos = _extract_repuesto_center_productos(lines, folio)
             if productos:
                 _apply_productos_to_data(data, productos, "repuesto_center")
-            elif not (data.get("productos") or []):
-                _log_repuesto_center_extraction_debug(lines, folio, texto, [])
 
         neto, iva, total = _extract_repuesto_center_footer_montos(lines)
         if neto is None and data.get("_dte_neto") is not None:
