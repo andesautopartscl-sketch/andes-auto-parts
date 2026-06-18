@@ -2580,14 +2580,128 @@ def _is_xinwang_qty_line(line: str) -> bool:
 
 
 def _parse_xinwang_qty_from_line(line: str) -> int:
-    """Extrae el primer número de una línea de cantidad Xinwang. Ej: '3 3' → 3"""
+    """Cantidad Xinwang: 'N N' (cantidad + % imp. adic.) o dígito duplicado OCR (22 → 2)."""
     s = (line or "").strip()
+    m = re.fullmatch(r"(\d{1,3})\s+(\d{1,2})", s)
+    if m:
+        return max(1, min(999, int(m.group(1))))
+    m = re.fullmatch(r"(\d{2,3})", s)
+    if m:
+        raw = m.group(1)
+        if len(raw) % 2 == 0:
+            half = len(raw) // 2
+            left, right = raw[:half], raw[half:]
+            if left == right:
+                return max(1, min(999, int(left) or 1))
+        val = int(raw)
+        if 1 <= val <= 999:
+            return val
     m = re.match(r"^(\d{1,3})", s)
     if m:
         val = int(m.group(1))
         if 1 <= val <= 999:
             return val
     return 1
+
+
+def _xinwang_resolve_qty(qty: int, unit: int, line_total: int | None) -> int:
+    """Ajusta cantidad si valor línea ≠ qty×precio (detecta 22 en vez de 2)."""
+    qty = max(1, qty)
+    if unit > 0 and line_total is not None and line_total > 0:
+        if line_total % unit == 0:
+            implied = line_total // unit
+            if 1 <= implied <= 999 and implied != qty:
+                return implied
+    return qty
+
+
+_XINWANG_INLINE_ROW_SPACED_RE = re.compile(
+    r"^(.+?)\s+(\d{1,3})\s+(\d{1,2})\s+([\d.,]+)\s+([\d.,]+)\s*$",
+    re.IGNORECASE,
+)
+_XINWANG_INLINE_ROW_MERGED_QTY_RE = re.compile(
+    r"^(.+?)\s+(\d{2,3})\s+([\d.,]+)\s+([\d.,]+)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _extract_xinwang_inline_rows(lines: list[str]) -> list[dict[str, Any]]:
+    """Fila única: DESCRIPCIÓN  N N  PRECIO  VALOR (PDF nativo Xinwang)."""
+    productos: list[dict[str, Any]] = []
+    for line in lines:
+        s = (line or "").strip()
+        if not s:
+            continue
+        m = _XINWANG_INLINE_ROW_SPACED_RE.match(s)
+        if m:
+            desc, raw_qty, raw_imp, pu_tok, pt_tok = m.groups()
+        else:
+            m = _XINWANG_INLINE_ROW_MERGED_QTY_RE.match(s)
+            if not m:
+                continue
+            desc, raw_qty, pu_tok, pt_tok = m.groups()
+            raw_imp = None
+        if not re.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]", desc or ""):
+            continue
+        unit = _parse_monto_chileno(pu_tok)
+        line_total = _parse_monto_chileno(pt_tok)
+        if unit is None:
+            continue
+        if raw_imp is not None:
+            qty = _parse_xinwang_qty_from_line(f"{raw_qty} {raw_imp}")
+        else:
+            qty = _parse_xinwang_qty_from_line(raw_qty)
+        qty = _xinwang_resolve_qty(qty, unit, line_total)
+        productos.append(_producto_sin_codigo(desc.strip(), qty, unit))
+    return productos
+
+
+def _extract_xinwang_amount_pairs(lines: list[str]) -> list[tuple[int, int | None]]:
+    """Tras cada cantidad: (precio unitario, valor línea o None)."""
+    start = _find_xinwang_numeric_start(lines)
+    if start is None:
+        return []
+
+    pairs: list[tuple[int, int | None]] = []
+    i = start
+    while i < len(lines):
+        line = lines[i].strip()
+        if _is_detalle_producto_stop_line(line) or line.lower().startswith("timbre"):
+            break
+        if not _is_xinwang_qty_line(line):
+            i += 1
+            continue
+        j = i + 1
+        montos: list[int] = []
+        while j < len(lines):
+            s = lines[j].strip()
+            if not s:
+                j += 1
+                continue
+            if _is_detalle_producto_stop_line(s) or s.lower().startswith("timbre"):
+                break
+            if _is_xinwang_qty_line(s):
+                break
+            if _is_xinwang_monto_line(s):
+                val = _parse_xinwang_monto_line(s)
+                if val is not None:
+                    montos.append(val)
+                j += 1
+                continue
+            if montos:
+                break
+            j += 1
+        if montos:
+            unit = montos[0]
+            line_total = montos[1] if len(montos) >= 2 else None
+            pairs.append((unit, line_total))
+        if j < len(lines) and _is_xinwang_qty_line(lines[j].strip()):
+            i = j
+        elif montos and j < len(lines):
+            i = j
+        else:
+            i += 1
+    return pairs
 
 
 def _extract_xinwang_unit_prices(lines: list[str]) -> list[int]:
@@ -2697,16 +2811,25 @@ def _xinwang_fallback_from_totals(
 
 
 def _extract_productos_sin_codigo_xinwang(lines: list[str]) -> list[dict[str, Any]]:
+    inline = _extract_xinwang_inline_rows(lines)
+    if inline:
+        return inline
+
     descs_stacked = _extract_xinwang_descripciones(lines)
     units_stacked = _extract_xinwang_unit_prices(lines)
     qtys = _extract_xinwang_quantities(lines)
+    amount_pairs = _extract_xinwang_amount_pairs(lines)
 
     if descs_stacked and units_stacked:
         n = min(len(descs_stacked), len(units_stacked))
         return [
             _producto_sin_codigo(
                 descs_stacked[i],
-                qtys[i] if i < len(qtys) else 1,
+                _xinwang_resolve_qty(
+                    qtys[i] if i < len(qtys) else 1,
+                    units_stacked[i],
+                    amount_pairs[i][1] if i < len(amount_pairs) else None,
+                ),
                 units_stacked[i],
             )
             for i in range(n)
@@ -2756,7 +2879,15 @@ def _extract_productos_sin_codigo_xinwang(lines: list[str]) -> list[dict[str, An
         return []
     n = min(len(descs), len(units))
     return [
-        _producto_sin_codigo(descs[i], qtys[i] if i < len(qtys) else 1, units[i])
+        _producto_sin_codigo(
+            descs[i],
+            _xinwang_resolve_qty(
+                qtys[i] if i < len(qtys) else 1,
+                units[i],
+                amount_pairs[i][1] if i < len(amount_pairs) else None,
+            ),
+            units[i],
+        )
         for i in range(n)
     ]
 

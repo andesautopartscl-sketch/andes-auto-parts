@@ -66,6 +66,7 @@ def main() -> int:
 
     xinwang = _load_module("test_xinwang_ocr", "test_xinwang_ocr.py")
     _register(xinwang, "test_fixture_qty", "xinwang.fixture_qty")
+    _register(xinwang, "test_fixture_2947", "xinwang.fixture_2947")
 
     parachoque = _load_module("_test_xinwang_parachoque", "_test_xinwang_parachoque.py")
     _register(parachoque, "main", "xinwang.parachoque")

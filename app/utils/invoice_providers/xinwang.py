@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
@@ -7,6 +8,8 @@ from app.utils import invoice_vision
 
 from .base import BaseInvoiceParser
 from .registry import registry
+
+logger = logging.getLogger(__name__)
 
 
 @registry.register
@@ -55,5 +58,22 @@ class XinwangParser(BaseInvoiceParser):
             data["producto_codigo"] = p0.get("codigo_proveedor")
             data["producto_cantidad"] = p0.get("cantidad")
             data["producto_valor_neto"] = p0.get("valor_neto")
+
+            neto_footer = data.get("total_neto")
+            if neto_footer is None:
+                neto_footer, _, _ = invoice_vision._extract_montos(texto_norm)
+            suma = sum(
+                (p.get("cantidad") or 1) * (p.get("valor_neto") or 0) for p in rebuilt
+            )
+            if neto_footer and suma != neto_footer:
+                tolerancia = max(50, int(neto_footer) * 0.01)
+                if abs(suma - int(neto_footer)) > tolerancia:
+                    logger.warning(
+                        "xinwang checksum doc=%s suma_lineas=%s neto_factura=%s diff=%s",
+                        data.get("numero_documento"),
+                        suma,
+                        neto_footer,
+                        abs(suma - int(neto_footer)),
+                    )
 
         return data

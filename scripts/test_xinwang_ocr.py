@@ -30,6 +30,49 @@ Codigo
 - FILTRO ACEITE MOTOR 3 4874 14622
 """
 
+XINWANG_FIXTURE_2947 = """
+IMPORTACION Y EXPORTACION XINWANG SPA
+R.U.T.: 78.031.825-2
+FACTURA ELECTRONICA N 2947
+Codigo
+Descripcion
+Cantidad
+Precio
+%Impto Adic.*
+%Desc.
+Valor
+RODAMIENTO CAZOLETA
+22
+6.723
+13.446
+MUÑON DELT RH
+1 1
+58.823
+58.823
+Forma de Pago: Contado
+MONTO NETO $ 72.269
+I.V.A. 19% $ 13.731
+IMPUESTO ADICIONAL $ 0
+TOTAL $ 86.000
+"""
+
+XINWANG_FIXTURE_2947_INLINE = """
+IMPORTACION Y EXPORTACION XINWANG SPA
+R.U.T.: 78.031.825-2
+FACTURA ELECTRONICA N 2947
+Codigo
+Descripcion
+Cantidad
+Precio
+Valor
+RODAMIENTO CAZOLETA   2 2   6.723   13.446
+MUÑON DELT RH          1 1  58.823   58.823
+Forma de Pago: Contado
+MONTO NETO $ 72.269
+I.V.A. 19% $ 13.731
+TOTAL $ 86.000
+"""
+
 PDF_PATH = Path(
     os.environ.get(
         "XINWANG_PDF",
@@ -48,8 +91,38 @@ def test_fixture_qty() -> None:
     print(f"OK qty=3 en {productos}\n")
 
 
+def test_fixture_2947() -> None:
+    """Folio 2947: cantidad '22' OCR (2 2 sin espacio) y filas inline."""
+    from app.utils.invoice_providers.xinwang import XinwangParser
+
+    parser = XinwangParser()
+    for label, fixture in (
+        ("stacked merged qty", XINWANG_FIXTURE_2947),
+        ("inline spaced qty", XINWANG_FIXTURE_2947_INLINE),
+    ):
+        data = parser.parse(
+            {
+                "rut_proveedor": "78.031.825-2",
+                "ocr_texto_crudo": fixture,
+                "numero_documento": "2947",
+            }
+        )
+        productos = data.get("productos") or []
+        assert len(productos) == 2, (label, productos)
+        assert productos[0]["descripcion"] == "RODAMIENTO CAZOLETA", (label, productos)
+        assert productos[0]["cantidad"] == 2, (label, productos)
+        assert productos[0]["valor_neto"] == 6723, (label, productos)
+        assert productos[1]["descripcion"] == "MUÑON DELT RH", (label, productos)
+        assert productos[1]["cantidad"] == 1, (label, productos)
+        assert productos[1]["valor_neto"] == 58823, (label, productos)
+        suma = sum((p["cantidad"] * p["valor_neto"]) for p in productos)
+        assert suma == 72269, (label, suma, productos)
+    print("OK Xinwang fixture 2947\n")
+
+
 def main() -> None:
     test_fixture_qty()
+    test_fixture_2947()
     if not PDF_PATH.is_file():
         print(f"ERROR: no se encuentra {PDF_PATH}")
         sys.exit(1)
