@@ -17,6 +17,7 @@ _RC_TOKEN_RE = re.compile(
     re.IGNORECASE,
 )
 _NUM_CODE_RE = re.compile(r"^\d{9,11}$")
+_SHORT_NUM_CODE_RE = re.compile(r"^\d{3,4}$")
 _INLINE_CODE_RE = re.compile(
     r"\b((?:[A-Z]{1,6}\d{2,6}[A-Z0-9]{0,6})|(?:\d{3,6}[A-Z]{1,6}))\b",
     re.IGNORECASE,
@@ -27,7 +28,8 @@ _QTY_PRICE_LINE_RE = re.compile(
     r"^\s*(\d{1,3})\s+([\d$][\d.,]*)\s*(?:([\d$][\d.,]*)\s*)?$"
 )
 _FULL_PRODUCT_ROW_RE = re.compile(
-    r"^((?:[A-Z]{1,6}\d{2,6}[A-Z0-9]{0,6})|(?:\d{3,6}[A-Z]{1,6}))\b.*?\b(\d{1,3})\s+([\d.,]+)",
+    r"^((?:[A-Z]{1,6}\d{2,6}[A-Z0-9]{0,6})|(?:\d{3,6}[A-Z]{1,6})|(?:\d{3,4}))\b"
+    r".*?\b(\d{1,3})\s+([\d.,]+)",
     re.IGNORECASE,
 )
 
@@ -88,13 +90,31 @@ def _is_rc_numeric_code(code: str) -> bool:
     return bool(_NUM_CODE_RE.match((code or "").strip()))
 
 
-def _is_rc_product_code(line: str, folio: str | None = None) -> bool:
-    c = _normalize_rc_code_ocr((line or "").strip())
+def _is_rc_short_numeric_code(code: str, full_line: str = "") -> bool:
+    """Códigos catálogo solo numéricos cortos (ej. 2901), no montos con separadores."""
+    if not _SHORT_NUM_CODE_RE.match((code or "").strip()):
+        return False
+    stripped = (full_line or code).strip()
+    if re.search(r"[.,]", stripped):
+        return False
+    parts = stripped.split()
+    if stripped == code or (parts and parts[0] == code):
+        return True
+    return False
+
+
+def _is_rc_product_code(
+    line: str, folio: str | None = None, *, allow_short_numeric: bool = False
+) -> bool:
+    raw = (line or "").strip()
+    c = _normalize_rc_code_ocr(raw)
     if not c or _CUSTOMER_CODE_RE.match(c):
         return False
     if folio and _is_folio_token(c, folio):
         return False
     if _is_rc_numeric_code(c):
+        return True
+    if allow_short_numeric and _is_rc_short_numeric_code(c, raw):
         return True
     if _DIGIT_PREFIX_CODE_RE.match(c):
         return True
@@ -159,7 +179,7 @@ def _extract_item_codes_loose(lines: list[str], folio: str | None = None) -> lis
             break
         if _is_ui_noise_line(line) or _is_folio_context_line(line):
             continue
-        for code in _codes_from_line(line, folio):
+        for code in _codes_from_line(line, folio, allow_short_numeric=False):
             if code not in seen:
                 seen.add(code)
                 out.append(code)
@@ -183,10 +203,10 @@ def _extract_item_codes_columnar(lines: list[str], folio: str | None = None) -> 
                 break
             if _is_folio_context_line(nxt):
                 continue
-            if _is_rc_product_code(nxt, folio):
+            if _is_rc_product_code(nxt, folio, allow_short_numeric=True):
                 start = j
                 break
-            inline = _inline_code_from_line(nxt, folio)
+            inline = _inline_code_from_line(nxt, folio, allow_short_numeric=True)
             if inline:
                 start = j
                 break
@@ -203,20 +223,26 @@ def _extract_item_codes_columnar(lines: list[str], folio: str | None = None) -> 
             break
         if _is_ui_noise_line(line) or _is_folio_context_line(line):
             continue
-        for candidate in _codes_from_line(line, folio):
+        for candidate in _codes_from_line(line, folio, allow_short_numeric=True):
             if candidate not in seen:
                 seen.add(candidate)
                 out.append(candidate)
     return out
 
 
-def _inline_code_from_line(line: str, folio: str | None = None) -> str | None:
-    for candidate in _codes_from_line(line, folio):
+def _inline_code_from_line(
+    line: str, folio: str | None = None, *, allow_short_numeric: bool = False
+) -> str | None:
+    for candidate in _codes_from_line(
+        line, folio, allow_short_numeric=allow_short_numeric
+    ):
         return candidate
     return None
 
 
-def _codes_from_line(line: str, folio: str | None = None) -> list[str]:
+def _codes_from_line(
+    line: str, folio: str | None = None, *, allow_short_numeric: bool = False
+) -> list[str]:
     found: list[str] = []
     seen: set[str] = set()
     stripped = (line or "").strip()
@@ -225,11 +251,16 @@ def _codes_from_line(line: str, folio: str | None = None) -> list[str]:
 
     def add_code(raw: str) -> None:
         code = _normalize_rc_code_ocr(raw)
-        if _is_rc_product_code(code, folio) and code not in seen:
+        if (
+            _is_rc_product_code(
+                code, folio, allow_short_numeric=allow_short_numeric
+            )
+            and code not in seen
+        ):
             seen.add(code)
             found.append(code)
 
-    if _is_rc_product_code(stripped, folio):
+    if _is_rc_product_code(stripped, folio, allow_short_numeric=allow_short_numeric):
         add_code(stripped)
     for token in re.split(r"\s+", stripped):
         add_code(token)
@@ -269,7 +300,7 @@ def _extract_item_codes_inline(lines: list[str], folio: str | None = None) -> li
             continue
         if _is_ui_noise_line(line):
             continue
-        for code in _codes_from_line(line, folio):
+        for code in _codes_from_line(line, folio, allow_short_numeric=True):
             if code not in seen:
                 seen.add(code)
                 out.append(code)
@@ -321,7 +352,23 @@ def _unit_prices(prices: list[int], n: int) -> list[int]:
     if n <= 0 or not prices:
         return []
     if len(prices) >= 2 * n:
-        return [prices[i * 2] for i in range(n)]
+        block_units = prices[:n]
+        block_items = prices[n : 2 * n]
+        interleaved_units = [prices[i * 2] for i in range(n)]
+        interleaved_items = [prices[i * 2 + 1] for i in range(n)]
+
+        def _pairs_score(units: list[int], items: list[int]) -> int:
+            score = 0
+            for unit, item in zip(units, items):
+                if unit > 0 and item >= unit and (item == unit or item % unit == 0):
+                    score += 1
+            return score
+
+        if _pairs_score(block_units, block_items) > _pairs_score(
+            interleaved_units, interleaved_items
+        ):
+            return block_units
+        return interleaved_units
     units: list[int] = []
     i = 0
     while len(units) < n and i < len(prices):
@@ -435,7 +482,7 @@ def _extract_productos_pdf_rows(
         if not m:
             continue
         code = _normalize_rc_code_ocr(m.group(1))
-        if not _is_rc_product_code(code, folio):
+        if not _is_rc_product_code(code, folio, allow_short_numeric=True):
             continue
         unit = invoice_vision._parse_monto_chileno(m.group(3))
         if unit is None or unit < 1000:
@@ -458,12 +505,12 @@ def _extract_repuesto_center_productos(
         return row_products
 
     tail_products = _extract_productos_facele_pdf_tail(lines, folio)
-    if tail_products:
+    codes = _extract_item_codes(lines, folio)
+    if tail_products and (not codes or len(tail_products) >= len(codes)):
         return tail_products
 
-    codes = _extract_item_codes(lines, folio)
     if not codes:
-        return []
+        return tail_products or []
     qtys, prices = _extract_qty_and_prices(lines)
     units = _unit_prices(prices, len(codes))
     productos: list[dict[str, Any]] = []

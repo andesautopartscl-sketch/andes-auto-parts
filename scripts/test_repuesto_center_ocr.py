@@ -141,6 +141,47 @@ MONTO IVA 19% 23.180
 MONTO TOTAL 145.180
 """
 
+OCR_FIXTURE_567124_PDF_ROW = """
+R.U.T. 79.656.210-2
+FACTURA ELECTRÓNICA
+N° 0000567124
+SEÑORES ANDES AUTO PARTS
+CÓDIGO DETALLE CANTIDAD PRECIO UNITARIO PRECIO ÍTEM
+2901 FILTRO DE ACEITE 3 1.500,00 4.500
+VG4020RC KIT EMPAQUETADURAS 1 46.010,00 46.010
+OBSERVACIONES: Basado en la Orden de Venta : 10413157
+MONTO NETO 50.510
+MONTO IVA 19% 9.597
+MONTO TOTAL 60.107
+"""
+
+OCR_FIXTURE_567124_COLUMNAR = """
+R.U.T. 79.656.210-2
+FACTURA ELECTRÓNICA
+N° 0000567124
+SEÑORES ANDES AUTO PARTS
+CÓDIGO
+2901
+VG4020RC
+FILTRO DE ACEITE
+KIT EMPAQUETADURAS
+CANTIDAD
+3
+1
+PRECIO ÍTEM
+UNITARIO
+1.500,00
+46.010,00
+4.500
+46.010
+MONTO NETO
+50.510
+MONTO IVA 19%
+9.597
+MONTO TOTAL
+60.107
+"""
+
 
 DTE_XML_FIXTURE_565092 = """<?xml version="1.0"?>
 <DTE><Documento><Detalle>
@@ -354,6 +395,56 @@ def test_fixture_565092_050327() -> None:
     print("OK repuesto_center fixture 565092 050327RC\n")
 
 
+def test_fixture_567124_pdf_row() -> None:
+    """PDF fila: código numérico corto 2901 + VG4020RC (folio 567124)."""
+    parser = RepuestoCenterParser()
+    data = parser.parse(
+        {
+            "rut_proveedor": "79.656.210-2",
+            "ocr_texto_crudo": OCR_FIXTURE_567124_PDF_ROW,
+            "productos": [],
+            "numero_documento": "567124",
+        }
+    )
+    productos = data.get("productos") or []
+    assert len(productos) == 2, productos
+    assert productos[0]["codigo_proveedor"] == "2901"
+    assert productos[0]["cantidad"] == 3
+    assert productos[0]["valor_neto"] == 1500
+    assert productos[1]["codigo_proveedor"] == "VG4020RC"
+    assert productos[1]["cantidad"] == 1
+    assert productos[1]["valor_neto"] == 46010
+    assert data.get("total_neto") == 50510
+    assert data.get("iva") == 9597
+    assert data.get("total") == 60107
+    suma = sum((p.get("cantidad") or 1) * (p.get("valor_neto") or 0) for p in productos)
+    assert suma == 50510
+    print("OK repuesto_center fixture 567124 PDF row\n")
+
+
+def test_fixture_567124_columnar() -> None:
+    """Layout columnar: 2901 numérico corto alineado con cantidades/precios."""
+    parser = RepuestoCenterParser()
+    data = parser.parse(
+        {
+            "rut_proveedor": "79.656.210-2",
+            "ocr_texto_crudo": OCR_FIXTURE_567124_COLUMNAR,
+            "productos": [],
+            "numero_documento": "567124",
+        }
+    )
+    productos = data.get("productos") or []
+    assert len(productos) == 2, productos
+    assert productos[0]["codigo_proveedor"] == "2901"
+    assert productos[0]["cantidad"] == 3
+    assert productos[0]["valor_neto"] == 1500
+    assert productos[1]["codigo_proveedor"] == "VG4020RC"
+    assert productos[1]["valor_neto"] == 46010
+    assert data.get("total_neto") == 50510
+    assert data.get("total") == 60107
+    print("OK repuesto_center fixture 567124 columnar\n")
+
+
 def test_dte_xml_productos() -> None:
     from app.utils.invoice_vision import (
         _extract_montos_from_dte_xml,
@@ -437,6 +528,8 @@ if __name__ == "__main__":
     test_fixture_565092_pdf_compact()
     test_fixture_565092_h_codes()
     test_fixture_565092_050327()
+    test_fixture_567124_pdf_row()
+    test_fixture_567124_columnar()
     test_dte_xml_productos()
     test_folio_no_es_codigo()
     test_repair_folio_en_neto()
