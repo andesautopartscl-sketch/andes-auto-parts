@@ -3,7 +3,11 @@
 {% block title %}Importar imágenes Cloudinary | Andes Auto Parts{% endblock %}
 
 {% block extra_head %}
-<style>
+{# Estilos en content para que también carguen vía SPA (solo se inyecta el bloque content). #}
+{% endblock %}
+
+{% block content %}
+<style id="import-img-page-style">
 .topbar { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:18px; }
 .card {
   background:#fff; border:1px solid #e2e8f0; border-radius:16px; padding:16px 18px;
@@ -27,7 +31,16 @@
 .dropzone-icon { font-size:42px; line-height:1; margin-bottom:10px; opacity:.85; }
 .dropzone-title { font-size:15px; font-weight:700; color:#0f172a; margin:0 0 6px; }
 .dropzone-hint { font-size:12px; color:#64748b; margin:0; max-width:520px; }
-.dropzone input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+.dropzone input[type=file] {
+  position:absolute; inset:0; opacity:0; width:100%; height:100%;
+  pointer-events:none;
+}
+.dropzone-status {
+  display:none; margin-top:10px; padding:8px 12px; border-radius:8px;
+  font-size:12px; line-height:1.4;
+}
+.dropzone-status.ok { display:block; background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+.dropzone-status.err { display:block; background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
 .table-wrap { overflow:auto; max-height:min(55vh,620px); border:1px solid #e2e8f0; border-radius:10px; margin-top:12px; }
 table { width:100%; border-collapse:collapse; font-size:12px; }
 th, td { padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:middle; }
@@ -182,9 +195,6 @@ td.td-action {
   background: #fffbeb;
 }
 </style>
-{% endblock %}
-
-{% block content %}
 <div class="topbar">
   <div>
     <h1 class="page-title">Importar imágenes desde Cloudinary</h1>
@@ -224,8 +234,9 @@ td.td-action {
       Desde explorador de archivos, otra pestaña del navegador o una imagen en cualquier sitio web.
       Formatos: JPG, PNG, WEBP, GIF · Carpeta: <code id="dropzone-folder-code">andes_erp/productos</code>
     </p>
-    <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif" multiple>
+    <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif" multiple style="position:absolute;inset:0;opacity:0;width:100%;height:100%;pointer-events:none">
   </div>
+  <div id="dropzone-status" class="dropzone-status" role="status" aria-live="polite"></div>
 </section>
 
 <section class="card" id="sec-asignacion" hidden>
@@ -266,6 +277,15 @@ td.td-action {
 
 <script>
 (function () {
+  var main = document.getElementById('appMainContent');
+  var pageStyle = (main && main.querySelector('#import-img-page-style'))
+    || document.getElementById('import-img-page-style');
+  if (pageStyle) {
+    var staleHeadStyle = document.head.querySelector('#import-img-page-style');
+    if (staleHeadStyle && staleHeadStyle !== pageStyle) staleHeadStyle.remove();
+    if (pageStyle.parentNode !== document.head) document.head.appendChild(pageStyle);
+  }
+
   var dropzone = document.getElementById('dropzone');
   if (!dropzone) return;
 
@@ -278,6 +298,7 @@ td.td-action {
   var btnLimpiar = document.getElementById('btn-limpiar-listas');
   var toolbarHint = document.getElementById('toolbar-hint');
   var msg = document.getElementById('upload-msg');
+  var dropzoneStatus = document.getElementById('dropzone-status');
   var resumenFinal = document.getElementById('resumen-final');
 
   var resolverUrl = {{ url_for('productos.importar_imagenes_cloudinary_resolver') | tojson }};
@@ -358,13 +379,16 @@ td.td-action {
     if (cell) bindTipoCell(item, cell);
   }
 
-  document.getElementById('tipo-global-group').addEventListener('click', function (e) {
-    var btn = e.target.closest('.tipo-toggle[data-tipo]');
-    if (!btn) return;
-    globalTipo = normalizeTipo(btn.getAttribute('data-tipo'));
-    queue.forEach(function (item) { item.tipoImagen = globalTipo; });
-    updateGlobalTipoUi();
-  });
+  var tipoGlobalGroup = document.getElementById('tipo-global-group');
+  if (tipoGlobalGroup) {
+    tipoGlobalGroup.addEventListener('click', function (e) {
+      var btn = e.target.closest('.tipo-toggle[data-tipo]');
+      if (!btn) return;
+      globalTipo = normalizeTipo(btn.getAttribute('data-tipo'));
+      queue.forEach(function (item) { item.tipoImagen = globalTipo; });
+      updateGlobalTipoUi();
+    });
+  }
   updateGlobalTipoUi();
 
   var ALLOWED_MIME = {
@@ -372,9 +396,24 @@ td.td-action {
   };
 
   function showMsg(text, ok) {
-    msg.textContent = text;
-    msg.className = 'msg-inline ' + (ok ? 'ok' : 'err');
-    msg.style.display = 'block';
+    if (msg) {
+      msg.textContent = text;
+      msg.className = 'msg-inline ' + (ok ? 'ok' : 'err');
+      msg.style.display = 'block';
+    }
+    showDropzoneStatus(text, ok);
+  }
+
+  function showDropzoneStatus(text, ok) {
+    if (!dropzoneStatus || !text) return;
+    dropzoneStatus.textContent = text;
+    dropzoneStatus.className = 'dropzone-status ' + (ok ? 'ok' : 'err');
+  }
+
+  function clearDropzoneStatus() {
+    if (!dropzoneStatus) return;
+    dropzoneStatus.textContent = '';
+    dropzoneStatus.className = 'dropzone-status';
   }
 
   function showMsgAutoHide(text, ok, ms) {
@@ -412,9 +451,11 @@ td.td-action {
 
   function isImageFile(file) {
     if (!file) return false;
-    if (file.type && ALLOWED_MIME[file.type]) return true;
+    var mime = (file.type || '').toLowerCase();
+    if (mime.indexOf('image/') === 0) return true;
+    if (mime && ALLOWED_MIME[mime]) return true;
     var n = (file.name || '').toLowerCase();
-    return /\.(jpe?g|png|webp|gif)$/.test(n);
+    return /\.(jpe?g|png|webp|gif|bmp|jfif|heic|heif)$/.test(n);
   }
 
   function fetchResolver(codigo) {
@@ -670,6 +711,7 @@ td.td-action {
     colaResumen.textContent = queue.length + ' imagen(es) en cola · ' + conCodigo + ' con código asignado';
     secAsign.hidden = queue.length === 0;
     dropzone.classList.toggle('has-items', queue.length > 0);
+    if (queue.length > 0) clearDropzoneStatus();
   }
 
   function removeFromQueue(item) {
@@ -830,6 +872,11 @@ td.td-action {
     if (!/\.(jpe?g|png|webp|gif)$/i.test(nombre)) {
       nombre = 'imagen.' + extFromMime(file.type || 'image/jpeg');
     }
+    var dupKey = nombre + '|' + (file.size || 0);
+    var already = queue.some(function (q) {
+      return ((q.nombre || '') + '|' + ((q.file && q.file.size) || 0)) === dupKey;
+    });
+    if (already) return Promise.resolve();
     var stem = codigoFromFilename(nombre);
     var preview = URL.createObjectURL(file);
     var item = {
@@ -960,69 +1007,172 @@ td.td-action {
   function collectDropEntries(dataTransfer) {
     var files = [];
     var urlPromises = [];
+    var seen = {};
+    if (!dataTransfer) return { files: files, urlPromises: urlPromises };
+
+    function rememberFile(f) {
+      if (!f || !isImageFile(f)) return;
+      var key = (f.name || 'imagen') + '|' + f.size;
+      if (seen[key]) return;
+      seen[key] = true;
+      files.push(f);
+    }
+
+    /* Explorador de archivos: dataTransfer.files es la fuente fiable (un solo origen). */
     if (dataTransfer.files && dataTransfer.files.length) {
       for (var i = 0; i < dataTransfer.files.length; i++) {
-        if (isImageFile(dataTransfer.files[i])) files.push(dataTransfer.files[i]);
+        rememberFile(dataTransfer.files[i]);
       }
-      if (files.length) return { files: files, urlPromises: [] };
+      if (files.length) {
+        return { files: files, urlPromises: [] };
+      }
     }
-    if (dataTransfer.items) {
+
+    /* Arrastre desde pestaña web sin FileList: items con blob o URL de imagen. */
+    if (dataTransfer.items && dataTransfer.items.length) {
       for (var j = 0; j < dataTransfer.items.length; j++) {
         var it = dataTransfer.items[j];
         if (it.kind === 'file') {
-          var f = it.getAsFile();
-          if (f && isImageFile(f)) files.push(f);
-        } else if (it.kind === 'string' && it.type === 'text/uri-list') {
-          urlPromises.push(new Promise(function (resolve) {
-            it.getAsString(function (s) {
-              var u = (s || '').trim().split('\n')[0];
-              resolve(u);
-            });
-          }));
-        } else if (it.kind === 'string' && it.type === 'text/html') {
-          urlPromises.push(new Promise(function (resolve) {
-            it.getAsString(function (html) {
-              var m = html.match(/src=["']([^"']+)["']/i);
-              resolve(m ? m[1] : '');
-            });
-          }));
+          rememberFile(it.getAsFile());
+        }
+      }
+      if (files.length) {
+        return { files: files, urlPromises: [] };
+      }
+
+      function queueUrlPromise(item, type) {
+        urlPromises.push(new Promise(function (resolve) {
+          item.getAsString(function (s) {
+            var url = '';
+            if (type === 'text/html') {
+              var m = (s || '').match(/<img[^>]+src=["']([^"']+)["']/i);
+              url = m ? m[1] : '';
+            } else {
+              var lines = (s || '').trim().split(/[\s\r\n]+/);
+              for (var li = 0; li < lines.length; li++) {
+                var line = lines[li].trim();
+                if (line && line.charAt(0) !== '#') { url = line; break; }
+              }
+            }
+            resolve(url || '');
+          });
+        }));
+      }
+
+      for (var k = 0; k < dataTransfer.items.length; k++) {
+        var it2 = dataTransfer.items[k];
+        if (it2.kind !== 'string') continue;
+        if (it2.type === 'text/uri-list' || it2.type === 'text/plain' || it2.type === 'text/html') {
+          queueUrlPromise(it2, it2.type);
         }
       }
     }
+
     return { files: files, urlPromises: urlPromises };
+  }
+
+  function addFromDataUrl(url) {
+    var m = (url || '').match(/^data:(image\/[^;]+);base64,(.+)$/i);
+    if (!m) return Promise.resolve();
+    var mime = m[1].toLowerCase();
+    var ext = extFromMime(mime);
+    var file = base64ToFile(m[2], 'imagen.' + ext, mime);
+    return addFileToQueue(file, 'imagen.' + ext);
+  }
+
+  function addFromBlobUrl(url) {
+    return fetch(url).then(function (r) { return r.blob(); }).then(function (blob) {
+      if (!blob || !blob.type || blob.type.indexOf('image/') !== 0) {
+        throw new Error('No se pudo leer la imagen arrastrada.');
+      }
+      var ext = extFromMime(blob.type);
+      var file = new File([blob], 'imagen.' + ext, { type: blob.type });
+      return addFileToQueue(file, 'imagen.' + ext);
+    });
+  }
+
+  function importDroppedUrl(url) {
+    var u = (url || '').trim();
+    if (!u) return Promise.resolve();
+    if (/^file:/i.test(u)) return Promise.resolve();
+    if (/^data:image\//i.test(u)) return addFromDataUrl(u);
+    if (u.indexOf('blob:') === 0) return addFromBlobUrl(u);
+    if (/^https?:\/\//i.test(u)) return addFromUrl(u);
+    return Promise.resolve();
   }
 
   function handleDrop(e) {
     e.preventDefault();
     e.stopPropagation();
     dropzone.classList.remove('is-dragover');
-    var collected = collectDropEntries(e.dataTransfer);
-    var work = [];
-    if (collected.files.length) work.push(addFilesFromList(collected.files));
-    collected.urlPromises.forEach(function (p) {
-      work.push(p.then(function (url) {
-        if (url && /^https?:\/\//i.test(url)) return addFromUrl(url);
-      }));
+    var dt = e.dataTransfer;
+    if (!dt) {
+      showDropzoneStatus('No se pudo leer el arrastre.', false);
+      return;
+    }
+    var collected = collectDropEntries(dt);
+
+    if (collected.files.length) {
+      addFilesFromList(collected.files).then(function () {
+        if (queue.length) {
+          showDropzoneStatus('Imagen agregada a la cola.', true);
+        }
+      }).catch(function (err) {
+        showDropzoneStatus(err.message || 'Error al procesar la imagen.', false);
+      });
+      return;
+    }
+
+    if (!collected.urlPromises.length) {
+      showDropzoneStatus('No se detectaron imágenes válidas (JPG, PNG, WEBP o GIF).', false);
+      return;
+    }
+
+    var seenUrl = {};
+    Promise.all(collected.urlPromises.map(function (p) {
+      return p.then(function (url) {
+        var u = (url || '').trim();
+        if (!u || seenUrl[u]) return;
+        seenUrl[u] = true;
+        return importDroppedUrl(u);
+      });
+    })).then(function () {
+      if (queue.length) {
+        showDropzoneStatus('Imagen agregada a la cola.', true);
+      }
+    }).catch(function (err) {
+      showDropzoneStatus(err.message || 'Error al importar imagen desde la web.', false);
     });
-    Promise.all(work).catch(function (err) {
-      showMsg(err.message || 'Error al procesar imágenes arrastradas.', false);
-    });
+  }
+
+  function preventDragDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   ['dragenter', 'dragover'].forEach(function (evName) {
     dropzone.addEventListener(evName, function (e) {
-      e.preventDefault();
-      e.stopPropagation();
+      preventDragDefaults(e);
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
       dropzone.classList.add('is-dragover');
-    });
+    }, true);
   });
-  ['dragleave', 'drop'].forEach(function (evName) {
-    dropzone.addEventListener(evName, function (e) {
+  dropzone.addEventListener('dragleave', function (e) {
+    preventDragDefaults(e);
+    if (!dropzone.contains(e.relatedTarget)) {
+      dropzone.classList.remove('is-dragover');
+    }
+  }, true);
+  dropzone.addEventListener('drop', handleDrop, true);
+
+  dropzone.addEventListener('click', function () {
+    fileInput.click();
+  });
+  dropzone.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      e.stopPropagation();
-      if (evName === 'drop') handleDrop(e);
-      else dropzone.classList.remove('is-dragover');
-    });
+      fileInput.click();
+    }
   });
 
   fileInput.addEventListener('change', function () {
@@ -1136,7 +1286,7 @@ td.td-action {
     });
   }
 
-  btnTodas.addEventListener('click', function () {
+  if (btnTodas) btnTodas.addEventListener('click', function () {
     if (uploadingAll) return;
     var pending = queue.filter(function (q) {
       return (q.codigo || '').trim() && q.status !== 'done' && q.status !== 'uploading';
@@ -1183,12 +1333,13 @@ td.td-action {
     tbody.innerHTML = '';
     secAsign.hidden = true;
     secResumen.hidden = true;
-    msg.style.display = 'none';
+    if (msg) msg.style.display = 'none';
     toolbarHint.textContent = '';
+    clearDropzoneStatus();
     updateColaResumen();
   }
 
-  btnLimpiar.addEventListener('click', limpiarCola);
+  if (btnLimpiar) btnLimpiar.addEventListener('click', limpiarCola);
 
   document.addEventListener('paste', function (e) {
     try {
