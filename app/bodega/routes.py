@@ -2127,6 +2127,24 @@ def api_analizar_factura():
                 data.get("iva"),
                 data.get("total"),
             )
+            parser_nombre = getattr(parser, "nombre", "")
+            suma_items = sum(
+                (p.get("cantidad") or 1) * (p.get("valor_neto") or 0)
+                for p in productos
+            )
+            footer_neto = data.get("total_neto")
+            if (
+                parser_nombre == "acd"
+                and footer_neto
+                and suma_items > footer_neto + max(50, int(footer_neto * 0.02))
+            ):
+                neto = footer_neto
+                if total is None and iva is not None:
+                    total = int(footer_neto + iva)
+                elif total is None and data.get("total"):
+                    total = data.get("total")
+                if iva is None and total and total > footer_neto:
+                    iva = int(total - footer_neto)
             if neto is not None:
                 data["total_neto"] = neto
             if iva is not None:

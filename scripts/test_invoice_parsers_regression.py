@@ -96,6 +96,17 @@ def main() -> int:
     huoying = _load_module("test_huoying_ocr", "test_huoying_ocr.py")
     _register(huoying, "test_fixture_39039", "huoying.fixture_39039")
 
+    acd = _load_module("test_acd_ocr", "test_acd_ocr.py")
+    _register(acd, "test_fixture_270", "acd.fixture_270")
+    _register(acd, "test_fixture_273", "acd.fixture_273")
+    _register(acd, "test_fixture_merged_header_line", "acd.fixture_merged_header")
+    _register(acd, "test_fixture_duplicate_rows_merge", "acd.fixture_duplicate_merge")
+    _register(acd, "test_fixture_270_discount_dup_desc", "acd.fixture_270_discount_dup")
+    _register(acd, "test_fixture_270_wrong_global_neto", "acd.fixture_270_wrong_neto")
+    _register(acd, "test_fixture_270_broken_footer_label_wrong_neto", "acd.fixture_270_broken_footer")
+    _register(acd, "test_fixture_ocr_duplicate_single_item", "acd.fixture_ocr_dup_single")
+    _register(acd, "test_fixture_no_glosa_header", "acd.fixture_no_glosa")
+
     failed: list[str] = []
     print("=" * 72)
     print("REGRESIÓN PARSERS OCR (fixtures locales)")

@@ -2628,14 +2628,57 @@
                 }
             }
 
-            function applyBackendPreviewImage(src) {
-                if (!src) return;
-                revokeLocalPreviewUrl();
-                hidePreviewPdf();
-                hidePreviewPdfCanvas();
-                hidePreviewImg();
-                showPreviewImg(src);
+            function restoreLocalFilePreview() {
+                if (!pendingFile) return;
                 setPreviewWrapVisible(true);
+                if (isFacturaPdfFile(pendingFile)) {
+                    showPdfPlaceholder(pendingFile);
+                    return;
+                }
+                if (isFacturaImageFile(pendingFile)) {
+                    showLocalImagePreview(pendingFile);
+                }
+            }
+
+            function applyBackendPreviewImage(src) {
+                if (!src || !previewImg) return;
+                setPreviewWrapVisible(true);
+                previewImg.onload = function () {
+                    previewImg.onload = null;
+                    previewImg.onerror = null;
+                    revokeLocalPreviewUrl();
+                    hidePreviewPdf();
+                    hidePreviewPdfCanvas();
+                    previewImg.hidden = false;
+                    previewImg.style.display = "block";
+                    setPreviewWrapVisible(true);
+                };
+                previewImg.onerror = function () {
+                    previewImg.onerror = null;
+                    previewImg.onload = null;
+                    restoreLocalFilePreview();
+                };
+                previewImg.src = src;
+                previewImg.alt = facturaPreviewImgAlt;
+            }
+
+            function ensurePreviewVisibleAfterAnalyze() {
+                setPreviewWrapVisible(true);
+                if (previewImg && previewImg.src && !previewImg.hidden) {
+                    return;
+                }
+                if (
+                    previewPdfRendered &&
+                    !previewPdfRendered.hidden &&
+                    previewPdfCanvas &&
+                    previewPdfCanvas.width > 0
+                ) {
+                    return;
+                }
+                if (previewPdf && !previewPdf.hidden) {
+                    return;
+                }
+                restoreLocalFilePreview();
             }
 
             function clearExtractedResults() {
@@ -3319,6 +3362,7 @@
                             applyBackendPreviewImage(extractedData.preview_base64);
                         }
                         renderExtractedPreview(extractedData);
+                        ensurePreviewVisibleAfterAnalyze();
                         if (btnApply) btnApply.disabled = false;
                         setStatus(
                             !extractedData.fecha
