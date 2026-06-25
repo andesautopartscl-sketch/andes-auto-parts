@@ -217,6 +217,70 @@ def cloudinary_storage_key(producto: Producto | None, fallback_code: str = "") -
     return _sanitize_storage_key(fallback_code)
 
 
+_CLOUDINARY_PRODUCT_LIST_CACHE: dict[str, tuple[float, list[str]]] = {}
+_CLOUDINARY_PRODUCT_LIST_CACHE_TTL_S = 300.0
+
+
+def list_cloudinary_product_urls_by_storage_key(
+    storage_key: str,
+    *,
+    max_results: int = 30,
+) -> list[str]:
+    """
+    URLs de imágenes ya subidas a Cloudinary bajo andes_erp/productos/{storage_key}/.
+    Solo lectura (no modifica BD). Cache en memoria por OEM/código.
+    """
+    import time
+
+    from app.utils.cloudinary_config import is_configured
+
+    key = _sanitize_storage_key(storage_key)
+    if not key or not is_configured():
+        return []
+
+    now = time.monotonic()
+    cached = _CLOUDINARY_PRODUCT_LIST_CACHE.get(key)
+    if cached and (now - cached[0]) < _CLOUDINARY_PRODUCT_LIST_CACHE_TTL_S:
+        return list(cached[1])
+
+    folder = CLOUD_FOLDER_BY_TIPO[TIPO_IMAGEN_PRODUCTO]
+    prefix = f"{folder}/{key}"
+    urls: list[str] = []
+    try:
+        from app.utils.cloudinary_config import _ensure_configured
+
+        _ensure_configured()
+        import cloudinary.api
+
+        next_cursor: str | None = None
+        resources: list[dict] = []
+        while len(resources) < max_results:
+            kwargs: dict = {
+                "type": "upload",
+                "prefix": prefix,
+                "max_results": min(50, max_results - len(resources)),
+                "resource_type": "image",
+            }
+            if next_cursor:
+                kwargs["next_cursor"] = next_cursor
+            resp = cloudinary.api.resources(**kwargs)
+            resources.extend(resp.get("resources") or [])
+            next_cursor = resp.get("next_cursor")
+            if not next_cursor:
+                break
+
+        for res in sorted(resources, key=lambda r: r.get("created_at") or ""):
+            url = (res.get("secure_url") or res.get("url") or "").strip()
+            if url:
+                urls.append(url)
+    except Exception:
+        logger.exception("list_cloudinary_product_urls_by_storage_key failed for %s", key)
+        return []
+
+    _CLOUDINARY_PRODUCT_LIST_CACHE[key] = (now, urls)
+    return list(urls)
+
+
 def producto_resolver_payload(producto: Producto, match_type: str) -> dict:
     codigo = (producto.codigo or "").strip().upper()
     oem = (producto.codigo_oem or "").strip().upper()

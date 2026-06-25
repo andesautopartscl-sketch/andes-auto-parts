@@ -65,6 +65,8 @@ from ..utils.cloudinary_product_import import (
     link_cloudinary_url_to_despiece,
     link_cloudinary_url_to_360,
     link_cloudinary_url_to_producto,
+    list_cloudinary_product_urls_by_storage_key,
+    imagen_ordenes_para_producto,
     build_import_public_id,
     normalize_tipo_imagen,
     producto_resolver_payload,
@@ -517,7 +519,109 @@ def _collect_imagenes_producto(producto: Producto) -> list[str]:
     if STATIC_PRODUCTOS_IMG.is_dir():
         for name in _collect_imagenes_producto_carpeta(folder, producto):
             add(f"productos_img/{name}")
+
+    if not out and cloudinary_is_configured():
+        storage_keys: list[str] = []
+        sk_oem = cloudinary_storage_key(producto)
+        if sk_oem:
+            storage_keys.append(sk_oem)
+        codigo_interno = re.sub(
+            r"[^a-zA-Z0-9_\-]", "_", (producto.codigo or "").strip().upper()
+        )
+        if codigo_interno and codigo_interno not in storage_keys:
+            storage_keys.append(codigo_interno)
+        for sk in storage_keys:
+            for url in list_cloudinary_product_urls_by_storage_key(sk):
+                add(url)
+            if out:
+                break
     return out
+
+
+def _galeria_imagenes_query(sess, producto: Producto):
+    """Filas ProductoImagen visibles en galería (mismo OEM compartido o solo este código)."""
+    oem = (producto.codigo_oem or "").strip().upper()
+    codigo = (producto.codigo or "").strip().upper()
+    q = (
+        sess.query(ProductoImagen)
+        .join(Producto, ProductoImagen.producto_codigo == Producto.codigo)
+        .filter(Producto.activo.is_(True))
+        .filter(ProductoImagen.ruta.isnot(None))
+        .filter(ProductoImagen.ruta != "")
+    )
+    if oem:
+        q = q.filter(func.upper(func.trim(Producto.codigo_oem)) == oem)
+    elif codigo:
+        q = q.filter(func.upper(func.trim(Producto.codigo)) == codigo)
+    else:
+        return []
+    return q.all()
+
+
+def _galeria_edit_payload(sess, producto: Producto) -> dict:
+    """Imágenes vinculadas + huérfanas en Cloudinary para el gestor en edición."""
+    rows = sorted(_galeria_imagenes_query(sess, producto), key=_producto_imagen_sort_key)
+    seen_keys: set[str] = set()
+    imagenes: list[dict] = []
+    for row in rows:
+        ruta = (row.ruta or "").strip()
+        if not ruta:
+            continue
+        key = image_ref_dedupe_key(ruta) or ruta.lower()
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        try:
+            orden = int(row.orden) if row.orden is not None else 999
+        except (TypeError, ValueError):
+            orden = 999
+        imagenes.append(
+            {
+                "id": row.id,
+                "ruta": ruta,
+                "url": product_image_src(ruta),
+                "orden": orden,
+                "es_principal": bool(getattr(row, "es_principal", False)),
+                "producto_codigo": (row.producto_codigo or "").strip().upper(),
+            }
+        )
+    imagenes.sort(key=lambda x: (x["orden"], x["id"]))
+
+    huerfanas: list[dict] = []
+    if cloudinary_is_configured():
+        keys_try: list[str] = []
+        sk = cloudinary_storage_key(producto)
+        if sk:
+            keys_try.append(sk)
+        codigo_sk = re.sub(
+            r"[^a-zA-Z0-9_\-]", "_", (producto.codigo or "").strip().upper()
+        )
+        if codigo_sk and codigo_sk not in keys_try:
+            keys_try.append(codigo_sk)
+        for storage_key in keys_try:
+            for url in list_cloudinary_product_urls_by_storage_key(storage_key):
+                ukey = image_ref_dedupe_key(url) or url.lower()
+                if ukey in seen_keys:
+                    continue
+                seen_keys.add(ukey)
+                huerfanas.append({"url": url, "thumb": product_image_src(url)})
+
+    ord_info = imagen_ordenes_para_producto(sess, producto)
+    return {
+        "imagenes": imagenes,
+        "huerfanas": huerfanas,
+        "imagen_siguiente_orden": ord_info.get("imagen_siguiente_orden", 0),
+    }
+
+
+def _galeria_row_en_scope(sess, producto: Producto, img_id: int) -> ProductoImagen | None:
+    if not img_id:
+        return None
+    scope_ids = {r.id for r in _galeria_imagenes_query(sess, producto)}
+    row = sess.query(ProductoImagen).filter(ProductoImagen.id == img_id).first()
+    if row and row.id in scope_ids:
+        return row
+    return None
 
 
 def _collect_imagenes_360(producto: Producto) -> list[str]:
@@ -1571,8 +1675,231 @@ def buscar_para_editar():
             "homologados": producto.homologados or "",
             "activo": bool(producto.activo),
             "estado": "ACTIVO" if producto.activo else "INACTIVO",
+            "galeria": _galeria_edit_payload(sess, producto),
         })
     except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 500
+    finally:
+        sess.close()
+
+
+@productos_bp.route("/productos/<codigo>/imagenes/galeria", methods=["GET"])
+@admin_required
+def obtener_galeria_producto(codigo):
+    denied = _require_productos_crear_editar_json()
+    if denied:
+        return denied
+    normalized = (codigo or "").strip().upper()
+    sess = SessionDB()
+    try:
+        producto = _find_producto_by_codigo(sess, normalized)
+        if producto is None:
+            return jsonify({"success": False, "error": "Producto no encontrado"}), 404
+        return jsonify({"success": True, "codigo": normalized, **_galeria_edit_payload(sess, producto)})
+    finally:
+        sess.close()
+
+
+@productos_bp.route("/productos/imagenes/galeria/orden", methods=["POST"])
+@admin_required
+def guardar_galeria_orden():
+    denied = _require_productos_crear_editar_json()
+    if denied:
+        return denied
+    data = request.get_json(silent=True) or {}
+    codigo = (data.get("codigo") or "").strip().upper()
+    orden_ids_raw = data.get("orden_ids") or []
+    if not codigo:
+        return jsonify({"success": False, "error": "Código inválido"}), 400
+    if not isinstance(orden_ids_raw, list) or not orden_ids_raw:
+        return jsonify({"success": False, "error": "orden_ids debe ser una lista no vacía"}), 400
+
+    orden_ids: list[int] = []
+    for raw in orden_ids_raw:
+        try:
+            orden_ids.append(int(raw))
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "error": "orden_ids contiene ids inválidos"}), 400
+
+    sess = SessionDB()
+    try:
+        producto = _find_producto_by_codigo(sess, codigo)
+        if producto is None:
+            return jsonify({"success": False, "error": "Producto no encontrado"}), 404
+
+        scope_rows = {r.id: r for r in _galeria_imagenes_query(sess, producto)}
+        if len(orden_ids) != len(set(orden_ids)):
+            return jsonify({"success": False, "error": "Hay ids duplicados en la lista"}), 400
+        for img_id in orden_ids:
+            if img_id not in scope_rows:
+                return jsonify({"success": False, "error": f"Imagen {img_id} no pertenece a este producto/OEM"}), 400
+
+        portada_url: str | None = None
+        for idx, img_id in enumerate(orden_ids):
+            row = scope_rows[img_id]
+            row.orden = idx
+            row.es_principal = idx == 0
+            if idx == 0:
+                portada_url = (row.ruta or "").strip() or None
+
+        if portada_url:
+            producto.imagen_url = portada_url
+            oem = (producto.codigo_oem or "").strip().upper()
+            if oem:
+                otros = (
+                    sess.query(Producto)
+                    .filter(Producto.activo.is_(True))
+                    .filter(func.upper(func.trim(Producto.codigo_oem)) == oem)
+                    .all()
+                )
+                for otro in otros:
+                    otro.imagen_url = portada_url
+
+        register_product_audit(
+            sess,
+            actor=_actor_usuario(),
+            action="update",
+            modulo="productos",
+            producto_codigo=codigo,
+            req=request,
+            metadata={"galeria_reorden": True, "orden_ids": orden_ids},
+        )
+        sess.commit()
+        return jsonify(
+            {
+                "success": True,
+                "message": "Orden de galería guardado",
+                "galeria": _galeria_edit_payload(sess, producto),
+            }
+        )
+    except Exception as exc:
+        sess.rollback()
+        return jsonify({"success": False, "error": str(exc)}), 500
+    finally:
+        sess.close()
+
+
+@productos_bp.route("/productos/imagenes/galeria/vincular", methods=["POST"])
+@admin_required
+def vincular_galeria_imagen():
+    denied = _require_productos_crear_editar_json()
+    if denied:
+        return denied
+    data = request.get_json(silent=True) or {}
+    codigo = (data.get("codigo") or "").strip().upper()
+    url = (data.get("url") or "").strip()
+    orden_raw = data.get("orden")
+    if not codigo or not url:
+        return jsonify({"success": False, "error": "Faltan codigo o url"}), 400
+
+    try:
+        orden = int(orden_raw) if orden_raw is not None else None
+    except (TypeError, ValueError):
+        orden = None
+
+    sess = SessionDB()
+    try:
+        producto = _find_producto_by_codigo(sess, codigo)
+        if producto is None:
+            return jsonify({"success": False, "error": "Producto no encontrado"}), 404
+
+        if orden is None:
+            orden = imagen_ordenes_para_producto(sess, producto).get("imagen_siguiente_orden", 0)
+
+        link_cloudinary_url_to_producto(sess, producto, url, orden=orden)
+        register_product_audit(
+            sess,
+            actor=_actor_usuario(),
+            action="update",
+            modulo="productos",
+            producto_codigo=codigo,
+            req=request,
+            metadata={"galeria_vincular": True, "url": url[:200], "orden": orden},
+        )
+        sess.commit()
+        return jsonify(
+            {
+                "success": True,
+                "message": "Imagen vinculada a la galería",
+                "galeria": _galeria_edit_payload(sess, producto),
+            }
+        )
+    except Exception as exc:
+        sess.rollback()
+        return jsonify({"success": False, "error": str(exc)}), 500
+    finally:
+        sess.close()
+
+
+@productos_bp.route("/productos/imagenes/galeria/eliminar", methods=["POST"])
+@admin_required
+def eliminar_galeria_imagen():
+    denied = _require_productos_crear_editar_json()
+    if denied:
+        return denied
+    data = request.get_json(silent=True) or {}
+    codigo = (data.get("codigo") or "").strip().upper()
+    img_id_raw = data.get("id")
+    try:
+        img_id = int(img_id_raw)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "id inválido"}), 400
+
+    if not codigo:
+        return jsonify({"success": False, "error": "Código inválido"}), 400
+
+    sess = SessionDB()
+    try:
+        producto = _find_producto_by_codigo(sess, codigo)
+        if producto is None:
+            return jsonify({"success": False, "error": "Producto no encontrado"}), 404
+
+        row = _galeria_row_en_scope(sess, producto, img_id)
+        if row is None:
+            return jsonify({"success": False, "error": "Imagen no encontrada en la galería"}), 404
+
+        era_principal = bool(getattr(row, "es_principal", False)) or int(row.orden or 999) == 0
+        ruta_borrada = (row.ruta or "").strip()
+        sess.delete(row)
+        sess.flush()
+
+        if era_principal:
+            restantes = sorted(_galeria_imagenes_query(sess, producto), key=_producto_imagen_sort_key)
+            nueva_portada = (restantes[0].ruta or "").strip() if restantes else None
+            producto.imagen_url = nueva_portada
+            oem = (producto.codigo_oem or "").strip().upper()
+            if oem:
+                otros = (
+                    sess.query(Producto)
+                    .filter(Producto.activo.is_(True))
+                    .filter(func.upper(func.trim(Producto.codigo_oem)) == oem)
+                    .all()
+                )
+                for otro in otros:
+                    otro.imagen_url = nueva_portada
+            if restantes:
+                restantes[0].es_principal = True
+                restantes[0].orden = 0
+
+        register_product_audit(
+            sess,
+            actor=_actor_usuario(),
+            action="update",
+            modulo="productos",
+            producto_codigo=codigo,
+            req=request,
+            metadata={"galeria_eliminar": True, "imagen_id": img_id, "ruta": ruta_borrada[:200]},
+        )
+        sess.commit()
+        return jsonify(
+            {
+                "success": True,
+                "message": "Imagen quitada de la galería (el archivo en Cloudinary no se borra)",
+                "galeria": _galeria_edit_payload(sess, producto),
+            }
+        )
+    except Exception as exc:
+        sess.rollback()
         return jsonify({"success": False, "error": str(exc)}), 500
     finally:
         sess.close()

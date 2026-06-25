@@ -593,6 +593,134 @@ body.dark .productos-edit-page .vc-table .btn-vc-save:hover {
         flex: 1 1 100%;
     }
 }
+
+/* Galería de imágenes */
+.productos-edit-page .gal-module {
+    margin-top: 4px;
+}
+.productos-edit-page .gal-hint {
+    margin: 0 0 10px;
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.4;
+}
+.productos-edit-page .gal-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    min-height: 48px;
+}
+.productos-edit-page .gal-item {
+    position: relative;
+    width: 108px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+    padding: 6px;
+    cursor: grab;
+    transition: box-shadow .15s ease, border-color .15s ease;
+}
+.productos-edit-page .gal-item:active {
+    cursor: grabbing;
+}
+.productos-edit-page .gal-item.gal-item--dragging {
+    opacity: 0.55;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+.productos-edit-page .gal-item.gal-item--portada {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+}
+.productos-edit-page .gal-thumb {
+    width: 100%;
+    height: 84px;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #e2e8f0;
+    display: block;
+}
+.productos-edit-page .gal-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: #0ea5e9;
+    color: #fff;
+}
+.productos-edit-page .gal-pos {
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    text-align: center;
+    margin-top: 4px;
+}
+.productos-edit-page .gal-actions-row {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    margin-top: 6px;
+    flex-wrap: wrap;
+}
+.productos-edit-page .gal-btn {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    cursor: pointer;
+    color: #334155;
+    line-height: 1.3;
+}
+.productos-edit-page .gal-btn:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+.productos-edit-page .gal-btn--danger {
+    color: #b91c1c;
+    border-color: #fecaca;
+}
+.productos-edit-page .gal-btn--danger:hover {
+    background: #fef2f2;
+}
+.productos-edit-page .gal-orphans {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed #e2e8f0;
+}
+.productos-edit-page .gal-orphans-title {
+    margin: 0 0 8px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.productos-edit-page .gal-item--orphan {
+    cursor: default;
+}
+.productos-edit-page .gal-empty {
+    font-size: 12px;
+    color: #94a3b8;
+    padding: 8px 0;
+}
+.productos-edit-page .gal-toolbar {
+    margin-top: 10px;
+}
+body.dark .productos-edit-page .gal-item {
+    background: #111827;
+    border-color: #374151;
+}
+body.dark .productos-edit-page .gal-btn {
+    background: #1f2937;
+    border-color: #4b5563;
+    color: #e5e7eb;
+}
 </style>
 {% endblock %}
 
@@ -741,6 +869,23 @@ body.dark .productos-edit-page .vc-table .btn-vc-save:hover {
         <div id="variantesComercialesEmpty" class="vc-empty hidden"></div>
     </div>
 
+    <h3 class="form-sec">Galería de imágenes</h3>
+    <div id="galeriaImagenesModule" class="gal-module">
+        <p class="gal-hint">Arrastra las miniaturas para cambiar el orden. La primera es la <strong>portada</strong> (ficha técnica y catálogo). También podés usar los botones ↑ ↓ o «Portada».</p>
+        <div id="galeriaImagenesList" class="gal-grid" aria-live="polite"></div>
+        <div id="galeriaImagenesEmpty" class="gal-empty hidden">Sin imágenes vinculadas en la galería.</div>
+        <div id="galeriaHuerfanasWrap" class="gal-orphans hidden">
+            <h4 class="gal-orphans-title">En Cloudinary sin vincular</h4>
+            <p class="gal-hint" style="margin-top:0;">Estas fotos ya están en la nube pero no en la galería del producto. «Agregar» las incorpora sin volver a subirlas.</p>
+            <div id="galeriaHuerfanasList" class="gal-grid"></div>
+        </div>
+        <div class="actions gal-toolbar">
+            <button type="button" class="btn btn-primary" id="btnGuardarGaleria" disabled>Guardar orden de galería</button>
+            <a class="btn" href="{{ url_for('productos.importar_imagenes_cloudinary_view') }}" data-module-url="{{ url_for('productos.importar_imagenes_cloudinary_view') }}">Subir nuevas imágenes</a>
+        </div>
+        <div id="msgGaleria"></div>
+    </div>
+
     <h3 class="form-sec">Codificación OEM</h3>
     <div class="row">
         <div class="field">
@@ -784,6 +929,253 @@ body.dark .productos-edit-page .vc-table .btn-vc-save:hover {
 <script>
 var taxonomiaCategorias = [];
 var taxonomiaCategoriasBackup = [];
+var galeriaState = { codigo: '', items: [], huerfanas: [], dirty: false, dragId: null };
+
+function setMsgGaleria(text, ok) {
+    var el = document.getElementById('msgGaleria');
+    if (!el) return;
+    if (!text) {
+        el.textContent = '';
+        el.className = '';
+        return;
+    }
+    el.className = 'msg ' + (ok ? 'msg-ok' : 'msg-err');
+    el.textContent = text;
+}
+
+function updateGaleriaToolbar() {
+    var btn = document.getElementById('btnGuardarGaleria');
+    if (!btn) return;
+    btn.disabled = !galeriaState.dirty || !galeriaState.items.length;
+}
+
+function applyGaleriaPayload(galeria) {
+    galeria = galeria || {};
+    galeriaState.items = (galeria.imagenes || []).slice();
+    galeriaState.huerfanas = (galeria.huerfanas || []).slice();
+    galeriaState.dirty = false;
+    renderGaleriaImagenes();
+    updateGaleriaToolbar();
+    setMsgGaleria('', true);
+}
+
+function renderGaleriaImagenes() {
+    var list = document.getElementById('galeriaImagenesList');
+    var empty = document.getElementById('galeriaImagenesEmpty');
+    var orphanWrap = document.getElementById('galeriaHuerfanasWrap');
+    var orphanList = document.getElementById('galeriaHuerfanasList');
+    if (!list) return;
+
+    list.innerHTML = '';
+    if (!galeriaState.items.length) {
+        if (empty) empty.classList.remove('hidden');
+    } else if (empty) {
+        empty.classList.add('hidden');
+    }
+
+    galeriaState.items.forEach(function (img, idx) {
+        var card = document.createElement('div');
+        card.className = 'gal-item' + (idx === 0 ? ' gal-item--portada' : '');
+        card.setAttribute('draggable', 'true');
+        card.dataset.id = String(img.id);
+        card.innerHTML =
+            (idx === 0 ? '<span class="gal-badge">Portada</span>' : '') +
+            '<img class="gal-thumb" src="' + (img.url || '').replace(/"/g, '&quot;') + '" alt="">' +
+            '<div class="gal-pos">Posición ' + (idx + 1) + '</div>' +
+            '<div class="gal-actions-row">' +
+            '<button type="button" class="gal-btn gal-btn-up" title="Subir">↑</button>' +
+            '<button type="button" class="gal-btn gal-btn-down" title="Bajar">↓</button>' +
+            (idx === 0 ? '' : '<button type="button" class="gal-btn gal-btn-portada" title="Hacer portada">Portada</button>') +
+            '<button type="button" class="gal-btn gal-btn--danger gal-btn-del" title="Quitar de galería">✕</button>' +
+            '</div>';
+
+        card.addEventListener('dragstart', function (e) {
+            galeriaState.dragId = img.id;
+            card.classList.add('gal-item--dragging');
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', String(img.id));
+            }
+        });
+        card.addEventListener('dragend', function () {
+            galeriaState.dragId = null;
+            card.classList.remove('gal-item--dragging');
+        });
+        card.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        });
+        card.addEventListener('drop', function (e) {
+            e.preventDefault();
+            var fromId = galeriaState.dragId;
+            var toId = img.id;
+            if (fromId == null || fromId === toId) return;
+            moverGaleriaItem(fromId, toId);
+        });
+
+        var btnUp = card.querySelector('.gal-btn-up');
+        var btnDown = card.querySelector('.gal-btn-down');
+        var btnPortada = card.querySelector('.gal-btn-portada');
+        var btnDel = card.querySelector('.gal-btn-del');
+        if (btnUp) btnUp.addEventListener('click', function () { moverGaleriaDelta(img.id, -1); });
+        if (btnDown) btnDown.addEventListener('click', function () { moverGaleriaDelta(img.id, 1); });
+        if (btnPortada) btnPortada.addEventListener('click', function () { hacerPortadaGaleria(img.id); });
+        if (btnDel) btnDel.addEventListener('click', function () { eliminarGaleriaImagen(img.id); });
+        list.appendChild(card);
+    });
+
+    if (orphanWrap && orphanList) {
+        orphanList.innerHTML = '';
+        if (galeriaState.huerfanas.length) {
+            orphanWrap.classList.remove('hidden');
+            galeriaState.huerfanas.forEach(function (h) {
+                var card = document.createElement('div');
+                card.className = 'gal-item gal-item--orphan';
+                card.innerHTML =
+                    '<img class="gal-thumb" src="' + (h.thumb || h.url || '').replace(/"/g, '&quot;') + '" alt="">' +
+                    '<div class="gal-actions-row">' +
+                    '<button type="button" class="gal-btn gal-btn-link">Agregar</button>' +
+                    '</div>';
+                var btnLink = card.querySelector('.gal-btn-link');
+                if (btnLink) btnLink.addEventListener('click', function () { vincularGaleriaHuerfana(h.url); });
+                orphanList.appendChild(card);
+            });
+        } else {
+            orphanWrap.classList.add('hidden');
+        }
+    }
+}
+
+function moverGaleriaItem(fromId, toId) {
+    var items = galeriaState.items;
+    var fromIdx = items.findIndex(function (x) { return x.id === fromId; });
+    var toIdx = items.findIndex(function (x) { return x.id === toId; });
+    if (fromIdx < 0 || toIdx < 0) return;
+    var moved = items.splice(fromIdx, 1)[0];
+    items.splice(toIdx, 0, moved);
+    galeriaState.dirty = true;
+    renderGaleriaImagenes();
+    updateGaleriaToolbar();
+}
+
+function moverGaleriaDelta(id, delta) {
+    var items = galeriaState.items;
+    var idx = items.findIndex(function (x) { return x.id === id; });
+    if (idx < 0) return;
+    var newIdx = idx + delta;
+    if (newIdx < 0 || newIdx >= items.length) return;
+    moverGaleriaItem(id, items[newIdx].id);
+}
+
+function hacerPortadaGaleria(id) {
+    var items = galeriaState.items;
+    var idx = items.findIndex(function (x) { return x.id === id; });
+    if (idx <= 0) return;
+    var item = items.splice(idx, 1)[0];
+    items.unshift(item);
+    galeriaState.dirty = true;
+    renderGaleriaImagenes();
+    updateGaleriaToolbar();
+}
+
+function cargarGaleriaProducto(codigo) {
+    galeriaState.codigo = (codigo || '').trim().toUpperCase();
+    if (!galeriaState.codigo) {
+        galeriaState.items = [];
+        galeriaState.huerfanas = [];
+        renderGaleriaImagenes();
+        return;
+    }
+    fetch('/productos/' + encodeURIComponent(galeriaState.codigo) + '/imagenes/galeria', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data.success) {
+                setMsgGaleria(data.error || 'No se pudo cargar la galería', false);
+                return;
+            }
+            applyGaleriaPayload(data);
+        })
+        .catch(function () {
+            setMsgGaleria('Error de conexión al cargar galería.', false);
+        });
+}
+
+function guardarOrdenGaleria() {
+    var codigo = galeriaState.codigo || (document.getElementById('codigo').value || '').trim().toUpperCase();
+    if (!codigo || !galeriaState.items.length) return;
+    var ordenIds = galeriaState.items.map(function (x) { return x.id; });
+    var btn = document.getElementById('btnGuardarGaleria');
+    if (btn) btn.disabled = true;
+    fetch('/productos/imagenes/galeria/orden', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ codigo: codigo, orden_ids: ordenIds })
+    })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (btn) btn.disabled = false;
+            if (!data.success) {
+                setMsgGaleria(data.error || 'No se pudo guardar el orden', false);
+                updateGaleriaToolbar();
+                return;
+            }
+            applyGaleriaPayload(data.galeria || {});
+            setMsgGaleria(data.message || 'Orden guardado correctamente', true);
+        })
+        .catch(function () {
+            if (btn) btn.disabled = false;
+            setMsgGaleria('Error de conexión al guardar galería.', false);
+            updateGaleriaToolbar();
+        });
+}
+
+function vincularGaleriaHuerfana(url) {
+    var codigo = galeriaState.codigo || (document.getElementById('codigo').value || '').trim().toUpperCase();
+    if (!codigo || !url) return;
+    fetch('/productos/imagenes/galeria/vincular', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ codigo: codigo, url: url })
+    })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data.success) {
+                setMsgGaleria(data.error || 'No se pudo vincular', false);
+                return;
+            }
+            applyGaleriaPayload(data.galeria || {});
+            setMsgGaleria(data.message || 'Imagen agregada a la galería', true);
+        })
+        .catch(function () {
+            setMsgGaleria('Error de conexión al vincular imagen.', false);
+        });
+}
+
+function eliminarGaleriaImagen(id) {
+    var codigo = galeriaState.codigo || (document.getElementById('codigo').value || '').trim().toUpperCase();
+    if (!codigo || !id) return;
+    if (!window.confirm('¿Quitar esta imagen de la galería? (No se borra de Cloudinary)')) return;
+    fetch('/productos/imagenes/galeria/eliminar', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ codigo: codigo, id: id })
+    })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data.success) {
+                setMsgGaleria(data.error || 'No se pudo quitar la imagen', false);
+                return;
+            }
+            applyGaleriaPayload(data.galeria || {});
+            setMsgGaleria(data.message || 'Imagen quitada de la galería', true);
+        })
+        .catch(function () {
+            setMsgGaleria('Error de conexión al quitar imagen.', false);
+        });
+}
 
 function poblarSubcategorias(categoriaId, subIdSeleccionada) {
     var sub = document.getElementById('subcategoria_id');
@@ -1287,6 +1679,10 @@ function buscarProductoParaEditar() {
             if (!data.success) {
                 document.getElementById('formCard').classList.add('hidden');
                 renderVariantesComerciales(null);
+                galeriaState.codigo = '';
+                galeriaState.items = [];
+                galeriaState.huerfanas = [];
+                renderGaleriaImagenes();
                 var stReset = document.getElementById('stockTotalDisplay');
                 if (stReset) stReset.textContent = '—';
                 setMsg('msgBusqueda', data.error || 'No encontrado', false);
@@ -1322,6 +1718,9 @@ function buscarProductoParaEditar() {
             document.getElementById('alternativo').value = data.alternativo || '';
             document.getElementById('homologados').value = data.homologados || '';
             document.getElementById('activo_toggle').checked = data.activo !== false;
+
+            galeriaState.codigo = (data.codigo || '').trim().toUpperCase();
+            applyGaleriaPayload(data.galeria || {});
 
             const badge = document.getElementById('estadoBadge');
             badge.classList.remove('hidden', 'badge-active', 'badge-inactive');
@@ -1419,5 +1818,10 @@ document.addEventListener('input', function (e) {
     if (['codigoBuscar','estadoBadge'].indexOf(t.id) !== -1) return;
     debouncedDraft();
 });
+
+var btnGuardarGaleria = document.getElementById('btnGuardarGaleria');
+if (btnGuardarGaleria) {
+    btnGuardarGaleria.addEventListener('click', guardarOrdenGaleria);
+}
 </script>
 {% endblock %}
