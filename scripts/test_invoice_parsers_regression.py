@@ -96,6 +96,9 @@ def main() -> int:
     huoying = _load_module("test_huoying_ocr", "test_huoying_ocr.py")
     _register(huoying, "test_fixture_39039", "huoying.fixture_39039")
 
+    boston = _load_module("test_boston_ocr", "test_boston_ocr.py")
+    _register(boston, "test_fixture_365597", "boston.fixture_365597")
+
     acd = _load_module("test_acd_ocr", "test_acd_ocr.py")
     _register(acd, "test_fixture_270", "acd.fixture_270")
     _register(acd, "test_fixture_273", "acd.fixture_273")

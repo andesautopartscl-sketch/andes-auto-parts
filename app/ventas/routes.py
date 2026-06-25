@@ -18,6 +18,7 @@ from app.utils.decorators import login_required
 from app.utils.permissions import has_permission
 from app.utils.rut_utils import clean_rut, format_rut, is_valid_rut
 from app.utils.phone_format import format_phone_display, phone_to_compact_e164
+from app.utils.party_fields import normalize_party_email, party_text_upper
 from app.utils.variante_comercial import find_variante_stock, merge_ingreso_ref_variante_overrides
 from app.bodega.models import (
     IngresoDocumento,
@@ -255,13 +256,12 @@ def _clean_text(raw: str) -> str:
 
 def _upper_text(raw: str | None) -> str:
     """Strip and uppercase free-text party fields (names, addresses, giro)."""
-    return (raw or "").strip().upper()
+    return party_text_upper(raw)
 
 
 def _normalize_party_email(raw: str | None) -> str:
     """Strip and lowercase email for stable storage and lookup."""
-    e = (raw or "").strip()
-    return e.lower() if e else ""
+    return normalize_party_email(raw)
 
 
 def _normalize_country(raw: str, default: str = CHILE_COUNTRY_NAME) -> str:
@@ -1879,32 +1879,44 @@ def _search_products(term: str, limit: int = 60) -> list[dict]:
     starts = f"{search_term}%"
     safe_limit = max(1, min(limit, 100))
 
-    query = text(
-        f"""
-        SELECT
+    search_select = f"""
             CODIGO AS codigo,
             COALESCE(DESCRIPCION, '') AS descripcion,
             COALESCE(MODELO, '') AS modelo,
             COALESCE(MARCA, '') AS marca,
             COALESCE([CODIGO OEM], '') AS codigo_oem,
+            COALESCE([CODIGO ALTERNATIVO O ANTIGUO], '') AS codigo_alternativo,
+            COALESCE([HOMOLOGADOS], '') AS homologados,
             {_SQL_PRECIO_LISTA} AS precio,
             COALESCE(STOCK_10JUL, 0) AS stock
+    """
+    search_like_extra = """
+            OR UPPER(COALESCE([CODIGO ALTERNATIVO O ANTIGUO], '')) LIKE UPPER(:like)
+            OR UPPER(COALESCE([HOMOLOGADOS], '')) LIKE UPPER(:like)
+    """
+
+    query = text(
+        f"""
+        SELECT
+            {search_select}
         FROM productos
         WHERE COALESCE(ACTIVO, 1) = 1
           AND (
             UPPER(CODIGO) LIKE UPPER(:like)
             OR UPPER(COALESCE([CODIGO OEM], '')) LIKE UPPER(:like)
             OR UPPER(COALESCE(DESCRIPCION, '')) LIKE UPPER(:like)
+            {search_like_extra}
           )
         ORDER BY
             CASE
-                WHEN :is_numeric = 1 AND UPPER(CODIGO) LIKE UPPER(:starts) THEN 0
-                WHEN :is_numeric = 1 AND UPPER(COALESCE([CODIGO OEM], '')) LIKE UPPER(:starts) THEN 1
-                WHEN :is_numeric = 1 AND UPPER(COALESCE(DESCRIPCION, '')) LIKE UPPER(:starts) THEN 2
-                WHEN :is_numeric = 0 AND UPPER(COALESCE(DESCRIPCION, '')) LIKE UPPER(:starts) THEN 0
-                WHEN :is_numeric = 0 AND UPPER(COALESCE([CODIGO OEM], '')) LIKE UPPER(:starts) THEN 1
-                WHEN :is_numeric = 0 AND UPPER(CODIGO) LIKE UPPER(:starts) THEN 2
-                ELSE 3
+                WHEN UPPER(COALESCE([CODIGO OEM], '')) LIKE UPPER(:starts) THEN 0
+                WHEN UPPER(COALESCE([CODIGO ALTERNATIVO O ANTIGUO], '')) LIKE UPPER(:like) THEN 1
+                WHEN UPPER(COALESCE([HOMOLOGADOS], '')) LIKE UPPER(:like) THEN 2
+                WHEN :is_numeric = 1 AND UPPER(CODIGO) LIKE UPPER(:starts) THEN 3
+                WHEN :is_numeric = 1 AND UPPER(COALESCE(DESCRIPCION, '')) LIKE UPPER(:starts) THEN 4
+                WHEN :is_numeric = 0 AND UPPER(COALESCE(DESCRIPCION, '')) LIKE UPPER(:starts) THEN 3
+                WHEN :is_numeric = 0 AND UPPER(CODIGO) LIKE UPPER(:starts) THEN 4
+                ELSE 5
             END,
             LENGTH(CODIGO) ASC,
             CODIGO ASC
@@ -1942,6 +1954,8 @@ def _search_products(term: str, limit: int = 60) -> list[dict]:
                         OR UPPER(COALESCE(DESCRIPCION, '')) LIKE UPPER(:{key})
                         OR UPPER(COALESCE(MARCA, '')) LIKE UPPER(:{key})
                         OR UPPER(COALESCE(MODELO, '')) LIKE UPPER(:{key})
+                        OR UPPER(COALESCE([CODIGO ALTERNATIVO O ANTIGUO], '')) LIKE UPPER(:{key})
+                        OR UPPER(COALESCE([HOMOLOGADOS], '')) LIKE UPPER(:{key})
                     )"""
                 )
                 token_predicates_any.append(pred)
@@ -1951,13 +1965,7 @@ def _search_products(term: str, limit: int = 60) -> list[dict]:
             strict_query = text(
                 f"""
                 SELECT
-                    CODIGO AS codigo,
-                    COALESCE(DESCRIPCION, '') AS descripcion,
-                    COALESCE(MODELO, '') AS modelo,
-                    COALESCE(MARCA, '') AS marca,
-                    COALESCE([CODIGO OEM], '') AS codigo_oem,
-                    {_SQL_PRECIO_LISTA} AS precio,
-                    COALESCE(STOCK_10JUL, 0) AS stock
+                    {search_select}
                 FROM productos
                 WHERE COALESCE(ACTIVO, 1) = 1
                   AND ({all_match})
@@ -1974,13 +1982,7 @@ def _search_products(term: str, limit: int = 60) -> list[dict]:
                 fallback_query = text(
                     f"""
                     SELECT
-                        CODIGO AS codigo,
-                        COALESCE(DESCRIPCION, '') AS descripcion,
-                        COALESCE(MODELO, '') AS modelo,
-                        COALESCE(MARCA, '') AS marca,
-                        COALESCE([CODIGO OEM], '') AS codigo_oem,
-                        {_SQL_PRECIO_LISTA} AS precio,
-                        COALESCE(STOCK_10JUL, 0) AS stock
+                        {search_select}
                     FROM productos
                     WHERE COALESCE(ACTIVO, 1) = 1
                       AND ({any_match})
@@ -2004,10 +2006,12 @@ def _search_products(term: str, limit: int = 60) -> list[dict]:
             def _score_candidate(r):
                 code = (r.get("codigo") or "").strip().upper()
                 oem = (r.get("codigo_oem") or "").strip().upper()
+                alt = (r.get("codigo_alternativo") or "").strip().upper()
+                hom = (r.get("homologados") or "").strip().upper()
                 desc = (r.get("descripcion") or "").strip().upper()
                 marca = (r.get("marca") or "").strip().upper()
                 modelo = (r.get("modelo") or "").strip().upper()
-                blob = f"{code} {oem} {desc} {marca} {modelo}"
+                blob = f"{code} {oem} {alt} {hom} {desc} {marca} {modelo}"
                 words = [w for w in blob.split() if w]
                 score = 0.0
                 if phrase and phrase in blob:
@@ -2018,6 +2022,10 @@ def _search_products(term: str, limit: int = 60) -> list[dict]:
                         if code.startswith(tk):
                             score += 2.0
                         if oem.startswith(tk):
+                            score += 2.0
+                        if alt and tk in alt:
+                            score += 2.5
+                        if hom and tk in hom:
                             score += 2.0
                     elif len(tk) >= 3:
                         fuzzy = _best_token_fuzzy(tk, words)
@@ -2436,12 +2444,13 @@ def _cliente_form_data(source=None) -> dict:
 def _proveedor_form_data(source=None) -> dict:
     source = source or {}
     pais = _normalize_country(source.get("pais"), default=CHILE_COUNTRY_NAME)
-    region = _clean_text(source.get("region") or source.get("region_text"))
-    comuna = _clean_text(source.get("comuna") or source.get("comuna_text"))
+    region = _upper_text(source.get("region") or source.get("region_text"))
+    comuna = _upper_text(source.get("comuna") or source.get("comuna_text"))
     ciudad = _clean_text(source.get("ciudad"))
     if _is_chile_country(pais) and comuna and not ciudad:
         ciudad = "Santiago" if _is_metropolitana_region(region) else comuna
     ciudad = _upper_text(ciudad)
+    pais = _upper_text(pais) if pais else CHILE_COUNTRY_NAME
     empresa = _upper_text(source.get("empresa"))
     nombre = _upper_text(source.get("nombre"))
     # Form/API may send only one of the two; listado usa "empresa" y la ficha tenia solo "nombre".

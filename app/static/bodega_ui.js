@@ -35,6 +35,88 @@
         return parseInt(it.stock || 0, 10) || 0;
     }
 
+    function escProductSearch(v) {
+        return String(v == null ? "" : v)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    function productSearchResultsHeaderHtml() {
+        return (
+            '<div class="ingreso-product-results-table">' +
+            '<div class="ingreso-product-results-head" role="row">' +
+            '<div class="ingreso-product-col ingreso-product-col-codigo">Código</div>' +
+            '<div class="ingreso-product-col ingreso-product-col-desc">Descripción</div>' +
+            '<div class="ingreso-product-col ingreso-product-col-oem">Código OEM</div>' +
+            '<div class="ingreso-product-col ingreso-product-col-variante">Variantes</div>' +
+            '<div class="ingreso-product-col ingreso-product-col-stock">Stock</div>' +
+            '<div class="ingreso-product-col ingreso-product-col-action" aria-hidden="true"></div>' +
+            "</div>" +
+            '<div class="ingreso-product-results-body" role="rowgroup">'
+        );
+    }
+
+    function buildProductSearchRowHtml(it) {
+        var oem = ((it.oem || it.codigo_oem || "").trim() || "—");
+        var marca = ((it.marca || "").trim() || "—");
+        var modelo = (it.modelo || "").trim();
+        var desc = (it.descripcion || "").trim() || "—";
+        return (
+            '<div class="ingreso-product-item" role="row">' +
+            '<div class="ingreso-product-col ingreso-product-col-codigo">' +
+            escProductSearch(it.codigo || "") +
+            "</div>" +
+            '<div class="ingreso-product-col ingreso-product-col-desc">' +
+            '<span class="ingreso-product-desc-text">' +
+            escProductSearch(desc) +
+            "</span>" +
+            (modelo ? '<span class="ingreso-product-modelo-text">' + escProductSearch(modelo) + "</span>" : "") +
+            "</div>" +
+            '<div class="ingreso-product-col ingreso-product-col-oem">' +
+            escProductSearch(oem) +
+            "</div>" +
+            '<div class="ingreso-product-col ingreso-product-col-variante">' +
+            escProductSearch(marca) +
+            "</div>" +
+            '<div class="ingreso-product-col ingreso-product-col-stock">' +
+            productSearchStockQty(it) +
+            "</div>" +
+            '<div class="ingreso-product-col ingreso-product-col-action">' +
+            '<button type="button" class="btn btn-primary btn-sm">Seleccionar</button>' +
+            "</div>" +
+            "</div>"
+        );
+    }
+
+    function mountProductSearchResults(container, items, onSelect) {
+        if (!container) return;
+        container.innerHTML = "";
+        if (!Array.isArray(items) || items.length === 0) {
+            container.innerHTML =
+                '<div class="history-empty" style="border:none;background:#fff;padding:14px;">Sin resultados.</div>';
+            return;
+        }
+        container.innerHTML = productSearchResultsHeaderHtml() + "</div></div>";
+        var body = container.querySelector(".ingreso-product-results-body");
+        if (!body) return;
+        items.forEach(function (it) {
+            var tmp = document.createElement("div");
+            tmp.innerHTML = buildProductSearchRowHtml(it);
+            var row = tmp.firstElementChild;
+            if (!row) return;
+            var btn = row.querySelector("button");
+            if (btn && typeof onSelect === "function") {
+                btn.addEventListener("click", function () {
+                    onSelect(it);
+                });
+            }
+            body.appendChild(row);
+        });
+    }
+
     function initIngresoView(root) {
         var form = root.querySelector("#ingresoForm");
         if (!form || form.dataset.bodegaUiBound === "20260603") return;
@@ -1635,37 +1717,9 @@
         }
 
         function renderProductSearchResults(items) {
-            if (!productResults) return;
-            productResults.innerHTML = "";
-            if (!Array.isArray(items) || items.length === 0) {
-                productResults.innerHTML = '<div class="history-empty" style="border:none;background:#fff;padding:14px;">Sin resultados.</div>';
-                return;
-            }
-            function esc(v) {
-                return String(v == null ? "" : v)
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-                    .replace(/"/g, "&quot;")
-                    .replace(/'/g, "&#39;");
-            }
-            items.forEach(function (it) {
-                var row = document.createElement("div");
-                row.className = "ingreso-product-item";
-                row.innerHTML =
-                    '<div><strong>' + esc(it.codigo || "") + "</strong></div>" +
-                    '<div><div>' + esc(it.descripcion || "") + '</div><div class="ingreso-product-meta">' + esc(it.modelo || "—") + "</div></div>" +
-                    '<div>' + esc(((it.marca || "").trim() || "—")) + "</div>" +
-                    '<div>' + productSearchStockQty(it) + "</div>" +
-                    '<div><button type="button" class="btn btn-primary btn-sm">Seleccionar</button></div>';
-                var btnSel = row.querySelector("button");
-                if (btnSel) {
-                    btnSel.addEventListener("click", function () {
-                        applyProductToRow(currentProductSearchRow, it);
-                        closeProductSearchModal();
-                    });
-                }
-                productResults.appendChild(row);
+            mountProductSearchResults(productResults, items, function (it) {
+                applyProductToRow(currentProductSearchRow, it);
+                closeProductSearchModal();
             });
         }
 
@@ -4407,15 +4461,6 @@
         var marca = form.querySelector("#marca");
         var bodega = form.querySelector("#bodega");
 
-        function esc(v) {
-            return String(v == null ? "" : v)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#39;");
-        }
-
         function closeModal() {
             modal.classList.remove("open");
             modal.setAttribute("aria-hidden", "true");
@@ -4457,40 +4502,7 @@
         }
 
         function renderResults(items) {
-            if (!resultsEl) return;
-            resultsEl.innerHTML = "";
-            if (!Array.isArray(items) || items.length === 0) {
-                resultsEl.innerHTML =
-                    '<div class="history-empty" style="border:none;background:#fff;padding:14px;">Sin resultados.</div>';
-                return;
-            }
-            items.forEach(function (it) {
-                var row = document.createElement("div");
-                row.className = "ingreso-product-item";
-                row.innerHTML =
-                    '<div><strong>' +
-                    esc(it.codigo || "") +
-                    "</strong></div>" +
-                    '<div><div>' +
-                    esc(it.descripcion || "") +
-                    '</div><div class="ingreso-product-meta">' +
-                    esc(it.modelo || "—") +
-                    "</div></div>" +
-                    "<div>" +
-                    esc(((it.marca || "").trim() || "—")) +
-                    "</div>" +
-                    "<div>" +
-                    productSearchStockQty(it) +
-                    "</div>" +
-                    '<div><button type="button" class="btn btn-primary btn-sm">Seleccionar</button></div>';
-                var btn = row.querySelector("button");
-                if (btn) {
-                    btn.addEventListener("click", function () {
-                        applyItem(it);
-                    });
-                }
-                resultsEl.appendChild(row);
-            });
+            mountProductSearchResults(resultsEl, items, applyItem);
         }
 
         function doSearch() {

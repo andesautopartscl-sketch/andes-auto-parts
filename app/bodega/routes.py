@@ -16,6 +16,7 @@ from werkzeug.security import check_password_hash
 from app.extensions import db
 from app.seguridad.models import Usuario
 from app.ventas.models import DocumentoVenta, Proveedor
+from app.utils.party_fields import normalize_party_email, party_text_upper
 from app.utils.decorators import admin_required, login_required
 from app.utils.invoice_vision import analizar_factura, garantizar_producto_factura, reconcile_factura_totals_con_lineas
 from app.utils.invoice_providers import registry as invoice_parser_registry
@@ -1696,8 +1697,8 @@ def ingreso():
                 try:
                     proveedor = _buscar_proveedor_por_rut(form_data["supplier_rut"])
                     if proveedor is None:
-                        emp = form_data["supplier_name"][:200]
-                        con = (form_data.get("supplier_contact") or "").strip()[:200]
+                        emp = party_text_upper(form_data["supplier_name"])[:200]
+                        con = party_text_upper(form_data.get("supplier_contact") or "")[:200]
                         nom = con if con else emp
                         ciudad_n = _ingreso_resolve_ciudad_chile(
                             form_data["supplier_region"],
@@ -1711,13 +1712,13 @@ def ingreso():
                             nombre=nom,
                             empresa=emp,
                             rut=form_data["supplier_rut"],
-                            giro=form_data["supplier_giro"][:200],
-                            direccion=form_data["supplier_address"][:300],
-                            comuna=form_data["supplier_comuna"][:120],
-                            region=form_data["supplier_region"][:120],
-                            ciudad=ciudad_n[:120],
-                            pais=form_data["supplier_country"][:120],
-                            email=form_data["supplier_email"][:150],
+                            giro=party_text_upper(form_data["supplier_giro"])[:200],
+                            direccion=party_text_upper(form_data["supplier_address"])[:300],
+                            comuna=party_text_upper(form_data["supplier_comuna"])[:120],
+                            region=party_text_upper(form_data["supplier_region"])[:120],
+                            ciudad=party_text_upper(ciudad_n)[:120],
+                            pais=party_text_upper(form_data["supplier_country"])[:120],
+                            email=normalize_party_email(form_data["supplier_email"])[:150],
                             telefono=tel_n,
                             activo=True,
                         )
@@ -2201,19 +2202,19 @@ def ingreso_guardar_proveedor():
     rut = _normalize_rut(data.get("rut") or "")
     if not rut or not _is_valid_rut(rut):
         return jsonify({"ok": False, "message": "RUT inválido."}), 400
-    empresa = (data.get("name") or "").strip()
-    contact = (data.get("contact") or "").strip()
-    address = (data.get("address") or "").strip()
-    comuna = (data.get("comuna") or "").strip()
-    region = (data.get("region") or "").strip()
-    ciudad_in = (data.get("ciudad") or "").strip()
+    empresa = party_text_upper(data.get("name") or "")
+    contact = party_text_upper(data.get("contact") or "")
+    address = party_text_upper(data.get("address") or "")
+    comuna = party_text_upper(data.get("comuna") or "")
+    region = party_text_upper(data.get("region") or "")
+    ciudad_in = party_text_upper(data.get("ciudad") or "")
     if not all([empresa, address, comuna, region]):
         return jsonify({"ok": False, "message": "Completa empresa, calle y número, comuna y región."}), 400
 
-    giro = (data.get("giro") or "").strip()[:200]
-    email = (data.get("email") or "").strip()[:150]
+    giro = party_text_upper(data.get("giro") or "")[:200]
+    email = normalize_party_email(data.get("email"))[:150]
     telefono_raw = (data.get("telefono") or "").strip()[:80]
-    country = (data.get("country") or DEFAULT_COUNTRY).strip() or DEFAULT_COUNTRY
+    country = party_text_upper(data.get("country") or DEFAULT_COUNTRY) or party_text_upper(DEFAULT_COUNTRY)
     ciudad = _ingreso_resolve_ciudad_chile(region, comuna, ciudad_in)
     nombre = contact[:200] if contact else empresa[:200]
     telefono = phone_to_compact_e164(telefono_raw, country)[:50]

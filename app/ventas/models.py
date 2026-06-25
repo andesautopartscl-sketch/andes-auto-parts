@@ -1,7 +1,10 @@
 from datetime import datetime
 from decimal import Decimal
 
+from sqlalchemy.orm import validates
+
 from app.extensions import db
+from app.utils.party_fields import party_text_upper
 from app.utils.rut_utils import format_rut
 from app.utils.phone_format import format_phone_display
 
@@ -231,6 +234,19 @@ class Proveedor(db.Model):
     email = db.Column(db.String(150), default="")
     activo = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @validates(
+        "nombre",
+        "empresa",
+        "giro",
+        "direccion",
+        "region",
+        "comuna",
+        "ciudad",
+        "pais",
+    )
+    def _normalize_text_fields(self, _key: str, value: str | None) -> str:
+        return party_text_upper(value)
 
     def to_dict(self):
         return {

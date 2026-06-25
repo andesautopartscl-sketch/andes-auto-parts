@@ -108,40 +108,37 @@ table {
 }
 th,
 td {
-    padding: 7px 10px;
+    padding: 6px 10px;
     border-bottom: 1px solid #f1f5f9;
     text-align: left;
     vertical-align: middle;
 }
 th {
     background: #f8fafc;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
-    color: #64748b;
+    color: #94a3b8;
 }
 td {
-    font-size: 12px;
-    color: #1e293b;
-}
-.supplier-block {
-    display: grid;
-    gap: 2px;
-}
-.supplier-block strong {
-    font-size: 12px;
-    font-weight: 600;
-}
-.supplier-block span {
-    color: #64748b;
     font-size: 11px;
+    color: #475569;
+    line-height: 1.35;
+}
+td:last-child {
+    padding: 7px 10px;
+}
+.supplier-contact-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: #334155;
 }
 .contact-lines {
     display: grid;
-    gap: 2px;
-    color: #64748b;
-    font-size: 11px;
+    gap: 1px;
+    color: #94a3b8;
+    font-size: 10px;
 }
 .actions {
     display: flex;
@@ -261,19 +258,16 @@ td {
                 <tbody>
                     {% for proveedor in proveedores %}
                     <tr>
-                        <td>{{ proveedor.empresa or proveedor.nombre or 'Sin empresa' }}</td>
+                        <td>{{ (proveedor.empresa or proveedor.nombre or 'Sin empresa')|upper }}</td>
                         <td>
-                            <div class="supplier-block">
-                                <strong>{% if proveedor.empresa and proveedor.nombre != proveedor.empresa %}{{ proveedor.nombre }}{% else %}{{ proveedor.empresa or proveedor.nombre }}{% endif %}</strong>
-                                <span>{{ proveedor.email or 'Sin email' }}</span>
-                            </div>
+                            <strong class="supplier-contact-name">{% if proveedor.empresa and proveedor.nombre != proveedor.empresa %}{{ proveedor.nombre|upper }}{% else %}{{ (proveedor.empresa or proveedor.nombre)|upper }}{% endif %}</strong>
                         </td>
                         <td>{{ proveedor.rut|format_rut if proveedor.rut else 'Sin RUT' }}</td>
-                        <td>{{ proveedor.direccion or 'Sin direccion' }}</td>
+                        <td>{{ (proveedor.direccion or 'Sin direccion')|upper }}</td>
                         <td>
                             <div class="contact-lines">
                                 <span>{% if proveedor.telefono %}{{ proveedor.telefono|format_telefono }}{% else %}Sin telefono{% endif %}</span>
-                                <span>{{ proveedor.email or 'Sin email' }}</span>
+                                <span>{% if proveedor.email %}{{ proveedor.email|upper }}{% else %}Sin email{% endif %}</span>
                             </div>
                         </td>
                         <td>

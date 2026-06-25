@@ -22,6 +22,7 @@ from . import repuesto_center as _repuesto_center  # noqa: F401
 from . import huoying as _huoying  # noqa: F401
 from . import acd as _acd  # noqa: F401
 from . import mundo as _mundo  # noqa: F401
+from . import boston as _boston  # noqa: F401
 
 __all__ = [
     "BaseInvoiceParser",
