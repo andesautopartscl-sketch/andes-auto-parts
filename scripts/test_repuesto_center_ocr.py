@@ -223,6 +223,59 @@ EJE DE LEVAS (ESCAPE)
 """
 
 
+OCR_FIXTURE_567580_PDF_NATIVE = """
+Facturación Electrónica   -   www.facele.cl  -  Tel: (+56 02) 334 6746
+MONTO EXENTO
+MONTO NETO
+MONTO IVA 19%
+MONTO TOTAL
+La Cisterna
+78.074.288-7
+SANTIAGO
+2026-06-23
+VENTA DE PARTES, PIEZAS Y ACCESORIOS
+64.867
+Salas 8973
+79.656.210-2
+Quilicura
+SANTIAGO
+Crédito
+LA CONCEPCION 81 OFICINA 214
+0000567580
+PROVIDENCIA
+C78074288-7
+54.510
+10.357
+ANDES AUTO PARTS
+FACTURA ELECTRÓNICA
+0
+Basado en la Orden de Venta : 10413371
+2026-06-22
+Santiago
+Res. 80 de 2014 - Verifique Documento: www.sii.cl
+Timbre Electronico S.I.I.
+Galvarino 8601, Oficinas 6 y 7
+GPP057RC
+11.920
+RODAMIENTO DE MAZA DEL (88X55X46)
+RODAMIENTO DE MAZA DEL (88X55X46)
+11.920,00
+1
+TP120RC
+39.090
+PORTA FILTRO
+PORTA FILTRO
+39.090,00
+1
+ZXT1026RC
+3.500
+FILTRO A/C
+FILTRO A/C
+3.500,00
+1
+"""
+
+
 def test_fixture_565092_pdf_native() -> None:
     """PDF Facele nativo: ítems al final, después de etiquetas MONTO NETO."""
     parser = RepuestoCenterParser()
@@ -445,6 +498,36 @@ def test_fixture_567124_columnar() -> None:
     print("OK repuesto_center fixture 567124 columnar\n")
 
 
+def test_fixture_567580_pdf_native() -> None:
+    """PDF Facele nativo folio 567580: códigos basura en pie + 3 ítems al final."""
+    parser = RepuestoCenterParser()
+    data = parser.parse(
+        {
+            "rut_proveedor": "79.656.210-2",
+            "ocr_texto_crudo": OCR_FIXTURE_567580_PDF_NATIVE,
+            "productos": [],
+            "total_neto": 64867,
+            "iva": 567580,
+            "total": 632447,
+            "numero_documento": "567580",
+        }
+    )
+    productos = data.get("productos") or []
+    assert len(productos) == 3, productos
+    assert productos[0]["codigo_proveedor"] == "GPP057RC"
+    assert productos[0]["valor_neto"] == 11920
+    assert productos[1]["codigo_proveedor"] == "TP120RC"
+    assert productos[1]["valor_neto"] == 39090
+    assert productos[2]["codigo_proveedor"] == "ZXT1026RC"
+    assert productos[2]["valor_neto"] == 3500
+    assert data.get("total_neto") == 54510
+    assert data.get("iva") == 10357
+    assert data.get("total") == 64867
+    suma = sum((p.get("cantidad") or 1) * (p.get("valor_neto") or 0) for p in productos)
+    assert suma == 54510
+    print("OK repuesto_center fixture 567580 PDF native\n")
+
+
 def test_dte_xml_productos() -> None:
     from app.utils.invoice_vision import (
         _extract_montos_from_dte_xml,
@@ -530,6 +613,7 @@ if __name__ == "__main__":
     test_fixture_565092_050327()
     test_fixture_567124_pdf_row()
     test_fixture_567124_columnar()
+    test_fixture_567580_pdf_native()
     test_dte_xml_productos()
     test_folio_no_es_codigo()
     test_repair_folio_en_neto()

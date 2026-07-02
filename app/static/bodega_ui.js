@@ -26,6 +26,22 @@
         }
     }
 
+    /** Consulta en vivo (ajuste/salida/recepción): SPA para no recargar ni colapsar el acordeón del sidebar. */
+    function navigateBodegaConsult(url) {
+        try {
+            var cur = new URL(window.location.href);
+            var next = new URL(url, window.location.origin);
+            if (cur.pathname === next.pathname && cur.search === next.search) {
+                return;
+            }
+        } catch (e) {}
+        if (typeof window._loadModule === "function") {
+            window._loadModule(url, { softNav: true });
+        } else {
+            window.location.assign(url);
+        }
+    }
+
     /** Stock por variante en modal buscar producto; 0 es válido (no usar || con stock total). */
     function productSearchStockQty(it) {
         if (!it) return 0;
@@ -2136,6 +2152,26 @@
             rutInput.addEventListener("blur", scheduleNumeroDocCheck);
         }
 
+        var btnGuardarIngreso = form.querySelector("#btnGuardarIngreso")
+            || form.querySelector('button[type="submit"]');
+        var btnGuardarIngresoLabel = btnGuardarIngreso
+            ? (btnGuardarIngreso.textContent || "Guardar ingreso").trim()
+            : "Guardar ingreso";
+        var ingresoSubmitInFlight = false;
+
+        function setIngresoSubmitBusy(busy) {
+            if (!btnGuardarIngreso) {
+                return;
+            }
+            btnGuardarIngreso.disabled = !!busy;
+            btnGuardarIngreso.textContent = busy ? "Guardando…" : btnGuardarIngresoLabel;
+        }
+
+        function releaseIngresoSubmit() {
+            ingresoSubmitInFlight = false;
+            setIngresoSubmitBusy(false);
+        }
+
         function proceedIngresoSubmit() {
             var rows = itemsBody.querySelectorAll(".item-row");
             var promises = [];
@@ -2158,6 +2194,7 @@
                     return r !== false;
                 });
                 if (!ok) {
+                    releaseIngresoSubmit();
                     window.alert(
                         "Hay códigos internos que no existen en el catálogo o están inactivos. Revisá los campos en rojo."
                     );
@@ -2182,8 +2219,14 @@
                 return;
             }
             ev.preventDefault();
+            if (ingresoSubmitInFlight) {
+                return;
+            }
+            ingresoSubmitInFlight = true;
+            setIngresoSubmitBusy(true);
             var vpCheck = validateMargenYPrecioVentaIngresoRows();
             if (!vpCheck.ok) {
+                releaseIngresoSubmit();
                 window.alert(vpCheck.message);
                 if (vpCheck.focusEl) {
                     vpCheck.focusEl.focus();
@@ -2192,6 +2235,7 @@
             }
             checkNumeroDocumentoDuplicado().then(function (isDup) {
                 if (isDup) {
+                    releaseIngresoSubmit();
                     window.alert(
                         (numeroDocStatus && numeroDocStatus.textContent)
                             || "Este N° de documento ya está ingresado para este proveedor."
@@ -4357,7 +4401,7 @@
             if (!qs) {
                 return;
             }
-            window.location.href = baseUrl + "?" + qs;
+            navigateBodegaConsult(baseUrl + "?" + qs);
         }
 
         function scheduleConsult() {
@@ -4689,7 +4733,7 @@
             if (!qs) {
                 return;
             }
-            window.location.href = baseUrl + "?" + qs;
+            navigateBodegaConsult(baseUrl + "?" + qs);
         }
 
         function scheduleConsult() {
@@ -4855,7 +4899,7 @@
             if (!qs) {
                 return;
             }
-            window.location.href = baseUrl + "?" + qs;
+            navigateBodegaConsult(baseUrl + "?" + qs);
         }
 
         function scheduleConsult() {

@@ -506,12 +506,16 @@ def _extract_repuesto_center_productos(
 
     tail_products = _extract_productos_facele_pdf_tail(lines, folio)
     codes = _extract_item_codes(lines, folio)
-    if tail_products and (not codes or len(tail_products) >= len(codes)):
+    qtys, prices = _extract_qty_and_prices(lines)
+    # PDF Facele nativo: ítems al final con precio en líneas siguientes; el bloque
+    # columnar suele traer números basura (teléfono, dirección) y sin precios.
+    if tail_products and (
+        not codes or len(tail_products) >= len(codes) or not prices
+    ):
         return tail_products
 
     if not codes:
         return tail_products or []
-    qtys, prices = _extract_qty_and_prices(lines)
     units = _unit_prices(prices, len(codes))
     productos: list[dict[str, Any]] = []
     for i, codigo in enumerate(codes):

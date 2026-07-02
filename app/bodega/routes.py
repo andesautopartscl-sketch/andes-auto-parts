@@ -259,6 +259,13 @@ def _mensaje_ingreso_numero_documento_duplicado(doc: IngresoDocumento) -> str:
     )
 
 
+def _ingreso_begin_save_transaction() -> None:
+    """SQLite: bloqueo de escritura para serializar guardados concurrentes (doble clic / doble POST)."""
+    if db.engine.dialect.name == "sqlite":
+        db.session.rollback()
+        db.session.execute(text("BEGIN IMMEDIATE"))
+
+
 def _is_valid_rut(raw: str) -> bool:
     return is_valid_rut(raw)
 
@@ -1695,6 +1702,16 @@ def ingreso():
 
             if message is None:
                 try:
+                    _ingreso_begin_save_transaction()
+                    dup_doc_locked = _ingreso_numero_documento_duplicado(
+                        form_data["supplier_rut"],
+                        form_data["numero_documento"],
+                    )
+                    if dup_doc_locked is not None:
+                        raise ValueError(
+                            _mensaje_ingreso_numero_documento_duplicado(dup_doc_locked)
+                        )
+
                     proveedor = _buscar_proveedor_por_rut(form_data["supplier_rut"])
                     if proveedor is None:
                         emp = party_text_upper(form_data["supplier_name"])[:200]
