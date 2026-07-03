@@ -14,33 +14,271 @@
 		</div>
 	</div>
 
+	<form class="cxc-filters" method="get" action="{{ url_for('contabilidad.cuentas_por_cobrar') }}" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px;padding:12px 14px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;">
+		<div>
+			<label for="cxc-cliente" style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:4px;">Cliente</label>
+			<input id="cxc-cliente" type="text" name="cliente" value="{{ filtros.cliente or '' }}" placeholder="Nombre o parte del nombre" style="min-width:220px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;">
+		</div>
+		<div>
+			<label for="cxc-tipo" style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:4px;">Tipo documento</label>
+			<select id="cxc-tipo" name="tipo" style="min-width:160px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;">
+				<option value="">Todos</option>
+				<option value="factura" {% if filtros.tipo == 'factura' %}selected{% endif %}>Factura</option>
+				<option value="boleta" {% if filtros.tipo == 'boleta' %}selected{% endif %}>Boleta</option>
+				<option value="orden_venta" {% if filtros.tipo == 'orden_venta' %}selected{% endif %}>Orden de venta</option>
+			</select>
+		</div>
+		<div style="display:flex;gap:8px;">
+			<button class="link-btn" type="submit" style="border:none;cursor:pointer;">Filtrar</button>
+			{% if filtros.cliente or filtros.tipo %}
+			<a class="link-btn" href="{{ url_for('contabilidad.cuentas_por_cobrar') }}">Limpiar</a>
+			{% endif %}
+		</div>
+	</form>
+
+	{% if resumen_clientes %}
+	<div class="cxc-resumen" style="margin-bottom:14px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
+		<h2 style="margin:0 0 10px;font-size:14px;color:#0f172a;">Resumen por cliente</h2>
+		<div style="overflow:auto;">
+			<table style="width:100%;border-collapse:collapse;font-size:13px;">
+				<thead>
+					<tr>
+						<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #e2e8f0;">Cliente</th>
+						<th style="text-align:right;padding:6px 8px;border-bottom:1px solid #e2e8f0;">Total adeudado</th>
+						<th style="text-align:right;padding:6px 8px;border-bottom:1px solid #e2e8f0;">Deuda más antigua (días)</th>
+					</tr>
+				</thead>
+				<tbody>
+					{% for r in resumen_clientes %}
+					<tr>
+						<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;">{{ r.cliente }}</td>
+						<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right;">${{ '{:,.0f}'.format(r.total or 0).replace(',', '.') }}</td>
+						<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right;">{{ r.deuda_antigua_dias }}</td>
+					</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		</div>
+	</div>
+	{% endif %}
+
 	<div class="lv-table-wrap">
-		<table class="lv-table lv-money-col5 lv-muted-col2">
+		<table class="lv-table lv-money-col5 lv-muted-col2" id="cxcTable">
 			<thead>
 				<tr>
 					<th>Fecha</th>
 					<th>Tipo</th>
 					<th>Documento</th>
+					<th>N° OC Cliente</th>
 					<th>Cliente</th>
 					<th>Total</th>
+					<th>Días</th>
+					<th>Método pago</th>
 					<th>Estado pago</th>
+					{% if puede_registrar_pago %}<th></th>{% endif %}
 				</tr>
 			</thead>
 			<tbody>
 				{% for d in documentos %}
-				<tr>
+				<tr class="{% if d.vencido %}cxc-row-vencida{% endif %}" data-doc-id="{{ d.id }}">
 					<td>{{ d.fecha_documento.strftime('%d/%m/%Y') if d.fecha_documento else '-' }}</td>
 					<td>{{ d.tipo }}</td>
 					<td>{{ d.numero or '-' }}</td>
+					<td>{{ d.numero_oc_cliente }}</td>
 					<td>{{ d.cliente_nombre or '-' }}</td>
 					<td>${{ '{:,.0f}'.format(d.total or 0).replace(',', '.') }}</td>
+					<td>{{ d.dias }}</td>
+					<td>{{ d.metodo_pago_label }}</td>
 					<td>{{ d.estado_pago or 'pendiente' }}</td>
+					{% if puede_registrar_pago %}
+					<td>
+						<button type="button" class="link-btn cxc-btn-pago" data-doc-id="{{ d.id }}" data-doc-num="{{ d.numero or d.id }}" style="border:none;cursor:pointer;padding:0;">Registrar pago</button>
+					</td>
+					{% endif %}
 				</tr>
 				{% else %}
-				<tr><td class="lv-empty" colspan="6">Sin documentos pendientes por cobrar.</td></tr>
+				<tr><td class="lv-empty" colspan="{{ 10 if puede_registrar_pago else 9 }}">Sin documentos pendientes por cobrar.</td></tr>
 				{% endfor %}
 			</tbody>
 		</table>
 	</div>
 </div>
+
+<style>
+.cxc-row-vencida td {
+	background: #fef2f2 !important;
+	color: #991b1b;
+}
+.cxc-row-vencida td:last-child,
+.cxc-row-vencida .cxc-btn-pago {
+	color: #b91c1c;
+}
+#cxcPagoModal {
+	display: none;
+	position: fixed;
+	inset: 0;
+	z-index: 1200;
+	background: rgba(15, 23, 42, 0.45);
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+}
+#cxcPagoModal.open { display: flex; }
+#cxcPagoModal .cxc-modal-box {
+	background: #fff;
+	border-radius: 12px;
+	width: 100%;
+	max-width: 420px;
+	box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+	overflow: hidden;
+}
+#cxcPagoModal .cxc-modal-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 14px 18px;
+	border-bottom: 1px solid #e2e8f0;
+}
+#cxcPagoModal .cxc-modal-body { padding: 16px 18px; display: grid; gap: 12px; }
+#cxcPagoModal .cxc-modal-foot {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 12px 18px;
+	border-top: 1px solid #e2e8f0;
+}
+#cxcPagoModal label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+#cxcPagoModal input, #cxcPagoModal select {
+	width: 100%;
+	padding: 8px 10px;
+	border: 1px solid #cbd5e1;
+	border-radius: 8px;
+	font-size: 14px;
+}
+#cxcPagoError { color: #b91c1c; font-size: 13px; display: none; }
+</style>
+
+{% if puede_registrar_pago %}
+<div id="cxcPagoModal" aria-hidden="true">
+	<div class="cxc-modal-box">
+		<div class="cxc-modal-head">
+			<h3 style="margin:0;font-size:16px;">Registrar pago</h3>
+			<button type="button" id="cxcPagoClose" aria-label="Cerrar" style="border:none;background:none;font-size:22px;line-height:1;cursor:pointer;">&times;</button>
+		</div>
+		<div class="cxc-modal-body">
+			<p id="cxcPagoDocLabel" style="margin:0;font-size:13px;color:#64748b;"></p>
+			<div>
+				<label for="cxcMetodoPago">Método de pago</label>
+				<select id="cxcMetodoPago" required>
+					{% for opt in metodo_pago_options %}
+					<option value="{{ opt.value }}">{{ opt.label }}</option>
+					{% endfor %}
+				</select>
+			</div>
+			<div>
+				<label for="cxcPagoReferencia">Referencia de pago (opcional)</label>
+				<input id="cxcPagoReferencia" type="text" maxlength="200" placeholder="N° transferencia, voucher, etc.">
+			</div>
+			<div>
+				<label for="cxcPagoFecha">Fecha</label>
+				<input id="cxcPagoFecha" type="date" required>
+			</div>
+			<p id="cxcPagoError"></p>
+		</div>
+		<div class="cxc-modal-foot">
+			<button type="button" class="link-btn" id="cxcPagoCancel" style="border:none;cursor:pointer;">Cancelar</button>
+			<button type="button" class="link-btn" id="cxcPagoConfirm" style="border:none;cursor:pointer;background:#2563eb;color:#fff;padding:8px 14px;border-radius:8px;">Confirmar</button>
+		</div>
+	</div>
+</div>
+
+<script>
+(function () {
+	const modal = document.getElementById('cxcPagoModal');
+	if (!modal) return;
+	const closeBtn = document.getElementById('cxcPagoClose');
+	const cancelBtn = document.getElementById('cxcPagoCancel');
+	const confirmBtn = document.getElementById('cxcPagoConfirm');
+	const metodoSel = document.getElementById('cxcMetodoPago');
+	const refInput = document.getElementById('cxcPagoReferencia');
+	const fechaInput = document.getElementById('cxcPagoFecha');
+	const errBox = document.getElementById('cxcPagoError');
+	const docLabel = document.getElementById('cxcPagoDocLabel');
+	let activeDocId = null;
+
+	function todayIso() {
+		const d = new Date();
+		return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+	}
+
+	function openModal(docId, docNum) {
+		activeDocId = docId;
+		if (docLabel) docLabel.textContent = 'Documento: ' + (docNum || docId);
+		if (fechaInput) fechaInput.value = todayIso();
+		if (refInput) refInput.value = '';
+		if (errBox) { errBox.style.display = 'none'; errBox.textContent = ''; }
+		modal.classList.add('open');
+		modal.setAttribute('aria-hidden', 'false');
+	}
+
+	function closeModal() {
+		modal.classList.remove('open');
+		modal.setAttribute('aria-hidden', 'true');
+		activeDocId = null;
+	}
+
+	document.querySelectorAll('.cxc-btn-pago').forEach(function (btn) {
+		btn.addEventListener('click', function () {
+			openModal(btn.getAttribute('data-doc-id'), btn.getAttribute('data-doc-num'));
+		});
+	});
+	[closeBtn, cancelBtn].forEach(function (el) {
+		if (el) el.addEventListener('click', closeModal);
+	});
+	modal.addEventListener('click', function (e) {
+		if (e.target === modal) closeModal();
+	});
+
+	if (confirmBtn) {
+		confirmBtn.addEventListener('click', async function () {
+			if (!activeDocId) return;
+			if (errBox) errBox.style.display = 'none';
+			confirmBtn.disabled = true;
+			try {
+				const res = await fetch('/ventas/api/documento/' + activeDocId + '/pago', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+					body: JSON.stringify({
+						metodo_pago: metodoSel ? metodoSel.value : 'efectivo',
+						pago_referencia: refInput ? refInput.value : '',
+						fecha: fechaInput ? fechaInput.value : ''
+					})
+				});
+				const data = await res.json();
+				if (data.ok) {
+					const row = document.querySelector('tr[data-doc-id="' + activeDocId + '"]');
+					if (row) row.remove();
+					closeModal();
+					if (!document.querySelector('#cxcTable tbody tr[data-doc-id]')) {
+						location.reload();
+					}
+				} else {
+					if (errBox) {
+						errBox.textContent = data.error || 'No se pudo registrar el pago';
+						errBox.style.display = 'block';
+					}
+				}
+			} catch (e) {
+				if (errBox) {
+					errBox.textContent = 'Error de red al registrar pago';
+					errBox.style.display = 'block';
+				}
+			} finally {
+				confirmBtn.disabled = false;
+			}
+		});
+	}
+})();
+</script>
+{% endif %}
 {% endblock %}

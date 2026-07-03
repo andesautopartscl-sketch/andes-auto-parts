@@ -39,6 +39,12 @@
                     <input id="doc_valid_until" name="doc_valid_until" type="date" value="{{ doc_valid_until }}">
                 </div>
                 {% endif %}
+                {% if doc_type in ['cotizacion', 'orden_venta', 'factura'] %}
+                <div class="cot-meta-field">
+                    <label for="numero_oc_cliente">N° OC Cliente</label>
+                    <input id="numero_oc_cliente" name="numero_oc_cliente" type="text" value="{{ numero_oc_cliente or '' }}" maxlength="100" placeholder="Opcional" autocomplete="off">
+                </div>
+                {% endif %}
                 {% if doc_type in ['orden_venta', 'factura'] %}
                 <div class="cot-meta-field">
                     <label for="tipo_documento">Tipo de documento</label>

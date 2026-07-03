@@ -24,7 +24,7 @@ from .emisores_service import (
     upsert_emisor_contable_desde_movimiento,
     validate_emisor_form,
 )
-from app.ventas.routes import _chile_regions, _load_chile_geo
+from app.ventas.routes import _chile_regions, _load_chile_geo, METODO_PAGO_LABELS, METODO_PAGO_OPTIONS
 from app.ventas.models import DocumentoVenta
 
 contabilidad_bp = Blueprint(
@@ -491,25 +491,107 @@ def cuentas_por_pagar():
     )
 
 
+def _dias_desde_fecha_documento(fecha: datetime | None) -> int:
+    if fecha is None:
+        return 0
+    ref = fecha.date() if isinstance(fecha, datetime) else fecha
+    return max(0, (date.today() - ref).days)
+
+
+def _plazo_credito_dias(metodo_pago: str) -> int | None:
+    mp = (metodo_pago or "").strip().lower()
+    return {"credito_30": 30, "credito_60": 60, "credito_90": 90}.get(mp)
+
+
+def _metodo_pago_cxc_label(metodo_pago: str) -> str:
+    mp = (metodo_pago or "").strip().lower()
+    if mp in {"credito_30", "credito_60", "credito_90"}:
+        return METODO_PAGO_LABELS.get(mp, mp)
+    if mp:
+        return METODO_PAGO_LABELS.get(mp, mp.replace("_", " ").title())
+    return "—"
+
+
+def _documento_cxc_vencido(doc: DocumentoVenta, dias: int) -> bool:
+    plazo = _plazo_credito_dias(doc.metodo_pago or "")
+    if plazo is None:
+        return False
+    return dias > plazo
+
+
 @contabilidad_bp.route("/cuentas-por-cobrar", methods=["GET"])
 @login_required
 @permission_required("ver_finanzas")
 def cuentas_por_cobrar():
-    docs = (
-        DocumentoVenta.query
-        .filter(
-            and_(
-                DocumentoVenta.tipo.in_(["factura", "boleta", "orden_venta"]),
-                DocumentoVenta.estado_pago != "pagado",
-            )
+    cliente_q = (request.args.get("cliente") or "").strip()
+    tipo_q = (request.args.get("tipo") or "").strip().lower()
+
+    query = DocumentoVenta.query.filter(
+        and_(
+            DocumentoVenta.tipo.in_(["factura", "boleta", "orden_venta"]),
+            DocumentoVenta.estado_pago != "pagado",
         )
-        .order_by(DocumentoVenta.fecha_documento.desc(), DocumentoVenta.id.desc())
-        .limit(300)
+    )
+    if cliente_q:
+        query = query.filter(DocumentoVenta.cliente_nombre.ilike(f"%{cliente_q}%"))
+    if tipo_q in {"factura", "boleta", "orden_venta"}:
+        query = query.filter(DocumentoVenta.tipo == tipo_q)
+
+    docs = (
+        query.order_by(DocumentoVenta.fecha_documento.asc(), DocumentoVenta.id.asc())
+        .limit(500)
         .all()
     )
+
+    filas = []
+    resumen_por_cliente: dict[str, dict] = {}
+    for d in docs:
+        dias = _dias_desde_fecha_documento(d.fecha_documento)
+        vencido = _documento_cxc_vencido(d, dias)
+        cliente = (d.cliente_nombre or "—").strip() or "—"
+        total = float(d.total or 0)
+        filas.append(
+            SimpleNamespace(
+                id=d.id,
+                fecha_documento=d.fecha_documento,
+                tipo=d.tipo,
+                numero=d.numero,
+                numero_oc_cliente=(getattr(d, "numero_oc_cliente", None) or "").strip() or "—",
+                cliente_nombre=cliente,
+                total=total,
+                dias=dias,
+                metodo_pago_label=_metodo_pago_cxc_label(d.metodo_pago or ""),
+                vencido=vencido,
+                estado_pago=d.estado_pago or "pendiente",
+            )
+        )
+        bucket = resumen_por_cliente.setdefault(
+            cliente,
+            {"cliente": cliente, "total": 0.0, "deuda_antigua_dias": 0},
+        )
+        bucket["total"] += total
+        bucket["deuda_antigua_dias"] = max(bucket["deuda_antigua_dias"], dias)
+
+    resumen_clientes = sorted(
+        resumen_por_cliente.values(),
+        key=lambda x: (-x["total"], -x["deuda_antigua_dias"], x["cliente"]),
+    )
+
+    puede_registrar_pago = has_permission(
+        session.get("user"), session.get("rol"), "mod_finanzas"
+    )
+
     return render_template(
         "contabilidad/cuentas_por_cobrar.html",
-        documentos=docs,
+        documentos=filas,
+        resumen_clientes=resumen_clientes,
+        filtros={"cliente": cliente_q, "tipo": tipo_q},
+        metodo_pago_options=[
+            {"value": k, "label": METODO_PAGO_LABELS[k]}
+            for k in METODO_PAGO_OPTIONS
+            if k != "saldo_favor"
+        ],
+        puede_registrar_pago=puede_registrar_pago,
         active_page="contabilidad_cxc",
     )
 

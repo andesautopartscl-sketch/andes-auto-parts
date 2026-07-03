@@ -109,3 +109,46 @@ def aplicar_fuzzy_a_productos(
             producto["match_type"] = match["match_type"]
 
     return productos
+
+
+def fuzzy_match_catalogo_codigo(
+    codigo_ocr: str,
+    catalogo: dict[str, Any],
+    threshold: int = 92,
+) -> dict[str, Any] | None:
+    """Busca el código más parecido en un catálogo {CODIGO_UPPER: metadata}.
+
+    Usado por OCR de OC cliente contra la tabla productos (match exacto y fuzzy).
+    """
+    if not codigo_ocr or not catalogo:
+        return None
+
+    codigo_norm = codigo_ocr.upper().strip()
+    if not codigo_norm:
+        return None
+
+    if codigo_norm in catalogo:
+        return {
+            "codigo": codigo_norm,
+            "score": 100,
+            "match_type": "exact",
+            "meta": catalogo[codigo_norm],
+        }
+
+    codigos = list(catalogo.keys())
+    match = process.extractOne(
+        codigo_norm,
+        codigos,
+        scorer=fuzz.ratio,
+        score_cutoff=threshold,
+    )
+    if not match:
+        return None
+
+    matched_codigo, score, _ = match
+    return {
+        "codigo": matched_codigo,
+        "score": int(score),
+        "match_type": "fuzzy",
+        "meta": catalogo[matched_codigo],
+    }

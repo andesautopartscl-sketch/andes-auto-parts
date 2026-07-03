@@ -24,7 +24,7 @@
                 <input type="hidden" name="filtro" value="{{ filtro }}">
                 <div class="field grow-lg">
                     <label for="pagos-q">N° factura o boleta</label>
-                    <input id="pagos-q" type="search" name="q" value="{{ search_term }}" placeholder="Ej. BO-0001, FA-0002" autocomplete="off">
+                    <input id="pagos-q" type="search" name="q" value="{{ search_term }}" placeholder="Ej. BO-0001, FA-0002, N° OC cliente" autocomplete="off">
                 </div>
                 <div class="field grow">
                     <label for="pagos-cliente">Cliente (filtra la tabla inferior)</label>
@@ -65,6 +65,12 @@
                     <dt>Cliente</dt>
                     <dd>{{ documento.cliente_nombre or '—' }}</dd>
                 </div>
+                {% if documento.numero_oc_cliente %}
+                <div>
+                    <dt>N° OC Cliente</dt>
+                    <dd>{{ documento.numero_oc_cliente }}</dd>
+                </div>
+                {% endif %}
                 <div>
                     <dt>Total</dt>
                     <dd>${{ '{:,.0f}'.format(documento.total or 0).replace(',', '.') }}</dd>

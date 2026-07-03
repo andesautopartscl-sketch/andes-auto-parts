@@ -1,0 +1,739 @@
+{% extends 'ventas/base_partial.html' if _partial else 'ventas/base.html' %}
+
+{% block title %}Nueva OC Cliente | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.oc-form-page { display: grid; gap: 8px; max-width: 1180px; }
+.oc-toolbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    padding: 10px 14px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+.oc-toolbar h2 { margin: 0; font-size: 16px; font-weight: 700; color: #0f172a; letter-spacing: -0.02em; }
+.oc-toolbar p { margin: 2px 0 0; font-size: 11px; color: #64748b; }
+.oc-toolbar-actions { display: flex; gap: 6px; align-items: center; }
+.oc-card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05); overflow: hidden;
+}
+.oc-section { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; }
+.oc-section:last-child { border-bottom: none; }
+.oc-section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    color: #64748b; margin: 0 0 8px;
+}
+.oc-client-row {
+    display: grid; grid-template-columns: minmax(140px, 1fr) auto 1fr; gap: 8px; align-items: end;
+}
+.oc-client-row label, .oc-field label {
+    display: block; font-size: 10px; font-weight: 600; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px;
+}
+.oc-client-row input, .oc-field input, .oc-field textarea, .oc-field select {
+    width: 100%; padding: 6px 8px; border: 1px solid #dbe3ef; border-radius: 6px;
+    font-size: 12px; box-sizing: border-box; background: #fff;
+}
+.oc-client-row input:focus, .oc-field input:focus, .oc-field textarea:focus {
+    outline: none; border-color: #93c5fd; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+.oc-client-name {
+    font-size: 12px; font-weight: 600; color: #15803d; padding: 7px 0 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.oc-client-name.empty { color: #94a3b8; font-weight: 500; }
+.oc-grid {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 10px;
+}
+.oc-grid .span-2 { grid-column: span 2; }
+.oc-grid .span-4 { grid-column: 1 / -1; }
+.oc-field textarea { min-height: 52px; resize: vertical; }
+.oc-items-head {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;
+}
+.oc-items-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.oc-items-table thead th {
+    padding: 5px 4px; text-align: left; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.03em; color: #64748b;
+    border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+}
+.oc-items-table tbody td {
+    padding: 4px 3px; border-bottom: 1px solid #f1f5f9; vertical-align: middle;
+}
+.oc-items-table input {
+    width: 100%; padding: 4px 6px; border: 1px solid #e2e8f0; border-radius: 5px;
+    font-size: 11px; box-sizing: border-box;
+}
+.oc-code-cell { display: flex; gap: 3px; align-items: center; }
+.oc-code-cell input { flex: 1; min-width: 0; }
+.oc-code-cell .item-search {
+    padding: 3px 6px; font-size: 11px; line-height: 1; flex-shrink: 0;
+}
+.oc-inv-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 5px; font-size: 11px; font-weight: 700;
+}
+.oc-inv-badge.yes { background: #dcfce7; color: #15803d; }
+.oc-inv-badge.no { background: #f1f5f9; color: #94a3b8; }
+.item-subtotal { font-size: 11px; font-weight: 600; color: #334155; white-space: nowrap; }
+.oc-footer {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 8px 14px; background: #f8fafc; border-top: 1px solid #e2e8f0;
+}
+.oc-totals { display: flex; gap: 14px; font-size: 12px; color: #475569; }
+.oc-totals strong { color: #0f172a; font-size: 13px; }
+.oc-totals .total-line strong { color: #1d4ed8; font-size: 14px; }
+.oc-ps-modal {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(15, 23, 42, 0.45); align-items: center; justify-content: center; padding: 16px;
+}
+.oc-ps-modal.open { display: flex; }
+.oc-ps-box {
+    background: #fff; border-radius: 10px; width: 100%; max-width: 520px;
+    max-height: 75vh; overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+}
+.oc-ps-head { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; font-weight: 700; font-size: 14px; }
+.oc-ps-body { padding: 10px 14px; overflow-y: auto; flex: 1; }
+.oc-ps-body input { width: 100%; padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; margin-bottom: 8px; }
+.oc-ps-result {
+    display: block; width: 100%; text-align: left; padding: 7px 10px; margin-bottom: 4px;
+    border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; font-size: 12px; cursor: pointer;
+}
+.oc-ps-result:hover { background: #f8fafc; border-color: #93c5fd; }
+.oc-ps-foot { padding: 10px 14px; border-top: 1px solid #e2e8f0; text-align: right; }
+.oc-scan-zone {
+    padding: 14px; border: 2px dashed #cbd5e1; border-radius: 10px; background: #f8fafc;
+    margin-bottom: 10px; text-align: center; transition: border-color 0.15s, background 0.15s;
+}
+.oc-scan-zone.dragover { border-color: #3b82f6; background: #eff6ff; }
+.oc-scan-zone h3 { margin: 0 0 6px; font-size: 13px; font-weight: 700; color: #0f172a; }
+.oc-scan-zone p { margin: 0 0 10px; font-size: 11px; color: #64748b; }
+.oc-scan-actions { display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; }
+.oc-scan-spinner {
+    display: none; align-items: center; justify-content: center; gap: 8px;
+    font-size: 12px; color: #475569; margin-top: 10px;
+}
+.oc-scan-spinner.active { display: flex; }
+.oc-scan-spinner .spin {
+    width: 16px; height: 16px; border: 2px solid #cbd5e1; border-top-color: #3b82f6;
+    border-radius: 50%; animation: oc-spin 0.7s linear infinite;
+}
+@keyframes oc-spin { to { transform: rotate(360deg); } }
+.oc-warnings {
+    display: none; margin-bottom: 10px; padding: 10px 12px; border-radius: 8px;
+    background: #fef9c3; border: 1px solid #fde047; font-size: 11px; color: #854d0e;
+}
+.oc-warnings.visible { display: block; }
+.oc-warnings ul { margin: 4px 0 0; padding-left: 18px; }
+.oc-dup-alert {
+    display: none; margin-top: 6px; padding: 8px 10px; border-radius: 6px;
+    background: #fef2f2; border: 1px solid #fecaca; font-size: 11px; color: #b91c1c;
+}
+.oc-dup-alert.visible { display: block; }
+.oc-field-invalid input { border-color: #f87171 !important; box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.2); }
+.oc-ocr-totals {
+    display: none; gap: 12px; font-size: 11px; color: #92400e; margin-left: auto;
+    padding: 4px 8px; border-radius: 6px; background: #fffbeb; border: 1px solid #fde68a;
+}
+.oc-ocr-totals.visible { display: flex; flex-wrap: wrap; }
+.oc-ocr-totals.mismatch { background: #fef9c3; border-color: #facc15; }
+.oc-footer { flex-wrap: wrap; }
+@media (max-width: 960px) {
+    .oc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .oc-grid .span-2 { grid-column: span 2; }
+    .oc-client-row { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}
+
+{% block ventas_inner %}
+<div class="page-stack oc-form-page">
+    <form method="post" id="ocForm" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="cliente_id" id="clienteIdHidden" value="{{ form_data.cliente_id or 0 }}">
+
+        <div class="oc-toolbar">
+            <div>
+                <h2>Nueva OC del cliente</h2>
+                <p>Registre la orden de compra recibida · ítems de inventario o texto libre</p>
+            </div>
+            <div class="oc-toolbar-actions">
+                <a class="btn sm" href="{{ url_for('oc_clientes.lista') }}">← Listado</a>
+                <button class="btn sm outline" type="button" id="btnClearForm">Limpiar</button>
+                {% if puede_modificar %}
+                <button class="btn sm primary" type="submit">Guardar OC</button>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if puede_modificar %}
+        <div class="oc-card" style="margin-bottom:8px;">
+            <div class="oc-section">
+                <div id="scanZone" class="oc-scan-zone">
+                    <h3>📷 Escanear OC (foto o PDF)</h3>
+                    <p>Suba una imagen o PDF de la orden de compra del cliente. Los datos se autocompletan para revisión; nada se guarda hasta presionar Guardar OC.</p>
+                    <div class="oc-scan-actions">
+                        <input type="file" id="scanFileInput" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" style="display:none;">
+                        <button type="button" class="btn sm primary" id="btnPickScan">Seleccionar archivo</button>
+                        <span style="font-size:11px;color:#94a3b8;">o arrastre aquí</span>
+                    </div>
+                    <div id="scanSpinner" class="oc-scan-spinner">
+                        <span class="spin"></span>
+                        <span>Procesando documento…</span>
+                    </div>
+                </div>
+                <div id="scanWarnings" class="oc-warnings" role="alert"></div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="oc-card">
+            <div class="oc-section">
+                <p class="oc-section-title">Cliente y documento</p>
+                <div class="oc-client-row" style="margin-bottom:10px;">
+                    <div class="oc-field">
+                        <label for="rutLookup">RUT</label>
+                        <input id="rutLookup" type="text" placeholder="12.345.678-9" value="{{ party.rut|format_rut if party.rut else '' }}">
+                    </div>
+                    <div>
+                        <label>&nbsp;</label>
+                        <button class="btn sm outline" type="button" id="btnSearchClient" style="height:31px;">Buscar</button>
+                    </div>
+                    <div>
+                        <label>Cliente</label>
+                        <div id="partyStatus" class="oc-client-name {% if not selected_client %}empty{% endif %}">
+                            {% if selected_client %}{{ selected_client.nombre }}{% else %}Sin cliente seleccionado{% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="oc-grid">
+                    <div class="oc-field">
+                        <label for="numero_oc">N° OC *</label>
+                        <input id="numero_oc" name="numero_oc" required value="{{ form_data.numero_oc }}" maxlength="100" placeholder="Ej. 73905" autocomplete="off">
+                        <div id="dupNumeroAlert" class="oc-dup-alert" role="alert"></div>
+                    </div>
+                    <div class="oc-field">
+                        <label for="fecha_oc">Fecha OC *</label>
+                        <input id="fecha_oc" name="fecha_oc" type="date" required value="{{ form_data.fecha_oc }}">
+                    </div>
+                    <div class="oc-field">
+                        <label for="fecha_entrega_comprometida">Entrega comprometida</label>
+                        <input id="fecha_entrega_comprometida" name="fecha_entrega_comprometida" type="date" value="{{ form_data.fecha_entrega_comprometida }}">
+                    </div>
+                    <div class="oc-field">
+                        <label for="forma_pago">Forma de pago</label>
+                        <input id="forma_pago" name="forma_pago" value="{{ form_data.forma_pago }}" placeholder="Crédito 30 días">
+                    </div>
+                    <div class="oc-field span-2">
+                        <label for="direccion_despacho">Dirección despacho</label>
+                        <input id="direccion_despacho" name="direccion_despacho" value="{{ form_data.direccion_despacho }}">
+                    </div>
+                    <div class="oc-field span-2">
+                        <label for="observaciones">Observaciones</label>
+                        <textarea id="observaciones" name="observaciones" rows="2" placeholder="Opcional">{{ form_data.observaciones }}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="oc-section">
+                <div class="oc-items-head">
+                    <p class="oc-section-title" style="margin:0;">Ítems</p>
+                    <button class="btn sm outline" type="button" id="btnAddRow">+ Línea</button>
+                </div>
+                <div class="table-wrap">
+                    <table class="oc-items-table" id="itemsTable">
+                        <thead>
+                            <tr>
+                                <th style="width:12%">Código</th>
+                                <th style="width:26%">Descripción</th>
+                                <th style="width:9%">Marca</th>
+                                <th style="width:9%">Bodega</th>
+                                <th style="width:6%">Cant.</th>
+                                <th style="width:9%">P. neto</th>
+                                <th style="width:6%">Desc.</th>
+                                <th style="width:8%">Subtotal</th>
+                                <th style="width:5%" title="En inventario">Inv.</th>
+                                <th style="width:4%"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="itemsBody">
+                            {% for it in form_data['items'] %}
+                            <tr class="item-row">
+                                <td>
+                                    <div class="oc-code-cell">
+                                        <input name="item_codigo[]" class="item-codigo" value="{{ it.codigo_producto }}" placeholder="Código">
+                                        <button type="button" class="btn sm outline item-search" title="Buscar producto">🔍</button>
+                                    </div>
+                                </td>
+                                <td><input name="item_descripcion[]" value="{{ it.descripcion }}" placeholder="Descripción"></td>
+                                <td><input name="item_marca[]" value="{{ it.marca }}"></td>
+                                <td><input name="item_bodega[]" value="{{ it.bodega or 'Bodega 1' }}"></td>
+                                <td><input name="item_cantidad[]" type="number" min="1" class="item-qty" value="{{ it.cantidad }}"></td>
+                                <td><input name="item_precio[]" class="item-precio" value="{{ it.precio_unitario }}"></td>
+                                <td><input name="item_descuento[]" class="item-desc" value="{{ it.descuento_item or 0 }}"></td>
+                                <td class="item-subtotal">${{ '{:,.0f}'.format(it.subtotal or 0).replace(',', '.') }}</td>
+                                <td class="item-inv"><span class="oc-inv-badge {% if it.en_inventario %}yes{% else %}no{% endif %}">{% if it.en_inventario %}✓{% else %}—{% endif %}</span></td>
+                                <td><button type="button" class="btn sm danger item-del" title="Quitar">✕</button></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="oc-footer">
+                <span style="font-size:11px;color:#94a3b8;">✓ = en inventario · — = texto libre</span>
+                <div id="ocrTotalsRef" class="oc-ocr-totals" title="Totales leídos del documento (referencia)"></div>
+                <div class="oc-totals">
+                    <span>Neto <strong id="tNeto">${{ '{:,.0f}'.format(form_data.totals.neto).replace(',', '.') }}</strong></span>
+                    <span>IVA <strong id="tIva">${{ '{:,.0f}'.format(form_data.totals.iva).replace(',', '.') }}</strong></span>
+                    <span class="total-line">Total <strong id="tTotal">${{ '{:,.0f}'.format(form_data.totals.total).replace(',', '.') }}</strong></span>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div id="psModal" class="oc-ps-modal" aria-hidden="true">
+    <div class="oc-ps-box">
+        <div class="oc-ps-head">Buscar producto</div>
+        <div class="oc-ps-body">
+            <input id="psInput" type="search" placeholder="Código, OEM o descripción (mín. 2 caracteres)">
+            <div id="psResults"></div>
+        </div>
+        <div class="oc-ps-foot">
+            <button type="button" class="btn sm" id="psClose">Cerrar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    'use strict';
+    const URL_CLIENTES = {{ url_clientes|tojson }};
+    const URL_PRODUCTO = {{ url_producto|tojson }};
+    const URL_SEARCH = {{ url_productos_search|tojson }};
+    const URL_ESCANEAR = {{ url_escanear_oc|tojson }};
+    const URL_VERIFICAR_NUMERO = {{ url_verificar_numero|tojson }};
+    const CSRF_TOKEN = {{ csrf_token|tojson }};
+    const ocForm = document.getElementById('ocForm');
+    const numeroOcInput = document.getElementById('numero_oc');
+    const dupNumeroAlert = document.getElementById('dupNumeroAlert');
+    let numeroDuplicado = false;
+    let verificarTimer = null;
+    const clienteHidden = document.getElementById('clienteIdHidden');
+    const rutLookup = document.getElementById('rutLookup');
+    const partyStatus = document.getElementById('partyStatus');
+    const itemsBody = document.getElementById('itemsBody');
+    const psModal = document.getElementById('psModal');
+    const psInput = document.getElementById('psInput');
+    const psResults = document.getElementById('psResults');
+    let activeRow = null;
+
+    function fmt(n) { return '$' + Math.round(n).toLocaleString('es-CL'); }
+
+    function recalcTotals() {
+        let neto = 0;
+        itemsBody.querySelectorAll('.item-row').forEach(function (row) {
+            const qty = parseFloat(row.querySelector('.item-qty')?.value) || 0;
+            const precio = parseFloat(row.querySelector('.item-precio')?.value) || 0;
+            const desc = parseFloat(row.querySelector('.item-desc')?.value) || 0;
+            const bruto = qty * precio;
+            const sub = bruto - bruto * (desc / 100);
+            neto += sub;
+            const subEl = row.querySelector('.item-subtotal');
+            if (subEl) subEl.textContent = fmt(sub);
+        });
+        neto = Math.round(neto * 100) / 100;
+        const iva = Math.round(neto * 0.19 * 100) / 100;
+        const total = Math.round((neto + iva) * 100) / 100;
+        const tN = document.getElementById('tNeto');
+        const tI = document.getElementById('tIva');
+        const tT = document.getElementById('tTotal');
+        if (tN) tN.textContent = fmt(neto);
+        if (tI) tI.textContent = fmt(iva);
+        if (tT) tT.textContent = fmt(total);
+    }
+
+    function setInvBadge(row, yes) {
+        const el = row.querySelector('.item-inv span');
+        if (!el) return;
+        el.textContent = yes ? '✓' : '—';
+        el.className = 'oc-inv-badge ' + (yes ? 'yes' : 'no');
+    }
+
+    function lookupProduct(codigo, row, opts) {
+        opts = opts || {};
+        const preservePrecio = !!opts.preservePrecio;
+        const precioOcr = preservePrecio ? (parseFloat(row.querySelector('.item-precio')?.value) || 0) : null;
+        const c = String(codigo || '').trim().toUpperCase();
+        if (!c) { setInvBadge(row, false); return Promise.resolve(); }
+        return fetch(URL_PRODUCTO + '?codigo=' + encodeURIComponent(c), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success && data.producto) {
+                    const p = data.producto;
+                    if (!row.querySelector('[name="item_descripcion[]"]').value) {
+                        row.querySelector('[name="item_descripcion[]"]').value = p.descripcion || '';
+                    }
+                    if (!preservePrecio && p.precio) {
+                        row.querySelector('.item-precio').value = p.precio;
+                    } else if (preservePrecio && precioOcr) {
+                        row.querySelector('.item-precio').value = precioOcr;
+                    }
+                    if (p.default_marca) row.querySelector('[name="item_marca[]"]').value = p.default_marca;
+                    if (p.default_bodega) row.querySelector('[name="item_bodega[]"]').value = p.default_bodega;
+                    setInvBadge(row, true);
+                } else {
+                    setInvBadge(row, !!opts.enInventario);
+                }
+                recalcTotals();
+            })
+            .catch(function () { setInvBadge(row, !!opts.enInventario); });
+    }
+
+    function wireRow(row) {
+        row.querySelector('.item-codigo')?.addEventListener('change', function () {
+            lookupProduct(this.value, row);
+        });
+        row.querySelector('.item-search')?.addEventListener('click', function () {
+            activeRow = row;
+            psModal.classList.add('open');
+            psInput.value = row.querySelector('.item-codigo')?.value || '';
+            runSearch(psInput.value);
+        });
+        row.querySelector('.item-del')?.addEventListener('click', function () {
+            row.remove();
+            recalcTotals();
+        });
+        ['item-qty', 'item-precio', 'item-desc'].forEach(function (cls) {
+            row.querySelector('.' + cls)?.addEventListener('input', recalcTotals);
+        });
+    }
+
+    function escAttr(s) {
+        return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    }
+
+    function addRow(data, opts) {
+        opts = opts || {};
+        data = data || {};
+        const tr = document.createElement('tr');
+        tr.className = 'item-row';
+        tr.innerHTML =
+            '<td><div class="oc-code-cell">' +
+            '<input name="item_codigo[]" class="item-codigo" value="' + escAttr(data.codigo) + '" placeholder="Código">' +
+            '<button type="button" class="btn sm outline item-search" title="Buscar producto">🔍</button></div></td>' +
+            '<td><input name="item_descripcion[]" value="' + escAttr(data.descripcion) + '" placeholder="Descripción"></td>' +
+            '<td><input name="item_marca[]" value="' + escAttr(data.marca) + '"></td>' +
+            '<td><input name="item_bodega[]" value="' + escAttr(data.bodega || 'Bodega 1') + '"></td>' +
+            '<td><input name="item_cantidad[]" type="number" min="1" class="item-qty" value="' + (data.cantidad || 1) + '"></td>' +
+            '<td><input name="item_precio[]" class="item-precio" value="' + (data.precio || 0) + '"></td>' +
+            '<td><input name="item_descuento[]" class="item-desc" value="0"></td>' +
+            '<td class="item-subtotal">$0</td>' +
+            '<td class="item-inv"><span class="oc-inv-badge ' + (data.en_inventario ? 'yes' : 'no') + '">' + (data.en_inventario ? '✓' : '—') + '</span></td>' +
+            '<td><button type="button" class="btn sm danger item-del" title="Quitar">✕</button></td>';
+        itemsBody.appendChild(tr);
+        wireRow(tr);
+        if (data.codigo) {
+            lookupProduct(data.codigo, tr, {
+                preservePrecio: !!opts.preservePrecio,
+                enInventario: !!data.en_inventario,
+            });
+        } else {
+            recalcTotals();
+        }
+    }
+
+    function runSearch(q) {
+        if ((q || '').trim().length < 2) {
+            psResults.innerHTML = '<p style="color:#64748b;font-size:12px;margin:0;">Escriba al menos 2 caracteres</p>';
+            return;
+        }
+        fetch(URL_SEARCH + '?q=' + encodeURIComponent(q) + '&limit=40', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                psResults.innerHTML = '';
+                (data.items || []).forEach(function (it) {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'oc-ps-result';
+                    btn.textContent = (it.codigo || '') + ' — ' + (it.descripcion || '').slice(0, 55);
+                    btn.addEventListener('click', function () {
+                        if (activeRow) {
+                            activeRow.querySelector('.item-codigo').value = it.codigo || '';
+                            lookupProduct(it.codigo, activeRow);
+                        }
+                        psModal.classList.remove('open');
+                    });
+                    psResults.appendChild(btn);
+                });
+                if (!(data.items || []).length) {
+                    psResults.innerHTML = '<p style="color:#64748b;font-size:12px;margin:0;">Sin resultados</p>';
+                }
+            });
+    }
+
+    function setClientName(name, found) {
+        partyStatus.textContent = name || 'Sin cliente seleccionado';
+        partyStatus.classList.toggle('empty', !found);
+    }
+
+    function applyClienteFromScan(data) {
+        if (data.cliente_id) {
+            clienteHidden.value = String(data.cliente_id);
+            setClientName(data.cliente_nombre || 'Cliente encontrado', true);
+            if (data.cliente_rut) rutLookup.value = data.cliente_rut;
+        } else if (data.cliente_rut) {
+            clienteHidden.value = '0';
+            var label = data.cliente_razon_social || 'Cliente no encontrado';
+            if (data.cliente_rut) label += ' (' + data.cliente_rut + ')';
+            setClientName(label, false);
+            rutLookup.value = data.cliente_rut;
+        }
+    }
+
+    function showScanWarnings(warnings) {
+        var box = document.getElementById('scanWarnings');
+        if (!box) return;
+        if (!warnings || !warnings.length) {
+            box.classList.remove('visible');
+            box.innerHTML = '';
+            return;
+        }
+        box.classList.add('visible');
+        box.innerHTML = '<strong>Advertencias del escaneo</strong><ul>' +
+            warnings.map(function (w) { return '<li>' + escAttr(w) + '</li>'; }).join('') + '</ul>';
+    }
+
+    function showOcrTotals(totales, checksumOk) {
+        var el = document.getElementById('ocrTotalsRef');
+        if (!el || !totales) return;
+        var parts = [];
+        if (totales.neto != null) parts.push('Neto doc. ' + fmt(totales.neto));
+        if (totales.iva != null) parts.push('IVA doc. ' + fmt(totales.iva));
+        if (totales.total != null) parts.push('Total doc. ' + fmt(totales.total));
+        if (!parts.length) {
+            el.classList.remove('visible', 'mismatch');
+            el.innerHTML = '';
+            return;
+        }
+        el.classList.add('visible');
+        el.classList.toggle('mismatch', checksumOk === false);
+        el.innerHTML = '<span>Referencia OCR:</span> ' + parts.join(' · ');
+    }
+
+    function applyScanResult(payload) {
+        var data = payload.data || payload;
+        if (data.numero_oc) {
+            document.getElementById('numero_oc').value = data.numero_oc;
+            verificarNumeroOc();
+        }
+        if (data.fecha_oc) document.getElementById('fecha_oc').value = data.fecha_oc;
+        if (data.fecha_entrega) document.getElementById('fecha_entrega_comprometida').value = data.fecha_entrega;
+        if (data.forma_pago) document.getElementById('forma_pago').value = data.forma_pago;
+        if (data.direccion_despacho) document.getElementById('direccion_despacho').value = data.direccion_despacho;
+        applyClienteFromScan(data);
+        itemsBody.innerHTML = '';
+        (data.items || []).forEach(function (it) {
+            addRow({
+                codigo: it.codigo_producto || '',
+                descripcion: it.descripcion || '',
+                marca: it.marca || '',
+                cantidad: it.cantidad || 1,
+                precio: it.precio_unitario || 0,
+                en_inventario: !!it.en_inventario,
+            }, { preservePrecio: true });
+        });
+        if (!(data.items || []).length) addRow({});
+        showScanWarnings(data.warnings || []);
+        showOcrTotals(data.totales_leidos || {}, data.checksum_ok);
+        recalcTotals();
+    }
+
+    function processScanFile(file) {
+        if (!file || !URL_ESCANEAR) return;
+        var name = (file.name || '').toLowerCase();
+        if (!/\.(jpe?g|png|pdf)$/.test(name)) {
+            showScanWarnings(['Formato no soportado. Use JPG, PNG o PDF.']);
+            return;
+        }
+        var spinner = document.getElementById('scanSpinner');
+        if (spinner) spinner.classList.add('active');
+        showScanWarnings([]);
+        var fd = new FormData();
+        fd.append('archivo', file);
+        fd.append('csrf_token', CSRF_TOKEN);
+        fetch(URL_ESCANEAR, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': CSRF_TOKEN },
+            body: fd,
+        })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (res) {
+                if (spinner) spinner.classList.remove('active');
+                if (res.body && res.body.ok) {
+                    applyScanResult(res.body);
+                } else {
+                    var err = (res.body && res.body.error) || 'No se pudo escanear el documento';
+                    showScanWarnings([err]);
+                    document.getElementById('ocrTotalsRef')?.classList.remove('visible');
+                }
+            })
+            .catch(function () {
+                if (spinner) spinner.classList.remove('active');
+                showScanWarnings(['Error de red al escanear el documento.']);
+            });
+    }
+
+    (function initScanZone() {
+        var zone = document.getElementById('scanZone');
+        var input = document.getElementById('scanFileInput');
+        var btn = document.getElementById('btnPickScan');
+        if (!zone || !input) return;
+        btn?.addEventListener('click', function () { input.click(); });
+        input.addEventListener('change', function () {
+            if (input.files && input.files[0]) processScanFile(input.files[0]);
+            input.value = '';
+        });
+        ['dragenter', 'dragover'].forEach(function (ev) {
+            zone.addEventListener(ev, function (e) {
+                e.preventDefault();
+                zone.classList.add('dragover');
+            });
+        });
+        ['dragleave', 'drop'].forEach(function (ev) {
+            zone.addEventListener(ev, function (e) {
+                e.preventDefault();
+                zone.classList.remove('dragover');
+            });
+        });
+        zone.addEventListener('drop', function (e) {
+            var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+            if (f) processScanFile(f);
+        });
+    })();
+
+    document.getElementById('btnSearchClient')?.addEventListener('click', function () {
+        var q = (rutLookup?.value || '').replace(/[\s.\-]/g, '');
+        if (!q) {
+            setClientName('Ingrese un RUT para buscar', false);
+            clienteHidden.value = '0';
+            return;
+        }
+        fetch(URL_CLIENTES + '?q=' + encodeURIComponent(rutLookup.value), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var list = (data.clientes || []).filter(function (c) { return !c.es_proveedor; });
+                if (list.length) {
+                    var c = list[0];
+                    clienteHidden.value = c.id;
+                    setClientName(c.nombre || '', true);
+                    if (c.direccion) document.getElementById('direccion_despacho').value = c.direccion;
+                } else {
+                    setClientName('Cliente no encontrado', false);
+                    clienteHidden.value = '0';
+                }
+            });
+    });
+
+    function clearForm() {
+        clienteHidden.value = '0';
+        rutLookup.value = '';
+        setClientName('Sin cliente seleccionado', false);
+        document.getElementById('numero_oc').value = '';
+        var today = new Date();
+        var mm = String(today.getMonth() + 1).padStart(2, '0');
+        var dd = String(today.getDate()).padStart(2, '0');
+        document.getElementById('fecha_oc').value = today.getFullYear() + '-' + mm + '-' + dd;
+        document.getElementById('fecha_entrega_comprometida').value = '';
+        document.getElementById('forma_pago').value = '';
+        document.getElementById('direccion_despacho').value = '';
+        document.getElementById('observaciones').value = '';
+        itemsBody.innerHTML = '';
+        showScanWarnings([]);
+        document.getElementById('ocrTotalsRef')?.classList.remove('visible', 'mismatch');
+        showDupAlert('');
+        numeroDuplicado = false;
+        addRow({});
+    }
+
+    document.getElementById('btnClearForm')?.addEventListener('click', clearForm);
+    document.getElementById('btnAddRow')?.addEventListener('click', function () { addRow({}); });
+    document.getElementById('psClose')?.addEventListener('click', function () { psModal.classList.remove('open'); });
+    psModal?.addEventListener('click', function (e) { if (e.target === psModal) psModal.classList.remove('open'); });
+    psInput?.addEventListener('input', function () { runSearch(psInput.value); });
+
+    function showDupAlert(msg) {
+        if (!dupNumeroAlert) return;
+        if (!msg) {
+            dupNumeroAlert.classList.remove('visible');
+            dupNumeroAlert.innerHTML = '';
+            numeroOcInput?.closest('.oc-field')?.classList.remove('oc-field-invalid');
+            return;
+        }
+        dupNumeroAlert.classList.add('visible');
+        dupNumeroAlert.textContent = msg;
+        numeroOcInput?.closest('.oc-field')?.classList.add('oc-field-invalid');
+    }
+
+    function verificarNumeroOc() {
+        var num = (numeroOcInput?.value || '').trim();
+        numeroDuplicado = false;
+        if (!num) {
+            showDupAlert('');
+            return Promise.resolve();
+        }
+        return fetch(URL_VERIFICAR_NUMERO + '?q=' + encodeURIComponent(num), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.exists) {
+                    numeroDuplicado = true;
+                    var extra = data.fecha_oc ? ' (fecha ' + data.fecha_oc + ')' : '';
+                    showDupAlert('Ya existe una OC con el número ' + num + extra + '. No se puede guardar duplicada.');
+                } else {
+                    showDupAlert('');
+                }
+            })
+            .catch(function () { showDupAlert(''); });
+    }
+
+    numeroOcInput?.addEventListener('input', function () {
+        clearTimeout(verificarTimer);
+        verificarTimer = setTimeout(verificarNumeroOc, 350);
+    });
+    numeroOcInput?.addEventListener('blur', verificarNumeroOc);
+    if ((numeroOcInput?.value || '').trim()) verificarNumeroOc();
+
+    var allowOcSubmit = false;
+    ocForm?.addEventListener('submit', function (e) {
+        if (allowOcSubmit) return;
+        e.preventDefault();
+        var num = (numeroOcInput?.value || '').trim();
+        if (!num) {
+            alert('Debe ingresar el número de OC antes de guardar.');
+            numeroOcInput?.focus();
+            return;
+        }
+        verificarNumeroOc().then(function () {
+            if (numeroDuplicado) {
+                alert('No se puede guardar: ya existe una OC con el número ' + num + '.');
+                numeroOcInput?.focus();
+                return;
+            }
+            allowOcSubmit = true;
+            ocForm.submit();
+        });
+    });
+
+    itemsBody.querySelectorAll('.item-row').forEach(wireRow);
+    if (!itemsBody.querySelector('.item-row')) addRow({});
+    recalcTotals();
+})();
+</script>
+{% endblock %}

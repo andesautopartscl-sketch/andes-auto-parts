@@ -12,6 +12,7 @@
 {% set puede_mod_informes = (user_permissions.mod_informes if user_permissions is defined else True) %}
 {% set puede_mod_rrhh = (user_permissions.mod_rrhh if user_permissions is defined else False) %}
 {% set puede_mod_sii_sync = (user_permissions.mod_sii_sync if user_permissions is defined else False) %}
+{% set puede_ver_oc_clientes = (user_permissions.ver_oc_clientes if user_permissions is defined else False) %}
 {% set show_verify_badge = ('admin' in rol_actual) or ('super' in rol_actual) %}
 {% set n_online = (online_users|length) if (online_users is defined and online_users) else 0 %}
 <style>
@@ -568,6 +569,9 @@ html {
 				<a class="{% if active_page == 'ventas_index' %}nav-active{% endif %}" href="{{ url_for('ventas.index') }}" data-module-url="{{ url_for('ventas.index') }}">🏠 Módulo Ventas</a>
 				<a class="{% if active_page == 'cotizacion' %}nav-active{% endif %}" href="{{ url_for('ventas.cotizacion') }}" data-module-url="{{ url_for('ventas.cotizacion') }}">📄 Cotización</a>
 				<a class="{% if active_page == 'orden_venta' %}nav-active{% endif %}" href="{{ url_for('ventas.orden_venta') }}" data-module-url="{{ url_for('ventas.orden_venta') }}">📋 Orden de venta</a>
+				{% if puede_ver_oc_clientes %}
+				<a class="{% if active_page == 'oc_clientes' %}nav-active{% endif %}" href="{{ url_for('oc_clientes.lista') }}" data-module-url="{{ url_for('oc_clientes.lista') }}">📋 OC Clientes</a>
+				{% endif %}
 				<a class="{% if active_page == 'orden_compra' %}nav-active{% endif %}" href="{{ url_for('ventas.orden_compra') }}" data-module-url="{{ url_for('ventas.orden_compra') }}">🛍 Orden de compra</a>
 				<a class="{% if active_page == 'factura' %}nav-active{% endif %}" href="{{ url_for('ventas.facturacion') }}" data-module-url="{{ url_for('ventas.facturacion') }}">🧾 Facturación</a>
 				<a class="{% if active_page == 'boleta' %}nav-active{% endif %}" href="{{ url_for('ventas.facturacion', tipo_documento='boleta') }}" data-module-url="{{ url_for('ventas.facturacion', tipo_documento='boleta') }}">🎫 Boletas</a>

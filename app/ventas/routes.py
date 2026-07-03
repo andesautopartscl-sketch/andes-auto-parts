@@ -328,8 +328,20 @@ def _find_factura_boleta_por_busqueda(term: str) -> DocumentoVenta | None:
     exact = base.filter(func.upper(DocumentoVenta.numero) == t).order_by(DocumentoVenta.id.desc()).first()
     if exact:
         return exact
+    exact_oc = (
+        base.filter(func.upper(DocumentoVenta.numero_oc_cliente) == t)
+        .order_by(DocumentoVenta.id.desc())
+        .first()
+    )
+    if exact_oc:
+        return exact_oc
     return (
-        base.filter(DocumentoVenta.numero.ilike(f"%{t}%"))
+        base.filter(
+            or_(
+                DocumentoVenta.numero.ilike(f"%{t}%"),
+                DocumentoVenta.numero_oc_cliente.ilike(f"%{t}%"),
+            )
+        )
         .order_by(DocumentoVenta.fecha_documento.desc(), DocumentoVenta.id.desc())
         .first()
     )
@@ -585,6 +597,7 @@ def _serialize_documento_borrador_siguiente(doc_type: str, numero: str) -> dict:
         "source_type": "",
         "root_id": None,
         "numero": clean,
+        "numero_oc_cliente": "",
         "fecha_documento": today,
         "fecha_vencimiento": today,
         "status": "pendiente",
@@ -666,6 +679,7 @@ def _save_or_update_document(
     root_id: int | None = None,
     pago_saldo_monto: float | None = None,
     metodo_pago_resto: str = "",
+    numero_oc_cliente: str = "",
 ) -> DocumentoVenta:
     tipo_value = _doc_tipo_value(doc_type, tipo_documento)
     numero = (doc_number or "").strip().upper()
@@ -706,6 +720,7 @@ def _save_or_update_document(
 
     documento.fecha_documento = fecha_documento
     documento.fecha_vencimiento = fecha_vencimiento
+    documento.numero_oc_cliente = (numero_oc_cliente or "").strip()[:100] or None
     documento.cliente_id = selected_client_id if selected_client_id > 0 else None
     documento.proveedor_id = selected_proveedor_id if selected_proveedor_id > 0 else None
     documento.cliente_rut = party_rut
@@ -894,6 +909,7 @@ def _serialize_document(documento: DocumentoVenta) -> dict:
         "source_type": (documento.source_type or "").strip().lower(),
         "root_id": documento.root_id,
         "numero": (documento.numero or "").strip(),
+        "numero_oc_cliente": (getattr(documento, "numero_oc_cliente", None) or "").strip(),
         "fecha_documento": documento.fecha_documento.strftime("%Y-%m-%d") if documento.fecha_documento else "",
         "fecha_vencimiento": documento.fecha_vencimiento.strftime("%Y-%m-%d") if documento.fecha_vencimiento else "",
         "status": (documento.status or "pendiente").strip().lower(),
@@ -1164,6 +1180,7 @@ def _serialize_chain_node(doc: DocumentoVenta) -> dict:
         "id": doc.id,
         "type": tipo,
         "number": (doc.numero or "").strip(),
+        "numero_oc_cliente": (getattr(doc, "numero_oc_cliente", None) or "").strip(),
         "status": (doc.status or "pendiente").strip().lower(),
         "total": round(float(doc.total or 0), 2),
         "created_at": doc.created_at.isoformat() if doc.created_at else None,
@@ -1234,6 +1251,7 @@ def _history_row_from_node(node: dict) -> dict:
         "label": _history_doc_label(doc_type),
         "badge_tone": _history_doc_tone(doc_type),
         "number": number,
+        "numero_oc_cliente": (node.get("numero_oc_cliente") or "").strip(),
         "status": node.get("status") or "pendiente",
         "total": round(float(node.get("total") or 0), 2),
         "created_at": created_at,
@@ -1291,7 +1309,7 @@ def _trace_chain_from_document(root: DocumentoVenta) -> list[dict]:
     return nodes
 
 
-def _build_client_history_payload(client_id: int) -> tuple[Cliente | None, dict | None]:
+def _build_client_history_payload(client_id: int, solo_con_oc: bool = False) -> tuple[Cliente | None, dict | None]:
     cliente = db.session.get(Cliente, client_id)
     if cliente is None or not cliente.activo:
         return None, None
@@ -1328,6 +1346,8 @@ def _build_client_history_payload(client_id: int) -> tuple[Cliente | None, dict 
         for nota in notas
     ]
     documentos = [_history_row_from_node(node) for node in cotizaciones + ordenes_venta + facturas + notas_credito]
+    if solo_con_oc:
+        documentos = [d for d in documentos if (d.get("numero_oc_cliente") or "").strip()]
     timeline = sorted(documentos, key=lambda item: item.get("created_at") or "", reverse=False)
 
     saldo_actual = _round_money_cl(_cliente_saldo_favor_ledger(int(cliente.id)))
@@ -1367,6 +1387,13 @@ def _build_client_history_payload(client_id: int) -> tuple[Cliente | None, dict 
             }
         )
 
+    try:
+        from app.oc_clientes.services import listar_oc_por_cliente
+
+        ordenes_compra_cliente = listar_oc_por_cliente(client_id)
+    except Exception:
+        ordenes_compra_cliente = []
+
     payload = {
         "client": cliente.to_dict(),
         "saldo_favor": saldo_actual,
@@ -1376,6 +1403,7 @@ def _build_client_history_payload(client_id: int) -> tuple[Cliente | None, dict 
         "ordenes_venta": ordenes_venta,
         "facturas": facturas,
         "notas_credito": notas_credito,
+        "ordenes_compra_cliente": ordenes_compra_cliente,
         "documentos": sorted(documentos, key=lambda item: item.get("created_at") or "", reverse=True),
         "timeline": timeline,
     }
@@ -1572,6 +1600,7 @@ def _copy_document_with_trace(source: DocumentoVenta, target_doc_type: str, targ
         source_id=source.id,
         source_type=source_doc_type,
         root_id=source_root_id,
+        numero_oc_cliente=(getattr(source, "numero_oc_cliente", None) or "").strip(),
     )
     _mark_source_aprobada_after_conversion(source)
     return target
@@ -2666,6 +2695,7 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
     doc_date = (form.get("doc_date") if form else None) or now.strftime("%Y-%m-%d")
     doc_valid_until = (form.get("doc_valid_until") if form else None) or now.strftime("%Y-%m-%d")
     notes = ((form.get("notes") if form else None) or "").strip()
+    numero_oc_cliente = ((form.get("numero_oc_cliente") if form else None) or "").strip()
     status = ((form.get("status") if form else None) or "pendiente").strip().lower()
 
     selected_client_id = _safe_int((form.get("client_id") if form else None) or "0", default=0)
@@ -2710,6 +2740,7 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
                 status = serialized["status"] or status
                 tipo_documento = serialized["tipo_documento"] or tipo_documento
                 notes = serialized["notes"] or notes
+                numero_oc_cliente = serialized.get("numero_oc_cliente") or numero_oc_cliente
                 party = serialized["party"] or party
                 selected_client_id = int(loaded_document.cliente_id or 0)
                 selected_proveedor_id = int(loaded_document.proveedor_id or 0)
@@ -2774,6 +2805,7 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
                     items=items,
                     totals=totals,
                     notes=notes,
+                    numero_oc_cliente=numero_oc_cliente,
                     **pay_kw,
                 )
 
@@ -2806,6 +2838,7 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
                 status = serialized["status"] or status
                 tipo_documento = serialized["tipo_documento"] or tipo_documento
                 notes = serialized["notes"] or notes
+                numero_oc_cliente = serialized.get("numero_oc_cliente") or numero_oc_cliente
                 party = serialized["party"] or party
                 items = serialized["items"] or items
                 estado_pago = serialized.get("estado_pago", estado_pago)
@@ -2869,6 +2902,7 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
         "doc_number": doc_number,
         "doc_date": doc_date,
         "doc_valid_until": doc_valid_until,
+        "numero_oc_cliente": numero_oc_cliente,
         "party": party,
         "selected_client_id": selected_client_id,
         "selected_proveedor_id": selected_proveedor_id,
@@ -3108,7 +3142,8 @@ def cliente_eliminar(cid: int):
 @ventas_bp.route("/clientes/<int:cid>/historial")
 @login_required
 def cliente_historial(cid: int):
-    cliente, payload = _build_client_history_payload(cid)
+    filtro_oc = _clean_text(request.args.get("filtro_oc")) == "1"
+    cliente, payload = _build_client_history_payload(cid, solo_con_oc=filtro_oc)
     if cliente is None or payload is None:
         flash("Cliente no encontrado.", "error")
         return redirect(url_for("ventas.clientes"))
@@ -3116,6 +3151,7 @@ def cliente_historial(cid: int):
         "ventas/cliente_historial.html",
         cliente=cliente,
         data=payload,
+        filtro_oc=filtro_oc,
         active_page="clientes",
         **_base_ctx(),
     )
@@ -3320,6 +3356,7 @@ def notas_credito():
             | NotaCredito.razon.ilike(term)
             | DocumentoVenta.cliente_nombre.ilike(term)
             | DocumentoVenta.numero.ilike(term)
+            | DocumentoVenta.numero_oc_cliente.ilike(term)
         )
     lista = query.order_by(NotaCredito.fecha_documento.desc(), NotaCredito.id.desc()).all()
     return render_template(
@@ -4200,6 +4237,26 @@ def api_credit_notes_by_documento(documento_id: int):
 #  PAYMENT API
 # ─────────────────────────────────────────────────────────────
 
+def _registrar_pago_documento(
+    doc: DocumentoVenta,
+    metodo: str,
+    *,
+    referencia: str = "",
+    fecha_pago: datetime | None = None,
+) -> str | None:
+    """Marca documento como pagado. Devuelve mensaje de error o None si OK."""
+    met = (metodo or "").strip().lower()
+    if met not in METODO_PAGO_OPTIONS:
+        return f"Método de pago inválido: {met}"
+    doc.metodo_pago = met
+    doc.estado_pago = "pagado"
+    doc.pago_referencia = (referencia or "").strip()[:200]
+    doc.updated_at = fecha_pago or datetime.utcnow()
+    _mark_documento_aprobada_por_cobro(doc)
+    _cascade_upstream_aprobada(doc)
+    return None
+
+
 @ventas_bp.route("/api/documento/<int:doc_id>/pago", methods=["POST"])
 @login_required
 def api_registrar_pago(doc_id: int):
@@ -4212,16 +4269,18 @@ def api_registrar_pago(doc_id: int):
 
     data = request.get_json(force=True) or {}
     metodo = (data.get("metodo_pago") or "efectivo").strip().lower()
-    if metodo not in METODO_PAGO_OPTIONS:
-        return jsonify({"ok": False, "error": f"Método de pago inválido: {metodo}"}), 400
+    referencia = (data.get("pago_referencia") or data.get("referencia_caja") or "").strip()
+    fecha_raw = (data.get("fecha") or data.get("fecha_pago") or "").strip()
+    fecha_pago = None
+    if fecha_raw:
+        try:
+            fecha_pago = datetime.strptime(fecha_raw[:10], "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"ok": False, "error": "Fecha de pago inválida (use AAAA-MM-DD)."}), 400
 
-    doc.metodo_pago = metodo
-    doc.estado_pago = "pagado"
-    if "pago_referencia" in data or "referencia_caja" in data:
-        doc.pago_referencia = (data.get("pago_referencia") or data.get("referencia_caja") or "").strip()[:200]
-    doc.updated_at = datetime.utcnow()
-    _mark_documento_aprobada_por_cobro(doc)
-    _cascade_upstream_aprobada(doc)
+    err = _registrar_pago_documento(doc, metodo, referencia=referencia, fecha_pago=fecha_pago)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
     db.session.commit()
 
     return jsonify({

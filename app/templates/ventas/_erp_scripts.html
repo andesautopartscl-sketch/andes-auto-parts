@@ -64,6 +64,7 @@
     const docNumberInput = document.getElementById('doc_number');
     const docDateInput = document.getElementById('doc_date');
     const docValidInput = document.getElementById('doc_valid_until');
+    const numeroOcClienteInput = document.getElementById('numero_oc_cliente');
     const statusInput = document.getElementById('status');
     const notesInput = document.getElementById('notes');
     const docActionsPanel = document.querySelector('.doc-actions');
@@ -752,6 +753,10 @@
         setText('printDocFolio', num);
         setText('printDocDate', formatPrintDate(dateVal));
         setText('printDocValid', formatPrintDate(validVal));
+        var ocVal = numeroOcClienteInput ? String(numeroOcClienteInput.value || '').trim() : '';
+        setText('printDocOcCliente', ocVal);
+        var ocRow = document.getElementById('printOcClienteRow');
+        if (ocRow) ocRow.style.display = ocVal ? '' : 'none';
         var folioType = document.querySelector('.doc-folio-type');
         var titleBadge = document.querySelector('.cot-type-badge');
         var baseTitle = (titleBadge && titleBadge.textContent) ? titleBadge.textContent.trim().toUpperCase() : '';
@@ -1326,6 +1331,7 @@
         if (docNumberInput) docNumberInput.value = doc.numero || '';
         if (docDateInput) docDateInput.value = doc.fecha_documento || '';
         if (docValidInput) docValidInput.value = doc.fecha_vencimiento || '';
+        if (numeroOcClienteInput) numeroOcClienteInput.value = doc.numero_oc_cliente || '';
         if (statusInput && doc.status) statusInput.value = doc.status;
         if (tipoDocumento && doc.tipo_documento) tipoDocumento.value = doc.tipo_documento;
         if (notesInput) notesInput.value = doc.notes || '';
@@ -1806,6 +1812,7 @@
     if (docNumberInput) docNumberInput.addEventListener('input', syncPrintMetaFields);
     if (docDateInput) docDateInput.addEventListener('change', syncPrintMetaFields);
     if (docValidInput) docValidInput.addEventListener('change', syncPrintMetaFields);
+    if (numeroOcClienteInput) numeroOcClienteInput.addEventListener('input', syncPrintMetaFields);
     if (tipoDocumento) tipoDocumento.addEventListener('change', syncPrintMetaFields);
     if (partyName) partyName.addEventListener('input', function () { syncPartyPrintFromForm(); });
     if (partyAddress) partyAddress.addEventListener('input', function () { syncPartyPrintFromForm(); });

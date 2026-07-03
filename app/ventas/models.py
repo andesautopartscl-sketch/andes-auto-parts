@@ -22,6 +22,7 @@ class DocumentoVenta(db.Model):
     # Document metadata
     tipo = db.Column(db.String(20), nullable=False)  # factura, boleta, orden_venta, orden_compra, cotizacion
     numero = db.Column(db.String(60), index=True)  # Document number (optional for orders/quotes)
+    numero_oc_cliente = db.Column(db.String(100), index=True)  # Orden de compra del cliente (referencia externa)
     fecha_documento = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
     fecha_vencimiento = db.Column(db.DateTime)
     

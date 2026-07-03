@@ -36,6 +36,8 @@ PERMISSION_CATALOG: list[dict] = [
             {"key": "ventas_enviar_documento", "label": "Enviar documentos por email/WhatsApp"},
             {"key": "ventas_autorizar_margen_bajo", "label": "Autorizar margen bajo en OV"},
             {"key": "ver_precio_costo", "label": "Ver costos y margenes internos"},
+            {"key": "ver_oc_clientes", "label": "Ver órdenes de compra de clientes"},
+            {"key": "mod_oc_clientes", "label": "Gestionar órdenes de compra de clientes"},
         ],
     },
     {

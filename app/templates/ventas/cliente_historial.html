@@ -64,6 +64,52 @@
     text-transform: uppercase;
     color: rgba(255, 255, 255, 0.55);
 }
+.history-hero-actions {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.history-hero-actions .btn.primary {
+    background: #fff;
+    color: #1e40af;
+    border: none;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.history-hero-actions .btn.primary:hover {
+    background: #eff6ff;
+}
+.history-doc-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 12px 10px 14px;
+}
+.history-doc-filters .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: none;
+}
+.history-doc-filters .filter-chip.active {
+    background: #eff6ff;
+    border-color: #93c5fd;
+    color: #1d4ed8;
+}
+.history-oc-sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    font-weight: 500;
+    color: #64748b;
+}
 .history-card {
     background: #fff;
     border: 1px solid #e2e8f0;
@@ -515,19 +561,26 @@ textarea.sf-input {
             <h2>{{ cliente.nombre }}</h2>
             <p>RUT: {{ cliente.rut|format_rut if cliente.rut else 'Sin RUT' }} | Email: {{ cliente.email or 'Sin email' }} | Telefono: {% if cliente.telefono %}{{ cliente.telefono|format_telefono }}{% else %}Sin telefono{% endif %}</p>
         </div>
-        <div class="history-stats">
-            <div class="history-stat">
-                <strong>{{ data.documentos|length }}</strong>
-                <span>Documentos</span>
+            <div class="history-stats">
+                <div class="history-stat">
+                    <strong>{{ data.documentos|length }}</strong>
+                    <span>Documentos</span>
+                </div>
+                <div class="history-stat">
+                    <strong>{{ data.ordenes_compra_cliente|length }}</strong>
+                    <span>OC Cliente</span>
+                </div>
+                <div class="history-stat">
+                    <strong>{{ data.facturas|length }}</strong>
+                    <span>Facturas / Boletas</span>
+                </div>
+                <div class="history-stat">
+                    <strong>{{ data.notas_credito|length }}</strong>
+                    <span>Notas de credito</span>
+                </div>
             </div>
-            <div class="history-stat">
-                <strong>{{ data.facturas|length }}</strong>
-                <span>Facturas / Boletas</span>
-            </div>
-            <div class="history-stat">
-                <strong>{{ data.notas_credito|length }}</strong>
-                <span>Notas de credito</span>
-            </div>
+        <div class="history-hero-actions">
+            <a class="btn primary" href="{{ url_for('oc_clientes.nueva', cliente_id=cliente.id) }}">➕ Registrar Orden de Compra</a>
         </div>
     </section>
 
@@ -539,12 +592,17 @@ textarea.sf-input {
             </div>
             <div class="history-tabs" id="tabsClienteHistorial">
                 <button class="tab-btn active" type="button" data-tab="cliente-documentos">Documentos</button>
+                <button class="tab-btn" type="button" data-tab="cliente-oc">Órdenes de Compra</button>
                 <button class="tab-btn" type="button" data-tab="cliente-pagos">Pagos</button>
                 <button class="tab-btn" type="button" data-tab="cliente-trazabilidad">Trazabilidad</button>
             </div>
         </div>
 
         <section class="history-pane active" id="cliente-documentos">
+            <div class="history-doc-filters">
+                <a class="filter-chip{% if not filtro_oc %} active{% endif %}" href="{{ url_for('ventas.cliente_historial', cid=cliente.id) }}">Todos</a>
+                <a class="filter-chip{% if filtro_oc %} active{% endif %}" href="{{ url_for('ventas.cliente_historial', cid=cliente.id, filtro_oc=1) }}">Con OC de cliente</a>
+            </div>
             {% if data.documentos %}
             <div class="history-table-wrap">
                 <table class="history-table">
@@ -561,7 +619,12 @@ textarea.sf-input {
                         {% for doc in data.documentos %}
                         <tr class="{% if doc.view_url %}history-row-link{% endif %}" {% if doc.view_url %}data-href="{{ doc.view_url }}"{% endif %}>
                             <td><span class="doc-badge {{ doc.badge_tone }}">{{ doc.label }}</span></td>
-                            <td><strong>{{ doc.number or ('#' ~ doc.id) }}</strong></td>
+                            <td>
+                                <strong>{{ doc.number or ('#' ~ doc.id) }}</strong>
+                                {% if doc.numero_oc_cliente %}
+                                <span class="history-oc-sub">OC: {{ doc.numero_oc_cliente }}</span>
+                                {% endif %}
+                            </td>
                             <td>{{ doc.fecha }}</td>
                             <td>${{ '{:,.0f}'.format(doc.total or 0).replace(',', '.') }}</td>
                             <td><span class="status-pill">{{ doc.status or 'pendiente' }}</span></td>
@@ -571,7 +634,41 @@ textarea.sf-input {
                 </table>
             </div>
             {% else %}
-            <div class="history-empty">No hay documentos registrados para este cliente.</div>
+            <div class="history-empty">{% if filtro_oc %}No hay documentos con OC de cliente para este cliente.{% else %}No hay documentos registrados para este cliente.{% endif %}</div>
+            {% endif %}
+        </section>
+
+        <section class="history-pane" id="cliente-oc">
+            <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+                <a class="btn sm primary" href="{{ url_for('oc_clientes.nueva', cliente_id=cliente.id) }}">➕ Nueva OC</a>
+            </div>
+            {% if data.ordenes_compra_cliente %}
+            <div class="history-table-wrap">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>N° OC</th>
+                            <th>Fecha</th>
+                            <th>Total</th>
+                            <th>Estado</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for oc in data.ordenes_compra_cliente %}
+                        <tr class="history-row-link" data-href="{{ oc.view_url }}">
+                            <td><strong>{{ oc.numero_oc }}</strong></td>
+                            <td>{{ oc.fecha_oc }}</td>
+                            <td>${{ '{:,.0f}'.format(oc.total or 0).replace(',', '.') }}</td>
+                            <td><span class="doc-badge {{ oc.badge }}">{{ oc.estado_label }}</span></td>
+                            <td><a class="btn sm outline" href="{{ oc.view_url }}">Ver</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="history-empty">Sin órdenes de compra registradas para este cliente.</div>
             {% endif %}
         </section>
 

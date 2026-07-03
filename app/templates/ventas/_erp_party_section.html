@@ -48,6 +48,9 @@
                 <div class="doc-party-line"><span class="k">FECHA VENC.</span><span class="v" id="printDocValid">{{ doc_valid_until or doc_date }}</span></div>
                 <div class="doc-party-line"><span class="k">DOCUMENTO</span><span class="v" id="printDocType">{{ title|upper }}</span></div>
                 <div class="doc-party-line"><span class="k">Nº FOLIO</span><span class="v" id="printDocFolio">{{ doc_number }}</span></div>
+                {% if doc_type in ['cotizacion', 'orden_venta', 'factura'] %}
+                <div class="doc-party-line" id="printOcClienteRow"{% if not numero_oc_cliente %} style="display:none"{% endif %}><span class="k">N° OC CLIENTE</span><span class="v" id="printDocOcCliente">{{ numero_oc_cliente or '' }}</span></div>
+                {% endif %}
                 <div class="doc-party-line"><span class="k">TIPO</span><span class="v">{{ party_label|upper }}</span></div>
             </div>
         </div>

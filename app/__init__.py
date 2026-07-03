@@ -29,6 +29,7 @@ from .postventa import models as postventa_models  # noqa: F401
 from .contabilidad import models as contabilidad_models  # noqa: F401
 from .rrhh import models as rrhh_models  # noqa: F401
 from .sii_sync import models as sii_sync_models  # noqa: F401
+from .oc_clientes import models as oc_clientes_models  # noqa: F401
 from .inventario.routes import inventario_bp
 from .oportunidades.routes import oportunidades_bp
 from .postventa.routes import postventa_bp
@@ -37,6 +38,7 @@ from .contabilidad.routes import contabilidad_bp, finanzas_bp
 from .informes.routes import informes_bp
 from .rrhh.routes import rrhh_bp
 from .sii_sync import sii_sync_bp
+from .oc_clientes import oc_clientes_bp
 from .mobile import mobile_bp
 from app.seguridad.init_roles import crear_roles
 from app.seguridad.crear_superadmin import crear_superadmin
@@ -312,6 +314,7 @@ def create_app():
         app.register_blueprint(informes_bp)
         app.register_blueprint(rrhh_bp)
         app.register_blueprint(sii_sync_bp)
+        app.register_blueprint(oc_clientes_bp)
         app.register_blueprint(mobile_bp)
 
     print(app.url_map)
@@ -712,6 +715,14 @@ def create_app():
                     conn.execute(text(f"ALTER TABLE ventas_documentos ADD COLUMN {col_name} {col_type}"))
             if ventas_documentos_cols and "monto_saldo_favor" not in ventas_documentos_col_names:
                 conn.execute(text("ALTER TABLE ventas_documentos ADD COLUMN monto_saldo_favor REAL NOT NULL DEFAULT 0"))
+            if ventas_documentos_cols and "numero_oc_cliente" not in ventas_documentos_col_names:
+                conn.execute(text("ALTER TABLE ventas_documentos ADD COLUMN numero_oc_cliente VARCHAR(100)"))
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_ventas_documentos_numero_oc_cliente "
+                    "ON ventas_documentos(numero_oc_cliente)"
+                )
+            )
 
             ventas_nc_cols = conn.execute(text("PRAGMA table_info(ventas_notas_credito)")).fetchall()
             ventas_nc_col_names = {col[1] for col in ventas_nc_cols}
@@ -883,6 +894,64 @@ def create_app():
                     "ON sii_documentos(documento_venta_id)"
                 )
             )
+
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS oc_clientes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        numero_oc VARCHAR(100) NOT NULL,
+                        cliente_id INTEGER NOT NULL,
+                        fecha_oc DATETIME NOT NULL,
+                        fecha_entrega_comprometida DATETIME,
+                        fecha_entrega_real DATETIME,
+                        forma_pago VARCHAR(100),
+                        direccion_despacho VARCHAR(300),
+                        estado VARCHAR(30) NOT NULL DEFAULT 'recibida',
+                        numero_factura VARCHAR(60),
+                        fecha_pago DATETIME,
+                        metodo_pago VARCHAR(50),
+                        numero_guia_despacho VARCHAR(60),
+                        observaciones TEXT,
+                        neto REAL NOT NULL DEFAULT 0,
+                        iva REAL NOT NULL DEFAULT 0,
+                        total REAL NOT NULL DEFAULT 0,
+                        stock_deducted BOOLEAN NOT NULL DEFAULT 0,
+                        usuario VARCHAR(100),
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME,
+                        FOREIGN KEY (cliente_id) REFERENCES ventas_clientes(id)
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS oc_clientes_items (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        oc_id INTEGER NOT NULL,
+                        codigo_producto VARCHAR(100) NOT NULL,
+                        descripcion VARCHAR(255),
+                        marca VARCHAR(120),
+                        bodega VARCHAR(120),
+                        cantidad INTEGER NOT NULL DEFAULT 1,
+                        precio_unitario REAL NOT NULL DEFAULT 0,
+                        descuento_item REAL DEFAULT 0,
+                        subtotal REAL DEFAULT 0,
+                        en_inventario BOOLEAN NOT NULL DEFAULT 0,
+                        stock_descontado BOOLEAN NOT NULL DEFAULT 0,
+                        FOREIGN KEY (oc_id) REFERENCES oc_clientes(id)
+                    )
+                    """
+                )
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_numero_oc ON oc_clientes(numero_oc)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_cliente_id ON oc_clientes(cliente_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_estado ON oc_clientes(estado)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_fecha_oc ON oc_clientes(fecha_oc)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_items_oc_id ON oc_clientes_items(oc_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_items_codigo ON oc_clientes_items(codigo_producto)"))
 
             # Tablas antiguas sin producto_codigo: ALTER primero; luego el índice (no indexar columna inexistente).
             oem_d_cols = conn.execute(text("PRAGMA table_info(oem_despiece)")).fetchall()

@@ -1,0 +1,167 @@
+{% extends 'ventas/base_partial.html' if _partial else 'ventas/base.html' %}
+
+{% block title %}OC Clientes | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.oc-list-page { display: grid; gap: 8px; max-width: 1180px; }
+.oc-list-toolbar {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 10px 14px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+.oc-list-toolbar h2 { margin: 0; font-size: 16px; font-weight: 700; color: #0f172a; letter-spacing: -0.02em; }
+.oc-list-toolbar p { margin: 2px 0 8px; font-size: 11px; color: #64748b; line-height: 1.4; }
+.oc-kpis { display: flex; gap: 6px; flex-wrap: wrap; }
+.oc-kpi {
+    background: #f8fafc; border: 1px solid #e8eef5; border-radius: 7px;
+    padding: 5px 10px; min-width: 110px;
+}
+.oc-kpi strong { display: block; font-size: 14px; font-weight: 700; color: #0f172a; line-height: 1.2; }
+.oc-kpi span {
+    font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.oc-list-card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05); overflow: hidden;
+}
+.oc-list-filters {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end;
+    padding: 10px 14px; border-bottom: 1px solid #f1f5f9; background: #fafbfc;
+}
+.oc-list-filters label {
+    display: block; font-size: 10px; font-weight: 600; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px;
+}
+.oc-list-filters input, .oc-list-filters select {
+    padding: 6px 8px; border: 1px solid #dbe3ef; border-radius: 6px;
+    font-size: 12px; min-width: 130px; background: #fff; box-sizing: border-box;
+}
+.oc-list-filters input:focus, .oc-list-filters select:focus {
+    outline: none; border-color: #93c5fd; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+.oc-list-filters .filter-actions { display: flex; gap: 6px; align-items: center; }
+.oc-list-page .table-wrap { overflow-x: auto; }
+.oc-list-page table {
+    width: 100%; border-collapse: collapse; min-width: 720px;
+}
+.oc-list-page thead th {
+    padding: 7px 12px; text-align: left; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em; color: #64748b;
+    background: #f8fafc; border-bottom: 1px solid #e2e8f0; white-space: nowrap;
+}
+.oc-list-page tbody td {
+    padding: 8px 12px; border-bottom: 1px solid #f1f5f9;
+    font-size: 12px; color: #475569; vertical-align: middle;
+}
+.oc-list-page tbody tr:hover td { background: #fafbfc; }
+.oc-list-page tbody td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.oc-list-page tbody td.oc-num strong { color: #0f172a; font-weight: 600; }
+.oc-list-page tbody td.cliente { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oc-list-page tbody td.empty {
+    padding: 28px 14px; text-align: center; color: #94a3b8; font-size: 12px;
+}
+.badge-oc {
+    display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.25;
+}
+.badge-oc.blue { background: #dbeafe; color: #1d4ed8; }
+.badge-oc.orange { background: #ffedd5; color: #c2410c; }
+.badge-oc.green { background: #dcfce7; color: #15803d; }
+.badge-oc.slate { background: #f1f5f9; color: #64748b; }
+.oc-list-page .btn.sm { padding: 4px 9px; font-size: 11px; border-radius: 6px; }
+@media (max-width: 768px) {
+    .oc-list-toolbar { flex-direction: column; }
+    .oc-list-filters input, .oc-list-filters select { min-width: 100%; }
+}
+</style>
+{% endblock %}
+
+{% block ventas_inner %}
+<div class="page-stack oc-list-page">
+    <div class="oc-list-toolbar">
+        <div>
+            <h2>Órdenes de Compra Cliente</h2>
+            <p>OC emitidas por clientes B2B · entrega, cobro y factura externa</p>
+            <div class="oc-kpis">
+                <div class="oc-kpi">
+                    <strong>{{ resumen.pendientes_entrega }}</strong>
+                    <span>Pend. entrega</span>
+                </div>
+                <div class="oc-kpi">
+                    <strong>${{ '{:,.0f}'.format(resumen.total_por_cobrar).replace(',', '.') }}</strong>
+                    <span>Por cobrar</span>
+                </div>
+                <div class="oc-kpi">
+                    <strong>${{ '{:,.0f}'.format(resumen.cobrado_mes).replace(',', '.') }}</strong>
+                    <span>Cobrado mes</span>
+                </div>
+            </div>
+        </div>
+        {% if puede_modificar %}
+        <div style="flex-shrink:0;padding-top:2px;">
+            <a class="btn sm primary" href="{{ url_for('oc_clientes.nueva') }}">+ Nueva OC</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="oc-list-card">
+        <form class="oc-list-filters" method="get">
+            <div>
+                <label for="oc-estado">Estado</label>
+                <select id="oc-estado" name="estado">
+                    <option value="">Todos</option>
+                    {% for e in estados %}
+                    <option value="{{ e }}" {% if filtros.estado == e %}selected{% endif %}>{{ estado_labels.get(e, e|capitalize) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="oc-cliente">Cliente</label>
+                <input id="oc-cliente" type="text" name="cliente" value="{{ filtros.cliente }}" placeholder="Nombre">
+            </div>
+            <div>
+                <label for="oc-q">Buscar</label>
+                <input id="oc-q" type="search" name="q" value="{{ filtros.q }}" placeholder="N° OC o factura">
+            </div>
+            <div class="filter-actions">
+                <button class="btn sm outline" type="submit">Filtrar</button>
+                {% if filtros.estado or filtros.cliente or filtros.q %}
+                <a class="btn sm" href="{{ url_for('oc_clientes.lista') }}">Limpiar</a>
+                {% endif %}
+            </div>
+        </form>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha OC</th>
+                        <th>N° OC</th>
+                        <th>Cliente</th>
+                        <th style="text-align:right;">Total</th>
+                        <th>Estado</th>
+                        <th style="text-align:center;">Días entrega</th>
+                        <th style="width:72px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in filas %}
+                    <tr>
+                        <td>{{ f.oc.fecha_oc.strftime('%d/%m/%Y') if f.oc.fecha_oc else '—' }}</td>
+                        <td class="oc-num"><strong>{{ f.oc.numero_oc }}</strong></td>
+                        <td class="cliente" title="{{ f.cliente_nombre }}">{{ f.cliente_nombre }}</td>
+                        <td class="num">${{ '{:,.0f}'.format(f.oc.total or 0).replace(',', '.') }}</td>
+                        <td><span class="badge-oc {{ f.badge }}">{{ f.estado_label }}</span></td>
+                        <td class="num" style="text-align:center;">{% if f.dias_entrega is not none %}{{ f.dias_entrega }}{% else %}—{% endif %}</td>
+                        <td><a class="btn sm outline" href="{{ url_for('oc_clientes.detalle', oid=f.oc.id) }}">Ver</a></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="empty">Sin órdenes de compra registradas.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

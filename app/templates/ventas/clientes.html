@@ -262,6 +262,7 @@ td {
                         </td>
                         <td>
                             <div class="actions">
+                                <a class="btn sm outline" href="{{ url_for('oc_clientes.nueva', cliente_id=cliente.id) }}">➕ OC</a>
                                 <a class="btn sm outline" href="{{ url_for('ventas.cliente_historial', cid=cliente.id) }}">Historial</a>
                                 <a class="btn sm" href="{{ url_for('ventas.cliente_editar', cid=cliente.id) }}">Editar</a>
                                 <form class="inline-form" method="post" action="{{ url_for('ventas.cliente_eliminar', cid=cliente.id) }}" onsubmit="return confirm('Eliminar cliente {{ cliente.nombre }}?');">
