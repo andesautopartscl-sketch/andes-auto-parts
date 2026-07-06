@@ -1,0 +1,275 @@
+<style>
+.oc-pago-bar {
+    display: none; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    padding: 8px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+    margin-bottom: 8px; font-size: 12px; color: #1e3a8a;
+}
+.oc-pago-bar.visible { display: flex; }
+.oc-pago-bar-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.oc-pago-modal {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    padding: 18px; background: rgba(15, 23, 42, 0.48); z-index: 1200;
+}
+.oc-pago-modal.open { display: flex; }
+.oc-pago-card {
+    width: min(860px, calc(100vw - 24px));
+    max-height: calc(100vh - 36px);
+    overflow: hidden;
+    background: #fff; border: 1px solid #dbe3ef; border-radius: 12px;
+    box-shadow: 0 20px 55px rgba(15, 23, 42, 0.28); padding: 22px 26px 20px;
+    box-sizing: border-box;
+}
+.oc-pago-card form { box-sizing: border-box; }
+.oc-pago-card h3 { margin: 0 0 6px; font-size: 17px; font-weight: 700; color: #0f172a; }
+.oc-pago-card .sub { margin: 0 0 16px; color: #64748b; font-size: 12px; line-height: 1.45; }
+.oc-pago-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin-bottom: 16px; }
+.oc-pago-grid .full { grid-column: 1 / -1; }
+.oc-pago-card label {
+    display: block; font-size: 10px; font-weight: 600; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px;
+}
+.oc-pago-card input, .oc-pago-card select {
+    width: 100%; padding: 7px 9px; border: 1px solid #dbe3ef; border-radius: 6px;
+    font-size: 12px; box-sizing: border-box;
+}
+.oc-pago-table-wrap {
+    border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom: 12px;
+}
+.oc-pago-oc-table {
+    width: 100%; border-collapse: collapse; font-size: 12px; margin: 0;
+    table-layout: fixed; box-sizing: border-box;
+}
+.oc-pago-oc-table th, .oc-pago-oc-table td {
+    padding: 10px 12px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: middle;
+    overflow: hidden; box-sizing: border-box;
+}
+.oc-pago-oc-table tr:last-child td { border-bottom: none; }
+.oc-pago-oc-table th:nth-child(1), .oc-pago-oc-table td:nth-child(1) { width: 20%; }
+.oc-pago-oc-table th:nth-child(2), .oc-pago-oc-table td:nth-child(2) { width: 22%; }
+.oc-pago-oc-table th:nth-child(3), .oc-pago-oc-table td:nth-child(3) { width: 58%; }
+.oc-pago-oc-table th {
+    font-size: 10px; text-transform: uppercase; color: #64748b; background: #f8fafc;
+}
+.oc-pago-oc-table td.num { text-align: right; white-space: nowrap; }
+.oc-pago-oc-table input {
+    margin: 0; min-width: 0; width: 100%; max-width: 100%; box-sizing: border-box;
+}
+.oc-pago-totals {
+    display: flex; justify-content: flex-end; gap: 14px; font-size: 12px;
+    color: #475569; margin-bottom: 10px;
+}
+.oc-pago-totals strong { color: #0f172a; }
+.oc-pago-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.oc-row-check { width: 16px; height: 16px; cursor: pointer; }
+</style>
+
+{% if puede_modificar %}
+<div id="ocPagoBar" class="oc-pago-bar" aria-live="polite">
+    <span id="ocPagoBarText">0 OC seleccionadas</span>
+    <div class="oc-pago-bar-actions">
+        <button type="button" class="btn sm primary" id="btnPagoConjunto">Registrar pago conjunto</button>
+        <button type="button" class="btn sm" id="btnPagoClear">Quitar selección</button>
+    </div>
+</div>
+
+<div id="ocPagoModal" class="oc-pago-modal" aria-hidden="true">
+    <div class="oc-pago-card" role="dialog" aria-modal="true" aria-labelledby="ocPagoModalTitle">
+        <h3 id="ocPagoModalTitle">Pago conjunto</h3>
+        <p class="sub" id="ocPagoModalSub">Un solo abono del cliente con factura distinta por cada OC.</p>
+        <form id="ocPagoForm" method="post" action="{{ url_for('oc_clientes.registrar_pago_multiple') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="oc-pago-grid">
+                <div>
+                    <label for="ocPagoFecha">Fecha pago *</label>
+                    <input id="ocPagoFecha" name="fecha_pago" type="date" required>
+                </div>
+                <div>
+                    <label for="ocPagoMetodo">Método *</label>
+                    <select id="ocPagoMetodo" name="metodo_pago" required>
+                        {% for val, lab in metodo_pago_options %}
+                        <option value="{{ val }}">{{ lab }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="ocPagoMonto">Monto recibido *</label>
+                    <input id="ocPagoMonto" name="monto_recibido" type="number" min="1" step="1" required>
+                </div>
+                <div>
+                    <label for="ocPagoRef">Referencia / comprobante</label>
+                    <input id="ocPagoRef" name="referencia_pago" maxlength="120" placeholder="Ej. transferencia bancaria">
+                </div>
+            </div>
+            <div class="oc-pago-table-wrap">
+            <table class="oc-pago-oc-table">
+                <thead>
+                    <tr>
+                        <th>N° OC</th>
+                        <th style="text-align:right;">Total</th>
+                        <th>N° factura *</th>
+                    </tr>
+                </thead>
+                <tbody id="ocPagoOcRows"></tbody>
+            </table>
+            </div>
+            <div class="oc-pago-totals">
+                <span>Suma OC <strong id="ocPagoSuma">$0</strong></span>
+            </div>
+            <div class="oc-pago-actions">
+                <button type="button" class="btn sm" id="ocPagoCancel">Cancelar</button>
+                <button type="submit" class="btn sm primary">Confirmar pago</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    var bar = document.getElementById('ocPagoBar');
+    var barText = document.getElementById('ocPagoBarText');
+    var modal = document.getElementById('ocPagoModal');
+    var form = document.getElementById('ocPagoForm');
+    var rowsEl = document.getElementById('ocPagoOcRows');
+    var sumaEl = document.getElementById('ocPagoSuma');
+    var montoInput = document.getElementById('ocPagoMonto');
+    var fechaInput = document.getElementById('ocPagoFecha');
+    if (!bar || !modal || !form || !rowsEl) return;
+
+    function todayIso() {
+        var d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    if (fechaInput && !fechaInput.value) fechaInput.value = todayIso();
+
+    function fmt(n) {
+        return '$' + Math.round(n).toLocaleString('es-CL');
+    }
+
+    function selectableRows() {
+        return Array.prototype.slice.call(document.querySelectorAll('tr[data-oc-pendiente="1"]'));
+    }
+
+    function checkedRows() {
+        return selectableRows().filter(function (tr) {
+            var cb = tr.querySelector('.oc-row-check');
+            return cb && cb.checked;
+        });
+    }
+
+    function updateBar() {
+        var rows = checkedRows();
+        var sum = 0;
+        rows.forEach(function (tr) { sum += parseFloat(tr.getAttribute('data-oc-total') || '0') || 0; });
+        if (rows.length) {
+            bar.classList.add('visible');
+            barText.textContent = rows.length + ' OC seleccionada' + (rows.length > 1 ? 's' : '') +
+                ' · Suma ' + fmt(sum);
+        } else {
+            bar.classList.remove('visible');
+            barText.textContent = '0 OC seleccionadas';
+        }
+        return { rows: rows, sum: sum };
+    }
+
+    function validateSameClient(rows) {
+        if (!rows.length) return true;
+        var cid = rows[0].getAttribute('data-cliente-id');
+        return rows.every(function (tr) { return tr.getAttribute('data-cliente-id') === cid; });
+    }
+
+    function openModal(rows, sum) {
+        rowsEl.innerHTML = '';
+        rows.forEach(function (tr) {
+            var id = tr.getAttribute('data-oc-id');
+            var num = tr.getAttribute('data-oc-num') || id;
+            var total = parseFloat(tr.getAttribute('data-oc-total') || '0') || 0;
+            var row = document.createElement('tr');
+            row.innerHTML =
+                '<td><strong>' + num + '</strong><input type="hidden" name="oc_id" value="' + id + '"></td>' +
+                '<td class="num">' + fmt(total) + '</td>' +
+                '<td><input name="numero_factura_' + id + '" required maxlength="60" autocomplete="off" placeholder="N° factura"></td>';
+            rowsEl.appendChild(row);
+        });
+        sumaEl.textContent = fmt(sum);
+        if (montoInput) montoInput.value = String(Math.round(sum));
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+        var firstFact = rowsEl.querySelector('input[name^="numero_factura_"]');
+        if (firstFact) firstFact.focus();
+    }
+
+    function closeModal() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    document.body.addEventListener('change', function (e) {
+        if (!e.target.classList.contains('oc-row-check')) return;
+        var tr = e.target.closest('tr[data-oc-pendiente="1"]');
+        if (!tr) return;
+        var rows = checkedRows();
+        if (!validateSameClient(rows)) {
+            e.target.checked = false;
+            alert('Solo puede seleccionar OC del mismo cliente para un pago conjunto.');
+        }
+        updateBar();
+    });
+
+    document.getElementById('btnPagoConjunto')?.addEventListener('click', function () {
+        var state = updateBar();
+        if (!state.rows.length) {
+            alert('Seleccione al menos una OC pendiente de pago.');
+            return;
+        }
+        if (!validateSameClient(state.rows)) {
+            alert('Todas las OC deben ser del mismo cliente.');
+            return;
+        }
+        openModal(state.rows, state.sum);
+    });
+
+    document.getElementById('btnPagoClear')?.addEventListener('click', function () {
+        selectableRows().forEach(function (tr) {
+            var cb = tr.querySelector('.oc-row-check');
+            if (cb) cb.checked = false;
+        });
+        updateBar();
+    });
+
+    document.body.addEventListener('click', function (e) {
+        var btn = e.target.closest('.btn-oc-pago-uno');
+        if (!btn) return;
+        selectableRows().forEach(function (tr) {
+            var cb = tr.querySelector('.oc-row-check');
+            if (cb) cb.checked = false;
+        });
+        var tr = btn.closest('tr[data-oc-pendiente="1"]');
+        if (!tr) return;
+        var cb = tr.querySelector('.oc-row-check');
+        if (cb) cb.checked = true;
+        var state = updateBar();
+        openModal(state.rows, state.sum);
+    });
+
+    document.getElementById('ocPagoCancel')?.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+    });
+
+    form.addEventListener('submit', function (e) {
+        var facts = rowsEl.querySelectorAll('input[name^="numero_factura_"]');
+        for (var i = 0; i < facts.length; i++) {
+            if (!(facts[i].value || '').trim()) {
+                e.preventDefault();
+                alert('Ingrese el número de factura para cada OC.');
+                facts[i].focus();
+                return;
+            }
+        }
+    });
+})();
+</script>
+{% endif %}

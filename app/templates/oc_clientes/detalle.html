@@ -184,6 +184,28 @@
                     <dt>Método pago</dt>
                     <dd>{{ metodo_labels.get(oc.metodo_pago, oc.metodo_pago) if oc.metodo_pago else '—' }}</dd>
                 </div>
+                {% if oc.referencia_pago %}
+                <div class="oc-meta-item">
+                    <dt>Referencia pago</dt>
+                    <dd>{{ oc.referencia_pago }}</dd>
+                </div>
+                {% endif %}
+                {% if oc.monto_pago_grupo %}
+                <div class="oc-meta-item">
+                    <dt>Monto abono único</dt>
+                    <dd><strong>${{ '{:,.0f}'.format(oc.monto_pago_grupo).replace(',', '.') }}</strong></dd>
+                </div>
+                {% endif %}
+                {% if pago_hermanas %}
+                <div class="oc-meta-item span-4">
+                    <dt>Pago conjunto con</dt>
+                    <dd>
+                        {% for her in pago_hermanas %}
+                        <a href="{{ url_for('oc_clientes.detalle', oid=her.id) }}">OC {{ her.numero_oc }}</a>{% if not loop.last %}, {% endif %}
+                        {% endfor %}
+                    </dd>
+                </div>
+                {% endif %}
                 {% endif %}
                 {% if oc.observaciones %}
                 <div class="oc-meta-item span-4">

@@ -953,6 +953,18 @@ def create_app():
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_items_oc_id ON oc_clientes_items(oc_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_items_codigo ON oc_clientes_items(codigo_producto)"))
 
+            oc_cols = conn.execute(text("PRAGMA table_info(oc_clientes)")).fetchall()
+            oc_names = {c[1] for c in oc_cols} if oc_cols else set()
+            if oc_cols and "pago_grupo_id" not in oc_names:
+                conn.execute(text("ALTER TABLE oc_clientes ADD COLUMN pago_grupo_id VARCHAR(32)"))
+            if oc_cols and "referencia_pago" not in oc_names:
+                conn.execute(text("ALTER TABLE oc_clientes ADD COLUMN referencia_pago VARCHAR(120)"))
+            if oc_cols and "monto_pago_grupo" not in oc_names:
+                conn.execute(text("ALTER TABLE oc_clientes ADD COLUMN monto_pago_grupo REAL"))
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_pago_grupo ON oc_clientes(pago_grupo_id)")
+            )
+
             # Tablas antiguas sin producto_codigo: ALTER primero; luego el índice (no indexar columna inexistente).
             oem_d_cols = conn.execute(text("PRAGMA table_info(oem_despiece)")).fetchall()
             oem_d_names = {c[1] for c in oem_d_cols} if oem_d_cols else set()

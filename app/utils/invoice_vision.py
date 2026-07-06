@@ -42,7 +42,14 @@ def _parse_monto_chileno(raw: str) -> int | None:
         return None
     s = re.sub(r"^(\d+):(\d{3})$", r"\1.\2", plain)
     if "," in s:
-        s = s.replace(".", "").replace(",", ".")
+        m_thousands = re.fullmatch(r"(\d{1,3}),(\d{3})", plain)
+        m_decimal = re.fullmatch(r"(\d+),(\d{2})", plain)
+        if m_thousands and m_thousands.group(2) != "00":
+            s = m_thousands.group(1) + m_thousands.group(2)
+        elif m_decimal:
+            s = f"{m_decimal.group(1)}.{m_decimal.group(2)}"
+        else:
+            s = s.replace(".", "").replace(",", ".")
     elif re.fullmatch(r"\d{1,3}(\.\d{3})+", s):
         s = s.replace(".", "")
     try:
@@ -3676,6 +3683,10 @@ def _validar_consistencia_precios_termico(
 _AUTOTEC_CODE_FULL_RE = re.compile(r"^(\d{4,6})-([A-Z0-9]{1,2})$", re.IGNORECASE)
 _AUTOTEC_CODE_PARTIAL_RE = re.compile(r"^(\d{4,6})-$")
 _AUTOTEC_RUT_RE = re.compile(r"96\.?540\.?460-0", re.IGNORECASE)
+_AUTOTEC_UI_NOISE_RE = re.compile(
+    r"analizar\s+factura|aplicar\s+datos|datos\s+detectados|productos\s+detectados",
+    re.IGNORECASE,
+)
 
 
 def _is_autotec_rut(rut: str | None) -> bool:
@@ -3703,23 +3714,96 @@ def _normalize_autotec_codigo_ocr(code: str) -> str:
     return c
 
 
+def _is_plausible_autotec_code(code: str) -> bool:
+    """Filtra falsos positivos OCR (ej. '2023-24' en descripciones de año)."""
+    c = _normalize_autotec_codigo_ocr(code)
+    m = _AUTOTEC_CODE_FULL_RE.match(c)
+    if not m:
+        return False
+    prefix = int(m.group(1))
+    if 1990 <= prefix <= 2039:
+        return False
+    return prefix >= 10000
+
+
+def _is_autotec_table_header_line(line: str) -> bool:
+    low = (line or "").lower().strip().strip(":").strip()
+    if low in (
+        "codigo",
+        "código",
+        "cantidad",
+        "descripcion",
+        "descripción",
+        "precio",
+        "descuento%",
+        "descuento %",
+        "descuento",
+        "desc. %",
+        "desc",
+        "total",
+    ):
+        return True
+    return bool(
+        re.match(r"^(c[oó]digo|descripci[oó]n|precl?o)\b", low)
+        or re.match(r"^descuento\b", low)
+    )
+
+
+def _is_autotec_codigo_column_header(line: str) -> bool:
+    """Encabezado de columna CODIGO en tabla de ítems (no 'Código producto' de la UI)."""
+    low = (line or "").lower().strip().strip(":").strip()
+    return low in ("codigo", "código")
+
+
+def _is_autotec_ui_noise_line(line: str) -> bool:
+    low = (line or "").lower().strip()
+    if low in ("auto", "cerrar", "cancelar"):
+        return True
+    return bool(_AUTOTEC_UI_NOISE_RE.search(low))
+
+
+def _autotec_items_zone_end(lines: list[str], zone_start: int) -> int:
+    """Fin de la zona de ítems Autotec (antes de totales / glosa / ruido UI)."""
+    last_code_idx = zone_start - 1
+    last_monto_idx: int | None = None
+    for idx in range(zone_start, len(lines)):
+        if _is_autotec_ui_noise_line(lines[idx]):
+            return idx
+        stripped = lines[idx].strip()
+        if _AUTOTEC_CODE_FULL_RE.match(stripped):
+            last_code_idx = idx
+        if re.search(r"monto\s+afecto", stripped, re.IGNORECASE):
+            last_monto_idx = idx
+
+    if last_monto_idx is not None and last_monto_idx > last_code_idx:
+        return last_monto_idx
+
+    for idx in range(zone_start, len(lines)):
+        if _is_autotec_ui_noise_line(lines[idx]):
+            return idx
+        low = lines[idx].lower().strip()
+        if low.startswith(("glosa", "sub total", "monto exento", "iva 19")):
+            return idx
+        if re.fullmatch(r"descuento\s*:?", low):
+            return idx
+    return len(lines)
+
+
 def _find_autotec_items_bounds(lines: list[str]) -> tuple[int, int] | None:
     start: int | None = None
     end = len(lines)
     for idx, line in enumerate(lines):
-        if _is_codigo_header(line):
+        if _is_autotec_codigo_column_header(line):
             start = idx + 1
-        if start is not None and idx > start:
-            low = line.lower().strip()
-            if low.startswith(("descripcion", "descripción", "sub total", "monto exento")):
-                end = idx
-                break
-    return (start, end) if start is not None and start < end else None
+    if start is None:
+        return None
+    end = _autotec_items_zone_end(lines, start)
+    return (start, end) if start < end else None
 
 
 def _append_autotec_code(codes: list[str], qtys: list[int], code: str, qty: int = 1) -> None:
     code = _normalize_autotec_codigo_ocr(code)
-    if not code:
+    if not code or not _is_plausible_autotec_code(code):
         return
     if codes and codes[-1] == code:
         if qty > qtys[-1]:
@@ -3736,7 +3820,10 @@ def _collect_autotec_codes_qty(lines: list[str], start: int, end: int) -> tuple[
     while i < end:
         s = lines[i].strip()
         low = s.lower().strip().strip(":").strip()
-        if low in ("codigo", "código", "cantidad"):
+        if _is_autotec_table_header_line(s):
+            i += 1
+            continue
+        if _is_autotec_ui_noise_line(s):
             i += 1
             continue
         m = _AUTOTEC_CODE_FULL_RE.match(s)
@@ -3764,17 +3851,56 @@ def _collect_autotec_codes_qty(lines: list[str], start: int, end: int) -> tuple[
     return codes, qtys
 
 
-def _grep_autotec_codes_zone(lines: list[str]) -> tuple[list[str], list[int]]:
-    """Respaldo: todos los códigos ####-# entre CODIGO y PRECIO (incl. DESCRIPCION)."""
-    zone_end = len(lines)
-    zone_start = 0
+def _collect_autotec_codes_full_document(lines: list[str]) -> tuple[list[str], list[int]]:
+    """Todos los códigos ####-# en líneas propias (documento completo, sin ruido UI)."""
+    codes: list[str] = []
+    qtys: list[int] = []
+    for line in lines:
+        if _is_autotec_ui_noise_line(line) or _is_autotec_table_header_line(line):
+            continue
+        m = _AUTOTEC_CODE_FULL_RE.match(line.strip())
+        if m:
+            _append_autotec_code(codes, qtys, f"{m.group(1)}-{m.group(2).upper()}")
+    return codes, qtys
+
+
+def _autotec_document_scan_bounds(lines: list[str]) -> tuple[int, int]:
+    """Rango amplio para precios/códigos: primer código o CODIGO → último MONTO AFECTO."""
+    start = 0
     for idx, line in enumerate(lines):
-        low = line.lower().strip().strip(":").strip()
-        if _is_codigo_header(line) or low == "cantidad":
-            zone_start = idx + 1
-        if zone_start and (_is_autotec_precio_header(line) or re.search(r"monto\s+afecto", low)):
-            zone_end = idx
+        if _is_autotec_codigo_column_header(line) or _AUTOTEC_CODE_FULL_RE.match(line.strip()):
+            start = idx
             break
+    end = len(lines)
+    last_monto: int | None = None
+    for idx, line in enumerate(lines):
+        if _is_autotec_ui_noise_line(line):
+            end = idx
+            break
+        if re.search(r"monto\s+afecto", line, re.IGNORECASE):
+            last_monto = idx
+    if last_monto is not None and last_monto > start:
+        end = last_monto
+    return start, end
+
+
+def _collect_autotec_triplets_full_document(
+    lines: list[str],
+) -> list[tuple[int, int, int]]:
+    start, end = _autotec_document_scan_bounds(lines)
+    return _scan_autotec_triplets_from_lines(lines, start, end)
+
+
+def _grep_autotec_codes_zone(lines: list[str]) -> tuple[list[str], list[int]]:
+    """Respaldo: todos los códigos ####-# entre CODIGO y totales (layout columnar apilado)."""
+    zone_start: int | None = None
+    for idx, line in enumerate(lines):
+        if _is_autotec_codigo_column_header(line):
+            zone_start = idx + 1
+            break
+    if zone_start is None:
+        return [], []
+    zone_end = _autotec_items_zone_end(lines, zone_start)
     if zone_start >= zone_end:
         return [], []
     codes: list[str] = []
@@ -3793,16 +3919,15 @@ def _grep_autotec_codes_zone(lines: list[str]) -> tuple[list[str], list[int]]:
 
 
 def _autotec_code_zone_text(lines: list[str]) -> str:
-    """Texto entre encabezado CODIGO y columna PRECIO."""
-    zone_end = len(lines)
-    zone_start = 0
+    """Texto entre encabezado CODIGO y totales (soporta columnas apiladas por OCR)."""
+    zone_start: int | None = None
     for idx, line in enumerate(lines):
-        low = line.lower().strip().strip(":").strip()
-        if _is_codigo_header(line) or low == "cantidad":
+        if _is_autotec_codigo_column_header(line):
             zone_start = idx
-        if zone_start and (_is_autotec_precio_header(line) or re.search(r"monto\s+afecto", low)):
-            zone_end = idx
             break
+    if zone_start is None:
+        return "\n".join(lines)
+    zone_end = _autotec_items_zone_end(lines, zone_start)
     if zone_start >= zone_end:
         return "\n".join(lines)
     return "\n".join(lines[zone_start:zone_end])
@@ -3822,10 +3947,20 @@ def _scan_autotec_codes_ordered(texto: str, lines: list[str] | None = None) -> l
     for pat in patterns:
         for m in re.finditer(pat, zone, re.IGNORECASE):
             code = _normalize_autotec_codigo_ocr(m.group(1).upper())
-            if code and code not in seen:
+            if code and code not in seen and _is_plausible_autotec_code(code):
                 seen.add(code)
                 codes.append(code)
     return codes
+
+
+def _filter_autotec_code_list(codes: list[str], qtys: list[int]) -> tuple[list[str], list[int]]:
+    out_c: list[str] = []
+    out_q: list[int] = []
+    for i, code in enumerate(codes):
+        if _is_plausible_autotec_code(code):
+            out_c.append(_normalize_autotec_codigo_ocr(code))
+            out_q.append(qtys[i] if i < len(qtys) else 1)
+    return out_c, out_q
 
 
 def _best_autotec_codes(
@@ -3836,21 +3971,33 @@ def _best_autotec_codes(
     n_triplets: int = 0,
 ) -> tuple[list[str], list[int]]:
     """Elige la lista más completa de códigos sin perder cantidades ya detectadas."""
+    codes, qtys = _filter_autotec_code_list(codes, qtys)
     candidates: list[tuple[list[str], list[int]]] = [(codes, qtys)]
     grep_codes, grep_qtys = _grep_autotec_codes_zone(lines)
+    grep_codes, grep_qtys = _filter_autotec_code_list(grep_codes, grep_qtys)
     if grep_codes:
         candidates.append((grep_codes, grep_qtys))
+
+    full_codes, full_qtys = _collect_autotec_codes_full_document(lines)
+    full_codes, full_qtys = _filter_autotec_code_list(full_codes, full_qtys)
+    if full_codes:
+        candidates.append((full_codes, full_qtys))
 
     scanned = _scan_autotec_codes_ordered(texto, lines)
     if scanned:
         qty_map = dict(zip(codes, qtys))
         scanned_qtys = [qty_map.get(c, 1) for c in scanned]
-        candidates.append((scanned, scanned_qtys))
+        scanned, scanned_qtys = _filter_autotec_code_list(scanned, scanned_qtys)
+        if scanned:
+            candidates.append((scanned, scanned_qtys))
 
     def _score(item: tuple[list[str], list[int]]) -> tuple[int, int, int]:
         c = item[0]
         n = len(c)
-        triplet_fit = -abs(n - n_triplets) if n_triplets else 0
+        if n_triplets:
+            triplet_fit = 10_000 if n == n_triplets else -abs(n - n_triplets) * 1_000
+        else:
+            triplet_fit = 0
         return (triplet_fit, n, n)
 
     best_codes, best_qtys = max(candidates, key=_score)
@@ -3944,32 +4091,32 @@ def _collect_autotec_price_triplets(lines: list[str]) -> list[tuple[int, int, in
 
         triplets: list[tuple[int, int, int]] = []
         for i in range(0, len(nums) - (len(nums) % 3), 3):
-            triplets.append((nums[i], nums[i + 1], nums[i + 2]))
+            t = (nums[i], nums[i + 1], nums[i + 2])
+            if _plausible_autotec_triplet(*t):
+                triplets.append(t)
         if triplets:
             return triplets
+        scanned = _scan_autotec_triplets_from_lines(lines, data_start, end)
+        if scanned:
+            return scanned
 
-    # OCR degradado: sin línea PRECIO pero con bloque numérico PRECIO/DESC%/TOTAL.
-    zone_start = 0
-    for idx, line in enumerate(lines):
-        low = line.lower().strip()
-        if re.search(r"monto\s+afecto", low):
-            zone_start = idx + 1
-            break
-        if _is_autotec_triplet_header(line):
-            zone_start = idx + 1
-    zone_end = _autotec_triplet_zone_end(lines, zone_start)
+    # OCR degradado: escaneo amplio del documento.
+    start, end = _autotec_document_scan_bounds(lines)
+    scanned = _scan_autotec_triplets_from_lines(lines, start, end)
+    if scanned:
+        return scanned
 
     vals: list[int] = []
-    for idx in range(zone_start, zone_end):
+    for idx in range(start, end):
         line = lines[idx].strip()
-        if not line or _line_section_header(line):
+        if not line or _line_section_header(line) or _is_autotec_ui_noise_line(line):
             continue
         val = _parse_monto_chileno(line)
         if val is not None:
             vals.append(val)
 
     if not vals:
-        return _scan_autotec_triplets_from_lines(lines, zone_start, zone_end)
+        return _collect_autotec_triplets_full_document(lines)
 
     best: list[tuple[int, int, int]] = []
     best_score = -1
@@ -3979,7 +4126,9 @@ def _collect_autotec_price_triplets(lines: list[str]) -> list[tuple[int, int, in
             continue
         cand: list[tuple[int, int, int]] = []
         for i in range(0, len(chunk) - (len(chunk) % 3), 3):
-            cand.append((chunk[i], chunk[i + 1], chunk[i + 2]))
+            t = (chunk[i], chunk[i + 1], chunk[i + 2])
+            if _plausible_autotec_triplet(*t):
+                cand.append(t)
         disc_hits = sum(1 for _, d, _ in cand if 5 <= d <= 35)
         score = disc_hits * 100 + len(cand)
         if score > best_score:
@@ -3988,7 +4137,16 @@ def _collect_autotec_price_triplets(lines: list[str]) -> list[tuple[int, int, in
     if best:
         return best
 
-    return _scan_autotec_triplets_from_lines(lines, zone_start, zone_end)
+    return _collect_autotec_triplets_full_document(lines)
+
+
+def _autotec_triplets_look_incomplete(
+    triplets: list[tuple[int, int, int]], total_neto: int | None
+) -> bool:
+    if not triplets or not total_neto:
+        return False
+    triplet_neto = sum(t[2] for t in triplets)
+    return triplet_neto < int(total_neto * 0.85)
 
 
 def _infer_autotec_qty(list_price: int, disc_pct: int, line_total: int) -> int:
@@ -4050,29 +4208,66 @@ def _build_autotec_productos_from_triplets(
     return productos
 
 
+def _autotec_price_scan_bounds(lines: list[str]) -> tuple[int, int]:
+    """Rango de líneas donde buscar triplets PRECIO/DESC%/TOTAL."""
+    for idx, line in enumerate(lines):
+        if _is_autotec_precio_header(line):
+            start = idx + 1
+            while start < len(lines) and _is_autotec_triplet_header(lines[start]):
+                start += 1
+            return start, _autotec_triplet_zone_end(lines, start)
+    bounds = _find_autotec_items_bounds(lines)
+    start = bounds[0] if bounds else 0
+    return start, _autotec_items_zone_end(lines, start)
+
+
+def _autotec_productos_subtotal(productos: list[dict[str, Any]]) -> int:
+    return sum(
+        int(prod.get("cantidad") or 1) * int(prod.get("valor_neto") or 0)
+        for prod in productos
+    )
+
+
 def _autotec_productos_look_like_stack_trap(
     productos: list[dict[str, Any]],
     total_neto: int | None,
     triplets: list[tuple[int, int, int]],
 ) -> bool:
-    """Detecta emparejamiento erróneo con columna CANT/V NETO (2370/2970, suma << neto)."""
+    """Detecta emparejamiento erróneo con columna CANT/V NETO o triplets desalineados."""
     if not productos:
         return True
     for prod in productos:
         code = (prod.get("codigo_proveedor") or "").upper()
         neto = int(prod.get("valor_neto") or 0)
+        if not _is_plausible_autotec_code(code):
+            return True
         if code == "25130-5" and neto == 2370:
             return True
         if code == "26072-K" and neto == 2970:
             return True
-    if triplets and len(productos) < len(triplets):
+        if neto in (15,) and int(prod.get("cantidad") or 1) <= 2:
+            return True
+    if triplets and len(productos) < len(triplets) - 1:
         return True
     if total_neto and total_neto > 0:
-        subtotal = sum(
-            int(prod.get("cantidad") or 1) * int(prod.get("valor_neto") or 0)
-            for prod in productos
-        )
-        if subtotal < int(total_neto) * 0.6:
+        subtotal = _autotec_productos_subtotal(productos)
+        referencia = int(total_neto)
+        if triplets:
+            triplet_neto = sum(t[2] for t in triplets)
+            if triplet_neto > 0:
+                if triplet_neto < int(total_neto * 0.85):
+                    referencia = int(total_neto)
+                elif abs(referencia - triplet_neto) > max(
+                    500, int(triplet_neto * 0.08)
+                ):
+                    referencia = triplet_neto
+        if subtotal < int(referencia * 0.85) or subtotal > int(referencia * 1.15):
+            if subtotal < int(referencia * 0.85) and all(
+                _is_plausible_autotec_code(p.get("codigo_proveedor") or "")
+                and int(p.get("valor_neto") or 0) >= 500
+                for p in productos
+            ):
+                return False
             return True
     return False
 
@@ -4093,39 +4288,111 @@ def _finalize_autotec_productos(
     return rebuilt if rebuilt else productos
 
 
-def _extract_productos_autotec(lines: list[str], texto: str = "") -> list[dict[str, Any]]:
-    """Autotec: empareja códigos ####-X con triplets PRECIO/DESC%/TOTAL (ignora CANT/V NETO)."""
-    texto_norm = texto or "\n".join(lines)
-    triplets = _collect_autotec_price_triplets(lines)
-    if not triplets:
-        return []
+def _collect_autotec_netos_column(lines: list[str]) -> list[int]:
+    """Valores netos unitarios en columna V.NETO (respaldo sin triplets)."""
+    start, end = _autotec_document_scan_bounds(lines)
+    netos: list[int] = []
+    after_header = False
+    for idx in range(start, end):
+        line = lines[idx]
+        if _is_autotec_ui_noise_line(line):
+            break
+        if re.search(r"v\.?\s*neto", line, re.IGNORECASE):
+            after_header = True
+            continue
+        if _AUTOTEC_CODE_FULL_RE.match(line.strip()):
+            after_header = False
+            continue
+        if not after_header:
+            continue
+        val = _parse_monto_chileno(line.strip())
+        if val is not None and val >= 500:
+            netos.append(val)
+    if netos:
+        return netos
 
+    saw_code = False
+    for idx in range(start, end):
+        line = lines[idx]
+        if _is_autotec_ui_noise_line(line):
+            break
+        if _AUTOTEC_CODE_FULL_RE.match(line.strip()):
+            saw_code = True
+            continue
+        if not saw_code:
+            continue
+        val = _parse_monto_chileno(line.strip())
+        if val is not None and 500 <= val <= 999_999:
+            netos.append(val)
+    return netos
+
+
+def _autotec_fallback_from_netos_column(
+    lines: list[str], texto: str, total_neto: int | None
+) -> list[dict[str, Any]]:
     bounds = _find_autotec_items_bounds(lines)
-    if bounds is None:
-        codes, qtys = [], []
-    else:
-        codes, qtys = _collect_autotec_codes_qty(lines, bounds[0], bounds[1])
-
-    codes, _qtys = _best_autotec_codes(
-        lines, texto_norm, codes, qtys, n_triplets=len(triplets)
+    codes, qtys = (
+        _collect_autotec_codes_qty(lines, bounds[0], bounds[1]) if bounds else ([], [])
     )
-    if not codes:
+    codes, qtys = _best_autotec_codes(lines, texto, codes, qtys, 0)
+    netos = _collect_autotec_netos_column(lines)
+    if not codes or not netos:
         return []
-
     productos: list[dict[str, Any]] = []
-    for i in range(min(len(codes), len(triplets))):
-        list_price, disc_pct, line_total = triplets[i]
-        col_qty = _qtys[i] if i < len(_qtys) else 1
-        qty = _resolve_autotec_qty(col_qty, list_price, disc_pct, line_total)
-        unit_neto = int(round(line_total / qty)) if qty > 0 else line_total
+    for i in range(min(len(codes), len(netos))):
         productos.append(
             {
                 "codigo_proveedor": _normalize_autotec_codigo_ocr(codes[i]),
-                "cantidad": qty,
-                "valor_neto": unit_neto,
+                "cantidad": qtys[i] if i < len(qtys) else 1,
+                "valor_neto": netos[i],
             }
         )
     return productos
+
+
+def _extract_productos_autotec(
+    lines: list[str], texto: str = "", total_neto: int | None = None
+) -> list[dict[str, Any]]:
+    """Autotec: empareja códigos ####-X con triplets PRECIO/DESC%/TOTAL (ignora CANT/V NETO)."""
+    texto_norm = texto or "\n".join(lines)
+    if total_neto is None:
+        total_neto, _, _ = _extract_montos(texto_norm)
+
+    triplets = _collect_autotec_price_triplets(lines)
+    if not triplets:
+        triplets = _collect_autotec_triplets_full_document(lines)
+    if _autotec_triplets_look_incomplete(triplets, total_neto):
+        expanded = _collect_autotec_triplets_full_document(lines)
+        if len(expanded) > len(triplets):
+            triplets = expanded
+    if not triplets:
+        return _autotec_fallback_from_netos_column(lines, texto_norm, total_neto)
+
+    def _build(trips: list[tuple[int, int, int]]) -> list[dict[str, Any]]:
+        return _build_autotec_productos_from_triplets(lines, texto_norm, trips)
+
+    productos = _build(triplets)
+    if productos and not _autotec_productos_look_like_stack_trap(
+        productos, total_neto, triplets
+    ):
+        return productos
+
+    scan_start, scan_end = _autotec_price_scan_bounds(lines)
+    alt_triplets = _scan_autotec_triplets_from_lines(lines, scan_start, scan_end)
+    if not alt_triplets or _autotec_triplets_look_incomplete(alt_triplets, total_neto):
+        doc_triplets = _collect_autotec_triplets_full_document(lines)
+        if len(doc_triplets) > len(alt_triplets):
+            alt_triplets = doc_triplets
+    if alt_triplets and alt_triplets != triplets:
+        alt_productos = _build(alt_triplets)
+        if alt_productos and not _autotec_productos_look_like_stack_trap(
+            alt_productos, total_neto, alt_triplets
+        ):
+            return alt_productos
+
+    return productos if productos else _autotec_fallback_from_netos_column(
+        lines, texto_norm, total_neto
+    )
 
 
 def _extract_productos_fitalia_fallback(texto: str) -> list[dict[str, Any]]:
@@ -4355,9 +4622,11 @@ def reparar_productos_autotec_factura(data: dict[str, Any]) -> dict[str, Any]:
     lines = [ln.strip() for ln in texto_norm.splitlines() if ln.strip()]
     triplets = _collect_autotec_price_triplets(lines)
     productos_actuales = list(data.get("productos") or [])
-    autotec = _extract_productos_autotec(lines, texto_norm)
+    autotec = _extract_productos_autotec(lines, texto_norm, data.get("total_neto"))
 
-    if autotec:
+    if autotec and not _autotec_productos_look_like_stack_trap(
+        autotec, data.get("total_neto"), triplets
+    ):
         data["productos"] = autotec
         data["productos_fuente"] = "autotec_triplets"
     elif _autotec_productos_look_like_stack_trap(
@@ -4384,7 +4653,10 @@ def reparar_productos_autotec_factura(data: dict[str, Any]) -> dict[str, Any]:
 
 def parsear_factura_chilena(texto: str) -> dict[str, Any]:
     """Extrae campos habituales de facturas chilenas desde texto OCR."""
-    ocr_log = "=== TEXTO OCR COMPLETO ===\n%s\n=== FIN OCR ===" % (texto or "")
+    ocr_log = "=== TEXTO OCR (%d chars) ===\n%s\n=== FIN OCR ===" % (
+        len(texto or ""),
+        (texto or "")[:4000],
+    )
     try:
         from flask import has_app_context, current_app
 
@@ -4524,7 +4796,11 @@ def _preprocess_image_for_ocr(image_bytes: bytes) -> bytes:
         if img.mode in ("RGBA", "LA", "P"):
             img = img.convert("RGB")
         w, h = img.size
-        if w < 1500:
+        max_w = 2200
+        if w > max_w:
+            scale = max_w / w
+            img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+        elif w < 1500:
             scale = 1500 / w
             img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
         img = img.convert("L")

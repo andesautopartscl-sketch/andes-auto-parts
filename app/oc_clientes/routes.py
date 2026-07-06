@@ -22,6 +22,8 @@ from .services import (
     codigo_en_inventario,
     descontar_stock_oc,
     listar_oc_por_cliente,
+    registrar_pagos_conjuntos,
+    historial_cobros_mes,
     timeline_eventos,
 )
 from .ocr import escanear_oc
@@ -280,7 +282,30 @@ def _build_list_summary() -> dict:
         "pendientes_entrega": int(pendientes or 0),
         "total_por_cobrar": float(por_cobrar or 0),
         "cobrado_mes": float(cobrado_mes or 0),
+        "mes_label": f"{_mes_nombre_es(today.month)} {today.year}",
     }
+
+
+def _mes_nombre_es(month: int) -> str:
+    nombres = (
+        "", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+    )
+    return nombres[month] if 1 <= month <= 12 else str(month)
+
+
+@oc_clientes_bp.route("/api/cobrado-mes")
+@login_required
+@permission_required("ver_oc_clientes")
+def api_cobrado_mes():
+    """Historial de abonos cobrados en el mes actual."""
+    data = historial_cobros_mes()
+    labels = METODO_PAGO_LABELS
+    for it in data.get("items") or []:
+        mp = (it.get("metodo_pago") or "").strip()
+        it["metodo_label"] = labels.get(mp, mp.replace("_", " ").title() if mp else "—")
+    return jsonify(ok=True, **data)
+
 
 @oc_clientes_bp.route("/")
 @login_required
@@ -340,6 +365,10 @@ def lista():
         estados=OC_ESTADOS,
         estado_labels=OC_ESTADO_LABELS,
         puede_modificar=_can_modify(),
+        metodo_pago_options=[
+            (k, METODO_PAGO_LABELS.get(k, k)) for k in METODO_PAGO_OPTIONS if k != "saldo_favor"
+        ],
+        url_cobrado_mes=url_for("oc_clientes.api_cobrado_mes"),
         active_page="oc_clientes",
         _partial=_partial,
     )
@@ -580,12 +609,23 @@ def detalle(oid: int):
 
     cliente = db.session.get(Cliente, oc.cliente_id) if oc.cliente_id else None
     timeline = timeline_eventos(oc)
+    pago_hermanas: list[OrdenCompraCliente] = []
+    if (oc.pago_grupo_id or "").strip():
+        pago_hermanas = (
+            OrdenCompraCliente.query.filter(
+                OrdenCompraCliente.pago_grupo_id == oc.pago_grupo_id,
+                OrdenCompraCliente.id != oc.id,
+            )
+            .order_by(OrdenCompraCliente.numero_oc.asc())
+            .all()
+        )
     _partial = request.headers.get("X-Requested-With") == "XMLHttpRequest"
     return render_template(
         "oc_clientes/detalle.html",
         oc=oc,
         cliente=cliente,
         timeline=timeline,
+        pago_hermanas=pago_hermanas,
         estado_label=_estado_label(oc.estado),
         badge=_estado_badge(oc.estado),
         metodo_labels=METODO_PAGO_LABELS,
@@ -669,6 +709,54 @@ def registrar_pago(oid: int):
     db.session.commit()
     flash("Pago registrado correctamente.", "success")
     return redirect(url_for("oc_clientes.detalle", oid=oid))
+
+
+@oc_clientes_bp.route("/pago-multiple", methods=["POST"])
+@login_required
+@permission_required("mod_oc_clientes")
+def registrar_pago_multiple():
+    oc_ids = [_safe_int(x) for x in request.form.getlist("oc_id")]
+    oc_ids = [i for i in oc_ids if i > 0]
+    facturas: dict[int, str] = {}
+    for oc_id in oc_ids:
+        facturas[oc_id] = (request.form.get(f"numero_factura_{oc_id}") or "").strip()
+
+    fecha_pago = _parse_date((request.form.get("fecha_pago") or "").strip(), datetime.now()) or datetime.now()
+    metodo = (request.form.get("metodo_pago") or "").strip().lower()
+    referencia = (request.form.get("referencia_pago") or "").strip()
+    monto_raw = (request.form.get("monto_recibido") or "").strip().replace(".", "").replace(",", ".")
+    monto_recibido = _safe_float(monto_raw, 0.0) or None
+
+    if metodo not in METODO_PAGO_OPTIONS:
+        flash("Método de pago inválido.", "error")
+        return redirect(url_for("oc_clientes.lista"))
+
+    ocs, errors = registrar_pagos_conjuntos(
+        oc_ids,
+        facturas,
+        fecha_pago,
+        metodo,
+        monto_recibido=monto_recibido,
+        referencia_pago=referencia,
+    )
+    for err in errors:
+        flash(err, "error")
+    if errors:
+        return redirect(url_for("oc_clientes.lista"))
+
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        flash(f"No se pudo registrar el pago: {exc}", "error")
+        return redirect(url_for("oc_clientes.lista"))
+
+    nums = ", ".join(o.numero_oc for o in ocs if o.numero_oc)
+    if len(ocs) > 1:
+        flash(f"Pago conjunto registrado para OC {nums}.", "success")
+    else:
+        flash(f"Pago registrado para OC {nums}.", "success")
+    return redirect(url_for("oc_clientes.lista"))
 
 
 @oc_clientes_bp.route("/<int:oid>/anular", methods=["POST"])

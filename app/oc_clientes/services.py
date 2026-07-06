@@ -1,11 +1,14 @@
 """Lógica de negocio y stock para Órdenes de Compra Cliente."""
 
-from __future__ import annotations
+import uuid
+from calendar import monthrange
+from datetime import date, datetime
 
 from sqlalchemy import text
 
 from app.extensions import db
 from app.utils.stock_control import get_available_stock
+from app.ventas.models import Cliente
 from .models import OrdenCompraCliente, OrdenCompraClienteItem, oc_estado_label
 
 
@@ -150,6 +153,23 @@ def timeline_eventos(oc: OrdenCompraCliente) -> list[dict]:
         det = f"Factura {nf}" if nf else "Pago registrado"
         if mp:
             det += f" · {mp.replace('_', ' ')}"
+        if (oc.pago_grupo_id or "").strip():
+            hermanas = (
+                OrdenCompraCliente.query.filter(
+                    OrdenCompraCliente.pago_grupo_id == oc.pago_grupo_id,
+                    OrdenCompraCliente.id != oc.id,
+                )
+                .order_by(OrdenCompraCliente.numero_oc.asc())
+                .all()
+            )
+            nums = [h.numero_oc for h in hermanas if h.numero_oc]
+            if nums:
+                det += f" · Pago conjunto con OC {', '.join(nums)}"
+            if oc.monto_pago_grupo:
+                det += f" · Monto único ${oc.monto_pago_grupo:,.0f}".replace(",", ".")
+        ref = (oc.referencia_pago or "").strip()
+        if ref:
+            det += f" · Ref. {ref}"
         events.append(
             {
                 "estado": "pagada",
@@ -200,3 +220,161 @@ def listar_oc_por_cliente(cliente_id: int) -> list[dict]:
             }
         )
     return out
+
+
+def registrar_pagos_conjuntos(
+    oc_ids: list[int],
+    facturas: dict[int, str],
+    fecha_pago: datetime,
+    metodo_pago: str,
+    monto_recibido: float | None = None,
+    referencia_pago: str | None = None,
+) -> tuple[list[OrdenCompraCliente], list[str]]:
+    """Marca varias OC como pagadas con un mismo abono (factura distinta por OC)."""
+    errors: list[str] = []
+    ids = sorted({int(i) for i in oc_ids if int(i) > 0})
+    if not ids:
+        return [], ["Debe seleccionar al menos una OC."]
+
+    ocs = OrdenCompraCliente.query.filter(OrdenCompraCliente.id.in_(ids)).all()
+    if len(ocs) != len(ids):
+        return [], ["Una o más órdenes de compra no existen."]
+
+    cliente_ids = {o.cliente_id for o in ocs}
+    if len(cliente_ids) > 1:
+        return [], ["Todas las OC deben ser del mismo cliente."]
+
+    for oc in ocs:
+        if (oc.estado or "") != "entregada":
+            errors.append(f"OC {oc.numero_oc}: no está pendiente de pago.")
+        nf = (facturas.get(oc.id) or "").strip()
+        if not nf:
+            errors.append(f"OC {oc.numero_oc}: ingrese el número de factura.")
+
+    suma = round(sum(float(o.total or 0) for o in ocs), 2)
+    if monto_recibido is not None and monto_recibido > 0:
+        tolerancia = max(10.0, suma * 0.01)
+        if abs(monto_recibido - suma) > tolerancia:
+            errors.append(
+                f"El monto recibido (${monto_recibido:,.0f}) no cuadra con la suma "
+                f"de las OC (${suma:,.0f})."
+            )
+
+    if errors:
+        return [], errors
+
+    grupo_id = uuid.uuid4().hex
+    ref = (referencia_pago or "").strip()[:120] or None
+    monto_grupo = round(float(monto_recibido), 2) if monto_recibido and monto_recibido > 0 else suma
+    now = datetime.utcnow()
+
+    for oc in ocs:
+        oc.estado = "pagada"
+        oc.numero_factura = facturas[oc.id][:60]
+        oc.fecha_pago = fecha_pago
+        oc.metodo_pago = metodo_pago
+        oc.pago_grupo_id = grupo_id if len(ocs) > 1 else None
+        oc.referencia_pago = ref
+        oc.monto_pago_grupo = monto_grupo if len(ocs) > 1 else None
+        oc.updated_at = now
+
+    return ocs, []
+
+
+_MESES_ES = (
+    "",
+    "Enero",
+    "Febrero",
+    "Marzo",
+    "Abril",
+    "Mayo",
+    "Junio",
+    "Julio",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre",
+)
+
+
+def historial_cobros_mes(
+    year: int | None = None,
+    month: int | None = None,
+) -> dict:
+    """Agrupa cobros del mes por abono (pago conjunto o individual)."""
+    from flask import url_for
+
+    today = date.today()
+    y = int(year or today.year)
+    m = int(month or today.month)
+    mes_inicio = datetime(y, m, 1)
+    _, last_day = monthrange(y, m)
+    mes_fin = datetime(y, m, last_day, 23, 59, 59)
+
+    ocs = (
+        OrdenCompraCliente.query.filter(
+            OrdenCompraCliente.estado == "pagada",
+            OrdenCompraCliente.fecha_pago >= mes_inicio,
+            OrdenCompraCliente.fecha_pago <= mes_fin,
+        )
+        .order_by(OrdenCompraCliente.fecha_pago.desc(), OrdenCompraCliente.id.desc())
+        .all()
+    )
+
+    clientes_map: dict[int, str] = {}
+    cids = {o.cliente_id for o in ocs if o.cliente_id}
+    if cids:
+        for cl in Cliente.query.filter(Cliente.id.in_(cids)).all():
+            clientes_map[cl.id] = cl.nombre
+
+    grupos: dict[str, list[OrdenCompraCliente]] = {}
+    for oc in ocs:
+        gid = (oc.pago_grupo_id or "").strip()
+        key = gid if gid else f"single_{oc.id}"
+        grupos.setdefault(key, []).append(oc)
+
+    items: list[dict] = []
+    for key, rows in grupos.items():
+        rows.sort(key=lambda o: (o.numero_oc or ""))
+        first = rows[0]
+        total_ordenes = round(sum(float(o.total or 0) for o in rows), 2)
+        monto_abono = first.monto_pago_grupo
+        if monto_abono is None:
+            monto_abono = total_ordenes
+        fp = first.fecha_pago
+        items.append(
+            {
+                "pago_key": key,
+                "es_conjunto": bool((first.pago_grupo_id or "").strip()),
+                "fecha_pago": fp.strftime("%d/%m/%Y") if fp else "—",
+                "fecha_pago_sort": fp.isoformat() if fp else "",
+                "metodo_pago": first.metodo_pago or "",
+                "referencia_pago": (first.referencia_pago or "").strip(),
+                "monto_abono": float(monto_abono or 0),
+                "cliente_nombre": clientes_map.get(first.cliente_id, "—"),
+                "total_ordenes": total_ordenes,
+                "ordenes": [
+                    {
+                        "id": o.id,
+                        "numero_oc": o.numero_oc,
+                        "numero_factura": (o.numero_factura or "").strip() or "—",
+                        "total": float(o.total or 0),
+                        "detalle_url": url_for("oc_clientes.detalle", oid=o.id),
+                    }
+                    for o in rows
+                ],
+            }
+        )
+
+    items.sort(key=lambda x: x.get("fecha_pago_sort") or "", reverse=True)
+    total_cobrado = round(sum(float(it["monto_abono"] or 0) for it in items), 2)
+
+    mes_label = f"{_MESES_ES[m]} {y}" if 1 <= m <= 12 else f"{m:02d}/{y}"
+    return {
+        "mes_label": mes_label,
+        "total_cobrado": total_cobrado,
+        "cantidad_abonos": len(items),
+        "cantidad_oc": len(ocs),
+        "items": items,
+    }

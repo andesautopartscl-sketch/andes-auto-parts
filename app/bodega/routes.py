@@ -2131,6 +2131,11 @@ def api_analizar_factura():
 
         resultado = analizar_factura(image_b64, media_type)
         data = garantizar_producto_factura(resultado)
+        footer_montos = (
+            data.get("total_neto"),
+            data.get("iva"),
+            data.get("total"),
+        )
         parser = invoice_parser_registry.find(
             data.get("rut_proveedor"), data.get("ocr_texto_crudo") or ""
         )
@@ -2169,6 +2174,21 @@ def api_analizar_factura():
                 data["iva"] = iva
             if total is not None:
                 data["total"] = total
+
+        parser_nombre = getattr(parser, "nombre", "")
+        footer_neto, footer_iva, footer_total = footer_montos
+        if parser_nombre == "autotec" and footer_neto and productos:
+            suma_items = sum(
+                (p.get("cantidad") or 1) * (p.get("valor_neto") or 0)
+                for p in productos
+            )
+            tolerancia_footer = max(50, int(footer_neto * 0.02))
+            if abs(suma_items - footer_neto) > tolerancia_footer:
+                data["total_neto"] = footer_neto
+                if footer_iva is not None:
+                    data["iva"] = footer_iva
+                if footer_total is not None:
+                    data["total"] = footer_total
 
         total_neto = data.get("total_neto")
         productos = data.get("productos") or []
