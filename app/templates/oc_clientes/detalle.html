@@ -126,13 +126,18 @@
             <a class="btn sm outline" href="{{ url_for('oc_clientes.imprimir', oid=oc.id) }}" target="_blank">Imprimir</a>
             {% if puede_modificar %}
                 {% if oc.estado == 'recibida' %}
+                <a class="btn sm outline" href="{{ url_for('oc_clientes.editar', oid=oc.id, from='detalle') }}">Editar</a>
                 <button type="button" class="btn sm primary" id="btnEntregar">Marcar entregada</button>
-                <form method="post" action="{{ url_for('oc_clientes.anular', oid=oc.id) }}" onsubmit="return confirm('¿Anular esta OC?');">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn sm danger">Anular</button>
-                </form>
+                <button type="button" class="btn sm danger btn-oc-anular"
+                        data-oc-num="{{ oc.numero_oc }}"
+                        data-anular-url="{{ url_for('oc_clientes.anular', oid=oc.id) }}">Anular</button>
                 {% elif oc.estado == 'entregada' %}
                 <button type="button" class="btn sm primary" id="btnPago">Registrar pago</button>
+                {% elif oc.estado == 'anulada' %}
+                <form method="post" action="{{ url_for('oc_clientes.reactivar', oid=oc.id) }}" onsubmit="return confirm('¿Reactivar esta OC?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn sm primary">Reactivar</button>
+                </form>
                 {% endif %}
             {% endif %}
         </div>
@@ -295,6 +300,9 @@
         </form>
     </div>
 </div>
+{% endif %}
+{% if puede_modificar %}
+{% include 'oc_clientes/_anular_modal.html' %}
 {% endif %}
 {% endblock %}
 

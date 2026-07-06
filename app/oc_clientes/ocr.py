@@ -24,7 +24,7 @@ from app.ventas.models import Cliente
 
 logger = logging.getLogger(__name__)
 
-OCR_PARSER_REV = "oc-cliente-v2"
+OCR_PARSER_REV = "oc-cliente-v5"
 RUT_PROPIO = "78074288-7"
 RUT_PROPIO_NORM = clean_rut(RUT_PROPIO)
 
@@ -64,6 +64,27 @@ _ITEM_CODE_LINE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_ITEM_CODE_WITH_DESC_RE = re.compile(
+    r"^\s*(\d{1,3})\s+([A-Z0-9][A-Z0-9\-\./]{5,24})(?:\s+(.+))?\s*$",
+    re.IGNORECASE,
+)
+
+_STANDALONE_CODE_RE = re.compile(
+    r"^([A-Z0-9][A-Z0-9\-\./]{5,24})$",
+    re.IGNORECASE,
+)
+
+_ITEM_ONE_LINE_RE = re.compile(
+    r"^\s*(\d{1,3})\s+"
+    r"([A-Z0-9][A-Z0-9\-\./]{5,24})\s+"
+    r"([A-ZÁÉÍÓÚÑ][^\d$]{2,}?)"
+    r"(?:\s+\$)?"
+    r"\s+(\d{1,6})\s+"
+    r"([\d.,]+)"
+    r"(?:\s+([\d.,]+))?\s*$",
+    re.IGNORECASE,
+)
+
 _TABLE_HEADER_WORDS = frozenset({
     "cantidad", "precio", "unitario", "descto", "descto.", "total", "totil", "totals",
     "moneda", "maneda", "unidad", "item", "descripción", "descripcion", "descripci",
@@ -88,7 +109,86 @@ def _looks_like_product_code(code: str) -> bool:
         return False
     if c.isalpha():
         return False
+    if re.fullmatch(r"\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}", c):
+        return False
+    if _RUT_RE.fullmatch(c) or re.fullmatch(r"\d{7,8}-[\dkK]", c, re.I):
+        return False
+    if re.match(r"^[A-Z]{2,5}-[A-Z0-9][A-Z0-9\-]{4,}$", c):
+        return True
     return bool(re.search(r"\d", c) or "ERP" in c or "OEM" in c)
+
+
+def _item_table_zone(texto: str) -> str:
+    m = re.search(r"Item\s+Descripci[oó]n", texto, re.IGNORECASE)
+    if not m:
+        return texto
+    start = m.end()
+    tail = texto[start:]
+    m_end = re.search(
+        r"(?:Facturar\s+a|Observaciones|Fecha\s*O/?C|Forma\s+de\s+Pago)",
+        tail,
+        re.IGNORECASE,
+    )
+    zone = tail[: m_end.start()] if m_end else tail
+    return zone
+
+
+def _match_item_code_line(line: str) -> re.Match[str] | None:
+    s = (line or "").strip()
+    if not s:
+        return None
+    m = _ITEM_CODE_LINE_RE.match(s)
+    if m:
+        return m
+    m = _ITEM_CODE_WITH_DESC_RE.match(s)
+    if m and _looks_like_product_code(m.group(2)):
+        return m
+    return None
+
+
+def _is_standalone_code_line(line: str) -> str | None:
+    s = (line or "").strip()
+    if not s or _is_table_header_word(s):
+        return None
+    m = _STANDALONE_CODE_RE.match(s)
+    if not m:
+        return None
+    code = m.group(1).upper()
+    if _looks_like_product_code(code):
+        return code
+    return None
+
+
+def _collect_following_descriptions(lines: list[str], start: int) -> tuple[list[str], int]:
+    parts: list[str] = []
+    i = start
+    while i < len(lines):
+        cur = lines[i]
+        if _match_item_code_line(cur) or _is_table_section_end(cur):
+            break
+        if _is_standalone_code_line(cur):
+            break
+        if re.fullmatch(r"\d{1,3}", cur) and int(cur) <= 200:
+            break
+        if re.fullmatch(r"(SAN|UND|UN|UNIDAD|\$|S|KIT|SET)", cur, re.I):
+            i += 1
+            continue
+        if _is_description_line(cur):
+            parts.append(cur)
+            i += 1
+            continue
+        break
+    return parts, i
+
+
+def _is_table_section_end(line: str) -> bool:
+    return bool(
+        re.match(
+            r"^(facturar|presentar|observ|fecha|forma|rut|rat\b|maneda|moneda|unidad|cantidad|neto|noto|iva|total\b|item\b)",
+            (line or "").strip(),
+            re.I,
+        )
+    )
 
 
 def _credentials_path() -> Path:
@@ -136,6 +236,79 @@ def _parse_monto_chileno(raw: str) -> float | None:
     if v < 0:
         return None
     return round(v, 2)
+
+
+def _score_chilean_totales_triplet(
+    neto: float, iva: float, total: float
+) -> float | None:
+    """Puntaje de coherencia contable (menor = mejor). None si no cuadra."""
+    if neto <= 0 or iva < 0 or total <= 0:
+        return None
+    sum_err = abs(neto + iva - total)
+    iva_expected = round(neto * 0.19, 0)
+    iva_err = abs(iva - iva_expected)
+    if sum_err > max(5.0, total * 0.015):
+        return None
+    if iva_err > max(50.0, neto * 0.06):
+        return None
+    if total < neto or neto < iva:
+        return None
+    return sum_err + iva_err
+
+
+def _pick_coherent_totales_triplet(
+    amounts: list[tuple[int, float]],
+) -> dict[str, float | None]:
+    """Elige neto/iva/total coherentes entre montos OCR (evita ruido de firmas)."""
+    if len(amounts) < 3:
+        return {"neto": None, "iva": None, "total": None}
+
+    best: dict[str, float] | None = None
+    best_key: tuple[float, float] | None = None
+    vals = amounts[-12:]  # últimos montos del pie
+
+    for i in range(len(vals)):
+        for j in range(len(vals)):
+            if j == i:
+                continue
+            for k in range(len(vals)):
+                if k in (i, j):
+                    continue
+                for neto, iva, total in (
+                    (vals[i][1], vals[j][1], vals[k][1]),
+                    (vals[i][1], vals[k][1], vals[j][1]),
+                    (vals[j][1], vals[i][1], vals[k][1]),
+                    (vals[j][1], vals[k][1], vals[i][1]),
+                    (vals[k][1], vals[i][1], vals[j][1]),
+                    (vals[k][1], vals[j][1], vals[i][1]),
+                ):
+                    score = _score_chilean_totales_triplet(neto, iva, total)
+                    if score is None:
+                        continue
+                    pos = (vals[i][0] + vals[j][0] + vals[k][0]) / 3.0
+                    key = (score, -pos)
+                    if best_key is None or key < best_key:
+                        best_key = key
+                        best = {"neto": neto, "iva": iva, "total": total}
+
+    if best:
+        return best
+    return {"neto": None, "iva": None, "total": None}
+
+
+def _totales_triplet_coherent(
+    neto: float | None, iva: float | None, total: float | None
+) -> bool:
+    if neto is None or iva is None or total is None:
+        return False
+    return _score_chilean_totales_triplet(neto, iva, total) is not None
+
+
+def _find_cantidad_header_index(lines: list[str]) -> int | None:
+    for i, ln in enumerate(lines):
+        if re.search(r"\bCantidad\b", ln, re.IGNORECASE):
+            return i
+    return None
 
 
 def _parse_fecha_chilena(raw: str | None) -> str | None:
@@ -292,30 +465,107 @@ def _is_table_header_word(value: str) -> bool:
 
 
 def _extract_forma_pago(texto: str) -> str | None:
-    m = re.search(r"Forma\s+de\s+Pago\s*:?\s*(.*?)(?:\n|$)", texto, re.IGNORECASE)
+    m = re.search(
+        r"Forma\s+de\s+Pago\s*:?\s*(.+?)(?:\n|$)",
+        texto,
+        re.IGNORECASE,
+    )
     if not m:
         return None
     val = m.group(1).strip()
     if not val or _is_table_header_word(val):
         return None
+    if re.match(r"^despachar\b", val, re.IGNORECASE):
+        return None
     return val[:100]
 
 
+def _extract_footer_totales(texto: str) -> dict[str, float | None]:
+    """Totales al pie del documento (OCR suele poner montos tras firmas)."""
+    lines = [ln.strip() for ln in texto.splitlines() if ln.strip()]
+    amounts: list[tuple[int, float]] = []
+    start = max(0, len(lines) - 45)
+    for idx, ln in enumerate(lines[start:], start=start):
+        if re.match(r"^(?:Neto|Noto|IVA|Total)\s*\$?\s*:?\s*$", ln, re.I):
+            continue
+        if re.search(r"[A-Za-zÁÉÍÓÚáéíóú]{4,}", ln) and not re.fullmatch(
+            r"[\d.,+\s$]+", ln
+        ):
+            continue
+        amt = _parse_monto_chileno(ln)
+        if amt is not None and amt >= 100:
+            amounts.append((idx, amt))
+
+    picked = _pick_coherent_totales_triplet(amounts)
+    if _totales_triplet_coherent(
+        picked.get("neto"), picked.get("iva"), picked.get("total")
+    ):
+        return picked
+    return {"neto": None, "iva": None, "total": None}
+
+
 def _extract_totales(texto: str) -> dict[str, float | None]:
-    neto = iva = total = None
+    footer = _extract_footer_totales(texto)
+    neto = footer.get("neto")
+    iva = footer.get("iva")
+    total = footer.get("total")
+
     lines = [ln.strip() for ln in texto.splitlines()]
     for i, ln in enumerate(lines):
         if re.match(r"^(?:Neto|Noto)\b", ln, re.IGNORECASE):
             inline = re.search(r"([\d.,+]+)\s*$", ln)
             if inline:
-                neto = _parse_monto_chileno(inline.group(1))
+                parsed = _parse_monto_chileno(inline.group(1))
+                if parsed and parsed >= 1000:
+                    neto = parsed
             if neto is None:
-                for nxt in lines[i + 1 : i + 4]:
+                for nxt in lines[i + 1 : i + 6]:
                     parsed = _parse_monto_chileno(nxt)
-                    if parsed is not None and parsed >= 500:
+                    if parsed is not None and parsed >= 1000:
                         neto = parsed
                         break
             break
+
+    m = re.search(
+        r"IVA\s*(?:\(19%\)|19\s*%)\s*:?\s*\$?\s*([\d.,+]+)",
+        texto,
+        re.IGNORECASE,
+    )
+    if m:
+        parsed = _parse_monto_chileno(m.group(1))
+        if parsed and parsed >= 100:
+            iva = parsed
+    if iva is None:
+        for i, ln in enumerate(lines):
+            if re.match(r"^IVA\b", ln, re.I):
+                for nxt in lines[i + 1 : i + 8]:
+                    if _is_table_section_end(nxt):
+                        break
+                    parsed = _parse_monto_chileno(nxt)
+                    if parsed and parsed >= 100:
+                        iva = parsed
+                        break
+                break
+
+    if total is None:
+        for i, ln in enumerate(lines):
+            if re.match(r"^Total\s*\$?\s*:?\s*$", ln, re.I):
+                for nxt in lines[i + 1 : i + 8]:
+                    parsed = _parse_monto_chileno(nxt)
+                    if parsed and parsed >= 1000:
+                        total = parsed
+                        break
+                break
+
+    if not _totales_triplet_coherent(neto, iva, total):
+        footer = _extract_footer_totales(texto)
+        if _totales_triplet_coherent(
+            footer.get("neto"), footer.get("iva"), footer.get("total")
+        ):
+            neto = footer.get("neto")
+            iva = footer.get("iva")
+            total = footer.get("total")
+
     if neto is None:
         m = re.search(
             r"(?:Neto|Noto)\s*\$?\s*:?\s*([\d.,+]+)",
@@ -323,17 +573,10 @@ def _extract_totales(texto: str) -> dict[str, float | None]:
             re.IGNORECASE,
         )
         if m:
-            neto = _parse_monto_chileno(m.group(1))
-    m = re.search(r"IVA\s*(?:\(19%\)|19\s*%)?\s*:?\s*\$?\s*([\d.,+]+)", texto, re.IGNORECASE)
-    if m:
-        iva = _parse_monto_chileno(m.group(1))
-    m = re.search(r"Total\s*\$?\s*:?\s*([\d.,+]+)", texto, re.IGNORECASE)
-    if m:
-        total = _parse_monto_chileno(m.group(1))
-    if total is None:
-        m = re.search(r"TotalS?\s*\n\s*([\d.,+]+)", texto, re.IGNORECASE)
-        if m:
-            total = _parse_monto_chileno(m.group(1))
+            parsed = _parse_monto_chileno(m.group(1))
+            if parsed and parsed >= 1000:
+                neto = parsed
+
     return {"neto": neto, "iva": iva, "total": total}
 
 
@@ -396,12 +639,21 @@ def _extract_descripcion_tabla(texto: str, codigo: str | None) -> str:
 
 
 def _extract_observaciones(texto: str) -> dict[str, str | None]:
-    m = re.search(
-        r"Observaciones\s*\n([\s\S]*?)(?:Maneda|Moneda|Unidad|Fecha\s*O/?C|Cantidad|Neto|Noto|IVA\b)",
-        texto,
-        re.IGNORECASE,
-    )
-    obs = (m.group(1) if m else "").strip()
+    m = re.search(r"Observaciones\s*\n([\s\S]*)", texto, re.IGNORECASE)
+    rest = (m.group(1) if m else "").strip()
+    obs_lines: list[str] = []
+    for ln in rest.splitlines():
+        s = ln.strip()
+        if not s:
+            continue
+        if re.match(r"^(Luis|Nombre|Firma)\b", s, re.I):
+            break
+        if re.match(r"^(?:Neto|Noto|IVA|Total)\s*\$?\s*:?\s*$", s, re.I):
+            continue
+        if re.fullmatch(r"[\d.,]+", s):
+            continue
+        obs_lines.append(s)
+    obs = "\n".join(obs_lines).strip()
     marca = None
     vehiculo = None
     if re.search(r"GREAT\s*WALL", obs, re.IGNORECASE):
@@ -415,19 +667,210 @@ def _extract_observaciones(texto: str) -> dict[str, str | None]:
             if vm:
                 vehiculo = re.sub(r"\s+", " ", vm.group(1)).strip()
                 break
+    elif re.search(r"\bJAC\b", obs, re.IGNORECASE) or re.search(
+        r"\bJAC\s+T\d", texto, re.IGNORECASE
+    ):
+        marca = "JAC"
+        for ln in obs.splitlines():
+            vm = re.search(r"(JAC\s+T\d+[^\n]*\d{4})", ln, re.IGNORECASE)
+            if vm:
+                vehiculo = re.sub(r"\s+", " ", vm.group(1)).strip()
+                break
+    elif re.search(r"\bMAXUS\b", obs, re.IGNORECASE) or re.search(
+        r"\bMAXUS\b", texto, re.IGNORECASE
+    ):
+        marca = "MAXUS"
+        for ln in obs.splitlines():
+            vm = re.search(r"(MAXUS\s+T\d+\s+\d{4})", ln, re.IGNORECASE)
+            if vm:
+                vehiculo = re.sub(r"\s+", " ", vm.group(1)).strip()
+                break
     return {"texto": obs, "marca": marca, "vehiculo": vehiculo}
 
 
-def _extract_items_columnar(texto: str, neto_leido: float | None) -> dict[str, Any] | None:
+def _extract_items_table_rows(texto: str) -> list[dict[str, Any]]:
+    """Filas ítem+código+descripción (varias líneas por ítem, PDF o imagen)."""
+    zone = _item_table_zone(texto)
+    lines = [ln.strip() for ln in zone.splitlines()]
+    items: list[dict[str, Any]] = []
+    i = 0
+    while i < len(lines):
+        ln = lines[i]
+
+        m_one = _ITEM_ONE_LINE_RE.match(ln)
+        if m_one:
+            codigo = m_one.group(2).upper()
+            desc = (m_one.group(3) or "").strip()
+            desc = re.sub(r"\s+\$.*$", "", desc).strip()
+            qty = max(int(m_one.group(4)), 1)
+            precio = _parse_monto_chileno(m_one.group(5)) or 0.0
+            sub = _parse_monto_chileno(m_one.group(6)) if m_one.group(6) else None
+            if sub is None:
+                sub = round(precio * qty, 2)
+            items.append(
+                {
+                    "numero_item": int(m_one.group(1)),
+                    "codigo_producto": codigo,
+                    "descripcion": desc[:255],
+                    "cantidad": qty,
+                    "precio_unitario": precio,
+                    "subtotal": sub,
+                }
+            )
+            i += 1
+            continue
+
+        m = _match_item_code_line(ln)
+        if m:
+            codigo = m.group(2).upper().strip()
+            if _looks_like_product_code(codigo):
+                desc_parts: list[str] = []
+                if m.lastindex and m.lastindex >= 3 and m.group(3):
+                    desc_parts.append(m.group(3).strip())
+                i += 1
+                more, i = _collect_following_descriptions(lines, i)
+                desc_parts.extend(more)
+                items.append(
+                    {
+                        "numero_item": int(m.group(1)),
+                        "codigo_producto": codigo,
+                        "descripcion": " ".join(desc_parts)[:255],
+                        "cantidad": 1,
+                        "precio_unitario": 0.0,
+                        "subtotal": 0.0,
+                    }
+                )
+                continue
+            i += 1
+            continue
+
+        if re.fullmatch(r"\d{1,3}", ln) and int(ln) <= 200:
+            num_item = int(ln)
+            if i + 1 < len(lines):
+                code = _is_standalone_code_line(lines[i + 1])
+                if code:
+                    i += 2
+                    desc_parts, i = _collect_following_descriptions(lines, i)
+                    items.append(
+                        {
+                            "numero_item": num_item,
+                            "codigo_producto": code,
+                            "descripcion": " ".join(desc_parts)[:255],
+                            "cantidad": 1,
+                            "precio_unitario": 0.0,
+                            "subtotal": 0.0,
+                        }
+                    )
+                    continue
+
+        code = _is_standalone_code_line(ln)
+        if code and not any(it.get("codigo_producto") == code for it in items):
+            i += 1
+            desc_parts, i = _collect_following_descriptions(lines, i)
+            items.append(
+                {
+                    "numero_item": len(items) + 1,
+                    "codigo_producto": code,
+                    "descripcion": " ".join(desc_parts)[:255],
+                    "cantidad": 1,
+                    "precio_unitario": 0.0,
+                    "subtotal": 0.0,
+                }
+            )
+            continue
+
+        i += 1
+
+    return items
+
+
+def _is_price_block_end(line: str) -> bool:
+    return bool(
+        re.match(
+            r"^(facturar|presentar|observ|neto|noto|iva)\b",
+            (line or "").strip(),
+            re.I,
+        )
+    )
+
+
+def _extract_items_columnar_prices(texto: str) -> list[tuple[int, float, float]]:
+    """Precios/cantidades en bloque columnar tras encabezado Cantidad."""
+    lines = [ln.strip() for ln in texto.splitlines()]
+    header_i = _find_cantidad_header_index(lines)
+    if header_i is None:
+        return []
+
+    rows: list[tuple[int, float, float]] = []
+    qty = 1
+    pending_price: float | None = None
+
+    for ln in lines[header_i + 1 :]:
+        if _is_price_block_end(ln):
+            break
+        if not ln or _is_table_header_word(ln):
+            continue
+        if re.fullmatch(r"\d{1,4}", ln):
+            qty = max(int(ln), 1)
+            continue
+        amt = _parse_monto_chileno(ln)
+        if amt is None or amt < 500:
+            continue
+        if pending_price is None:
+            pending_price = amt
+            continue
+        subtotal = amt
+        precio = pending_price
+        if qty == 1 and abs(subtotal - precio) / max(precio, 1) <= 0.15:
+            subtotal = precio
+        elif subtotal < precio * 0.5:
+            subtotal = round(precio * qty, 2)
+        rows.append((qty, precio, subtotal))
+        pending_price = None
+        qty = 1
+
+    if pending_price is not None:
+        rows.append((qty, pending_price, round(pending_price * qty, 2)))
+
+    return rows
+
+
+def _merge_items_rows_with_prices(
+    rows: list[dict[str, Any]],
+    prices: list[tuple[int, float, float]],
+    neto_leido: float | None,
+) -> list[dict[str, Any]]:
+    if not rows:
+        return rows
+    out: list[dict[str, Any]] = []
+    for idx, row in enumerate(rows):
+        item = dict(row)
+        if idx < len(prices) and not float(item.get("precio_unitario") or 0):
+            qty, precio, subtotal = prices[idx]
+            item["cantidad"] = qty
+            item["precio_unitario"] = precio
+            item["subtotal"] = subtotal
+        elif prices:
+            _, precio, _ = prices[0]
+            qty = int(item.get("cantidad") or 1)
+            item["precio_unitario"] = precio
+            item["subtotal"] = round(precio * qty, 2)
+        out.append(item)
+
+    if len(out) == 1 and neto_leido and not prices:
+        if not float(out[0].get("precio_unitario") or 0):
+            out[0]["precio_unitario"] = neto_leido
+            out[0]["subtotal"] = neto_leido
+
+    return out
+
+
+def _extract_items_columnar_single(texto: str, neto_leido: float | None) -> dict[str, Any] | None:
     """OC con columnas separadas por OCR (cantidad/precio lejos del código)."""
     lines = [ln.strip() for ln in texto.splitlines()]
     cantidad = precio = subtotal = None
 
-    header_i = None
-    for i, ln in enumerate(lines):
-        if re.fullmatch(r"Cantidad", ln, re.IGNORECASE):
-            header_i = i
-            break
+    header_i = _find_cantidad_header_index(lines)
     if header_i is not None:
         data_lines: list[str] = []
         for ln in lines[header_i + 1 : header_i + 14]:
@@ -449,7 +892,13 @@ def _extract_items_columnar(texto: str, neto_leido: float | None) -> dict[str, A
 
         if amounts:
             precio = amounts[0]
-            subtotal = amounts[1] if len(amounts) > 1 else None
+            if len(amounts) > 1 and cantidad == 1:
+                if abs(amounts[1] - amounts[0]) / max(amounts[0], 1) <= 0.15:
+                    subtotal = amounts[0]
+                else:
+                    subtotal = amounts[1]
+            else:
+                subtotal = amounts[1] if len(amounts) > 1 else None
         if cantidad is None:
             cantidad = 1
 
@@ -464,10 +913,13 @@ def _extract_items_columnar(texto: str, neto_leido: float | None) -> dict[str, A
     cantidad = cantidad or 1
     if subtotal is None or subtotal < precio * 0.5:
         subtotal = round(precio * cantidad, 2)
-    if neto_leido is not None and abs(subtotal - neto_leido) > abs(precio - neto_leido):
+    if (
+        neto_leido is not None
+        and cantidad == 1
+        and abs(precio - neto_leido) <= max(100.0, neto_leido * 0.05)
+    ):
+        precio = neto_leido
         subtotal = neto_leido
-        if cantidad == 1:
-            precio = neto_leido
 
     codigo = _extract_codigo_producto(texto)
     desc = _extract_descripcion_tabla(texto, codigo)
@@ -528,46 +980,18 @@ def _parse_item_line(line: str) -> dict[str, Any] | None:
 
 
 def _extract_items(texto: str, neto_leido: float | None = None) -> list[dict[str, Any]]:
-    lines = [ln.rstrip() for ln in texto.splitlines()]
     items: list[dict[str, Any]] = []
-    pending_desc_for: int | None = None
-
-    for line in lines:
+    for line in texto.splitlines():
         parsed = _parse_item_line(line)
         if parsed:
             items.append(parsed)
-            pending_desc_for = len(items) - 1 if not parsed.get("descripcion") else None
-            continue
-        m_code = _ITEM_CODE_LINE_RE.match(line.strip())
-        if m_code and not items:
-            items.append(
-                {
-                    "numero_item": int(m_code.group(1)),
-                    "codigo_producto": m_code.group(2).upper(),
-                    "descripcion": "",
-                    "cantidad": 1,
-                    "precio_unitario": 0.0,
-                    "subtotal": 0.0,
-                }
-            )
-            pending_desc_for = 0
-            continue
-        if pending_desc_for is not None:
-            if re.fullmatch(r"(SAN|UND|UN|UNIDAD|\$|S|KIT|SET)", line.strip(), re.I):
-                pending_desc_for = None
-                continue
-            if re.match(r"^(facturar|presentar|observ|fecha|forma|rut|cantidad|neto|noto|iva|total)", line.strip(), re.I):
-                pending_desc_for = None
-                continue
-        if pending_desc_for is not None and _is_description_line(line):
-            prev = items[pending_desc_for].get("descripcion") or ""
-            new_desc = f"{prev} {line.strip()}".strip() if prev else line.strip()
-            items[pending_desc_for]["descripcion"] = new_desc[:255]
-            if not re.search(r"^(SAN|UND|UN|UNIDAD|KIT|SET)$", line.strip(), re.I):
-                pending_desc_for = None
 
-    if not items or all(not it.get("precio_unitario") for it in items):
-        col_item = _extract_items_columnar(texto, neto_leido)
+    table_rows = _extract_items_table_rows(texto)
+    if table_rows:
+        prices = _extract_items_columnar_prices(texto)
+        items = _merge_items_rows_with_prices(table_rows, prices, neto_leido)
+    elif not items or all(not it.get("precio_unitario") for it in items):
+        col_item = _extract_items_columnar_single(texto, neto_leido)
         if col_item:
             if items and not items[0].get("precio_unitario"):
                 existing_code = (items[0].get("codigo_producto") or "").strip()
@@ -591,11 +1015,18 @@ def _extract_items(texto: str, neto_leido: float | None = None) -> list[dict[str
         for it in items:
             if obs.get("marca") and not it.get("marca"):
                 it["marca"] = obs["marca"]
-            desc = (it.get("descripcion") or "").strip()
+            desc = re.sub(r"\s+", " ", it.get("descripcion") or "").strip()
             veh = (obs.get("vehiculo") or "").strip()
             if veh and veh.upper() not in desc.upper():
-                it["descripcion"] = f"{desc} {veh}".strip()[:255]
-            it["descripcion"] = re.sub(r"\s+", " ", it.get("descripcion") or "").strip()[:255]
+                desc = f"{desc} {veh}".strip() if desc else veh
+            elif len(items) == 1 and obs.get("texto"):
+                for ln in obs["texto"].splitlines():
+                    ln = ln.strip()
+                    if re.match(r"^(MAXUS|GREAT\s*WALL|JAC)\b", ln, re.I):
+                        if ln.upper() not in desc.upper():
+                            desc = f"{desc} {ln}".strip() if desc else ln
+                        break
+            it["descripcion"] = desc[:255]
 
     return items
 

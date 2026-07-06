@@ -1,6 +1,6 @@
 {% extends 'ventas/base_partial.html' if _partial else 'ventas/base.html' %}
 
-{% block title %}Nueva OC Cliente | Andes Auto Parts{% endblock %}
+{% block title %}{% if oc %}Editar OC {{ oc.numero_oc }}{% else %}Nueva OC Cliente{% endif %} | Andes Auto Parts{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -149,25 +149,30 @@
 
 {% block ventas_inner %}
 <div class="page-stack oc-form-page">
-    <form method="post" id="ocForm" autocomplete="off">
+    <form method="post" id="ocForm" autocomplete="off"{% if oc %} action="{{ url_for('oc_clientes.editar', oid=oc.id, from=from_src) }}"{% endif %}>
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="cliente_id" id="clienteIdHidden" value="{{ form_data.cliente_id or 0 }}">
+        {% if oc %}<input type="hidden" name="from" value="{{ from_src }}">{% endif %}
 
         <div class="oc-toolbar">
             <div>
-                <h2>Nueva OC del cliente</h2>
-                <p>Registre la orden de compra recibida · ítems de inventario o texto libre</p>
+                <h2>{% if oc %}Editar OC {{ oc.numero_oc }}{% else %}Nueva OC del cliente{% endif %}</h2>
+                <p>{% if oc %}Modifique los datos mientras la OC esté en estado recibida{% else %}Registre la orden de compra recibida · ítems de inventario o texto libre{% endif %}</p>
             </div>
             <div class="oc-toolbar-actions">
+                {% if oc %}
+                <a class="btn sm" href="{{ volver_url }}">← {% if from_src == 'lista' %}Listado{% else %}Volver{% endif %}</a>
+                {% else %}
                 <a class="btn sm" href="{{ url_for('oc_clientes.lista') }}">← Listado</a>
                 <button class="btn sm outline" type="button" id="btnClearForm">Limpiar</button>
+                {% endif %}
                 {% if puede_modificar %}
-                <button class="btn sm primary" type="submit">Guardar OC</button>
+                <button class="btn sm primary" type="submit">{% if oc %}Guardar cambios{% else %}Guardar OC{% endif %}</button>
                 {% endif %}
             </div>
         </div>
 
-        {% if puede_modificar %}
+        {% if puede_modificar and not oc %}
         <div class="oc-card" style="margin-bottom:8px;">
             <div class="oc-section">
                 <div id="scanZone" class="oc-scan-zone">
@@ -318,6 +323,7 @@
     const URL_SEARCH = {{ url_productos_search|tojson }};
     const URL_ESCANEAR = {{ url_escanear_oc|tojson }};
     const URL_VERIFICAR_NUMERO = {{ url_verificar_numero|tojson }};
+    const OC_EDIT_ID = {{ oc.id if oc else 0 }};
     const CSRF_TOKEN = {{ csrf_token|tojson }};
     const ocForm = document.getElementById('ocForm');
     const numeroOcInput = document.getElementById('numero_oc');
@@ -535,6 +541,7 @@
         if (data.fecha_oc) document.getElementById('fecha_oc').value = data.fecha_oc;
         if (data.fecha_entrega) document.getElementById('fecha_entrega_comprometida').value = data.fecha_entrega;
         if (data.forma_pago) document.getElementById('forma_pago').value = data.forma_pago;
+        else document.getElementById('forma_pago').value = '';
         if (data.direccion_despacho) document.getElementById('direccion_despacho').value = data.direccion_despacho;
         applyClienteFromScan(data);
         itemsBody.innerHTML = '';
@@ -687,9 +694,11 @@
             showDupAlert('');
             return Promise.resolve();
         }
-        return fetch(URL_VERIFICAR_NUMERO + '?q=' + encodeURIComponent(num), {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        })
+        return fetch(
+            URL_VERIFICAR_NUMERO + '?q=' + encodeURIComponent(num)
+                + (OC_EDIT_ID ? '&exclude_id=' + OC_EDIT_ID : ''),
+            { headers: { 'X-Requested-With': 'XMLHttpRequest' } },
+        )
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (data.exists) {

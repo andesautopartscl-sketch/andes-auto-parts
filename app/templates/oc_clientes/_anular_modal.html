@@ -1,0 +1,116 @@
+<style>
+.oc-anular-auth-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(15, 23, 42, 0.48);
+    z-index: 1200;
+}
+.oc-anular-auth-modal.open { display: flex; }
+.oc-anular-auth-card {
+    width: min(400px, 100%);
+    background: #fff;
+    border: 1px solid #dbe3ef;
+    border-radius: 12px;
+    box-shadow: 0 20px 55px rgba(15, 23, 42, 0.28);
+    padding: 14px 16px;
+}
+.oc-anular-auth-card h3 {
+    margin: 0 0 4px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.oc-anular-auth-card p {
+    margin: 0 0 12px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.4;
+}
+.oc-anular-auth-card label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 3px;
+}
+.oc-anular-auth-card input {
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid #dbe3ef;
+    border-radius: 6px;
+    font-size: 12px;
+    box-sizing: border-box;
+    margin-bottom: 8px;
+}
+.oc-anular-auth-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+</style>
+
+<div id="ocAnularAuthModal" class="oc-anular-auth-modal" aria-hidden="true">
+    <div class="oc-anular-auth-card" role="dialog" aria-modal="true" aria-labelledby="ocAnularAuthTitle">
+        <h3 id="ocAnularAuthTitle">Autorizar anulación</h3>
+        <p id="ocAnularAuthSub">Ingrese usuario y contraseña para anular esta orden de compra.</p>
+        <form id="ocAnularAuthForm" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label for="ocAnularAuthUser">Usuario</label>
+            <input id="ocAnularAuthUser" name="auth_user" required autocomplete="username">
+            <label for="ocAnularAuthPass">Contraseña</label>
+            <input id="ocAnularAuthPass" name="auth_password" type="password" required autocomplete="current-password">
+            <div class="oc-anular-auth-actions">
+                <button type="button" class="btn sm" id="ocAnularAuthCancel">Cancelar</button>
+                <button type="submit" class="btn sm danger">Autorizar y anular</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    var modal = document.getElementById('ocAnularAuthModal');
+    var form = document.getElementById('ocAnularAuthForm');
+    var sub = document.getElementById('ocAnularAuthSub');
+    var authUser = document.getElementById('ocAnularAuthUser');
+    var authPass = document.getElementById('ocAnularAuthPass');
+    var cancelBtn = document.getElementById('ocAnularAuthCancel');
+    if (!modal || !form || !sub || !authUser || !authPass) return;
+
+    function closeModal() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+        authPass.value = '';
+    }
+
+    document.body.addEventListener('click', function (e) {
+        var btn = e.target.closest('.btn-oc-anular');
+        if (!btn) return;
+        var url = btn.getAttribute('data-anular-url');
+        if (!url) return;
+        var num = btn.getAttribute('data-oc-num') || '';
+        form.action = url;
+        sub.textContent = num
+            ? ('Va a anular la OC ' + num + '. Ingrese credenciales de un usuario autorizado.')
+            : 'Ingrese credenciales de un usuario autorizado para anular esta orden.';
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+        setTimeout(function () { authUser.focus(); }, 20);
+    });
+
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+    });
+})();
+</script>

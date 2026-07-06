@@ -5,8 +5,10 @@ from datetime import date, datetime
 
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from sqlalchemy import func, or_
+from werkzeug.security import check_password_hash
 
 from app.extensions import db
+from app.seguridad.models import Usuario
 from app.utils.decorators import login_required, permission_required
 from app.utils.permissions import has_permission
 from app.utils.rut_utils import format_rut
@@ -55,6 +57,128 @@ def _oc_module_guard():
 
 def _can_modify() -> bool:
     return has_permission(session.get("user"), session.get("rol"), "mod_oc_clientes")
+
+
+def _validar_autorizacion_anulacion_oc(
+    username: str, password: str
+) -> tuple[bool, str, Usuario | None]:
+    user_name = (username or "").strip()
+    raw_pass = password or ""
+    if not user_name or not raw_pass:
+        return False, "Debe ingresar usuario y contraseña para autorizar la anulación.", None
+
+    u = Usuario.query.filter_by(usuario=user_name).first()
+    if u is None:
+        return False, "Usuario de autorización no válido.", None
+    if not bool(u.activo):
+        return False, "El usuario de autorización está inactivo.", None
+    if bool(getattr(u, "bloqueado_seguridad", False)):
+        return False, "El usuario de autorización está bloqueado.", None
+
+    try:
+        ok = check_password_hash(u.password_hash or "", raw_pass)
+    except Exception:
+        ok = False
+    if not ok:
+        return False, "Contraseña de autorización incorrecta.", None
+
+    rol_name = (u.rol.nombre if getattr(u, "rol", None) and u.rol.nombre else "") or ""
+    if not has_permission(u.usuario, rol_name, "mod_oc_clientes"):
+        return False, "El usuario no tiene permiso para anular OC de clientes.", None
+    return True, "", u
+
+
+def _redirect_back(oid: int):
+    ref = request.referrer
+    if ref:
+        try:
+            from urllib.parse import urlparse
+
+            if urlparse(ref).netloc == urlparse(request.host_url).netloc:
+                return redirect(ref)
+        except Exception:
+            pass
+    return redirect(url_for("oc_clientes.detalle", oid=oid))
+
+
+def _form_data_from_oc(oc: OrdenCompraCliente) -> dict:
+    items = []
+    for it in oc.items:
+        items.append(
+            {
+                "codigo_producto": it.codigo_producto or "",
+                "descripcion": it.descripcion or "",
+                "marca": it.marca or "",
+                "bodega": it.bodega or "Bodega 1",
+                "cantidad": it.cantidad or 1,
+                "precio_unitario": it.precio_unitario or 0,
+                "descuento_item": it.descuento_item or 0,
+                "subtotal": it.subtotal or 0,
+                "en_inventario": bool(it.en_inventario),
+            }
+        )
+    return {
+        "numero_oc": oc.numero_oc or "",
+        "fecha_oc": oc.fecha_oc.strftime("%Y-%m-%d") if oc.fecha_oc else "",
+        "fecha_entrega_comprometida": (
+            oc.fecha_entrega_comprometida.strftime("%Y-%m-%d")
+            if oc.fecha_entrega_comprometida
+            else ""
+        ),
+        "forma_pago": oc.forma_pago or "",
+        "direccion_despacho": oc.direccion_despacho or "",
+        "observaciones": oc.observaciones or "",
+        "cliente_id": oc.cliente_id or 0,
+        "items": items,
+        "totals": {
+            "neto": oc.neto or 0,
+            "iva": oc.iva or 0,
+            "total": oc.total or 0,
+        },
+    }
+
+
+def _editar_from_src() -> str:
+    src = (request.args.get("from") or request.form.get("from") or "detalle").strip().lower()
+    return src if src in {"lista", "detalle"} else "detalle"
+
+
+def _editar_volver_url(oid: int, from_src: str) -> str:
+    if from_src == "lista":
+        return url_for("oc_clientes.lista")
+    return url_for("oc_clientes.detalle", oid=oid)
+
+
+def _render_oc_form(
+    form_data: dict,
+    *,
+    party: dict,
+    selected_client,
+    oc: OrdenCompraCliente | None = None,
+    from_src: str = "detalle",
+):
+    _partial = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    volver_url = _editar_volver_url(oc.id, from_src) if oc else url_for("oc_clientes.lista")
+    return render_template(
+        "oc_clientes/form.html",
+        form_data=form_data,
+        party=party,
+        selected_client=selected_client,
+        oc=oc,
+        from_src=from_src,
+        volver_url=volver_url,
+        metodo_pago_options=[
+            (k, METODO_PAGO_LABELS.get(k, k)) for k in METODO_PAGO_OPTIONS if k != "saldo_favor"
+        ],
+        url_producto=url_for("ventas.api_producto"),
+        url_productos_search=url_for("ventas.api_productos_search"),
+        url_clientes=url_for("ventas.api_clientes"),
+        url_escanear_oc=url_for("oc_clientes.api_escanear_oc"),
+        url_verificar_numero=url_for("oc_clientes.api_verificar_numero"),
+        puede_modificar=_can_modify(),
+        active_page="oc_clientes",
+        _partial=_partial,
+    )
 
 
 def _parse_date(value: str | None, default: datetime | None = None) -> datetime | None:
@@ -327,21 +451,121 @@ def nueva():
         form_data["direccion_despacho"] = _full_address(selected_client) or party.get("address") or ""
 
     metodo_labels = METODO_PAGO_LABELS
-    _partial = request.headers.get("X-Requested-With") == "XMLHttpRequest"
-    return render_template(
-        "oc_clientes/form.html",
-        form_data=form_data,
-        party=party,
-        selected_client=selected_client,
-        metodo_pago_options=[(k, METODO_PAGO_LABELS.get(k, k)) for k in METODO_PAGO_OPTIONS if k != "saldo_favor"],
-        url_producto=url_for("ventas.api_producto"),
-        url_productos_search=url_for("ventas.api_productos_search"),
-        url_clientes=url_for("ventas.api_clientes"),
-        url_escanear_oc=url_for("oc_clientes.api_escanear_oc"),
-        url_verificar_numero=url_for("oc_clientes.api_verificar_numero"),
-        puede_modificar=_can_modify(),
-        active_page="oc_clientes",
-        _partial=_partial,
+    return _render_oc_form(form_data, party=party, selected_client=selected_client)
+
+
+@oc_clientes_bp.route("/<int:oid>/editar", methods=["GET", "POST"])
+@login_required
+@permission_required("ver_oc_clientes")
+def editar(oid: int):
+    oc = db.session.get(OrdenCompraCliente, oid)
+    if oc is None:
+        flash("Orden de compra no encontrada.", "error")
+        return redirect(url_for("oc_clientes.lista"))
+    if (oc.estado or "") != "recibida":
+        flash("Solo se pueden editar OC en estado recibida.", "error")
+        return redirect(url_for("oc_clientes.detalle", oid=oid))
+
+    from_src = _editar_from_src()
+
+    if request.method == "POST" and not _can_modify():
+        return _deny("Sin permiso para editar órdenes de compra de clientes.")
+
+    cliente = db.session.get(Cliente, oc.cliente_id) if oc.cliente_id else None
+    party = _entity_snapshot(cliente, False) if cliente else {
+        "name": "", "rut": "", "address": "", "telefono": "", "email": "",
+    }
+    form_data = _form_data_from_oc(oc)
+
+    if request.method == "POST":
+        form_data.update(
+            {
+                "numero_oc": (request.form.get("numero_oc") or "").strip(),
+                "fecha_oc": (request.form.get("fecha_oc") or form_data["fecha_oc"]).strip(),
+                "fecha_entrega_comprometida": (
+                    request.form.get("fecha_entrega_comprometida") or ""
+                ).strip(),
+                "forma_pago": (request.form.get("forma_pago") or "").strip(),
+                "direccion_despacho": (request.form.get("direccion_despacho") or "").strip(),
+                "observaciones": (request.form.get("observaciones") or "").strip(),
+                "cliente_id": _safe_int(request.form.get("cliente_id")),
+            }
+        )
+        items = _extract_items_from_form(request.form)
+        form_data["items"] = items
+        totals = calcular_totales_items(items)
+        form_data["totals"] = totals
+
+        errors = []
+        numero_oc_raw = form_data["numero_oc"]
+        if not numero_oc_raw:
+            errors.append("El número de OC del cliente es obligatorio.")
+        else:
+            dup = buscar_oc_por_numero(numero_oc_raw, exclude_id=oc.id)
+            if dup:
+                errors.append(
+                    f"Ya existe otra orden de compra con el número {numero_oc_raw}."
+                )
+        if form_data["cliente_id"] <= 0 or _client_by_id(form_data["cliente_id"]) is None:
+            errors.append("Debe seleccionar un cliente válido.")
+        if not items:
+            errors.append("Debe agregar al menos un ítem.")
+
+        for err in errors:
+            flash(err, "error")
+
+        if not errors:
+            try:
+                cliente = _client_by_id(form_data["cliente_id"])
+                oc.numero_oc = form_data["numero_oc"][:100]
+                oc.cliente_id = cliente.id
+                oc.fecha_oc = _parse_date(form_data["fecha_oc"], oc.fecha_oc) or oc.fecha_oc
+                oc.fecha_entrega_comprometida = _parse_date(
+                    form_data["fecha_entrega_comprometida"]
+                )
+                oc.forma_pago = form_data["forma_pago"][:100] or None
+                oc.direccion_despacho = form_data["direccion_despacho"][:300] or None
+                oc.observaciones = form_data["observaciones"] or None
+                oc.neto = totals["neto"]
+                oc.iva = totals["iva"]
+                oc.total = totals["total"]
+                oc.updated_at = datetime.utcnow()
+
+                for old in list(oc.items):
+                    db.session.delete(old)
+                db.session.flush()
+                for it in items:
+                    oc.items.append(
+                        OrdenCompraClienteItem(
+                            codigo_producto=it["codigo_producto"],
+                            descripcion=it["descripcion"],
+                            marca=it["marca"] or None,
+                            bodega=it["bodega"],
+                            cantidad=it["cantidad"],
+                            precio_unitario=it["precio_unitario"],
+                            descuento_item=it["descuento_item"],
+                            subtotal=it["subtotal"],
+                            en_inventario=it["en_inventario"],
+                        )
+                    )
+                db.session.commit()
+                flash("Orden de compra actualizada.", "success")
+                return redirect(url_for("oc_clientes.detalle", oid=oc.id))
+            except Exception as exc:
+                db.session.rollback()
+                flash(f"No se pudo guardar: {exc}", "error")
+
+        selected_client = _client_by_id(form_data["cliente_id"])
+        party = (
+            _entity_snapshot(selected_client, False)
+            if selected_client
+            else party
+        )
+    else:
+        selected_client = cliente
+
+    return _render_oc_form(
+        form_data, party=party, selected_client=selected_client, oc=oc, from_src=from_src
     )
 
 
@@ -462,11 +686,37 @@ def anular(oid: int):
         )
         return redirect(url_for("oc_clientes.detalle", oid=oid))
 
+    auth_user = (request.form.get("auth_user") or "").strip()
+    auth_pass = request.form.get("auth_password") or ""
+    auth_ok, auth_err, _auth_actor = _validar_autorizacion_anulacion_oc(auth_user, auth_pass)
+    if not auth_ok:
+        flash(auth_err, "error")
+        return _redirect_back(oid)
+
     oc.estado = "anulada"
     oc.updated_at = datetime.utcnow()
     db.session.commit()
     flash("Orden de compra anulada.", "success")
-    return redirect(url_for("oc_clientes.detalle", oid=oid))
+    return _redirect_back(oid)
+
+
+@oc_clientes_bp.route("/<int:oid>/reactivar", methods=["POST"])
+@login_required
+@permission_required("mod_oc_clientes")
+def reactivar(oid: int):
+    oc = db.session.get(OrdenCompraCliente, oid)
+    if oc is None:
+        flash("Orden no encontrada.", "error")
+        return redirect(url_for("oc_clientes.lista"))
+    if (oc.estado or "") != "anulada":
+        flash("Solo se pueden reactivar OC anuladas.", "error")
+        return redirect(url_for("oc_clientes.detalle", oid=oid))
+
+    oc.estado = "recibida"
+    oc.updated_at = datetime.utcnow()
+    db.session.commit()
+    flash("Orden de compra reactivada.", "success")
+    return _redirect_back(oid)
 
 
 @oc_clientes_bp.route("/<int:oid>/imprimir")
@@ -498,7 +748,8 @@ def api_verificar_numero():
     q = (request.args.get("q") or request.args.get("numero_oc") or "").strip()
     if not q:
         return jsonify(ok=True, exists=False)
-    existing = buscar_oc_por_numero(q)
+    exclude_id = _safe_int(request.args.get("exclude_id"), 0) or None
+    existing = buscar_oc_por_numero(q, exclude_id=exclude_id)
     if existing is None:
         return jsonify(ok=True, exists=False)
     return jsonify(

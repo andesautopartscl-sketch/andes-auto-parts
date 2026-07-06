@@ -70,6 +70,10 @@
 .badge-oc.green { background: #dcfce7; color: #15803d; }
 .badge-oc.slate { background: #f1f5f9; color: #64748b; }
 .oc-list-page .btn.sm { padding: 4px 9px; font-size: 11px; border-radius: 6px; }
+.oc-list-actions {
+    display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; align-items: center;
+}
+.oc-list-actions form { display: inline; margin: 0; }
 @media (max-width: 768px) {
     .oc-list-toolbar { flex-direction: column; }
     .oc-list-filters input, .oc-list-filters select { min-width: 100%; }
@@ -142,7 +146,7 @@
                         <th style="text-align:right;">Total</th>
                         <th>Estado</th>
                         <th style="text-align:center;">Días entrega</th>
-                        <th style="width:72px;"></th>
+                        <th style="width:200px;text-align:right;">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -154,7 +158,24 @@
                         <td class="num">${{ '{:,.0f}'.format(f.oc.total or 0).replace(',', '.') }}</td>
                         <td><span class="badge-oc {{ f.badge }}">{{ f.estado_label }}</span></td>
                         <td class="num" style="text-align:center;">{% if f.dias_entrega is not none %}{{ f.dias_entrega }}{% else %}—{% endif %}</td>
-                        <td><a class="btn sm outline" href="{{ url_for('oc_clientes.detalle', oid=f.oc.id) }}">Ver</a></td>
+                        <td>
+                            <div class="oc-list-actions">
+                                <a class="btn sm outline" href="{{ url_for('oc_clientes.detalle', oid=f.oc.id) }}">Ver</a>
+                                {% if puede_modificar %}
+                                    {% if f.oc.estado == 'recibida' %}
+                                    <a class="btn sm" href="{{ url_for('oc_clientes.editar', oid=f.oc.id, from='lista') }}">Editar</a>
+                                    <button type="button" class="btn sm danger btn-oc-anular"
+                                            data-oc-num="{{ f.oc.numero_oc }}"
+                                            data-anular-url="{{ url_for('oc_clientes.anular', oid=f.oc.id) }}">Anular</button>
+                                    {% elif f.oc.estado == 'anulada' %}
+                                    <form method="post" action="{{ url_for('oc_clientes.reactivar', oid=f.oc.id) }}" onsubmit="return confirm('¿Reactivar la OC {{ f.oc.numero_oc }}?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <button type="submit" class="btn sm primary">Reactivar</button>
+                                    </form>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </td>
                     </tr>
                     {% else %}
                     <tr><td colspan="7" class="empty">Sin órdenes de compra registradas.</td></tr>
@@ -164,4 +185,8 @@
         </div>
     </div>
 </div>
+
+{% if puede_modificar %}
+{% include 'oc_clientes/_anular_modal.html' %}
+{% endif %}
 {% endblock %}
