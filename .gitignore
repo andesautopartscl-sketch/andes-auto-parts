@@ -18,7 +18,7 @@ env/
 Thumbs.db
 
 # Local databases and generated docs
-data/*.db
+# data/andes.db is tracked intentionally (Render free tier persistence)
 data/*.db-wal
 data/*.db-shm
 data/fts_timing.txt
