@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 from app.utils.decorators import login_required
 from app.extensions import db
+from app.oc_clientes.models import OC_ESTADOS, OC_ESTADO_LABELS
 from app.seguridad.models import Usuario as UsuarioSistema
 from app.utils.finance_visibility import user_can_view_finanzas
 
@@ -20,7 +21,19 @@ from . import ingreso_rapido as mobile_ingreso_rapido
 from . import proveedores as mobile_proveedores
 from . import scan as mobile_scan
 from . import stock_ajuste as mobile_stock_ajuste
+from . import oc_clientes as mobile_oc_clientes
+from . import productos_buscar as mobile_productos_buscar
 from . import venta_rapida as mobile_venta_rapida
+
+
+@mobile_bp.context_processor
+def _mobile_permissions_ctx():
+    user = session.get("user")
+    rol = session.get("rol")
+    return {
+        "puede_ver_oc_clientes": mobile_oc_clientes.puede_ver(user, rol),
+        "puede_mod_oc_clientes": mobile_oc_clientes.puede_modificar(user, rol),
+    }
 
 
 def _puede_ver_finanzas() -> bool:
@@ -73,7 +86,10 @@ def dashboard():
 @login_required
 def buscar():
     q = (request.args.get("q") or "").strip()
-    resultados = mobile_data.buscar_productos(q, limit=30) if q else []
+    puede_precio = _puede_ver_finanzas()
+    resultados = (
+        mobile_productos_buscar.buscar(q, puede_ver_precio=puede_precio, limit=50) if q else []
+    )
     return render_template(
         "mobile/buscar.html",
         q=q,
@@ -96,6 +112,17 @@ def api_catalogo():
     return jsonify(success=True, items=items, count=len(items), synced_at=mobile_data._catalog_sync_ts())
 
 
+@mobile_bp.route("/api/productos/buscar")
+@login_required
+def api_productos_buscar():
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify(success=True, items=[], count=0, query=q)
+    puede_precio = _puede_ver_finanzas()
+    items = mobile_productos_buscar.buscar(q, puede_ver_precio=puede_precio, limit=50)
+    return jsonify(success=True, items=items, count=len(items), query=q)
+
+
 @mobile_bp.route("/api/buscar")
 @login_required
 def api_buscar():
@@ -109,7 +136,8 @@ def api_buscar():
 @mobile_bp.route("/producto/<codigo>")
 @login_required
 def producto(codigo):
-    detalle = mobile_data.producto_detalle(codigo)
+    puede_precio = _puede_ver_finanzas()
+    detalle = mobile_data.producto_detalle(codigo, puede_ver_precio=puede_precio)
     if detalle is None:
         abort(404)
     return render_template("mobile/producto.html", p=detalle, **_nav_ctx("buscar"))
@@ -677,6 +705,130 @@ def ajustes():
     return render_template(
         "mobile/ajustes.html",
         usuario_email=email,
-        pwa_version="v2026.06.05-v16",
+        pwa_version="v2026.07.07-v19",
         **_nav_ctx("mas"),
     )
+
+
+@mobile_bp.route("/oc-clientes")
+@login_required
+def oc_clientes_lista():
+    if not mobile_oc_clientes.puede_ver(session.get("user"), session.get("rol")):
+        abort(403)
+    estado = (request.args.get("estado") or "").strip().lower()
+    q = (request.args.get("q") or "").strip()
+    filas = mobile_oc_clientes.listar_oc(estado=estado, q=q)
+    return render_template(
+        "mobile/oc_clientes_lista.html",
+        filas=filas,
+        estado=estado,
+        q=q,
+        estados=OC_ESTADOS,
+        estado_labels=OC_ESTADO_LABELS,
+        puede_modificar=mobile_oc_clientes.puede_modificar(session.get("user"), session.get("rol")),
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/oc-clientes/nueva")
+@login_required
+def oc_clientes_nueva():
+    if not mobile_oc_clientes.puede_ver(session.get("user"), session.get("rol")):
+        abort(403)
+    puede_mod = mobile_oc_clientes.puede_modificar(session.get("user"), session.get("rol"))
+    return render_template(
+        "mobile/oc_clientes_form.html",
+        puede_modificar=puede_mod,
+        metodo_pago_options=mobile_oc_clientes.metodos_pago_opciones(),
+        url_escanear=url_for("oc_clientes.api_escanear_oc"),
+        url_api_guardar=url_for("mobile.api_oc_clientes_crear"),
+        url_api_buscar=url_for("mobile.api_buscar"),
+        url_api_clientes=url_for("mobile.api_clientes"),
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/oc-clientes/<int:oid>")
+@login_required
+def oc_clientes_detalle(oid: int):
+    if not mobile_oc_clientes.puede_ver(session.get("user"), session.get("rol")):
+        abort(403)
+    detalle = mobile_oc_clientes.detalle_oc(oid)
+    if detalle is None:
+        abort(404)
+    toast_map = {"entregada": "OC marcada como entregada", "pagada": "Pago registrado", "anulada": "OC anulada"}
+    toast_key = (request.args.get("toast") or "").strip().lower()
+    return render_template(
+        "mobile/oc_clientes_detalle.html",
+        oc=detalle,
+        toast_msg=toast_map.get(toast_key, ""),
+        puede_modificar=mobile_oc_clientes.puede_modificar(session.get("user"), session.get("rol")),
+        metodo_pago_options=mobile_oc_clientes.metodos_pago_opciones(),
+        url_entregar=url_for("mobile.api_oc_clientes_entregar", oid=oid),
+        url_pago=url_for("mobile.api_oc_clientes_pago", oid=oid),
+        url_anular=url_for("mobile.api_oc_clientes_anular", oid=oid),
+        **_nav_ctx("mas"),
+    )
+
+
+@mobile_bp.route("/api/oc-clientes", methods=["POST"])
+@login_required
+def api_oc_clientes_crear():
+    if not mobile_oc_clientes.puede_modificar(session.get("user"), session.get("rol")):
+        return jsonify(ok=False, error="Sin permiso para crear OC."), 403
+    payload = request.get_json(silent=True) or {}
+    ok, oc_id, errors = mobile_oc_clientes.crear_oc(payload, session.get("user") or "sistema")
+    if not ok:
+        return jsonify(ok=False, errors=errors), 400
+    return jsonify(ok=True, id=oc_id, redirect=url_for("mobile.oc_clientes_detalle", oid=oc_id))
+
+
+@mobile_bp.route("/api/oc-clientes/<int:oid>/entregar", methods=["POST"])
+@login_required
+def api_oc_clientes_entregar(oid: int):
+    if not mobile_oc_clientes.puede_modificar(session.get("user"), session.get("rol")):
+        return jsonify(ok=False, error="Sin permiso."), 403
+    payload = request.get_json(silent=True) or {}
+    ok, msg = mobile_oc_clientes.marcar_entregada(
+        oid,
+        fecha_entrega_real=payload.get("fecha_entrega_real"),
+        numero_guia_despacho=payload.get("numero_guia_despacho"),
+        descontar_stock=bool(payload.get("descontar_stock")),
+        usuario=session.get("user") or "sistema",
+    )
+    if not ok:
+        return jsonify(ok=False, error=msg), 400
+    return jsonify(ok=True, message=msg, redirect=url_for("mobile.oc_clientes_detalle", oid=oid, toast="entregada"))
+
+
+@mobile_bp.route("/api/oc-clientes/<int:oid>/pago", methods=["POST"])
+@login_required
+def api_oc_clientes_pago(oid: int):
+    if not mobile_oc_clientes.puede_modificar(session.get("user"), session.get("rol")):
+        return jsonify(ok=False, error="Sin permiso."), 403
+    payload = request.get_json(silent=True) or {}
+    ok, msg = mobile_oc_clientes.registrar_pago(
+        oid,
+        numero_factura=payload.get("numero_factura") or "",
+        fecha_pago=payload.get("fecha_pago"),
+        metodo_pago=payload.get("metodo_pago") or "",
+    )
+    if not ok:
+        return jsonify(ok=False, error=msg), 400
+    return jsonify(ok=True, message=msg, redirect=url_for("mobile.oc_clientes_detalle", oid=oid, toast="pagada"))
+
+
+@mobile_bp.route("/api/oc-clientes/<int:oid>/anular", methods=["POST"])
+@login_required
+def api_oc_clientes_anular(oid: int):
+    if not mobile_oc_clientes.puede_modificar(session.get("user"), session.get("rol")):
+        return jsonify(ok=False, error="Sin permiso."), 403
+    payload = request.get_json(silent=True) or {}
+    ok, msg = mobile_oc_clientes.anular_oc(
+        oid,
+        auth_user=payload.get("auth_user") or "",
+        auth_password=payload.get("auth_password") or "",
+    )
+    if not ok:
+        return jsonify(ok=False, error=msg), 400
+    return jsonify(ok=True, message=msg, redirect=url_for("mobile.oc_clientes_detalle", oid=oid, toast="anulada"))

@@ -21,8 +21,11 @@
   <script>
   (function () {
     try {
-      if (localStorage.getItem("andes_mobile_theme") === "1") {
+      var theme = localStorage.getItem("andes_mobile_theme");
+      if (theme === "1") {
         document.documentElement.classList.add("mobile-theme-dark");
+      } else if (theme === "0") {
+        document.documentElement.classList.add("mobile-theme-light");
       }
       document.cookie = "andes_mobile_pwa=1; path=/; max-age=31536000; SameSite=Lax";
     } catch (_e) {}
@@ -35,7 +38,7 @@
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
   data-sw-url="{{ url_for('mobile.service_worker') }}"
-  data-pwa-version="v2026.06.05-v16"
+  data-pwa-version="v2026.07.07-v21"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
     <div class="mobile-splash__content">
@@ -54,7 +57,7 @@
         <span class="mobile-splash__dot"></span>
       </div>
     </div>
-    <span class="mobile-splash__version">v2026.06.05-v16</span>
+    <span class="mobile-splash__version">v2026.07.07-v19</span>
   </div>
 
   <div id="catalog-sync-skeleton" class="catalog-sync-skeleton" hidden aria-hidden="true">
@@ -119,6 +122,16 @@
           </span>
           <span class="m-mas-item__arrow" aria-hidden="true">›</span>
         </a>
+        {% if puede_ver_oc_clientes %}
+        <a href="{{ url_for('mobile.oc_clientes_lista') }}" class="m-mas-item">
+          <span class="m-mas-item__icon m-mas-item__icon--oc" aria-hidden="true">📋</span>
+          <span class="m-mas-item__body">
+            <span class="m-mas-item__title">OC Clientes</span>
+            <span class="m-mas-item__desc">Órdenes de compra cliente</span>
+          </span>
+          <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+        </a>
+        {% endif %}
         <a href="{{ url_for('mobile.stock_critico') }}" class="m-mas-item">
           <span class="m-mas-item__icon m-mas-item__icon--stock" aria-hidden="true">⚠️</span>
           <span class="m-mas-item__body">
@@ -215,24 +228,34 @@
 
   <nav class="mobile-nav" aria-label="Navegación principal">
     <a href="{{ url_for('mobile.home') }}" class="mobile-nav__item{% if active_nav == 'inicio' %} mobile-nav__item--active{% endif %}" aria-label="Inicio">
-      <span class="mobile-nav__icon" aria-hidden="true">&#127968;</span>
+      <span class="mobile-nav__icon" aria-hidden="true">
+        <svg class="mobile-nav__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
+      </span>
       <span class="mobile-nav__label">Inicio</span>
     </a>
     <a href="{{ url_for('mobile.buscar') }}" class="mobile-nav__item{% if active_nav == 'buscar' %} mobile-nav__item--active{% endif %}" aria-label="Buscar">
-      <span class="mobile-nav__icon" aria-hidden="true">&#128269;</span>
+      <span class="mobile-nav__icon" aria-hidden="true">
+        <svg class="mobile-nav__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      </span>
       <span class="mobile-nav__label">Buscar</span>
     </a>
-    <a href="{{ url_for('mobile.escaner') }}" class="mobile-nav__item{% if active_nav == 'escaner' %} mobile-nav__item--active{% endif %}" aria-label="Escáner">
-      <span class="mobile-nav__icon" aria-hidden="true">&#128248;</span>
-      <span class="mobile-nav__label">Escáner</span>
+    <a href="{{ url_for('mobile.escaner') }}" class="mobile-nav__item mobile-nav__item--fab{% if active_nav == 'escaner' %} mobile-nav__item--active{% endif %}" aria-label="Escanear">
+      <span class="mobile-nav__fab" aria-hidden="true">
+        <svg class="mobile-nav__svg mobile-nav__svg--fab" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1-1h2"/><path d="M20 7V5a1 1 0 0 0-1-1h-2"/><path d="M4 17v2a1 1 0 0 0 1 1h2"/><path d="M20 17v2a1 1 0 0 1-1 1h-2"/><rect x="7" y="9" width="10" height="6" rx="1"/></svg>
+      </span>
+      <span class="mobile-nav__label">Escanear</span>
     </a>
     <a href="{{ url_for('mobile.ventas') }}" class="mobile-nav__item{% if active_nav == 'ventas' %} mobile-nav__item--active{% endif %}" aria-label="Ventas">
-      <span class="mobile-nav__icon" aria-hidden="true">&#128176;</span>
+      <span class="mobile-nav__icon" aria-hidden="true">
+        <svg class="mobile-nav__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M7 15h.01"/><path d="M11 15h2"/></svg>
+      </span>
       <span class="mobile-nav__label">Ventas</span>
     </a>
-    <button type="button" class="mobile-nav__item{% if active_nav == 'mas' %} mobile-nav__item--active{% endif %}" id="mobile-mas-toggle" aria-label="Más" aria-expanded="false" aria-controls="mobile-mas-menu">
-      <span class="mobile-nav__icon" aria-hidden="true">&#8942;</span>
-      <span class="mobile-nav__label">Más</span>
+    <button type="button" class="mobile-nav__item{% if active_nav == 'mas' %} mobile-nav__item--active{% endif %}" id="mobile-mas-toggle" aria-label="Menú" aria-expanded="false" aria-controls="mobile-mas-menu">
+      <span class="mobile-nav__icon" aria-hidden="true">
+        <svg class="mobile-nav__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg>
+      </span>
+      <span class="mobile-nav__label">Menú</span>
     </button>
   </nav>
 

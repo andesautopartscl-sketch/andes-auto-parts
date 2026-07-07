@@ -1,0 +1,51 @@
+{% extends "mobile/base.html" %}
+{% block title %}OC Clientes — Andes Mobile{% endblock %}
+{% block content %}
+<section class="m-page-head m-oc-head">
+  <h1 class="m-page-title">OC Clientes</h1>
+  <p class="m-page-sub">Órdenes de compra de clientes</p>
+</section>
+
+<form class="m-search-form" method="get" action="{{ url_for('mobile.oc_clientes_lista') }}" role="search">
+  <input type="search" name="q" class="m-search-input" placeholder="N° OC o factura" value="{{ q }}" autocomplete="off">
+  {% if estado %}<input type="hidden" name="estado" value="{{ estado }}">{% endif %}
+</form>
+
+<div class="m-filter-bar m-oc-filters" role="tablist" aria-label="Filtrar por estado">
+  <a href="{{ url_for('mobile.oc_clientes_lista', q=q) }}" class="m-filter-btn{% if not estado %} m-filter-btn--active{% endif %}" role="tab">Todas</a>
+  {% for e in estados %}
+  <a href="{{ url_for('mobile.oc_clientes_lista', estado=e, q=q) }}" class="m-filter-btn{% if estado == e %} m-filter-btn--active{% endif %}" role="tab">{{ {'recibida':'Recibida','entregada':'Entregada','pagada':'Pagada','anulada':'Anulada'}.get(e, e) }}</a>
+  {% endfor %}
+</div>
+
+<div class="m-oc-list m-pull-zone" data-pull-refresh>
+  {% if filas %}
+  <ul class="m-card-list">
+    {% for f in filas %}
+    <li>
+      <a href="{{ url_for('mobile.oc_clientes_detalle', oid=f.id) }}" class="m-oc-card">
+        <header class="m-oc-card__head">
+          <span class="m-oc-badge m-oc-badge--{{ f.badge }}">{{ f.estado_label }}</span>
+          {% if f.dias_desde_entrega is not none %}
+          <span class="m-oc-card__dias">{{ f.dias_desde_entrega }}d desde entrega</span>
+          {% endif %}
+        </header>
+        <span class="m-oc-card__numero">{{ f.numero_oc }}</span>
+        <span class="m-oc-card__cliente">{{ f.cliente_nombre }}</span>
+        <footer class="m-oc-card__foot">
+          <span class="m-oc-card__fecha">{{ f.fecha_oc_fmt }}</span>
+          <span class="m-oc-card__total">{{ f.total_fmt }}</span>
+        </footer>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="m-empty">{% if q or estado %}Sin órdenes con estos filtros.{% else %}No hay órdenes de compra registradas.{% endif %}</p>
+  {% endif %}
+</div>
+
+{% if puede_modificar %}
+<a href="{{ url_for('mobile.oc_clientes_nueva') }}" class="m-fab" aria-label="Nueva OC">+</a>
+{% endif %}
+{% endblock %}

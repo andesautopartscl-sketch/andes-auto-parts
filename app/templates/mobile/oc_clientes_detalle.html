@@ -1,0 +1,175 @@
+{% extends "mobile/base.html" %}
+{% block title %}OC {{ oc.numero_oc }} — Andes Mobile{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('mobile.oc_clientes_lista') }}" class="m-back" aria-label="Volver">
+  <span aria-hidden="true">&#8592;</span> Volver
+</a>
+
+{% if toast_msg %}
+<div class="m-flash m-flash--ok" role="status">{{ toast_msg }}</div>
+{% endif %}
+
+<section class="m-oc-detail">
+  <header class="m-oc-detail__head">
+    <div>
+      <span class="m-oc-badge m-oc-badge--{{ oc.badge }}">{{ oc.estado_label }}</span>
+      <h1 class="m-oc-detail__title">OC {{ oc.numero_oc }}</h1>
+      <p class="m-oc-detail__cliente">{{ oc.cliente_nombre }}{% if oc.cliente_rut != '—' %} · {{ oc.cliente_rut }}{% endif %}</p>
+    </div>
+    {% if oc.dias_desde_entrega is not none %}
+    <span class="m-oc-card__dias m-oc-card__dias--lg">{{ oc.dias_desde_entrega }} días desde entrega</span>
+    {% endif %}
+  </header>
+
+  <div class="m-kv-card">
+    <h2 class="m-kv-card__title">Datos de la orden</h2>
+    <dl class="m-kv-list">
+      <div class="m-kv-list__row"><dt class="m-kv-list__key">Fecha OC</dt><dd class="m-kv-list__val">{{ oc.fecha_oc_fmt }}</dd></div>
+      {% if oc.fecha_entrega_comprometida_fmt != '—' %}
+      <div class="m-kv-list__row"><dt class="m-kv-list__key">Entrega comprometida</dt><dd class="m-kv-list__val">{{ oc.fecha_entrega_comprometida_fmt }}</dd></div>
+      {% endif %}
+      {% if oc.fecha_entrega_real_fmt != '—' %}
+      <div class="m-kv-list__row"><dt class="m-kv-list__key">Entrega real</dt><dd class="m-kv-list__val">{{ oc.fecha_entrega_real_fmt }}</dd></div>
+      {% endif %}
+      {% if oc.forma_pago %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Forma de pago</dt><dd class="m-kv-list__val">{{ oc.forma_pago }}</dd></div>{% endif %}
+      {% if oc.vendedor %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Vendedor</dt><dd class="m-kv-list__val">{{ oc.vendedor }}</dd></div>{% endif %}
+      {% if oc.direccion_despacho %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Despacho</dt><dd class="m-kv-list__val">{{ oc.direccion_despacho }}</dd></div>{% endif %}
+      {% if oc.numero_guia_despacho %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Guía despacho</dt><dd class="m-kv-list__val">{{ oc.numero_guia_despacho }}</dd></div>{% endif %}
+      {% if oc.numero_factura %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Factura</dt><dd class="m-kv-list__val">{{ oc.numero_factura }}</dd></div>{% endif %}
+      {% if oc.fecha_pago_fmt != '—' %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Fecha pago</dt><dd class="m-kv-list__val">{{ oc.fecha_pago_fmt }}</dd></div>{% endif %}
+      {% if oc.metodo_pago_label and oc.metodo_pago_label != '—' %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Método pago</dt><dd class="m-kv-list__val">{{ oc.metodo_pago_label }}</dd></div>{% endif %}
+      {% if oc.observaciones %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Observaciones</dt><dd class="m-kv-list__val">{{ oc.observaciones }}</dd></div>{% endif %}
+    </dl>
+  </div>
+
+  <section class="m-section">
+    <h2 class="m-section__title">Ítems ({{ oc.items | length }})</h2>
+    <ul class="m-list m-oc-items">
+      {% for it in oc.items %}
+      <li class="m-list-item m-list-item--static m-oc-item">
+        <span class="m-list-item__main">{{ it.codigo_producto or '—' }}</span>
+        <span class="m-list-item__sub">{{ it.descripcion }}{% if it.marca %} · {{ it.marca }}{% endif %}</span>
+        <span class="m-list-item__meta">{{ it.subtotal_fmt }}</span>
+        <span class="m-oc-item__meta">
+          <span class="m-badge{% if it.en_inventario %} m-badge--ok{% endif %}">{% if it.en_inventario %}Inventario{% else %}Fuera inv.{% endif %}</span>
+          <span class="m-oc-item__qty">×{{ it.cantidad }}</span>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <div class="m-totals">
+    <div class="m-totals__row"><span>Neto</span><span>{{ oc.neto_fmt }}</span></div>
+    <div class="m-totals__row"><span>IVA</span><span>{{ oc.iva_fmt }}</span></div>
+    <div class="m-totals__row m-totals__row--total"><span>Total</span><span>{{ oc.total_fmt }}</span></div>
+  </div>
+
+  {% if oc.timeline %}
+  <section class="m-section">
+    <h2 class="m-section__title">Historial</h2>
+    <ul class="m-oc-timeline">
+      {% for ev in oc.timeline %}
+      <li class="m-oc-timeline__item">
+        <strong>{{ ev.titulo }}</strong>
+        <span>{{ ev.fecha_fmt }}{% if ev.detalle %} — {{ ev.detalle }}{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if puede_modificar %}
+  <div class="m-oc-actions" id="m-oc-actions" data-oid="{{ oc.id }}" data-estado="{{ oc.estado }}"
+       data-url-entregar="{{ url_entregar }}"
+       data-url-pago="{{ url_pago }}"
+       data-url-anular="{{ url_anular }}">
+    {% if oc.estado == 'recibida' %}
+    <button type="button" class="m-btn m-btn--primary m-btn--block" id="m-oc-btn-entregar">Marcar entregada</button>
+    <button type="button" class="m-btn m-btn--danger m-btn--block" id="m-oc-btn-anular">Anular OC</button>
+    {% elif oc.estado == 'entregada' %}
+    <button type="button" class="m-btn m-btn--primary m-btn--block" id="m-oc-btn-pago">Registrar pago</button>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+
+<div id="m-oc-modal-entregar" class="m-modal" hidden>
+  <div class="m-modal__backdrop" data-oc-close></div>
+  <div class="m-modal__panel">
+    <h2 class="m-modal__title">Marcar entregada</h2>
+    <label class="m-field">
+      <span class="m-field__label">Fecha entrega real</span>
+      <input type="date" class="m-field__input" id="m-oc-fecha-entrega">
+    </label>
+    <label class="m-field">
+      <span class="m-field__label">N° guía despacho</span>
+      <input type="text" class="m-field__input" id="m-oc-guia" placeholder="Opcional">
+    </label>
+    <label class="m-switch m-switch--in-modal">
+      <span class="m-switch__text">
+        <span class="m-switch__title">Descontar stock</span>
+        <span class="m-switch__desc">Desactivado por defecto</span>
+      </span>
+      <input type="checkbox" id="m-oc-descontar-stock" class="m-switch__input">
+      <span class="m-switch__track" aria-hidden="true"></span>
+    </label>
+    <div class="m-modal__actions">
+      <button type="button" class="m-btn m-btn--secondary" data-oc-close>Cancelar</button>
+      <button type="button" class="m-btn m-btn--primary" id="m-oc-confirm-entregar">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div id="m-oc-modal-pago" class="m-modal" hidden>
+  <div class="m-modal__backdrop" data-oc-close></div>
+  <div class="m-modal__panel">
+    <h2 class="m-modal__title">Registrar pago</h2>
+    <label class="m-field">
+      <span class="m-field__label">N° factura *</span>
+      <input type="text" class="m-field__input" id="m-oc-numero-factura" required placeholder="Obligatorio">
+    </label>
+    <label class="m-field">
+      <span class="m-field__label">Fecha pago</span>
+      <input type="date" class="m-field__input" id="m-oc-fecha-pago">
+    </label>
+    <label class="m-field">
+      <span class="m-field__label">Método de pago</span>
+      <select class="m-field__input" id="m-oc-metodo-pago">
+        {% for val, label in metodo_pago_options %}
+        <option value="{{ val }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="m-modal__actions">
+      <button type="button" class="m-btn m-btn--secondary" data-oc-close>Cancelar</button>
+      <button type="button" class="m-btn m-btn--primary" id="m-oc-confirm-pago">Registrar</button>
+    </div>
+  </div>
+</div>
+
+<div id="m-oc-modal-anular" class="m-modal" hidden>
+  <div class="m-modal__backdrop" data-oc-close></div>
+  <div class="m-modal__panel">
+    <h2 class="m-modal__title">Anular OC</h2>
+    <p class="m-hint">Requiere autorización de un usuario con permiso de gestión OC.</p>
+    <label class="m-field">
+      <span class="m-field__label">Usuario autorizador</span>
+      <input type="text" class="m-field__input" id="m-oc-auth-user" autocomplete="username">
+    </label>
+    <label class="m-field">
+      <span class="m-field__label">Contraseña</span>
+      <input type="password" class="m-field__input" id="m-oc-auth-pass" autocomplete="current-password">
+    </label>
+    <div class="m-modal__actions">
+      <button type="button" class="m-btn m-btn--secondary" data-oc-close>Cancelar</button>
+      <button type="button" class="m-btn m-btn--danger" id="m-oc-confirm-anular">Anular</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='mobile/oc_clientes_detalle.js') }}" defer></script>
+{% endblock %}

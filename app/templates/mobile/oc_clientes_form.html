@@ -1,0 +1,110 @@
+{% extends "mobile/base.html" %}
+{% block title %}Nueva OC — Andes Mobile{% endblock %}
+
+{% block head_extra %}
+<script>
+  window.ANDES_OC_CLIENTES = {
+    puedeModificar: {{ 'true' if puede_modificar else 'false' }},
+    apiGuardar: "{{ url_for('mobile.api_oc_clientes_crear') }}",
+    apiBuscar: "{{ url_for('mobile.api_buscar') }}",
+    apiClientes: "{{ url_for('mobile.api_clientes') }}",
+    urlEscanear: "{{ url_escanear }}",
+    urlLista: "{{ url_for('mobile.oc_clientes_lista') }}"
+  };
+</script>
+{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('mobile.oc_clientes_lista') }}" class="m-back" aria-label="Volver">
+  <span aria-hidden="true">&#8592;</span> Volver
+</a>
+
+<section class="m-page-head">
+  <h1 class="m-page-title">Nueva OC cliente</h1>
+</section>
+
+{% if not puede_modificar %}
+<p class="m-alert m-alert--error">No tienes permiso para crear órdenes de compra.</p>
+{% else %}
+
+<article class="m-oc-form" id="m-oc-form-root" data-puede-modificar="1">
+  <div class="m-oc-scan-zone">
+    <input type="file" id="m-oc-scan-input" accept=".jpg,.jpeg,.png,.pdf,image/*,application/pdf" hidden>
+    <button type="button" class="m-btn m-btn--secondary m-btn--block" id="m-oc-scan-btn">
+      📷 Escanear OC
+    </button>
+    <p class="m-hint" id="m-oc-scan-status" hidden></p>
+    <div id="m-oc-scan-skeleton" class="m-skeleton-list" hidden aria-hidden="true">
+      <div class="m-skeleton m-skeleton--card"></div>
+      <div class="m-skeleton m-skeleton--row"></div>
+    </div>
+  </div>
+
+  <section class="m-settings__card m-oc-form__section">
+    <h2 class="m-settings__title">Cliente</h2>
+    <label class="m-field">
+      <span class="m-field__label">Buscar por RUT o nombre</span>
+      <input type="search" class="m-field__input" id="m-oc-cliente-q" placeholder="12.345.678-9" autocomplete="off">
+    </label>
+    <div id="m-oc-clientes-list" class="m-card-select-list"></div>
+    <input type="hidden" id="m-oc-cliente-id" value="0">
+    <p class="m-hint" id="m-oc-cliente-seleccionado">Ningún cliente seleccionado</p>
+  </section>
+
+  <section class="m-settings__card m-oc-form__section">
+    <h2 class="m-settings__title">Datos OC</h2>
+    <label class="m-field">
+      <span class="m-field__label">N° OC *</span>
+      <input type="text" class="m-field__input" id="m-oc-numero" required>
+    </label>
+    <label class="m-field">
+      <span class="m-field__label">Fecha OC *</span>
+      <input type="date" class="m-field__input" id="m-oc-fecha">
+    </label>
+    <label class="m-field">
+      <span class="m-field__label">Entrega comprometida</span>
+      <input type="date" class="m-field__input" id="m-oc-fecha-entrega">
+    </label>
+    <label class="m-field">
+      <span class="m-field__label">Forma de pago</span>
+      <input type="text" class="m-field__input" id="m-oc-forma-pago" placeholder="Ej: 30 días">
+    </label>
+    <label class="m-field">
+      <span class="m-field__label">Vendedor</span>
+      <input type="text" class="m-field__input" id="m-oc-vendedor">
+    </label>
+    <label class="m-field">
+      <span class="m-field__label">Dirección despacho</span>
+      <input type="text" class="m-field__input" id="m-oc-direccion">
+    </label>
+    <label class="m-field">
+      <span class="m-field__label">Observaciones</span>
+      <textarea class="m-field__input" id="m-oc-observaciones" rows="2"></textarea>
+    </label>
+  </section>
+
+  <section class="m-settings__card m-oc-form__section">
+    <h2 class="m-settings__title">Ítems</h2>
+    <label class="m-field">
+      <span class="m-field__label">Buscar producto o escribir código</span>
+      <input type="search" class="m-field__input" id="m-oc-producto-q" placeholder="Código o descripción" autocomplete="off">
+    </label>
+    <div id="m-oc-productos-list" class="m-card-select-list"></div>
+    <button type="button" class="m-btn m-btn--secondary m-btn--block" id="m-oc-add-libre">+ Ítem texto libre</button>
+    <ul class="m-cart" id="m-oc-items"></ul>
+    <p class="m-empty" id="m-oc-items-empty">Agrega ítems buscando o con texto libre.</p>
+    <div class="m-totals">
+      <div class="m-totals__row"><span>Neto</span><span id="m-oc-neto">$0</span></div>
+      <div class="m-totals__row"><span>IVA (19%)</span><span id="m-oc-iva">$0</span></div>
+      <div class="m-totals__row m-totals__row--total"><span>Total</span><span id="m-oc-total">$0</span></div>
+    </div>
+  </section>
+
+  <button type="button" class="m-btn m-btn--primary m-btn--block m-btn--lg" id="m-oc-guardar" disabled>Guardar OC</button>
+</article>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='mobile/oc_clientes.js') }}" defer></script>
+{% endblock %}
