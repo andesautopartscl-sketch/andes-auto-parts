@@ -40,6 +40,7 @@
 
   function applyTheme(dark) {
     document.documentElement.classList.toggle("mobile-theme-dark", !!dark);
+    document.documentElement.classList.toggle("mobile-theme-light", !dark);
     document.body.classList.toggle("mobile-app--dark", !!dark);
   }
 

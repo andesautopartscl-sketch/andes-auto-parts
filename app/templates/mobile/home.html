@@ -9,25 +9,43 @@
     <h1 class="m-home__name">{{ usuario_nombre or 'Usuario' }}</h1>
   </header>
 
-  <a href="{{ url_for('mobile.dashboard') }}" class="m-home-kpi m-home-kpi--link m-home-animate" style="--delay: 0ms">
-    <div class="m-home-kpi__chips">
-      <div class="m-home-kpi__chip">
-        <span class="m-home-kpi__chip-label">Ventas hoy</span>
-        <span class="m-home-kpi__chip-value">{{ kpis.ventas_hoy_count }}</span>
-        <span class="m-home-kpi__chip-sub">{{ kpis.ventas_hoy_monto_fmt }}</span>
-      </div>
-      <div class="m-home-kpi__chip">
-        <span class="m-home-kpi__chip-label">Ingresos hoy</span>
-        <span class="m-home-kpi__chip-value">{{ kpis.ingresos_hoy_count }}</span>
-        <span class="m-home-kpi__chip-sub">{{ kpis.ingresos_hoy_monto_fmt }}</span>
-      </div>
-      <div class="m-home-kpi__chip{% if kpis.stock_critico_count > 0 %} m-home-kpi__chip--alert{% endif %}">
-        <span class="m-home-kpi__chip-label">Stock crítico</span>
-        <span class="m-home-kpi__chip-value">{{ kpis.stock_critico_count }}</span>
-        <span class="m-home-kpi__chip-sub">productos</span>
-      </div>
-    </div>
-  </a>
+  <section class="m-home-kpis m-home-animate" style="--delay: 0ms" aria-label="Indicadores del día">
+    <a href="{{ url_for('mobile.dashboard') }}" class="m-home-kpi-card">
+      <span class="m-home-kpi-card__icon m-home-kpi-card__icon--sales" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </span>
+      <span class="m-home-kpi-card__body">
+        <span class="m-home-kpi-card__label">Ventas hoy</span>
+        <span class="m-home-kpi-card__value">{{ kpis.ventas_hoy_count }}</span>
+        <span class="m-home-kpi-card__sub">{{ kpis.ventas_hoy_monto_fmt }}</span>
+      </span>
+      <span class="m-home-kpi-card__trend m-home-kpi-card__trend--day">Hoy</span>
+    </a>
+    <a href="{{ url_for('mobile.ingresos') }}" class="m-home-kpi-card">
+      <span class="m-home-kpi-card__icon m-home-kpi-card__icon--ingresos" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V8"/><path d="m5 12 7-7 7 7"/><rect x="3" y="3" width="18" height="5" rx="1"/></svg>
+      </span>
+      <span class="m-home-kpi-card__body">
+        <span class="m-home-kpi-card__label">Ingresos hoy</span>
+        <span class="m-home-kpi-card__value">{{ kpis.ingresos_hoy_count }}</span>
+        <span class="m-home-kpi-card__sub">{{ kpis.ingresos_hoy_monto_fmt }}</span>
+      </span>
+      <span class="m-home-kpi-card__trend m-home-kpi-card__trend--day">Hoy</span>
+    </a>
+    <a href="{{ url_for('mobile.stock_critico') }}" class="m-home-kpi-card{% if kpis.stock_critico_count > 0 %} m-home-kpi-card--alert{% endif %}">
+      <span class="m-home-kpi-card__icon m-home-kpi-card__icon--alert" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      </span>
+      <span class="m-home-kpi-card__body">
+        <span class="m-home-kpi-card__label">Stock crítico</span>
+        <span class="m-home-kpi-card__value">{{ kpis.stock_critico_count }}</span>
+        <span class="m-home-kpi-card__sub">productos</span>
+      </span>
+      <span class="m-home-kpi-card__trend{% if kpis.stock_critico_count > 0 %} m-home-kpi-card__trend--warn{% else %} m-home-kpi-card__trend--ok{% endif %}">
+        {% if kpis.stock_critico_count > 0 %}Revisar{% else %}OK{% endif %}
+      </span>
+    </a>
+  </section>
 
   <section class="m-home-grid m-home-grid--12" aria-label="Accesos rápidos">
     <a href="{{ url_for('mobile.dashboard') }}" class="m-home-card m-home-animate" style="--delay: 40ms">

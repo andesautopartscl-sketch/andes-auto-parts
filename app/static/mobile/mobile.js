@@ -139,23 +139,40 @@
       var html = '<ul class="m-card-list">';
       items.forEach(function (r) {
         var href = "/m/producto/" + encodeURIComponent(r.codigo || "");
+        var thumb = r.imagen
+          ? '<img src="' + escapeHtml(r.imagen) + '" alt="" class="m-result-card__thumb" width="56" height="56" loading="lazy" decoding="async">'
+          : '<span class="m-result-card__thumb m-result-card__thumb--empty" aria-hidden="true">📦</span>';
+        var matchBadge = r.match_en
+          ? '<span class="m-result-card__match">' + escapeHtml(r.match_en) + "</span>"
+          : "";
+        var meta = r.meta_linea
+          ? '<span class="m-result-card__meta">' + escapeHtml(r.meta_linea) + "</span>"
+          : "";
         html +=
           '<li><a href="' +
           href +
-          '" class="m-result-card">' +
+          '" class="m-result-card m-result-card--rich">' +
+          '<div class="m-result-card__media">' +
+          thumb +
+          "</div>" +
+          '<div class="m-result-card__body">' +
+          '<div class="m-result-card__head">' +
           '<span class="m-result-card__code">' +
           escapeHtml(r.codigo || "") +
           "</span>" +
+          matchBadge +
+          "</div>" +
           '<span class="m-result-card__desc">' +
           escapeHtml(r.descripcion || "") +
           "</span>" +
+          meta +
           '<div class="m-result-card__footer">' +
           '<span class="m-badge">Stock ' +
           escapeHtml(String(r.stock != null ? r.stock : 0)) +
           "</span>" +
           '<span class="m-result-card__price">' +
           escapeHtml(r.precio_fmt || "—") +
-          "</span></div></a></li>";
+          "</span></div></div></a></li>";
       });
       html += "</ul>";
       results.innerHTML = html;
@@ -184,7 +201,7 @@
 
     function fetchLocal(q) {
       if (!window.AndesOfflineDb) return Promise.resolve([]);
-      return AndesOfflineDb.searchLocal(q, 30);
+      return AndesOfflineDb.searchLocal(q, 50);
     }
 
     function normalizeLocalItem(row) {
@@ -193,6 +210,9 @@
         descripcion: row.descripcion,
         stock: row.stock,
         precio_fmt: row.precio_fmt || "—",
+        imagen: row.imagen || "",
+        meta_linea: row.meta_linea || "",
+        match_en: row.match_en || "",
       };
     }
 
@@ -270,8 +290,20 @@
     if (!zones.length || !("ontouchstart" in window)) return;
 
     zones.forEach(function (zone) {
+      if (!zone.classList.contains("m-pull-zone")) {
+        zone.classList.add("m-pull-zone");
+      }
       var startY = 0;
       var pulling = false;
+      var indicator = document.createElement("div");
+      indicator.className = "m-pull-indicator";
+      indicator.setAttribute("aria-hidden", "true");
+      indicator.innerHTML =
+        '<span class="m-pull-indicator__icon">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>' +
+        "</span>" +
+        '<span class="m-pull-indicator__text">Suelta para actualizar</span>';
+      zone.insertBefore(indicator, zone.firstChild);
 
       zone.addEventListener(
         "touchstart",
@@ -279,6 +311,8 @@
           if (window.scrollY > 8) return;
           startY = e.touches[0].clientY;
           pulling = true;
+          zone.classList.remove("m-pull-ready");
+          zone.classList.remove("m-pull-active");
         },
         { passive: true }
       );
@@ -288,6 +322,14 @@
         function (e) {
           if (!pulling) return;
           var dy = e.touches[0].clientY - startY;
+          if (dy <= 0) {
+            zone.classList.remove("m-pull-active");
+            zone.classList.remove("m-pull-ready");
+            return;
+          }
+          zone.classList.add("m-pull-active");
+          var progress = Math.min(dy / 80, 1);
+          indicator.style.setProperty("--pull-progress", String(progress));
           if (dy > 72) zone.classList.add("m-pull-ready");
           else zone.classList.remove("m-pull-ready");
         },
@@ -296,9 +338,11 @@
 
       zone.addEventListener("touchend", function () {
         if (zone.classList.contains("m-pull-ready")) {
+          zone.classList.add("m-pull-loading");
           zone.classList.remove("m-pull-ready");
           window.location.reload();
         }
+        zone.classList.remove("m-pull-active");
         pulling = false;
       });
     });
@@ -525,9 +569,13 @@
 
   function initMobileTheme() {
     try {
-      var dark = localStorage.getItem("andes_mobile_theme") === "1";
-      document.body.classList.toggle("mobile-app--dark", dark);
-      document.documentElement.classList.toggle("mobile-theme-dark", dark);
+      var theme = localStorage.getItem("andes_mobile_theme");
+      if (theme === "1") {
+        document.body.classList.add("mobile-app--dark");
+        document.documentElement.classList.add("mobile-theme-dark");
+      } else if (theme === "0") {
+        document.documentElement.classList.add("mobile-theme-light");
+      }
     } catch (_e) {}
   }
 

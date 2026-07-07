@@ -11,25 +11,49 @@
   <h1 class="m-page-title">Dashboard del día</h1>
 </section>
 
-<div class="m-kpi-grid" data-pull-refresh>
-  <article class="m-kpi-card">
-    <span class="m-kpi-card__label">Ventas hoy</span>
-    <span class="m-kpi-card__value">{{ data.ventas_hoy_count }}</span>
-    <span class="m-kpi-card__meta">{{ data.ventas_hoy_monto_fmt }}</span>
+<div class="m-kpi-grid m-pull-zone" data-pull-refresh>
+  <article class="m-kpi-card m-kpi-card--v2">
+    <span class="m-kpi-card__icon m-kpi-card__icon--sales" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    </span>
+    <div class="m-kpi-card__content">
+      <span class="m-kpi-card__label">Ventas hoy</span>
+      <span class="m-kpi-card__value">{{ data.ventas_hoy_count }}</span>
+      <span class="m-kpi-card__meta">{{ data.ventas_hoy_monto_fmt }}</span>
+    </div>
+    <span class="m-kpi-card__trend">Hoy</span>
   </article>
-  <article class="m-kpi-card">
-    <span class="m-kpi-card__label">Ingresos hoy</span>
-    <span class="m-kpi-card__value">{{ data.ingresos_hoy_count }}</span>
-    <span class="m-kpi-card__meta">{{ data.ingresos_hoy_monto_fmt }}</span>
+  <article class="m-kpi-card m-kpi-card--v2">
+    <span class="m-kpi-card__icon m-kpi-card__icon--ingresos" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V8"/><path d="m5 12 7-7 7 7"/></svg>
+    </span>
+    <div class="m-kpi-card__content">
+      <span class="m-kpi-card__label">Ingresos hoy</span>
+      <span class="m-kpi-card__value">{{ data.ingresos_hoy_count }}</span>
+      <span class="m-kpi-card__meta">{{ data.ingresos_hoy_monto_fmt }}</span>
+    </div>
+    <span class="m-kpi-card__trend">Hoy</span>
   </article>
-  <article class="m-kpi-card m-kpi-card--alert">
-    <span class="m-kpi-card__label">Stock crítico</span>
-    <span class="m-kpi-card__value">{{ data.stock_critico_count }}</span>
-    <a href="{{ url_for('mobile.stock_critico') }}" class="m-kpi-card__link">Ver lista</a>
+  <article class="m-kpi-card m-kpi-card--v2 m-kpi-card--alert">
+    <span class="m-kpi-card__icon m-kpi-card__icon--alert" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/></svg>
+    </span>
+    <div class="m-kpi-card__content">
+      <span class="m-kpi-card__label">Stock crítico</span>
+      <span class="m-kpi-card__value">{{ data.stock_critico_count }}</span>
+      <a href="{{ url_for('mobile.stock_critico') }}" class="m-kpi-card__link">Ver lista</a>
+    </div>
+    <span class="m-kpi-card__trend m-kpi-card__trend--warn">Alerta</span>
   </article>
-  <article class="m-kpi-card">
-    <span class="m-kpi-card__label">Productos catálogo</span>
-    <span class="m-kpi-card__value">{{ data.productos_total }}</span>
+  <article class="m-kpi-card m-kpi-card--v2">
+    <span class="m-kpi-card__icon m-kpi-card__icon--catalog" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+    </span>
+    <div class="m-kpi-card__content">
+      <span class="m-kpi-card__label">Productos catálogo</span>
+      <span class="m-kpi-card__value">{{ data.productos_total }}</span>
+    </div>
+    <span class="m-kpi-card__trend m-kpi-card__trend--ok">Total</span>
   </article>
 </div>
 

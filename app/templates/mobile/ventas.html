@@ -13,7 +13,7 @@
   <a href="{{ url_for('mobile.ventas', periodo='semana') }}" class="m-filter-btn{% if periodo == 'semana' %} m-filter-btn--active{% endif %}" role="tab">Semana</a>
 </div>
 
-<div data-pull-refresh>
+<div class="m-pull-zone" data-pull-refresh>
   {% if ventas %}
   <ul class="m-list">
     {% for v in ventas %}

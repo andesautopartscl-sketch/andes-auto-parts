@@ -19,6 +19,9 @@ Thumbs.db
 
 # Local databases and generated docs
 data/*.db
+data/*.db-wal
+data/*.db-shm
+data/fts_timing.txt
 data/public_docs/
 data/chat_uploads/
 data/usuarios_fotos/
@@ -28,6 +31,12 @@ data/gdrive_token.json
 data/google_service_account.json
 data/.flask_secret_key
 data/gdrive_backup_status.json
+
+# Local logs and debug scratch
+logs/
+debug_ali_ocr.txt
+scripts/_*
+scripts/test_ocr_sample.txt
 
 # Large local catalog/assets not required for deploy
 SAIC EPC/
