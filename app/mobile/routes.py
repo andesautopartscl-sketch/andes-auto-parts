@@ -53,6 +53,32 @@ def _saludo_hora() -> str:
     return "Buenas noches"
 
 
+def _nombre_presentable() -> str:
+    """Primer nombre legible para saludo en Home (no el username técnico)."""
+    uid = session.get("usuario_id")
+    if uid:
+        try:
+            u = db.session.get(UsuarioSistema, int(uid))
+            if u and (u.nombre or "").strip():
+                return (u.nombre or "").strip().split()[0].capitalize()
+        except (TypeError, ValueError):
+            pass
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return "Usuario"
+
+    base = username.lower()
+    for suffix in ("superadmin", "admin", "user", "usr"):
+        if base.endswith(suffix) and len(base) > len(suffix) + 1:
+            base = base[: -len(suffix)]
+            break
+    base = base.strip("._-")
+    if base:
+        return base.capitalize()
+    return username.capitalize()
+
+
 @mobile_bp.route("/service-worker.js")
 def service_worker():
     """SW con scope /m/ — exento del login wall vía login_wall.py."""
@@ -71,6 +97,7 @@ def home():
         "mobile/home.html",
         kpis=kpis,
         saludo=_saludo_hora(),
+        nombre_presentable=_nombre_presentable(),
         **_nav_ctx("inicio"),
     )
 

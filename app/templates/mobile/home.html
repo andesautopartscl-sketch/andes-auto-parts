@@ -5,8 +5,8 @@
 {% block content %}
 <section class="m-home">
   <header class="m-home__greeting">
-    <p class="m-home__saludo">{{ saludo }} 👋</p>
-    <h1 class="m-home__name">{{ usuario_nombre or 'Usuario' }}</h1>
+    <p class="m-home__saludo">{{ saludo }}</p>
+    <h1 class="m-home__name">{{ nombre_presentable or 'Usuario' }} <span class="m-home__wave" aria-hidden="true">👋</span></h1>
   </header>
 
   <section class="m-home-kpis m-home-animate" style="--delay: 0ms" aria-label="Indicadores del día">
@@ -49,62 +49,86 @@
 
   <section class="m-home-grid m-home-grid--12" aria-label="Accesos rápidos">
     <a href="{{ url_for('mobile.dashboard') }}" class="m-home-card m-home-animate" style="--delay: 40ms">
-      <span class="m-home-card__icon m-home-card__icon--purple" aria-hidden="true">📊</span>
+      <span class="m-home-card__icon m-home-card__icon--purple" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 16v-5"/><path d="M12 16V8"/><path d="M17 16v-9"/></svg>
+      </span>
       <span class="m-home-card__title">Dashboard</span>
       <span class="m-home-card__desc">Resumen del día</span>
     </a>
     <a href="{{ url_for('mobile.buscar') }}" class="m-home-card m-home-animate" style="--delay: 80ms">
-      <span class="m-home-card__icon m-home-card__icon--blue" aria-hidden="true">🔍</span>
+      <span class="m-home-card__icon m-home-card__icon--blue" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      </span>
       <span class="m-home-card__title">Buscar</span>
       <span class="m-home-card__desc">Código o descripción</span>
     </a>
     <a href="{{ url_for('mobile.escaner') }}" class="m-home-card m-home-animate" style="--delay: 120ms">
-      <span class="m-home-card__icon m-home-card__icon--green" aria-hidden="true">📷</span>
+      <span class="m-home-card__icon m-home-card__icon--green" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1-1h2"/><path d="M20 7V5a1 1 0 0 0-1-1h-2"/><path d="M4 17v2a1 1 0 0 0 1 1h2"/><path d="M20 17v2a1 1 0 0 1-1 1h-2"/><rect x="7" y="9" width="10" height="6" rx="1"/></svg>
+      </span>
       <span class="m-home-card__title">Escáner</span>
       <span class="m-home-card__desc">QR y barras</span>
     </a>
     <a href="{{ url_for('mobile.ventas') }}" class="m-home-card m-home-animate" style="--delay: 160ms">
-      <span class="m-home-card__icon m-home-card__icon--navy" aria-hidden="true">💰</span>
+      <span class="m-home-card__icon m-home-card__icon--navy" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M7 15h.01"/><path d="M11 15h2"/></svg>
+      </span>
       <span class="m-home-card__title">Ventas</span>
       <span class="m-home-card__desc">Hoy o semana</span>
     </a>
     <a href="{{ url_for('mobile.ingresos') }}" class="m-home-card m-home-animate" style="--delay: 200ms">
-      <span class="m-home-card__icon m-home-card__icon--teal" aria-hidden="true">📥</span>
+      <span class="m-home-card__icon m-home-card__icon--teal" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M4 21h16"/></svg>
+      </span>
       <span class="m-home-card__title">Ingresos</span>
       <span class="m-home-card__desc">Historial compras</span>
     </a>
     <a href="{{ url_for('mobile.stock_critico') }}" class="m-home-card m-home-animate" style="--delay: 240ms">
-      <span class="m-home-card__icon m-home-card__icon--yellow" aria-hidden="true">⚠️</span>
+      <span class="m-home-card__icon m-home-card__icon--yellow" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      </span>
       <span class="m-home-card__title">Stock crítico</span>
       <span class="m-home-card__desc">Bajo mínimo</span>
     </a>
     <a href="{{ url_for('mobile.venta_rapida') }}" class="m-home-card m-home-animate" style="--delay: 280ms" data-requires-online>
-      <span class="m-home-card__icon m-home-card__icon--red" aria-hidden="true">💳</span>
+      <span class="m-home-card__icon m-home-card__icon--red" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M7 15h.01"/><path d="M11 15h2"/></svg>
+      </span>
       <span class="m-home-card__title">Venta rápida</span>
       <span class="m-home-card__desc">Boleta o factura</span>
     </a>
     <a href="{{ url_for('mobile.ingreso_rapido') }}" class="m-home-card m-home-animate" style="--delay: 320ms" data-requires-online>
-      <span class="m-home-card__icon m-home-card__icon--indigo" aria-hidden="true">📦</span>
+      <span class="m-home-card__icon m-home-card__icon--indigo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg>
+      </span>
       <span class="m-home-card__title">Ingreso rápido</span>
       <span class="m-home-card__desc">Compra en 3 pasos</span>
     </a>
     <a href="{{ url_for('mobile.etiquetas') }}" class="m-home-card m-home-animate" style="--delay: 360ms">
-      <span class="m-home-card__icon m-home-card__icon--orange" aria-hidden="true">🏷️</span>
+      <span class="m-home-card__icon m-home-card__icon--orange" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.41 0l6.59-6.59a1 1 0 0 0 0-1.41L12 2Z"/><path d="M7 7h.01"/></svg>
+      </span>
       <span class="m-home-card__title">Etiquetas</span>
       <span class="m-home-card__desc">Imprimir QR/barras</span>
     </a>
     <a href="{{ url_for('mobile.clientes') }}" class="m-home-card m-home-animate" style="--delay: 400ms">
-      <span class="m-home-card__icon m-home-card__icon--sky" aria-hidden="true">👥</span>
+      <span class="m-home-card__icon m-home-card__icon--sky" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </span>
       <span class="m-home-card__title">Clientes</span>
       <span class="m-home-card__desc">Gestión móvil</span>
     </a>
     <a href="{{ url_for('mobile.proveedores') }}" class="m-home-card m-home-animate" style="--delay: 440ms">
-      <span class="m-home-card__icon m-home-card__icon--lime" aria-hidden="true">🚚</span>
+      <span class="m-home-card__icon m-home-card__icon--lime" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18h2"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+      </span>
       <span class="m-home-card__title">Proveedores</span>
       <span class="m-home-card__desc">Compras y homolog.</span>
     </a>
     <a href="{{ url_for('mobile.reportes') }}" class="m-home-card m-home-animate" style="--delay: 480ms">
-      <span class="m-home-card__icon m-home-card__icon--pink" aria-hidden="true">📈</span>
+      <span class="m-home-card__icon m-home-card__icon--pink" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+      </span>
       <span class="m-home-card__title">Reportes</span>
       <span class="m-home-card__desc">Rankings y mes</span>
     </a>
@@ -114,6 +138,8 @@
     <h2 class="m-home-recent__title">Accesos recientes</h2>
     <ul class="m-home-recent__list" id="m-home-recent-list"></ul>
   </section>
+
+  <p class="m-home-version" id="mobile-version-badge" aria-hidden="true"></p>
 </section>
 {% endblock %}
 

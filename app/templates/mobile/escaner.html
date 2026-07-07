@@ -33,41 +33,54 @@
   </div>
 
   <div class="m-scanner__stage">
-    <p class="m-scanner__status" id="scanner-detecting" hidden>Detectando…</p>
     <div class="m-scanner__viewport">
-    <div id="qr-reader" class="m-scanner__reader" aria-label="Vista de cámara"></div>
-    <div class="m-scanner__overlay" aria-hidden="true">
-      <div class="m-scanner__viewfinder m-scanner__frame{% if modo_inicial == 'qr' %} m-scanner__frame--qr{% elif modo_inicial == 'barcode' %} m-scanner__frame--barcode{% endif %}">
-        <span class="m-scanner__corner m-scanner__corner--tl"></span>
-        <span class="m-scanner__corner m-scanner__corner--tr"></span>
-        <span class="m-scanner__corner m-scanner__corner--bl"></span>
-        <span class="m-scanner__corner m-scanner__corner--br"></span>
-        <span class="m-scanner__scanline"></span>
+      <div id="qr-reader" class="m-scanner__reader" aria-label="Vista de cámara"></div>
+      <div class="m-scanner__overlay" aria-hidden="true">
+        <div class="m-scanner__overlay-inner">
+          <div class="m-scanner__viewfinder m-scanner__frame{% if modo_inicial == 'qr' %} m-scanner__frame--qr{% elif modo_inicial == 'barcode' %} m-scanner__frame--barcode{% endif %}">
+            <span class="m-scanner__corner m-scanner__corner--tl"></span>
+            <span class="m-scanner__corner m-scanner__corner--tr"></span>
+            <span class="m-scanner__corner m-scanner__corner--bl"></span>
+            <span class="m-scanner__corner m-scanner__corner--br"></span>
+            <span class="m-scanner__scanline"></span>
+          </div>
+          <div class="m-scanner__chip" id="scanner-detecting" hidden role="status" aria-live="polite">
+            <span class="m-scanner__chip-label">Detectando</span>
+            <span class="m-scanner__chip-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+          </div>
+          <div class="m-scanner__chip m-scanner__chip--success" id="scanner-detected-chip" hidden role="status">
+            <span class="m-scanner__chip-ok" aria-hidden="true">✓</span>
+            <span>Código detectado</span>
+          </div>
+          <button type="button" class="m-scanner-fab m-scanner-fab--torch m-scanner-fab--overlay" id="scanner-torch-btn" hidden disabled title="Linterna" aria-label="Linterna">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+          </button>
+        </div>
       </div>
-    </div>
-    <div id="scanner-success" class="m-scanner__success" hidden aria-hidden="true">
-      <span class="m-scanner__success-icon">✓</span>
-    </div>
-    <div id="scanner-permission-denied" class="m-scanner__denied" hidden>
-      <p class="m-scanner__denied-title">No se pudo acceder a la cámara</p>
-      <p class="m-scanner__denied-text">Permite el acceso a la cámara en la configuración del navegador.</p>
-      <p class="m-scanner__denied-detail" id="scanner-error-detail"></p>
-      <button type="button" class="m-btn m-btn--primary" id="scanner-retry-btn">Reintentar</button>
-    </div>
+      <div id="scanner-success" class="m-scanner__success" hidden aria-hidden="true">
+        <span class="m-scanner__success-icon">✓</span>
+      </div>
+      <div id="scanner-permission-denied" class="m-scanner__denied" hidden>
+        <p class="m-scanner__denied-title">No se pudo acceder a la cámara</p>
+        <p class="m-scanner__denied-text">Permite el acceso a la cámara en la configuración del navegador.</p>
+        <p class="m-scanner__denied-detail" id="scanner-error-detail"></p>
+        <button type="button" class="m-btn m-btn--primary" id="scanner-retry-btn">Reintentar</button>
+      </div>
     </div>
   </div>
 
   <div class="m-scanner__float-actions">
-    <button type="button" class="m-scanner-fab m-scanner-fab--torch" id="scanner-torch-btn" hidden disabled title="Linterna" aria-label="Linterna">
-      <span aria-hidden="true">&#128161;</span>
-    </button>
     <button type="button" class="m-scanner-fab" id="scanner-switch-btn" title="Cambiar cámara" aria-label="Cambiar cámara">
-      <span aria-hidden="true">&#128247;</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
     </button>
     {% if modo_inicial == 'venta' %}
-    <a href="{{ url_for('mobile.venta_rapida') }}?step=2" class="m-scanner-fab m-scanner-fab--ok" id="scanner-listo-btn" title="Listo">&#10003;</a>
+    <a href="{{ url_for('mobile.venta_rapida') }}?step=2" class="m-scanner-fab m-scanner-fab--ok" id="scanner-listo-btn" title="Listo" aria-label="Listo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+    </a>
     {% elif modo_inicial == 'ingreso' %}
-    <a href="{{ url_for('mobile.ingreso_rapido') }}?step=2" class="m-scanner-fab m-scanner-fab--ok" id="scanner-listo-btn" title="Listo">&#10003;</a>
+    <a href="{{ url_for('mobile.ingreso_rapido') }}?step=2" class="m-scanner-fab m-scanner-fab--ok" id="scanner-listo-btn" title="Listo" aria-label="Listo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+    </a>
     {% endif %}
   </div>
 </div>

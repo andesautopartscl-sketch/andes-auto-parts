@@ -35,7 +35,7 @@
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
   data-sw-url="{{ url_for('mobile.service_worker') }}"
-  data-pwa-version="v2026.07.07-v25"
+  data-pwa-version="v2026.07.07-v26"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
     <div class="mobile-splash__bg" aria-hidden="true">
@@ -58,7 +58,7 @@
         <div class="mobile-splash__progress-fill" id="mobile-splash-progress"></div>
       </div>
     </div>
-    <span class="mobile-splash__version">v2026.07.07-v25</span>
+    <span class="mobile-splash__version">v2026.07.07-v26</span>
   </div>
 
   <div id="catalog-sync-skeleton" class="catalog-sync-skeleton" hidden aria-hidden="true">
@@ -232,8 +232,6 @@
       <button type="button" class="m-mas-menu__close" data-mas-close>Cerrar</button>
     </nav>
   </div>
-
-  <span id="mobile-version-badge" class="mobile-version-badge" aria-hidden="true"></span>
 
   <div id="mobile-toast" class="m-toast" role="alert" aria-live="assertive" hidden></div>
 

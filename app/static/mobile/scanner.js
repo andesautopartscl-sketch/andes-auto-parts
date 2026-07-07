@@ -39,6 +39,7 @@
 
   var hintEl = document.getElementById("scanner-hint");
   var detectingEl = document.getElementById("scanner-detecting");
+  var detectedChipEl = document.getElementById("scanner-detected-chip");
   var successEl = document.getElementById("scanner-success");
   var toastEl = document.getElementById("mobile-toast");
   var deniedEl = document.getElementById("scanner-permission-denied");
@@ -160,21 +161,31 @@
   }
 
   function setDetecting(on) {
+    root.classList.toggle("m-scanner--detecting", !!on);
+    if (frameEl) {
+      frameEl.classList.toggle("m-scanner__frame--scanning", !!on);
+    }
     if (!detectingEl) return;
     detectingEl.hidden = !on;
-    detectingEl.classList.toggle("m-scanner__status--active", !!on);
+    if (detectedChipEl) detectedChipEl.hidden = true;
   }
 
   function showSuccessThen(fn) {
-    if (!successEl) {
-      fn();
-      return;
+    root.classList.remove("m-scanner--detecting");
+    root.classList.add("m-scanner--success");
+    if (frameEl) {
+      frameEl.classList.remove("m-scanner__frame--scanning");
+      frameEl.classList.add("m-scanner__frame--success");
     }
-    successEl.hidden = false;
-    successEl.classList.add("m-scanner__success--visible");
+    if (detectingEl) detectingEl.hidden = true;
+    if (detectedChipEl) detectedChipEl.hidden = false;
+    if (successEl) {
+      successEl.hidden = false;
+      successEl.classList.add("m-scanner__success--visible");
+    }
     window.setTimeout(function () {
       fn();
-    }, 480);
+    }, 520);
   }
 
   function updateHint() {
@@ -411,15 +422,16 @@
   }
 
   function toggleTorch() {
-    if (!torchSupported) {
-      showToast("Tu dispositivo no soporta linterna");
-      return;
-    }
-    applyTorchState()
-      .catch(function (err) {
-        debugError("toggleTorch:", err);
-        showToast("Linterna no disponible");
-      });
+    if (!torchSupported) return;
+    applyTorchState().catch(function (err) {
+      debugError("toggleTorch:", err);
+      torchSupported = false;
+      torchOn = false;
+      if (torchBtn) {
+        torchBtn.hidden = true;
+        torchBtn.disabled = true;
+      }
+    });
   }
 
   function facingFromConfig(config) {
