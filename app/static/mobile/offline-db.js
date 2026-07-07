@@ -9,11 +9,22 @@
   var INGRESOS_STORE = "ingresos_recientes";
   var META_STORE = "meta";
   var RECENT_PRODUCTS_KEY = "recent_products";
-  var CATALOG_TTL_MS = 30 * 60 * 1000;
-  var CATALOG_PAGE_SIZE = 1500;
-  var CATALOG_BATCH_SIZE = 400;
+  var META_CATALOG_OFFSET = "catalog_sync_offset";
+  var META_CATALOG_TOTAL = "catalog_sync_total";
+  var META_CATALOG_LOCK = "catalog_sync_lock";
+  var CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
+  var CATALOG_PAGE_SIZE = 800;
+  var CATALOG_BATCH_SIZE = 200;
+  var LOCK_HEARTBEAT_MS = 3000;
+  var LOCK_STALE_MS = 12000;
   var RECENT_LIMIT = 50;
   var RECENT_PRODUCTS_LIMIT = 12;
+
+  var syncControl = {
+    paused: false,
+    sessionId: null,
+    heartbeatTimer: null,
+  };
 
   function openDb() {
     return new Promise(function (resolve, reject) {
@@ -325,6 +336,14 @@
     });
   }
 
+  function generateSessionId() {
+    return (
+      Date.now().toString(36) +
+      "-" +
+      Math.random().toString(36).slice(2, 10)
+    );
+  }
+
   function shouldSyncCatalog(lastSync, schemaVersion) {
     if (Number(schemaVersion) !== CATALOG_SCHEMA) return true;
     if (!lastSync) return true;
@@ -332,18 +351,14 @@
   }
 
   function isCatalogReady(db) {
-    return Promise.all([
-      getMeta(db, "catalog_schema"),
-      getMeta(db, "catalog_synced_at"),
-      countCatalogItems(db),
-    ]).then(function (parts) {
-      var schemaVersion = parts[0];
-      var lastSync = parts[1];
-      var count = Number(parts[2] || 0);
-      if (Number(schemaVersion) !== CATALOG_SCHEMA) return false;
-      if (!lastSync || count < 1) return false;
-      return true;
-    });
+    return Promise.all([getMeta(db, "catalog_schema"), countCatalogItems(db)]).then(
+      function (parts) {
+        var schemaVersion = parts[0];
+        var count = Number(parts[1] || 0);
+        if (Number(schemaVersion) !== CATALOG_SCHEMA) return false;
+        return count >= 1;
+      }
+    );
   }
 
   function isCatalogFresh(db) {
@@ -354,13 +369,156 @@
     );
   }
 
+  function getCatalogSyncProgress(db) {
+    return Promise.all([
+      getMeta(db, META_CATALOG_OFFSET),
+      getMeta(db, META_CATALOG_TOTAL),
+      getMeta(db, "catalog_synced_at"),
+    ]).then(function (parts) {
+      var offset = Number(parts[0] || 0);
+      var total = Number(parts[1] || 0);
+      var syncedAt = parts[2];
+      var inProgress = total > 0 && offset > 0 && offset < total;
+      if (!inProgress && !syncedAt && offset > 0 && total > 0 && offset >= total) {
+        inProgress = false;
+      }
+      return {
+        done: offset,
+        total: total,
+        inProgress: inProgress || (!syncedAt && offset > 0 && total > 0 && offset < total),
+        complete: !!syncedAt && (!total || offset >= total),
+      };
+    });
+  }
+
+  function assessCatalogSyncNeed(db) {
+    return Promise.all([
+      getMeta(db, "catalog_synced_at"),
+      getMeta(db, "catalog_schema"),
+      getMeta(db, META_CATALOG_OFFSET),
+      getMeta(db, META_CATALOG_TOTAL),
+    ]).then(function (parts) {
+      var lastSync = parts[0];
+      var schemaVersion = parts[1];
+      var offset = Number(parts[2] || 0);
+      var total = Number(parts[3] || 0);
+
+      if (Number(schemaVersion) !== CATALOG_SCHEMA) {
+        return { needed: true, reason: "schema", startOffset: 0, total: null, clearFirst: true };
+      }
+
+      if (total > 0 && offset > 0 && offset < total) {
+        return {
+          needed: true,
+          reason: "resume",
+          startOffset: offset,
+          total: total,
+          clearFirst: false,
+        };
+      }
+
+      if (!lastSync) {
+        return {
+          needed: true,
+          reason: offset > 0 ? "resume" : "never",
+          startOffset: offset > 0 ? offset : 0,
+          total: total || null,
+          clearFirst: offset <= 0,
+        };
+      }
+
+      if (Date.now() - Number(lastSync) > CATALOG_TTL_MS) {
+        return { needed: true, reason: "expired", startOffset: 0, total: null, clearFirst: true };
+      }
+
+      return { needed: false, reason: "fresh", startOffset: 0, total: total, clearFirst: false };
+    });
+  }
+
+  function tryAcquireCatalogLock(db, sessionId, force) {
+    return getMeta(db, META_CATALOG_LOCK).then(function (lock) {
+      var now = Date.now();
+      if (
+        lock &&
+        lock.owner &&
+        lock.owner !== sessionId &&
+        now - Number(lock.heartbeat || 0) < LOCK_STALE_MS &&
+        !force
+      ) {
+        return { acquired: false, lock: lock };
+      }
+      return setMeta(db, META_CATALOG_LOCK, { owner: sessionId, heartbeat: now }).then(
+        function () {
+          return { acquired: true };
+        }
+      );
+    });
+  }
+
+  function renewCatalogLock(db, sessionId) {
+    return setMeta(db, META_CATALOG_LOCK, { owner: sessionId, heartbeat: Date.now() });
+  }
+
+  function releaseCatalogLock(db, sessionId) {
+    return getMeta(db, META_CATALOG_LOCK).then(function (lock) {
+      if (lock && lock.owner === sessionId) {
+        return setMeta(db, META_CATALOG_LOCK, null);
+      }
+    });
+  }
+
+  function clearCatalogSyncProgress(db) {
+    return Promise.all([
+      setMeta(db, META_CATALOG_OFFSET, null),
+      setMeta(db, META_CATALOG_TOTAL, null),
+    ]);
+  }
+
+  function saveCatalogSyncProgress(db, offset, total) {
+    return Promise.all([
+      setMeta(db, META_CATALOG_OFFSET, offset),
+      setMeta(db, META_CATALOG_TOTAL, total),
+    ]);
+  }
+
+  function waitIfSyncPaused() {
+    if (!syncControl.paused) return Promise.resolve();
+    return new Promise(function (resolve) {
+      function tick() {
+        if (!syncControl.paused) {
+          resolve();
+          return;
+        }
+        setTimeout(tick, 350);
+      }
+      tick();
+    });
+  }
+
+  function startLockHeartbeat(db, sessionId) {
+    stopLockHeartbeat();
+    syncControl.heartbeatTimer = setInterval(function () {
+      renewCatalogLock(db, sessionId).catch(function () {});
+    }, LOCK_HEARTBEAT_MS);
+  }
+
+  function stopLockHeartbeat() {
+    if (syncControl.heartbeatTimer) {
+      clearInterval(syncControl.heartbeatTimer);
+      syncControl.heartbeatTimer = null;
+    }
+  }
+
   function runPaginatedCatalogSync(db, apiUrl, options) {
     var pageSize = options.pageSize || CATALOG_PAGE_SIZE;
     var onProgress = options.onProgress;
-    var offset = 0;
-    var total = null;
-    var written = 0;
-    var clearPending = true;
+    var sessionId = options.sessionId || generateSessionId();
+    var offset = Number(options.startOffset || 0);
+    var total = options.total != null ? Number(options.total) : null;
+    var written = offset;
+    var clearPending = !!options.clearFirst;
+    syncControl.sessionId = sessionId;
+    syncControl.paused = false;
 
     function reportProgress() {
       if (onProgress) {
@@ -373,12 +531,17 @@
     }
 
     function finalize(count) {
-      return setMeta(db, "catalog_synced_at", Date.now()).then(function () {
-        return setMeta(db, "catalog_schema", CATALOG_SCHEMA).then(function () {
+      return clearCatalogSyncProgress(db)
+        .then(function () {
+          return setMeta(db, "catalog_synced_at", Date.now());
+        })
+        .then(function () {
+          return setMeta(db, "catalog_schema", CATALOG_SCHEMA);
+        })
+        .then(function () {
           reportProgress();
-          return { skipped: false, count: count };
+          return { skipped: false, count: count, resumed: offset > 0 };
         });
-      });
     }
 
     function writeItemsInBatches(items, clearFirst) {
@@ -397,7 +560,9 @@
     }
 
     function fetchNextPage() {
-      return fetchCatalogPage(apiUrl, offset, pageSize).then(function (data) {
+      return waitIfSyncPaused().then(function () {
+        return fetchCatalogPage(apiUrl, offset, pageSize);
+      }).then(function (data) {
         var items = data.items || [];
         if (total === null) {
           total = Number(data.total || data.count || 0);
@@ -415,25 +580,57 @@
         return writeItemsInBatches(items, clearFirst).then(function () {
           written += items.length;
           offset += items.length;
-          reportProgress();
-          if (items.length < pageSize || (total && offset >= total)) {
-            return finalize(written);
-          }
-          return fetchNextPage();
+          return saveCatalogSyncProgress(db, offset, total).then(function () {
+            reportProgress();
+            if (items.length < pageSize || (total && offset >= total)) {
+              return finalize(written);
+            }
+            return waitIfSyncPaused().then(fetchNextPage);
+          });
         });
       });
     }
 
-    return fetchNextPage();
+    startLockHeartbeat(db, sessionId);
+    return setMeta(db, "catalog_schema", CATALOG_SCHEMA).then(function () {
+      return fetchNextPage();
+    }).finally(function () {
+      stopLockHeartbeat();
+      return releaseCatalogLock(db, sessionId);
+    });
   }
 
   var AndesOfflineDb = {
     CATALOG_TTL_MS: CATALOG_TTL_MS,
     CATALOG_SCHEMA: CATALOG_SCHEMA,
+    LOCK_STALE_MS: LOCK_STALE_MS,
     open: openDb,
     shouldSyncCatalog: shouldSyncCatalog,
     getMeta: getMeta,
     setMeta: setMeta,
+    pauseCatalogSync: function () {
+      syncControl.paused = true;
+    },
+    resumeCatalogSync: function () {
+      syncControl.paused = false;
+    },
+    isCatalogSyncPaused: function () {
+      return syncControl.paused;
+    },
+    releaseSyncSession: function (sessionId) {
+      stopLockHeartbeat();
+      syncControl.paused = false;
+      if (!sessionId) return Promise.resolve();
+      return openDb().then(function (db) {
+        return releaseCatalogLock(db, sessionId);
+      });
+    },
+    getCatalogSyncProgress: function () {
+      return openDb().then(getCatalogSyncProgress);
+    },
+    assessCatalogSyncNeed: function () {
+      return openDb().then(assessCatalogSyncNeed);
+    },
     countCatalog: function () {
       return openDb().then(countCatalogItems);
     },
@@ -448,34 +645,79 @@
       if (!apiUrl) {
         return Promise.reject(new Error("URL de catálogo no configurada"));
       }
+      var sessionId = options.sessionId || generateSessionId();
       return openDb().then(function (db) {
-        return Promise.all([
-          getMeta(db, "catalog_synced_at"),
-          getMeta(db, "catalog_schema"),
-        ]).then(function (meta) {
-          var lastSync = meta[0];
-          var schemaVersion = meta[1];
-          if (!options.force && !shouldSyncCatalog(lastSync, schemaVersion)) {
+        function runSync(plan) {
+          return runPaginatedCatalogSync(db, apiUrl, {
+            pageSize: options.pageSize || CATALOG_PAGE_SIZE,
+            onProgress: options.onProgress,
+            sessionId: sessionId,
+            startOffset: plan.startOffset,
+            total: plan.total,
+            clearFirst: plan.clearFirst,
+          });
+        }
+
+        function prepareForce() {
+          return clearCatalogStore(db)
+            .then(function () {
+              return setMeta(db, "catalog_synced_at", null);
+            })
+            .then(function () {
+              return setMeta(db, "catalog_schema", null);
+            })
+            .then(function () {
+              return clearCatalogSyncProgress(db);
+            })
+            .then(function () {
+              return {
+                needed: true,
+                reason: "force",
+                startOffset: 0,
+                total: null,
+                clearFirst: true,
+              };
+            });
+        }
+
+        var planPromise = options.force
+          ? prepareForce()
+          : assessCatalogSyncNeed(db).then(function (plan) {
+              if (!plan.needed) {
+                return { needed: false };
+              }
+              return plan;
+            });
+
+        return planPromise.then(function (plan) {
+          if (!plan.needed) {
             return { skipped: true, count: 0 };
           }
-          var needsSchemaReset = Number(schemaVersion) !== CATALOG_SCHEMA;
-          var startSync = function () {
-            return runPaginatedCatalogSync(db, apiUrl, {
-              pageSize: options.pageSize || CATALOG_PAGE_SIZE,
-              onProgress: options.onProgress,
-            });
-          };
-          if (needsSchemaReset) {
-            return clearCatalogStore(db)
-              .then(function () {
-                return setMeta(db, "catalog_synced_at", null);
-              })
-              .then(function () {
-                return setMeta(db, "catalog_schema", null);
-              })
-              .then(startSync);
-          }
-          return startSync();
+          return tryAcquireCatalogLock(db, sessionId, !!options.force).then(function (lock) {
+            if (!lock.acquired) {
+              return { skipped: true, lockHeld: true, count: 0 };
+            }
+            if (plan.reason === "schema" || plan.reason === "expired" || plan.reason === "force") {
+              return clearCatalogStore(db)
+                .then(function () {
+                  return setMeta(db, "catalog_synced_at", null);
+                })
+                .then(function () {
+                  return clearCatalogSyncProgress(db);
+                })
+                .then(function () {
+                  return setMeta(db, "catalog_schema", CATALOG_SCHEMA);
+                })
+                .then(function () {
+                  return runSync({
+                    startOffset: 0,
+                    total: null,
+                    clearFirst: true,
+                  });
+                });
+            }
+            return runSync(plan);
+          });
         });
       });
     },

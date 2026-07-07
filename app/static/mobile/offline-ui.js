@@ -2,11 +2,31 @@
   "use strict";
 
   var bannerId = "mobile-offline-banner";
-  var skeletonId = "catalog-sync-skeleton";
-  var syncInFlight = null;
+  var chipId = "catalog-sync-chip";
+  var SYNC_START_DELAY_MS = 3000;
+  var SYNC_RESUME_DELAY_MS = 1200;
+  var PROGRESS_POLL_MS = 2500;
+
+  var syncState = {
+    inFlight: null,
+    sessionId: null,
+    pollTimer: null,
+    startTimer: null,
+    resumeTimer: null,
+    chipExpandedUntil: 0,
+    userPaused: false,
+  };
 
   function isOnline() {
     return navigator.onLine !== false;
+  }
+
+  function newSessionId() {
+    return (
+      Date.now().toString(36) +
+      "-" +
+      Math.random().toString(36).slice(2, 10)
+    );
   }
 
   function showToast(msg, kind) {
@@ -84,38 +104,84 @@
     });
   }
 
-  function updateCatalogSyncUi(progress) {
-    var sk = document.getElementById(skeletonId);
-    if (!sk) return;
-    var text = sk.querySelector(".catalog-sync-skeleton__text");
-    var bar = sk.querySelector(".catalog-sync-skeleton__bar-fill");
+  function getSyncChip() {
+    return document.getElementById(chipId);
+  }
+
+  function updateCatalogSyncUi(progress, options) {
+    options = options || {};
+    var chip = getSyncChip();
+    if (!chip) return;
+    var textEl = chip.querySelector(".catalog-sync-chip__text");
     var done = progress && progress.done ? progress.done : 0;
     var total = progress && progress.total ? progress.total : 0;
-    if (text) {
+    var show = !!options.show;
+    var expanded = !!options.expanded || Date.now() < syncState.chipExpandedUntil;
+
+    chip.hidden = !show;
+    chip.classList.toggle("catalog-sync-chip--active", show);
+    chip.classList.toggle("catalog-sync-chip--expanded", expanded && total > 0);
+
+    if (textEl) {
       if (total > 0) {
-        text.textContent =
-          "Sincronizando catálogo… " + formatCount(done) + "/" + formatCount(total);
+        textEl.textContent = formatCount(done) + "/" + formatCount(total);
+        chip.setAttribute(
+          "aria-label",
+          "Sincronizando catálogo " + formatCount(done) + " de " + formatCount(total)
+        );
       } else {
-        text.textContent = "Sincronizando catálogo…";
+        textEl.textContent = "";
+        chip.setAttribute("aria-label", "Sincronizando catálogo");
       }
     }
-    if (bar) {
-      var pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 8;
-      bar.style.width = pct + "%";
+  }
+
+  function hideCatalogSyncUi() {
+    updateCatalogSyncUi({ done: 0, total: 0 }, { show: false });
+    document.body.classList.remove("mobile-app--catalog-sync");
+  }
+
+  function showCatalogSyncUi(progress, expanded) {
+    document.body.classList.add("mobile-app--catalog-sync");
+    if (expanded) {
+      syncState.chipExpandedUntil = Date.now() + 2200;
+    }
+    updateCatalogSyncUi(progress || { done: 0, total: 0 }, { show: true, expanded: expanded });
+  }
+
+  function stopProgressPoll() {
+    if (syncState.pollTimer) {
+      clearInterval(syncState.pollTimer);
+      syncState.pollTimer = null;
     }
   }
 
-  function showCatalogSkeleton(show, progress) {
-    var sk = document.getElementById(skeletonId);
-    if (!sk) return;
-    sk.hidden = !show;
-    sk.classList.toggle("catalog-sync-skeleton--active", !!show);
-    if (show) {
-      updateCatalogSyncUi(progress || { done: 0, total: 0 });
-    }
+  function startProgressPoll() {
+    if (syncState.pollTimer || !window.AndesOfflineDb) return;
+    syncState.pollTimer = setInterval(function () {
+      if (!window.AndesOfflineDb) return;
+      AndesOfflineDb.getCatalogSyncProgress().then(function (progress) {
+        if (progress.inProgress) {
+          showCatalogSyncUi(progress, false);
+          document.dispatchEvent(
+            new CustomEvent("andes:catalog-sync-progress", { detail: progress })
+          );
+        } else if (!syncState.inFlight) {
+          stopProgressPoll();
+          hideCatalogSyncUi();
+        }
+      });
+    }, PROGRESS_POLL_MS);
   }
 
-  function syncCatalogBackground(options) {
+  function dispatchProgress(progress) {
+    updateCatalogSyncUi(progress, { show: true, expanded: false });
+    document.dispatchEvent(
+      new CustomEvent("andes:catalog-sync-progress", { detail: progress })
+    );
+  }
+
+  function runCatalogSync(options) {
     options = options || {};
     if (!window.AndesOfflineDb || !isOnline()) {
       return Promise.resolve({ skipped: true, count: 0 });
@@ -124,22 +190,40 @@
     if (!api) {
       return Promise.resolve({ skipped: true, count: 0 });
     }
-    if (syncInFlight) return syncInFlight;
+    if (syncState.inFlight) return syncState.inFlight;
+
+    if (!syncState.sessionId) {
+      syncState.sessionId = newSessionId();
+    }
 
     var force = !!options.force;
     var silent = !!options.silent;
-    showCatalogSkeleton(true, { done: 0, total: 0 });
 
-    syncInFlight = AndesOfflineDb.syncCatalog(api, {
-      force: force,
-      onProgress: function (progress) {
-        updateCatalogSyncUi(progress);
-        document.dispatchEvent(
-          new CustomEvent("andes:catalog-sync-progress", { detail: progress })
+    syncState.inFlight = AndesOfflineDb.getCatalogSyncProgress()
+      .then(function (existing) {
+        showCatalogSyncUi(
+          existing.inProgress ? existing : { done: 0, total: 0 },
+          !!force || existing.inProgress
         );
-      },
-    })
+        return AndesOfflineDb.syncCatalog(api, {
+          force: force,
+          sessionId: syncState.sessionId,
+          onProgress: function (progress) {
+            dispatchProgress(progress);
+          },
+        });
+      })
       .then(function (result) {
+        if (result && result.lockHeld) {
+          startProgressPoll();
+          return AndesOfflineDb.getCatalogSyncProgress().then(function (progress) {
+            if (progress.inProgress) {
+              showCatalogSyncUi(progress, false);
+            }
+            return result;
+          });
+        }
+        stopProgressPoll();
         if (!silent && result && !result.skipped) {
           showToast(
             "Catálogo sincronizado (" + formatCount(result.count) + " productos)",
@@ -164,32 +248,87 @@
         throw err;
       })
       .finally(function () {
-        showCatalogSkeleton(false);
-        syncInFlight = null;
+        if (!syncState.pollTimer) {
+          hideCatalogSyncUi();
+        }
+        syncState.inFlight = null;
       });
 
-    return syncInFlight;
+    return syncState.inFlight;
+  }
+
+  function scheduleAutoSync() {
+    clearTimeout(syncState.startTimer);
+    syncState.startTimer = setTimeout(function () {
+      if (!window.AndesOfflineDb || !isOnline()) return;
+      AndesOfflineDb.assessCatalogSyncNeed().then(function (plan) {
+        if (!plan.needed) return;
+        if (syncState.userPaused) return;
+        var kick = function () {
+          runCatalogSync({ silent: true }).catch(function () {});
+        };
+        if (window.requestIdleCallback) {
+          window.requestIdleCallback(kick, { timeout: 5000 });
+        } else {
+          kick();
+        }
+      });
+    }, SYNC_START_DELAY_MS);
+  }
+
+  function pauseCatalogSyncForUser() {
+    syncState.userPaused = true;
+    if (window.AndesOfflineDb) {
+      AndesOfflineDb.pauseCatalogSync();
+    }
+  }
+
+  function resumeCatalogSyncForUser() {
+    clearTimeout(syncState.resumeTimer);
+    syncState.resumeTimer = setTimeout(function () {
+      syncState.userPaused = false;
+      if (window.AndesOfflineDb) {
+        AndesOfflineDb.resumeCatalogSync();
+      }
+      if (!syncState.inFlight && isOnline() && window.AndesOfflineDb) {
+        AndesOfflineDb.assessCatalogSyncNeed().then(function (plan) {
+          if (plan.needed) {
+            runCatalogSync({ silent: true }).catch(function () {});
+          }
+        });
+      }
+    }, SYNC_RESUME_DELAY_MS);
   }
 
   function initOfflineState() {
     setOfflineUi(!isOnline());
     window.addEventListener("online", function () {
       setOfflineUi(false);
-      syncCatalogBackground({ silent: true });
+      scheduleAutoSync();
     });
     window.addEventListener("offline", function () {
       setOfflineUi(true);
+    });
+    window.addEventListener("pagehide", function () {
+      stopProgressPoll();
+      clearTimeout(syncState.startTimer);
+      clearTimeout(syncState.resumeTimer);
+      if (window.AndesOfflineDb && syncState.sessionId && AndesOfflineDb.releaseSyncSession) {
+        AndesOfflineDb.releaseSyncSession(syncState.sessionId);
+      }
     });
   }
 
   function initCatalogSync() {
     if (!window.AndesOfflineDb || !isOnline()) return;
-    syncCatalogBackground({ silent: true }).catch(function () {});
-    setInterval(function () {
-      if (isOnline()) {
-        syncCatalogBackground({ silent: true }).catch(function () {});
+    syncState.sessionId = newSessionId();
+    AndesOfflineDb.getCatalogSyncProgress().then(function (progress) {
+      if (progress.inProgress) {
+        showCatalogSyncUi(progress, true);
+        startProgressPoll();
       }
-    }, AndesOfflineDb.CATALOG_TTL_MS);
+    });
+    scheduleAutoSync();
   }
 
   function recordRecentFromPage() {
@@ -221,12 +360,21 @@
     }
     var api = document.body.getAttribute("data-catalog-api");
     if (!api) return Promise.reject(new Error("API de catálogo no configurada"));
-    return syncCatalogBackground({ force: true, silent: false });
+    syncState.userPaused = false;
+    if (AndesOfflineDb.resumeCatalogSync) {
+      AndesOfflineDb.resumeCatalogSync();
+    }
+    showCatalogSyncUi({ done: 0, total: 0 }, true);
+    return runCatalogSync({ force: true, silent: false });
   }
 
   window.AndesCatalogSync = {
     force: forceSyncCatalog,
-    background: syncCatalogBackground,
+    background: function (options) {
+      return runCatalogSync(options || { silent: true });
+    },
+    pause: pauseCatalogSyncForUser,
+    resume: resumeCatalogSyncForUser,
   };
 
   document.addEventListener("DOMContentLoaded", function () {

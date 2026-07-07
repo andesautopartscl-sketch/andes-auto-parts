@@ -4678,3 +4678,69 @@ textarea.m-field__input {
   justify-content: center;
   font-size: 1.25rem;
 }
+
+/* v25 — indicador mínimo de sync en header */
+.catalog-sync-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0;
+  border-radius: var(--radius-full);
+  background: rgba(27, 43, 107, 0.08);
+  transition: max-width 0.25s ease, opacity 0.2s ease, padding 0.2s ease;
+  pointer-events: none;
+}
+
+.catalog-sync-chip--active {
+  max-width: 140px;
+  opacity: 1;
+  padding: 6px 10px;
+}
+
+.catalog-sync-chip--expanded {
+  max-width: 180px;
+}
+
+.catalog-sync-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--andes-navy);
+  flex-shrink: 0;
+  animation: catalog-sync-chip-pulse 1.2s ease-in-out infinite;
+}
+
+.catalog-sync-chip__text {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--andes-navy);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@keyframes catalog-sync-chip-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+body.mobile-app--catalog-sync .catalog-sync-skeleton {
+  display: none !important;
+}
+
+body.mobile-app--dark .catalog-sync-chip,
+:root:not(.mobile-theme-light) body.mobile-app--dark .catalog-sync-chip {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+body.mobile-app--dark .catalog-sync-chip__text,
+:root:not(.mobile-theme-light) body.mobile-app--dark .catalog-sync-chip__text {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+body.mobile-app--dark .catalog-sync-chip__dot,
+:root:not(.mobile-theme-light) body.mobile-app--dark .catalog-sync-chip__dot {
+  background: #8ea4ff;
+}

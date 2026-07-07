@@ -423,10 +423,19 @@
       var q = input.value.trim();
       if (q === lastQ) return;
       lastQ = q;
+      if (window.AndesCatalogSync && AndesCatalogSync.pause) {
+        AndesCatalogSync.pause();
+      }
       clearTimeout(timer);
       timer = setTimeout(function () {
         fetchResults(q);
       }, 300);
+    });
+
+    input.addEventListener("blur", function () {
+      if (window.AndesCatalogSync && AndesCatalogSync.resume) {
+        AndesCatalogSync.resume();
+      }
     });
   }
 
@@ -728,19 +737,28 @@
 
   function initCompactHeader() {
     var header = document.querySelector(".mobile-header");
-    if (!header) return;
+    if (!header || header.dataset.andesCompactInit === "1") return;
+    header.dataset.andesCompactInit = "1";
+    var ticking = false;
     var last = false;
     function onScroll() {
-      var compact = window.scrollY > 28;
-      if (compact === last) return;
-      last = compact;
-      header.classList.toggle("mobile-header--compact", compact);
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(function () {
+        ticking = false;
+        var compact = window.scrollY > 28;
+        if (compact === last) return;
+        last = compact;
+        header.classList.toggle("mobile-header--compact", compact);
+      });
     }
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
   }
 
   function initStaggerLists() {
+    if (document.documentElement.dataset.andesStaggerInit === "1") return;
+    document.documentElement.dataset.andesStaggerInit = "1";
     document.querySelectorAll(".m-card-list--stagger").forEach(function (list) {
       list.classList.add("m-card-list--stagger-ready");
     });
@@ -753,6 +771,8 @@
   }
 
   function initHapticActions() {
+    if (document.documentElement.dataset.andesHapticInit === "1") return;
+    document.documentElement.dataset.andesHapticInit = "1";
     document.addEventListener(
       "click",
       function (e) {
