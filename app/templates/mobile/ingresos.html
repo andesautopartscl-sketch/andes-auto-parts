@@ -12,7 +12,14 @@
   <p class="m-page-sub">Últimos 20 documentos</p>
 </section>
 
-<div class="m-pull-zone" data-pull-refresh>
+<div class="m-pull-zone" data-pull-refresh data-page-loading>
+  <div class="m-page-skeleton" aria-hidden="true">
+    <div class="m-skeleton m-skeleton--list-row"></div>
+    <div class="m-skeleton m-skeleton--list-row"></div>
+    <div class="m-skeleton m-skeleton--list-row"></div>
+    <div class="m-skeleton m-skeleton--list-row"></div>
+  </div>
+  <div class="m-page-content">
   {% if ingresos %}
   <ul class="m-list">
     {% for i in ingresos %}
@@ -34,5 +41,6 @@
     <p class="m-empty-state__text">Aún no hay documentos de ingreso recientes.</p>
   </div>
   {% endif %}
+  </div>
 </div>
 {% endblock %}

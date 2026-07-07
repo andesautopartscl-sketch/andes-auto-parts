@@ -642,6 +642,16 @@
     } catch (_e) {}
   }
 
+  function initPageLoading() {
+    if (!document.querySelector("[data-page-loading]")) return;
+    document.body.classList.add("m-page-loading");
+    window.requestAnimationFrame(function () {
+      window.setTimeout(function () {
+        document.body.classList.remove("m-page-loading");
+      }, 120);
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     initMobileTheme();
     initPwaAutoUpdate();
@@ -649,6 +659,7 @@
     initMasMenu();
     initBackNavigation();
     initPageTransitions();
+    initPageLoading();
     initQueryToast();
     initSearchDebounce();
     initPullToRefresh();

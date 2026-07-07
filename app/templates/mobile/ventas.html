@@ -13,7 +13,14 @@
   <a href="{{ url_for('mobile.ventas', periodo='semana') }}" class="m-filter-btn{% if periodo == 'semana' %} m-filter-btn--active{% endif %}" role="tab">Semana</a>
 </div>
 
-<div class="m-pull-zone" data-pull-refresh>
+<div class="m-pull-zone" data-pull-refresh data-page-loading>
+  <div class="m-page-skeleton" aria-hidden="true">
+    <div class="m-skeleton m-skeleton--list-row"></div>
+    <div class="m-skeleton m-skeleton--list-row"></div>
+    <div class="m-skeleton m-skeleton--list-row"></div>
+    <div class="m-skeleton m-skeleton--list-row"></div>
+  </div>
+  <div class="m-page-content">
   {% if ventas %}
   <ul class="m-list">
     {% for v in ventas %}
@@ -35,5 +42,6 @@
     <p class="m-empty-state__text">No hay documentos en este período.</p>
   </div>
   {% endif %}
+  </div>
 </div>
 {% endblock %}

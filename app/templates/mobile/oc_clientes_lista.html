@@ -18,7 +18,25 @@
   {% endfor %}
 </div>
 
-<div class="m-oc-list m-pull-zone" data-pull-refresh>
+<div class="m-oc-list m-pull-zone" data-pull-refresh data-page-loading>
+  <div class="m-page-skeleton" aria-hidden="true">
+    <div class="m-skeleton m-skeleton--oc-card">
+      <div class="m-skeleton m-skeleton--line m-skeleton--line-short"></div>
+      <div class="m-skeleton m-skeleton--line"></div>
+      <div class="m-skeleton m-skeleton--line m-skeleton--line-meta"></div>
+    </div>
+    <div class="m-skeleton m-skeleton--oc-card">
+      <div class="m-skeleton m-skeleton--line m-skeleton--line-short"></div>
+      <div class="m-skeleton m-skeleton--line"></div>
+      <div class="m-skeleton m-skeleton--line m-skeleton--line-meta"></div>
+    </div>
+    <div class="m-skeleton m-skeleton--oc-card">
+      <div class="m-skeleton m-skeleton--line m-skeleton--line-short"></div>
+      <div class="m-skeleton m-skeleton--line"></div>
+      <div class="m-skeleton m-skeleton--line m-skeleton--line-meta"></div>
+    </div>
+  </div>
+  <div class="m-page-content">
   {% if filas %}
   <ul class="m-card-list">
     {% for f in filas %}
@@ -49,6 +67,7 @@
     <p class="m-empty-state__text">{% if q or estado %}No hay OC con estos filtros.{% else %}No hay órdenes de compra registradas.{% endif %}</p>
   </div>
   {% endif %}
+  </div>
 </div>
 
 {% if puede_modificar %}

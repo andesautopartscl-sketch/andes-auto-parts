@@ -38,29 +38,30 @@
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
   data-sw-url="{{ url_for('mobile.service_worker') }}"
-  data-pwa-version="v2026.07.07-v22"
+  data-pwa-version="v2026.07.07-v23"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
-    <div class="mobile-splash__bg" aria-hidden="true"></div>
+    <div class="mobile-splash__bg" aria-hidden="true">
+      <div class="mobile-splash__glow" aria-hidden="true"></div>
+      <div class="mobile-splash__particles" aria-hidden="true"></div>
+    </div>
     <div class="mobile-splash__content">
-      <div class="mobile-splash__logo-wrap">
-        <svg class="mobile-splash__ring" viewBox="0 0 120 120" aria-hidden="true">
-          <circle class="mobile-splash__ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="3"/>
-          <circle class="mobile-splash__ring-progress" cx="60" cy="60" r="52" fill="none" stroke-width="3"/>
-        </svg>
+      <div class="mobile-splash__logo-shell">
         <img
           src="{{ 'logo_andes.png' | static_or_cloud }}"
           alt="Andes Auto Parts"
           class="mobile-splash__logo"
-          width="88"
-          height="88"
+          width="80"
+          height="80"
         >
       </div>
       <p class="mobile-splash__title">Andes Auto Parts</p>
-      <p class="mobile-splash__subtitle">ERP móvil</p>
-      <p class="mobile-splash__status">Cargando…</p>
+      <p class="mobile-splash__subtitle">ERP MÓVIL</p>
+      <div class="mobile-splash__progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="mobile-splash__progress-fill" id="mobile-splash-progress"></div>
+      </div>
     </div>
-    <span class="mobile-splash__version">v2026.07.07-v22</span>
+    <span class="mobile-splash__version">v2026.07.07-v23</span>
   </div>
 
   <div id="catalog-sync-skeleton" class="catalog-sync-skeleton" hidden aria-hidden="true">
@@ -74,7 +75,7 @@
   </div>
 
   <div id="mobile-page-transition" class="mobile-page-transition" hidden aria-hidden="true">
-    <img src="{{ 'logo_andes.png' | static_or_cloud }}" alt="" class="mobile-page-transition__logo andes-logo-pulse" width="56" height="56">
+    <div class="mobile-page-transition__veil"></div>
   </div>
 
   {% if not scanner_layout %}
