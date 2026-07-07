@@ -1155,6 +1155,10 @@ def parse_oc_text(texto: str) -> dict[str, Any]:
         _extract_labeled_field(texto, ["Fecha Entrega", "Fecha de Entrega"])
     )
     forma_pago = _extract_forma_pago(texto)
+    vendedor = _extract_labeled_field(
+        texto,
+        ["Vendedor", "Vendedor/a", "Ejecutivo", "Asesor comercial", "Emitido por", "Elaborado por"],
+    )
     direccion = _extract_labeled_field(texto, ["Despachar a", "Despacho a", "Dirección de despacho", "Despachar A"])
 
     rut_cliente, razon_social = _extract_cliente_rut(texto)
@@ -1183,6 +1187,7 @@ def parse_oc_text(texto: str) -> dict[str, Any]:
         "fecha_oc": fecha_oc,
         "fecha_entrega": fecha_entrega,
         "forma_pago": forma_pago,
+        "vendedor": vendedor,
         "direccion_despacho": direccion,
         "cliente_id": cliente_id,
         "cliente_nombre": cliente_nombre,

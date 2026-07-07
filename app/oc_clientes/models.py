@@ -17,6 +17,18 @@ def oc_estado_label(estado: str | None) -> str:
     return OC_ESTADO_LABELS.get(key, estado or "—")
 
 
+class OcVendedorCatalogo(db.Model):
+    """Catálogo de vendedores que emiten OC de clientes (nombre único normalizado)."""
+
+    __tablename__ = "oc_vendedores_catalogo"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    activo = db.Column(db.Boolean, nullable=False, default=True)
+    orden = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
 class OrdenCompraCliente(db.Model):
     __tablename__ = "oc_clientes"
 
@@ -27,6 +39,7 @@ class OrdenCompraCliente(db.Model):
     fecha_entrega_comprometida = db.Column(db.DateTime)
     fecha_entrega_real = db.Column(db.DateTime)
     forma_pago = db.Column(db.String(100))
+    vendedor = db.Column(db.String(120))
     direccion_despacho = db.Column(db.String(300))
     estado = db.Column(db.String(30), nullable=False, default="recibida", index=True)
     numero_factura = db.Column(db.String(60))

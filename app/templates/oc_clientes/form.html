@@ -48,6 +48,29 @@
 .oc-grid .span-2 { grid-column: span 2; }
 .oc-grid .span-4 { grid-column: 1 / -1; }
 .oc-field textarea { min-height: 52px; resize: vertical; }
+.oc-vendedor-wrap { position: relative; width: 100%; }
+.oc-vendedor-wrap #vendedor { padding-right: 28px; }
+.oc-vendedor-drop-btn {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    width: 22px; height: 22px; border: 0; border-radius: 5px; background: transparent;
+    color: #94a3b8; font-size: 11px; line-height: 1; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; z-index: 2;
+}
+.oc-vendedor-drop-btn:hover { background: #eef6ff; color: #1d4ed8; }
+.oc-vendedor-drop-btn[aria-expanded="true"] { color: #1d4ed8; background: #eef6ff; }
+.oc-vendedor-menu {
+    position: absolute; left: 0; right: 0; top: 100%; margin-top: 2px;
+    max-height: 180px; overflow-y: auto; background: #fff; border: 1px solid #dbe3ef;
+    border-radius: 8px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12); z-index: 40;
+    font-size: 12px; line-height: 1.2;
+}
+.oc-vendedor-menu-item {
+    display: block; width: 100%; text-align: left; border: 0; background: transparent;
+    padding: 6px 8px; cursor: pointer; font-family: inherit; font-size: 12px; color: #0f172a;
+}
+.oc-vendedor-menu-item:hover, .oc-vendedor-menu-item.is-active { background: #f1f5f9; }
+.oc-vendedor-menu-item.is-create { color: #1d4ed8; font-weight: 600; }
+.oc-vendedor-menu-empty { padding: 6px 8px; font-size: 11px; color: #94a3b8; }
 .oc-items-head {
     display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;
 }
@@ -230,11 +253,25 @@
                         <label for="forma_pago">Forma de pago</label>
                         <input id="forma_pago" name="forma_pago" value="{{ form_data.forma_pago }}" placeholder="Crédito 30 días">
                     </div>
+                    <div class="oc-field">
+                        <label for="vendedor">Vendedor</label>
+                        <div class="oc-vendedor-wrap" id="vendedorWrap">
+                            <input id="vendedor" name="vendedor" type="text" maxlength="120"
+                                   value="{{ form_data.vendedor }}"
+                                   placeholder="Escriba para buscar o agregar"
+                                   autocomplete="off" aria-autocomplete="list"
+                                   aria-controls="vendedorMenu" aria-expanded="false">
+                            <button type="button" class="oc-vendedor-drop-btn" id="vendedorDropBtn"
+                                    title="Ver vendedores registrados" aria-label="Ver vendedores registrados"
+                                    aria-haspopup="listbox" aria-expanded="false" aria-controls="vendedorMenu">&#9662;</button>
+                            <div id="vendedorMenu" class="oc-vendedor-menu" role="listbox" aria-label="Vendedores" hidden></div>
+                        </div>
+                    </div>
                     <div class="oc-field span-2">
                         <label for="direccion_despacho">Dirección despacho</label>
                         <input id="direccion_despacho" name="direccion_despacho" value="{{ form_data.direccion_despacho }}">
                     </div>
-                    <div class="oc-field span-2">
+                    <div class="oc-field span-4">
                         <label for="observaciones">Observaciones</label>
                         <textarea id="observaciones" name="observaciones" rows="2" placeholder="Opcional">{{ form_data.observaciones }}</textarea>
                     </div>
@@ -323,6 +360,9 @@
     const URL_SEARCH = {{ url_productos_search|tojson }};
     const URL_ESCANEAR = {{ url_escanear_oc|tojson }};
     const URL_VERIFICAR_NUMERO = {{ url_verificar_numero|tojson }};
+    const URL_VENDEDORES = {{ url_vendedores|tojson }};
+    const PUEDE_MODIFICAR = {{ puede_modificar|tojson }};
+    const VENDEDORES_OPCIONES = {{ vendedores_opciones|tojson }};
     const OC_EDIT_ID = {{ oc.id if oc else 0 }};
     const CSRF_TOKEN = {{ csrf_token|tojson }};
     const ocForm = document.getElementById('ocForm');
@@ -337,7 +377,236 @@
     const psModal = document.getElementById('psModal');
     const psInput = document.getElementById('psInput');
     const psResults = document.getElementById('psResults');
+    const vendedorInput = document.getElementById('vendedor');
+    const vendedorMenu = document.getElementById('vendedorMenu');
+    const vendedorWrap = document.getElementById('vendedorWrap');
+    const vendedorDropBtn = document.getElementById('vendedorDropBtn');
+    let vendedoresCatalogo = (VENDEDORES_OPCIONES || []).slice();
+    let vendedorMenuShowAll = false;
+    let vendedorBlurTimer = null;
     let activeRow = null;
+
+    function vendedorKey(nombre) {
+        return String(nombre || '').trim().toLowerCase();
+    }
+
+    function findVendedorCanon(nombre) {
+        var key = vendedorKey(nombre);
+        if (!key) return null;
+        for (var i = 0; i < vendedoresCatalogo.length; i++) {
+            if (vendedorKey(vendedoresCatalogo[i]) === key) return vendedoresCatalogo[i];
+        }
+        return null;
+    }
+
+    function addVendedorLocal(nombre) {
+        var clean = String(nombre || '').trim();
+        if (!clean) return '';
+        var canon = findVendedorCanon(clean) || clean;
+        if (!findVendedorCanon(canon)) {
+            vendedoresCatalogo.push(canon);
+            vendedoresCatalogo.sort(function (a, b) { return a.localeCompare(b, 'es'); });
+        }
+        return canon;
+    }
+
+    function closeVendedorMenu() {
+        if (!vendedorMenu || !vendedorInput) return;
+        vendedorMenu.hidden = true;
+        vendedorMenu.innerHTML = '';
+        vendedorMenuShowAll = false;
+        vendedorInput.setAttribute('aria-expanded', 'false');
+        if (vendedorDropBtn) vendedorDropBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    function pickVendedor(nombre) {
+        if (!vendedorInput) return;
+        var canon = addVendedorLocal(nombre);
+        vendedorInput.value = canon;
+        closeVendedorMenu();
+    }
+
+    function registerVendedorRemoto(nombre, onDone) {
+        var clean = String(nombre || '').trim();
+        if (!clean || !PUEDE_MODIFICAR || !URL_VENDEDORES) {
+            if (onDone) onDone(findVendedorCanon(clean) || clean);
+            return;
+        }
+        fetch(URL_VENDEDORES, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': CSRF_TOKEN,
+            },
+            body: JSON.stringify({ nombre: clean }),
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var canon = (data && data.ok && data.item && data.item.nombre)
+                    ? data.item.nombre
+                    : (findVendedorCanon(clean) || clean);
+                addVendedorLocal(canon);
+                if (onDone) onDone(canon);
+            })
+            .catch(function () {
+                if (onDone) onDone(addVendedorLocal(clean));
+            });
+    }
+
+    function commitVendedorInput() {
+        if (!vendedorInput) return;
+        var text = (vendedorInput.value || '').trim();
+        if (!text) return;
+        var canon = findVendedorCanon(text);
+        if (canon) {
+            vendedorInput.value = canon;
+            return;
+        }
+        registerVendedorRemoto(text, function (finalName) {
+            if (vendedorInput) vendedorInput.value = finalName || text;
+        });
+    }
+
+    function renderVendedorMenu(opts) {
+        opts = opts || {};
+        if (!vendedorInput || !vendedorMenu) return;
+        var showAll = !!opts.showAll;
+        var text = (vendedorInput.value || '').trim();
+        var filter = showAll ? '' : text.toLowerCase();
+        vendedorMenu.innerHTML = '';
+        if (!showAll && !filter) {
+            closeVendedorMenu();
+            return;
+        }
+        var shown = 0;
+        vendedoresCatalogo.forEach(function (nombre) {
+            if (filter && nombre.toLowerCase().indexOf(filter) < 0) return;
+            shown += 1;
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'oc-vendedor-menu-item';
+            btn.setAttribute('role', 'option');
+            btn.textContent = nombre;
+            btn.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
+            btn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                pickVendedor(nombre);
+            });
+            vendedorMenu.appendChild(btn);
+        });
+        if (!showAll) {
+            var exact = findVendedorCanon(text);
+            if (!exact && text && PUEDE_MODIFICAR) {
+                var createBtn = document.createElement('button');
+                createBtn.type = 'button';
+                createBtn.className = 'oc-vendedor-menu-item is-create';
+                createBtn.setAttribute('role', 'option');
+                createBtn.textContent = 'Agregar «' + text + '»';
+                createBtn.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
+                createBtn.addEventListener('click', function (ev) {
+                    ev.preventDefault();
+                    registerVendedorRemoto(text, function (finalName) {
+                        pickVendedor(finalName || text);
+                    });
+                });
+                vendedorMenu.appendChild(createBtn);
+                shown += 1;
+            } else if (!shown) {
+                var empty = document.createElement('div');
+                empty.className = 'oc-vendedor-menu-empty';
+                empty.textContent = 'Sin coincidencias';
+                vendedorMenu.appendChild(empty);
+            }
+        } else if (!shown) {
+            var emptyAll = document.createElement('div');
+            emptyAll.className = 'oc-vendedor-menu-empty';
+            emptyAll.textContent = 'Sin vendedores registrados';
+            vendedorMenu.appendChild(emptyAll);
+        }
+        vendedorMenuShowAll = showAll;
+        vendedorMenu.hidden = false;
+        vendedorInput.setAttribute('aria-expanded', 'true');
+        if (vendedorDropBtn) vendedorDropBtn.setAttribute('aria-expanded', 'true');
+    }
+
+    function toggleVendedorMenuAll() {
+        if (vendedorMenu && !vendedorMenu.hidden && vendedorMenuShowAll) {
+            closeVendedorMenu();
+            return;
+        }
+        renderVendedorMenu({ showAll: true });
+    }
+
+    function setVendedorValue(nombre, opts) {
+        opts = opts || {};
+        if (!vendedorInput) return;
+        var clean = String(nombre || '').trim();
+        if (!clean) {
+            vendedorInput.value = '';
+            closeVendedorMenu();
+            return;
+        }
+        var canon = findVendedorCanon(clean);
+        if (canon) {
+            vendedorInput.value = canon;
+            closeVendedorMenu();
+            return;
+        }
+        if (opts.register !== false && PUEDE_MODIFICAR) {
+            registerVendedorRemoto(clean, function (finalName) {
+                if (vendedorInput) vendedorInput.value = finalName || clean;
+            });
+            return;
+        }
+        vendedorInput.value = clean;
+        closeVendedorMenu();
+    }
+
+    vendedorDropBtn?.addEventListener('mousedown', function (ev) {
+        ev.preventDefault();
+        if (vendedorBlurTimer) {
+            clearTimeout(vendedorBlurTimer);
+            vendedorBlurTimer = null;
+        }
+    });
+    vendedorDropBtn?.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleVendedorMenuAll();
+    });
+    vendedorInput?.addEventListener('input', function () {
+        if (vendedorBlurTimer) {
+            clearTimeout(vendedorBlurTimer);
+            vendedorBlurTimer = null;
+        }
+        renderVendedorMenu();
+    });
+    vendedorInput?.addEventListener('focus', function () {
+        if ((vendedorInput.value || '').trim()) renderVendedorMenu();
+    });
+    vendedorInput?.addEventListener('blur', function () {
+        vendedorBlurTimer = setTimeout(function () {
+            closeVendedorMenu();
+            commitVendedorInput();
+        }, 140);
+    });
+    vendedorInput?.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            closeVendedorMenu();
+            return;
+        }
+        if (e.key === 'Enter' && vendedorMenu && !vendedorMenu.hidden) {
+            e.preventDefault();
+            var items = vendedorMenu.querySelectorAll('.oc-vendedor-menu-item');
+            if (items.length) items[0].click();
+            else commitVendedorInput();
+        }
+    });
+    document.addEventListener('click', function (e) {
+        if (!vendedorWrap || vendedorWrap.contains(e.target)) return;
+        closeVendedorMenu();
+    });
 
     function fmt(n) { return '$' + Math.round(n).toLocaleString('es-CL'); }
 
@@ -542,6 +811,8 @@
         if (data.fecha_entrega) document.getElementById('fecha_entrega_comprometida').value = data.fecha_entrega;
         if (data.forma_pago) document.getElementById('forma_pago').value = data.forma_pago;
         else document.getElementById('forma_pago').value = '';
+        if (data.vendedor) setVendedorValue(data.vendedor, { register: true });
+        else if (vendedorInput) vendedorInput.value = '';
         if (data.direccion_despacho) document.getElementById('direccion_despacho').value = data.direccion_despacho;
         applyClienteFromScan(data);
         itemsBody.innerHTML = '';
@@ -658,6 +929,8 @@
         document.getElementById('fecha_oc').value = today.getFullYear() + '-' + mm + '-' + dd;
         document.getElementById('fecha_entrega_comprometida').value = '';
         document.getElementById('forma_pago').value = '';
+        if (vendedorInput) vendedorInput.value = '';
+        closeVendedorMenu();
         document.getElementById('direccion_despacho').value = '';
         document.getElementById('observaciones').value = '';
         itemsBody.innerHTML = '';

@@ -961,6 +961,37 @@ def create_app():
                 conn.execute(text("ALTER TABLE oc_clientes ADD COLUMN referencia_pago VARCHAR(120)"))
             if oc_cols and "monto_pago_grupo" not in oc_names:
                 conn.execute(text("ALTER TABLE oc_clientes ADD COLUMN monto_pago_grupo REAL"))
+            if oc_cols and "vendedor" not in oc_names:
+                conn.execute(text("ALTER TABLE oc_clientes ADD COLUMN vendedor VARCHAR(120)"))
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS oc_vendedores_catalogo (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nombre VARCHAR(120) NOT NULL UNIQUE,
+                        activo BOOLEAN NOT NULL DEFAULT 1,
+                        orden INTEGER NOT NULL DEFAULT 0,
+                        created_at DATETIME NOT NULL
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_oc_vendedores_catalogo_nombre "
+                    "ON oc_vendedores_catalogo(nombre)"
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    INSERT OR IGNORE INTO oc_vendedores_catalogo (nombre, activo, orden, created_at)
+                    SELECT DISTINCT TRIM(vendedor), 1, 0, datetime('now')
+                    FROM oc_clientes
+                    WHERE TRIM(COALESCE(vendedor, '')) != ''
+                    """
+                )
+            )
             conn.execute(
                 text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_pago_grupo ON oc_clientes(pago_grupo_id)")
             )

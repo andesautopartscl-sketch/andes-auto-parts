@@ -17,7 +17,7 @@
 <body>
     <button class="no-print" onclick="window.print()">Imprimir</button>
     <h1>Orden de Compra Cliente</h1>
-    <p class="meta">N° OC: <strong>{{ oc.numero_oc }}</strong> · Estado: {{ estado_label }} · Fecha: {{ oc.fecha_oc.strftime('%d/%m/%Y') if oc.fecha_oc else '—' }}</p>
+    <p class="meta">N° OC: <strong>{{ oc.numero_oc }}</strong> · Estado: {{ estado_label }} · Fecha: {{ oc.fecha_oc.strftime('%d/%m/%Y') if oc.fecha_oc else '—' }}{% if oc.vendedor %} · Vendedor: {{ oc.vendedor }}{% endif %}</p>
 
     {% if cliente %}
     <p><strong>Cliente:</strong> {{ cliente.nombre }}{% if cliente.rut %} · RUT {{ cliente.rut|format_rut }}{% endif %}<br>

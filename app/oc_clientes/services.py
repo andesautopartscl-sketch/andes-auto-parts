@@ -12,6 +12,60 @@ from app.ventas.models import Cliente
 from .models import OrdenCompraCliente, OrdenCompraClienteItem, oc_estado_label
 
 
+def normalizar_nombre_vendedor(nombre: str | None) -> str:
+    return " ".join((nombre or "").strip().split())[:120]
+
+
+def listar_vendedores_catalogo(*, activos_only: bool = True) -> list:
+    from .models import OcVendedorCatalogo
+
+    q = OcVendedorCatalogo.query
+    if activos_only:
+        q = q.filter(OcVendedorCatalogo.activo.is_(True))
+    return q.order_by(OcVendedorCatalogo.nombre.asc()).all()
+
+
+def buscar_vendedor_catalogo(nombre: str | None):
+    from .models import OcVendedorCatalogo
+
+    key = normalizar_nombre_vendedor(nombre).lower()
+    if not key:
+        return None
+    return (
+        OcVendedorCatalogo.query.filter(
+            db.func.lower(db.func.trim(OcVendedorCatalogo.nombre)) == key
+        )
+        .order_by(OcVendedorCatalogo.id.asc())
+        .first()
+    )
+
+
+def agregar_vendedor_catalogo(nombre: str | None, *, activo: bool = True):
+    from .models import OcVendedorCatalogo
+
+    nombre_norm = normalizar_nombre_vendedor(nombre)
+    if not nombre_norm:
+        raise ValueError("El nombre del vendedor es obligatorio.")
+    existing = buscar_vendedor_catalogo(nombre_norm)
+    if existing:
+        if activo and not existing.activo:
+            existing.activo = True
+            db.session.commit()
+        return existing, False
+    row = OcVendedorCatalogo(nombre=nombre_norm, activo=activo, orden=0)
+    db.session.add(row)
+    db.session.commit()
+    return row, True
+
+
+def resolver_nombre_vendedor_oc(nombre: str | None) -> str | None:
+    nombre_norm = normalizar_nombre_vendedor(nombre)
+    if not nombre_norm:
+        return None
+    row, _ = agregar_vendedor_catalogo(nombre_norm)
+    return row.nombre
+
+
 def codigo_en_inventario(codigo: str) -> bool:
     code = (codigo or "").strip().upper()
     if not code:

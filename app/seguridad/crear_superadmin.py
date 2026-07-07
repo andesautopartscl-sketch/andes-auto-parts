@@ -16,13 +16,31 @@ def _admin_config():
 
 def crear_superadmin():
     """
-    Crea el usuario SuperAdmin inicial si no existe el username configurado.
+    Crea el usuario SuperAdmin inicial solo si no hay ninguno en la BD.
+
+    Si ya existe al menos un SuperAdmin (p. ej. albertadmin), no crea cuentas extra.
 
     Variables de entorno (Render / local):
       ANDES_ADMIN_USERNAME  (default: admin)
       ANDES_ADMIN_PASSWORD  (default: 1234)
       ANDES_ADMIN_EMAIL     (default: admin@andesautoparts.cl)
     """
+    rol = Rol.query.filter_by(nombre="SuperAdmin").first()
+    if not rol:
+        print("crear_superadmin: rol SuperAdmin no encontrado.")
+        return
+
+    superadmin_existente = (
+        Usuario.query.filter_by(rol_id=rol.id, activo=True).first()
+        or Usuario.query.filter_by(rol_id=rol.id).first()
+    )
+    if superadmin_existente:
+        print(
+            "crear_superadmin: ya hay SuperAdmin "
+            f"('{superadmin_existente.usuario}') — sin cambios."
+        )
+        return
+
     cfg = _admin_config()
     username = cfg["username"]
     password = cfg["password"]
@@ -38,11 +56,6 @@ def crear_superadmin():
     existing = Usuario.query.filter_by(usuario=username).first()
     if existing:
         print(f"crear_superadmin: usuario '{username}' ya existe — sin cambios.")
-        return
-
-    rol = Rol.query.filter_by(nombre="SuperAdmin").first()
-    if not rol:
-        print("crear_superadmin: rol SuperAdmin no encontrado.")
         return
 
     nuevo = Usuario(

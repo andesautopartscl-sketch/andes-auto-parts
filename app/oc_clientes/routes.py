@@ -17,13 +17,16 @@ from app.ventas.routes import METODO_PAGO_LABELS, METODO_PAGO_OPTIONS, _client_b
 
 from .models import OC_ESTADOS, OC_ESTADO_LABELS, OrdenCompraCliente, OrdenCompraClienteItem, oc_estado_label
 from .services import (
+    agregar_vendedor_catalogo,
     buscar_oc_por_numero,
     calcular_totales_items,
     codigo_en_inventario,
     descontar_stock_oc,
     listar_oc_por_cliente,
+    listar_vendedores_catalogo,
     registrar_pagos_conjuntos,
     historial_cobros_mes,
+    resolver_nombre_vendedor_oc,
     timeline_eventos,
 )
 from .ocr import escanear_oc
@@ -128,6 +131,7 @@ def _form_data_from_oc(oc: OrdenCompraCliente) -> dict:
             else ""
         ),
         "forma_pago": oc.forma_pago or "",
+        "vendedor": oc.vendedor or "",
         "direccion_despacho": oc.direccion_despacho or "",
         "observaciones": oc.observaciones or "",
         "cliente_id": oc.cliente_id or 0,
@@ -161,6 +165,8 @@ def _render_oc_form(
 ):
     _partial = request.headers.get("X-Requested-With") == "XMLHttpRequest"
     volver_url = _editar_volver_url(oc.id, from_src) if oc else url_for("oc_clientes.lista")
+    vendedores_catalogo = listar_vendedores_catalogo()
+    vendedores_opciones = [v.nombre for v in vendedores_catalogo]
     return render_template(
         "oc_clientes/form.html",
         form_data=form_data,
@@ -169,6 +175,7 @@ def _render_oc_form(
         oc=oc,
         from_src=from_src,
         volver_url=volver_url,
+        vendedores_opciones=vendedores_opciones,
         metodo_pago_options=[
             (k, METODO_PAGO_LABELS.get(k, k)) for k in METODO_PAGO_OPTIONS if k != "saldo_favor"
         ],
@@ -177,6 +184,7 @@ def _render_oc_form(
         url_clientes=url_for("ventas.api_clientes"),
         url_escanear_oc=url_for("oc_clientes.api_escanear_oc"),
         url_verificar_numero=url_for("oc_clientes.api_verificar_numero"),
+        url_vendedores=url_for("oc_clientes.api_vendedores"),
         puede_modificar=_can_modify(),
         active_page="oc_clientes",
         _partial=_partial,
@@ -256,6 +264,27 @@ def _estado_badge(estado: str) -> str:
 
 def _estado_label(estado: str) -> str:
     return oc_estado_label(estado)
+
+
+def _as_date(value) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return None
+
+
+def _dias_entrega_oc(oc: OrdenCompraCliente) -> int | None:
+    """Días calendario desde la fecha de la OC hasta la entrega real."""
+    fecha_oc = _as_date(oc.fecha_oc)
+    fecha_entrega = _as_date(oc.fecha_entrega_real)
+    if not fecha_oc or not fecha_entrega:
+        return None
+    if (oc.estado or "").strip().lower() not in {"entregada", "pagada"}:
+        return None
+    return max(0, (fecha_entrega - fecha_oc).days)
 
 
 def _build_list_summary() -> dict:
@@ -339,12 +368,8 @@ def lista():
                 clientes_map[c.id] = c
 
     filas = []
-    hoy = date.today()
     for oc in ordenes:
-        dias_entrega = None
-        if (oc.estado or "") == "entregada" and oc.fecha_entrega_real:
-            ref = oc.fecha_entrega_real.date() if isinstance(oc.fecha_entrega_real, datetime) else oc.fecha_entrega_real
-            dias_entrega = max(0, (hoy - ref).days)
+        dias_entrega = _dias_entrega_oc(oc)
         cl = clientes_map.get(oc.cliente_id)
         filas.append(
             {
@@ -393,6 +418,7 @@ def nueva():
         "fecha_oc": now.strftime("%Y-%m-%d"),
         "fecha_entrega_comprometida": "",
         "forma_pago": "",
+        "vendedor": "",
         "direccion_despacho": party.get("address") or "",
         "observaciones": "",
         "cliente_id": selected_client.id if selected_client else 0,
@@ -407,6 +433,7 @@ def nueva():
                 "fecha_oc": (request.form.get("fecha_oc") or form_data["fecha_oc"]).strip(),
                 "fecha_entrega_comprometida": (request.form.get("fecha_entrega_comprometida") or "").strip(),
                 "forma_pago": (request.form.get("forma_pago") or "").strip(),
+                "vendedor": (request.form.get("vendedor") or "").strip(),
                 "direccion_despacho": (request.form.get("direccion_despacho") or "").strip(),
                 "observaciones": (request.form.get("observaciones") or "").strip(),
                 "cliente_id": _safe_int(request.form.get("cliente_id")),
@@ -445,6 +472,7 @@ def nueva():
                     fecha_oc=_parse_date(form_data["fecha_oc"], now) or now,
                     fecha_entrega_comprometida=_parse_date(form_data["fecha_entrega_comprometida"]),
                     forma_pago=form_data["forma_pago"][:100] or None,
+                    vendedor=resolver_nombre_vendedor_oc(form_data["vendedor"]),
                     direccion_despacho=form_data["direccion_despacho"][:300] or None,
                     observaciones=form_data["observaciones"] or None,
                     estado="recibida",
@@ -515,6 +543,7 @@ def editar(oid: int):
                     request.form.get("fecha_entrega_comprometida") or ""
                 ).strip(),
                 "forma_pago": (request.form.get("forma_pago") or "").strip(),
+                "vendedor": (request.form.get("vendedor") or "").strip(),
                 "direccion_despacho": (request.form.get("direccion_despacho") or "").strip(),
                 "observaciones": (request.form.get("observaciones") or "").strip(),
                 "cliente_id": _safe_int(request.form.get("cliente_id")),
@@ -553,6 +582,7 @@ def editar(oid: int):
                     form_data["fecha_entrega_comprometida"]
                 )
                 oc.forma_pago = form_data["forma_pago"][:100] or None
+                oc.vendedor = resolver_nombre_vendedor_oc(form_data["vendedor"])
                 oc.direccion_despacho = form_data["direccion_despacho"][:300] or None
                 oc.observaciones = form_data["observaciones"] or None
                 oc.neto = totals["neto"]
@@ -826,6 +856,40 @@ def imprimir(oid: int):
 
 _ALLOWED_SCAN_EXT = {".jpg", ".jpeg", ".png", ".pdf"}
 _MAX_SCAN_BYTES = 12 * 1024 * 1024
+
+
+@oc_clientes_bp.route("/api/vendedores", methods=["GET", "POST"])
+@login_required
+@permission_required("ver_oc_clientes")
+def api_vendedores():
+    if request.method == "GET":
+        rows = listar_vendedores_catalogo(activos_only=False)
+        return jsonify(
+            ok=True,
+            items=[{"id": r.id, "nombre": r.nombre, "activo": bool(r.activo)} for r in rows],
+        )
+
+    if not _can_modify():
+        return jsonify(ok=False, error="Sin permiso para administrar vendedores."), 403
+
+    payload = request.get_json(silent=True) or {}
+    nombre = (payload.get("nombre") or request.form.get("nombre") or "").strip()
+    if not nombre:
+        return jsonify(ok=False, error="Ingrese el nombre del vendedor."), 400
+    try:
+        row, created = agregar_vendedor_catalogo(nombre)
+    except ValueError as exc:
+        return jsonify(ok=False, error=str(exc)), 400
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("api_vendedores")
+        return jsonify(ok=False, error=f"No se pudo guardar: {exc}"), 500
+
+    return jsonify(
+        ok=True,
+        created=created,
+        item={"id": row.id, "nombre": row.nombre, "activo": bool(row.activo)},
+    )
 
 
 @oc_clientes_bp.route("/api/verificar-numero")
