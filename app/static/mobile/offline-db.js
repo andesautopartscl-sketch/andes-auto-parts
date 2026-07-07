@@ -331,6 +331,29 @@
     return Date.now() - Number(lastSync) > CATALOG_TTL_MS;
   }
 
+  function isCatalogReady(db) {
+    return Promise.all([
+      getMeta(db, "catalog_schema"),
+      getMeta(db, "catalog_synced_at"),
+      countCatalogItems(db),
+    ]).then(function (parts) {
+      var schemaVersion = parts[0];
+      var lastSync = parts[1];
+      var count = Number(parts[2] || 0);
+      if (Number(schemaVersion) !== CATALOG_SCHEMA) return false;
+      if (!lastSync || count < 1) return false;
+      return true;
+    });
+  }
+
+  function isCatalogFresh(db) {
+    return Promise.all([getMeta(db, "catalog_synced_at"), getMeta(db, "catalog_schema")]).then(
+      function (parts) {
+        return !shouldSyncCatalog(parts[0], parts[1]);
+      }
+    );
+  }
+
   function runPaginatedCatalogSync(db, apiUrl, options) {
     var pageSize = options.pageSize || CATALOG_PAGE_SIZE;
     var onProgress = options.onProgress;
@@ -413,6 +436,12 @@
     setMeta: setMeta,
     countCatalog: function () {
       return openDb().then(countCatalogItems);
+    },
+    isCatalogReady: function () {
+      return openDb().then(isCatalogReady);
+    },
+    isCatalogFresh: function () {
+      return openDb().then(isCatalogFresh);
     },
     syncCatalog: function (apiUrl, options) {
       options = options || {};

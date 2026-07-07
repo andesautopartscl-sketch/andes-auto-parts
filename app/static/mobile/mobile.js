@@ -151,51 +151,95 @@
         "».</p></div>";
     }
 
-    function renderItems(items) {
+    function buildResultCardHtml(r) {
+      var href = "/m/producto/" + encodeURIComponent(r.codigo || "");
+      var thumb = r.imagen
+        ? '<img src="' + escapeHtml(r.imagen) + '" alt="" class="m-result-card__thumb" width="60" height="60" loading="lazy" decoding="async">'
+        : '<span class="m-result-card__thumb m-result-card__thumb--empty" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7.7 12 12.5l8.7-4.8"/><path d="M12 22.4V12.5"/></svg></span>';
+      var matchBadge = r.match_en
+        ? '<span class="m-result-card__match">' + escapeHtml(r.match_en) + "</span>"
+        : "";
+      var meta = r.meta_linea
+        ? '<span class="m-result-card__meta">' + escapeHtml(r.meta_linea) + "</span>"
+        : '<span class="m-result-card__meta">—</span>';
+      return (
+        '<li class="m-stagger-item"><a href="' +
+        href +
+        '" class="m-result-card m-result-card--premium">' +
+        '<div class="m-result-card__media">' +
+        thumb +
+        "</div>" +
+        '<div class="m-result-card__body">' +
+        '<div class="m-result-card__top">' +
+        '<span class="m-result-card__code-chip">' +
+        escapeHtml(r.codigo || "") +
+        "</span>" +
+        matchBadge +
+        "</div>" +
+        '<p class="m-result-card__desc">' +
+        escapeHtml(r.descripcion || "") +
+        "</p>" +
+        '<div class="m-result-card__bottom">' +
+        meta +
+        '<span class="m-result-card__price">' +
+        escapeHtml(r.precio_fmt || "—") +
+        "</span></div></div></a></li>"
+      );
+    }
+
+    function itemsSignature(items) {
+      return (items || [])
+        .map(function (r) {
+          return [r.codigo || "", r.precio_fmt || "", r.stock != null ? r.stock : ""].join(":");
+        })
+        .join("|");
+    }
+
+    function ensureFreshnessEl() {
+      var el = document.getElementById("m-search-freshness");
+      if (el) return el;
+      el = document.createElement("div");
+      el.id = "m-search-freshness";
+      el.className = "m-search-freshness";
+      el.hidden = true;
+      el.innerHTML =
+        '<span class="m-search-freshness__dot" aria-hidden="true"></span><span>actualizando…</span>';
+      results.insertBefore(el, results.firstChild);
+      return el;
+    }
+
+    function setFreshness(on) {
+      var el = ensureFreshnessEl();
+      el.hidden = !on;
+    }
+
+    function renderItems(items, options) {
+      options = options || {};
       if (!items.length) {
         renderNoResults(lastQ || input.value.trim());
         return;
       }
-      var html = '<ul class="m-card-list">';
+      var sig = itemsSignature(items);
+      if (options.smooth && options.previousSig === sig) {
+        setFreshness(false);
+        return;
+      }
+      var listClass = "m-card-list m-card-list--stagger";
+      if (options.smooth) listClass += " m-card-list--refresh";
+      var html = '<ul class="' + listClass + '">';
       items.forEach(function (r) {
-        var href = "/m/producto/" + encodeURIComponent(r.codigo || "");
-        var thumb = r.imagen
-          ? '<img src="' + escapeHtml(r.imagen) + '" alt="" class="m-result-card__thumb" width="56" height="56" loading="lazy" decoding="async">'
-          : '<span class="m-result-card__thumb m-result-card__thumb--empty" aria-hidden="true">📦</span>';
-        var matchBadge = r.match_en
-          ? '<span class="m-result-card__match">' + escapeHtml(r.match_en) + "</span>"
-          : "";
-        var meta = r.meta_linea
-          ? '<span class="m-result-card__meta">' + escapeHtml(r.meta_linea) + "</span>"
-          : "";
-        html +=
-          '<li><a href="' +
-          href +
-          '" class="m-result-card m-result-card--rich">' +
-          '<div class="m-result-card__media">' +
-          thumb +
-          "</div>" +
-          '<div class="m-result-card__body">' +
-          '<div class="m-result-card__head">' +
-          '<span class="m-result-card__code">' +
-          escapeHtml(r.codigo || "") +
-          "</span>" +
-          matchBadge +
-          "</div>" +
-          '<span class="m-result-card__desc">' +
-          escapeHtml(r.descripcion || "") +
-          "</span>" +
-          meta +
-          '<div class="m-result-card__footer">' +
-          '<span class="m-badge">Stock ' +
-          escapeHtml(String(r.stock != null ? r.stock : 0)) +
-          "</span>" +
-          '<span class="m-result-card__price">' +
-          escapeHtml(r.precio_fmt || "—") +
-          "</span></div></div></a></li>";
+        html += buildResultCardHtml(r);
       });
       html += "</ul>";
-      results.innerHTML = html;
+      var freshness = document.getElementById("m-search-freshness");
+      results.innerHTML = "";
+      if (freshness) results.appendChild(freshness);
+      results.insertAdjacentHTML("beforeend", html);
+      setFreshness(false);
+      window.requestAnimationFrame(function () {
+        var list = results.querySelector(".m-card-list");
+        if (list) list.classList.remove("m-card-list--refresh");
+      });
     }
 
     var EMPTY_HTML =
@@ -285,50 +329,90 @@
         showEmptyState();
         return;
       }
-      setLoading(true);
+      lastQ = q;
 
-      function renderLocalFallback(hintClass, hintText) {
-        return fetchLocal(q).then(function (localItems) {
-          if (input.value.trim() !== q) return;
-          if (!localItems.length) return false;
-          renderItems(localItems.map(normalizeLocalItem));
-          if (hintText) {
-            results.insertAdjacentHTML(
-              "afterbegin",
-              '<p class="m-hint ' + hintClass + '">' + escapeHtml(hintText) + "</p>"
-            );
-          }
-          return true;
-        });
-      }
-
-      if (navigator.onLine) {
-        fetchSearchApi(api, q)
+      function runServerFirst() {
+        setLoading(true);
+        setFreshness(false);
+        if (!navigator.onLine) {
+          return fetchLocal(q).then(function (localItems) {
+            if (input.value.trim() !== q) return;
+            if (!localItems.length) {
+              results.innerHTML =
+                '<div class="m-empty-state">' +
+                '<div class="m-empty-state__icon" aria-hidden="true">📡</div>' +
+                '<p class="m-empty-state__title">Sin conexión</p>' +
+                '<p class="m-empty-state__text">No hay catálogo local. Conéctate para buscar.</p></div>';
+              return;
+            }
+            renderItems(localItems.map(normalizeLocalItem));
+          });
+        }
+        return fetchSearchApi(api, q)
           .then(function (items) {
             if (input.value.trim() !== q) return;
             renderItems(items);
           })
           .catch(function (err) {
-            return renderLocalFallback("m-hint--offline", "Sin servidor — resultados locales").then(
-              function (handled) {
-                if (input.value.trim() !== q) return;
-                if (!handled) showSearchError(err);
+            return fetchLocal(q).then(function (localItems) {
+              if (input.value.trim() !== q) return;
+              if (localItems.length) {
+                renderItems(localItems.map(normalizeLocalItem));
+                return;
               }
-            );
+              showSearchError(err);
+            });
           });
-        return;
       }
 
-      renderLocalFallback("m-hint--offline", "Sin conexión — catálogo local").then(function (handled) {
-        if (input.value.trim() !== q) return;
-        if (!handled) {
-          results.innerHTML =
-            '<div class="m-empty-state">' +
-            '<div class="m-empty-state__icon" aria-hidden="true">📡</div>' +
-            '<p class="m-empty-state__title">Sin conexión</p>' +
-            '<p class="m-empty-state__text">No hay resultados locales. Conéctate para buscar en el servidor.</p></div>';
-        }
-      });
+      function runLocalFirst() {
+        var readyPromise = window.AndesOfflineDb
+          ? AndesOfflineDb.isCatalogReady()
+          : Promise.resolve(false);
+        return readyPromise.then(function (ready) {
+          if (!ready) return runServerFirst();
+          return fetchLocal(q).then(function (localItems) {
+            if (input.value.trim() !== q) return;
+            var normalized = localItems.map(normalizeLocalItem);
+            var prevSig = itemsSignature(normalized);
+            if (normalized.length) {
+              renderItems(normalized, { smooth: false });
+            } else {
+              setLoading(true);
+            }
+            if (!navigator.onLine) {
+              if (!normalized.length) renderNoResults(q);
+              return;
+            }
+            setFreshness(true);
+            return fetchSearchApi(api, q)
+              .then(function (serverItems) {
+                if (input.value.trim() !== q) return;
+                if (!serverItems.length && !normalized.length) {
+                  renderNoResults(q);
+                  return;
+                }
+                if (serverItems.length || !normalized.length) {
+                  renderItems(serverItems, { smooth: true, previousSig: prevSig });
+                } else {
+                  setFreshness(false);
+                }
+              })
+              .catch(function () {
+                setFreshness(false);
+                if (!normalized.length) {
+                  results.innerHTML =
+                    '<div class="m-empty-state">' +
+                    '<div class="m-empty-state__icon" aria-hidden="true">⚠️</div>' +
+                    '<p class="m-empty-state__title">Sin conexión al servidor</p>' +
+                    '<p class="m-empty-state__text">Mostrando solo resultados locales.</p></div>';
+                }
+              });
+          });
+        });
+      }
+
+      runLocalFirst();
     }
 
     if (!input.value.trim()) {
@@ -642,6 +726,46 @@
     } catch (_e) {}
   }
 
+  function initCompactHeader() {
+    var header = document.querySelector(".mobile-header");
+    if (!header) return;
+    var last = false;
+    function onScroll() {
+      var compact = window.scrollY > 28;
+      if (compact === last) return;
+      last = compact;
+      header.classList.toggle("mobile-header--compact", compact);
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+  }
+
+  function initStaggerLists() {
+    document.querySelectorAll(".m-card-list--stagger").forEach(function (list) {
+      list.classList.add("m-card-list--stagger-ready");
+    });
+  }
+
+  function hapticTap() {
+    try {
+      if (navigator.vibrate) navigator.vibrate(10);
+    } catch (_e) {}
+  }
+
+  function initHapticActions() {
+    document.addEventListener(
+      "click",
+      function (e) {
+        var btn = e.target.closest(
+          ".m-btn--primary, .m-btn--danger, [data-haptic], button[type='submit']"
+        );
+        if (!btn || btn.disabled || btn.getAttribute("aria-disabled") === "true") return;
+        hapticTap();
+      },
+      true
+    );
+  }
+
   function initPageLoading() {
     if (!document.querySelector("[data-page-loading]")) return;
     document.body.classList.add("m-page-loading");
@@ -659,7 +783,10 @@
     initMasMenu();
     initBackNavigation();
     initPageTransitions();
+    initCompactHeader();
     initPageLoading();
+    initStaggerLists();
+    initHapticActions();
     initQueryToast();
     initSearchDebounce();
     initPullToRefresh();

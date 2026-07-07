@@ -13,10 +13,7 @@
   <link rel="manifest" href="{{ url_for('static', filename='mobile/manifest.json') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='mobile/icons/apple-touch-icon.png') }}">
   <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='mobile/icons/icon-192.png') }}">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" as="style">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/fonts/inter.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='mobile/mobile.min.css') }}">
   <script>
   (function () {
@@ -38,7 +35,7 @@
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
   data-sw-url="{{ url_for('mobile.service_worker') }}"
-  data-pwa-version="v2026.07.07-v23"
+  data-pwa-version="v2026.07.07-v24"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
     <div class="mobile-splash__bg" aria-hidden="true">
@@ -61,7 +58,7 @@
         <div class="mobile-splash__progress-fill" id="mobile-splash-progress"></div>
       </div>
     </div>
-    <span class="mobile-splash__version">v2026.07.07-v23</span>
+    <span class="mobile-splash__version">v2026.07.07-v24</span>
   </div>
 
   <div id="catalog-sync-skeleton" class="catalog-sync-skeleton" hidden aria-hidden="true">
@@ -96,9 +93,10 @@
     </div>
     <div class="mobile-header__user">
       {% if usuario_foto_url %}
-      <img src="{{ usuario_foto_url }}" alt="" class="mobile-header__avatar" width="32" height="32" loading="lazy" decoding="async">
+      <img src="{{ usuario_foto_url }}" alt="" class="mobile-header__avatar" width="36" height="36" loading="lazy" decoding="async">
+      {% else %}
+      <span class="mobile-header__avatar mobile-header__avatar--initial" aria-hidden="true">{{ (usuario_nombre or 'U')[:1] | upper }}</span>
       {% endif %}
-      <span class="mobile-header__name">{{ usuario_nombre or 'Usuario' }}</span>
     </div>
   </header>
   {% endif %}

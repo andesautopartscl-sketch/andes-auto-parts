@@ -3,9 +3,12 @@
 {% block title %}Buscar — Andes Mobile{% endblock %}
 
 {% block content %}
-<section class="m-page-head">
-  <h1 class="m-page-title">Buscar producto</h1>
-  <p class="m-page-sub">Código, OEM, homologados, medidas, motor y más</p>
+<section class="m-page-head m-page-head--view">
+  <div class="m-page-head__text">
+    <h1 class="m-page-title">Buscar producto</h1>
+    <p class="m-page-sub">Código, OEM, homologados, medidas, motor y más</p>
+  </div>
+  <span class="mobile-header__avatar mobile-header__avatar--initial m-page-head__avatar" aria-hidden="true">{{ (usuario_nombre or 'U')[:1] | upper }}</span>
 </section>
 
 <form class="m-search-form" action="{{ url_for('mobile.buscar') }}" method="get" role="search">
@@ -24,6 +27,10 @@
 </form>
 
 <div id="mobile-search-results" class="m-results" data-api="{{ url_for('mobile.api_productos_buscar') }}">
+  <div id="m-search-freshness" class="m-search-freshness" hidden>
+    <span class="m-search-freshness__dot" aria-hidden="true"></span>
+    <span>actualizando…</span>
+  </div>
   {% if q and not resultados %}
   <div class="m-empty-state">
     <div class="m-empty-state__icon" aria-hidden="true">
@@ -33,30 +40,29 @@
     <p class="m-empty-state__text">No encontramos productos para «{{ q }}».</p>
   </div>
   {% elif q %}
-  <ul class="m-card-list">
+  <ul class="m-card-list m-card-list--stagger m-card-list--stagger-ready">
     {% for r in resultados %}
-    <li>
-      <a href="{{ url_for('mobile.producto', codigo=r.codigo) }}" class="m-result-card m-result-card--rich">
+    <li class="m-stagger-item">
+      <a href="{{ url_for('mobile.producto', codigo=r.codigo) }}" class="m-result-card m-result-card--premium">
         <div class="m-result-card__media">
           {% if r.imagen %}
-          <img src="{{ r.imagen }}" alt="" class="m-result-card__thumb" width="56" height="56" loading="lazy" decoding="async">
+          <img src="{{ r.imagen }}" alt="" class="m-result-card__thumb" width="60" height="60" loading="lazy" decoding="async">
           {% else %}
-          <span class="m-result-card__thumb m-result-card__thumb--empty" aria-hidden="true">📦</span>
+          <span class="m-result-card__thumb m-result-card__thumb--empty" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7.7 12 12.5l8.7-4.8"/><path d="M12 22.4V12.5"/></svg>
+          </span>
           {% endif %}
         </div>
         <div class="m-result-card__body">
-          <div class="m-result-card__head">
-            <span class="m-result-card__code">{{ r.codigo }}</span>
+          <div class="m-result-card__top">
+            <span class="m-result-card__code-chip">{{ r.codigo }}</span>
             {% if r.match_en %}
             <span class="m-result-card__match">{{ r.match_en }}</span>
             {% endif %}
           </div>
-          <span class="m-result-card__desc">{{ r.descripcion }}</span>
-          {% if r.meta_linea %}
-          <span class="m-result-card__meta">{{ r.meta_linea }}</span>
-          {% endif %}
-          <div class="m-result-card__footer">
-            <span class="m-badge">Stock {{ r.stock }}</span>
+          <p class="m-result-card__desc">{{ r.descripcion }}</p>
+          <div class="m-result-card__bottom">
+            <span class="m-result-card__meta">{{ r.meta_linea or '—' }}</span>
             <span class="m-result-card__price">{{ r.precio_fmt }}</span>
           </div>
         </div>

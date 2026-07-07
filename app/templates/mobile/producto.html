@@ -79,47 +79,58 @@
   <p class="m-hint">Precios no visibles para tu perfil.</p>
   {% endif %}
 
-  <section class="m-kv-card">
-    <h2 class="m-kv-card__title">Códigos y referencias</h2>
-    <dl class="m-kv-list">
+  <section class="m-section">
+    <h2 class="m-section-title">Códigos</h2>
+    <dl class="m-kv-list m-kv-list--premium">
       {% if p.codigo_oem %}
       <div class="m-kv-list__row"><dt class="m-kv-list__key">OEM</dt><dd class="m-kv-list__val">{{ p.codigo_oem }}</dd></div>
       {% endif %}
       {% if p.codigo_alternativo %}
       <div class="m-kv-list__row"><dt class="m-kv-list__key">Alternativo</dt><dd class="m-kv-list__val">{{ p.codigo_alternativo }}</dd></div>
       {% endif %}
-      {% if p.homologados %}
-      <div class="m-kv-list__row"><dt class="m-kv-list__key">Homologados</dt><dd class="m-kv-list__val">{{ p.homologados }}</dd></div>
+    </dl>
+    {% if p.homologados %}
+    <div class="m-chip-list">
+      {% for h in p.homologados.replace(',', ' ').split() %}
+      {% if h.strip() %}
+      <span class="m-chip">{{ h.strip() }}</span>
       {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="m-section">
+    <h2 class="m-section-title">Compatibilidad</h2>
+    <dl class="m-kv-list m-kv-list--premium">
+      {% if p.motor %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Motor</dt><dd class="m-kv-list__val">{{ p.motor }}</dd></div>{% endif %}
+      {% if p.categoria %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Categoría</dt><dd class="m-kv-list__val">{{ p.categoria }}{% if p.subcategoria %} · {{ p.subcategoria }}{% endif %}</dd></div>{% endif %}
     </dl>
   </section>
 
-  <section class="m-kv-card">
-    <h2 class="m-kv-card__title">Especificaciones</h2>
-    <dl class="m-kv-list">
-      {% if p.motor %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Motor</dt><dd class="m-kv-list__val">{{ p.motor }}</dd></div>{% endif %}
+  <section class="m-section">
+    <h2 class="m-section-title">Medidas</h2>
+    <dl class="m-kv-list m-kv-list--premium">
       {% if p.medidas %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Medidas</dt><dd class="m-kv-list__val">{{ p.medidas }}</dd></div>{% endif %}
       {% if p.despiece %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Despiece</dt><dd class="m-kv-list__val">{{ p.despiece }}</dd></div>{% endif %}
-      {% if p.categoria %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Categoría</dt><dd class="m-kv-list__val">{{ p.categoria }}</dd></div>{% endif %}
-      {% if p.subcategoria %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Subcategoría</dt><dd class="m-kv-list__val">{{ p.subcategoria }}</dd></div>{% endif %}
     </dl>
   </section>
 
   {% if p.etiquetas %}
-  <section class="m-kv-card">
-    <h2 class="m-kv-card__title">Etiquetas</h2>
-    <div class="m-tag-list">
+  <section class="m-section">
+    <h2 class="m-section-title">Etiquetas</h2>
+    <div class="m-chip-list">
       {% for tag in p.etiquetas %}
-      <span class="m-tag">{{ tag }}</span>
+      <span class="m-chip">{{ tag }}</span>
       {% endfor %}
     </div>
   </section>
   {% endif %}
 
   {% if p.caracteristicas %}
-  <section class="m-kv-card">
-    <h2 class="m-kv-card__title">Más datos</h2>
-    <dl class="m-kv-list">
+  <section class="m-section">
+    <h2 class="m-section-title">Más datos</h2>
+    <dl class="m-kv-list m-kv-list--premium">
       {% for c in p.caracteristicas %}
       <div class="m-kv-list__row">
         <dt class="m-kv-list__key">{{ c.label }}</dt>
@@ -130,7 +141,8 @@
   </section>
   {% endif %}
 
-  <section class="m-accordion" data-accordion>
+  <section class="m-section m-accordion" data-accordion>
+    <h2 class="m-section-title">Stock</h2>
     <button type="button" class="m-accordion__header" aria-expanded="false">
       <span class="m-accordion__title">Stock por bodega</span>
       <span class="m-accordion__meta">{{ p.ficha_stock.stotal }} u.</span>
