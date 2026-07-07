@@ -55,8 +55,12 @@
     <p class="m-product__prov">Prov: {{ p.codigos_proveedor | join(', ') }}</p>
     {% endif %}
     <p class="m-product__desc">{{ p.descripcion }}</p>
+    {% if p.marca or p.modelo or p.anio %}
+    <p class="m-product__meta-line">{{ p.marca }}{% if p.modelo %} · {{ p.modelo }}{% endif %}{% if p.anio %} · {{ p.anio }}{% endif %}{% if p.version %} · {{ p.version }}{% endif %}</p>
+    {% endif %}
   </header>
 
+  {% if p.puede_ver_precio %}
   <div class="m-detail-grid">
     <div class="m-detail-item">
       <span class="m-detail-item__label">Precio venta</span>
@@ -64,23 +68,57 @@
     </div>
     <div class="m-detail-item">
       <span class="m-detail-item__label">Precio neto</span>
-      <span class="m-detail-item__value">
-        {% if p.precio_neto > 0 %}${{ "{:,.0f}".format(p.precio_neto).replace(",", ".") }}{% else %}—{% endif %}
-      </span>
-    </div>
-    <div class="m-detail-item">
-      <span class="m-detail-item__label">Marca</span>
-      <span class="m-detail-item__value">{{ p.marca or '—' }}</span>
+      <span class="m-detail-item__value">{{ p.precio_neto_fmt }}</span>
     </div>
     <div class="m-detail-item">
       <span class="m-detail-item__label">Origen</span>
       <span class="m-detail-item__value">{{ p.origen or '—' }}</span>
     </div>
   </div>
+  {% else %}
+  <p class="m-hint">Precios no visibles para tu perfil.</p>
+  {% endif %}
+
+  <section class="m-kv-card">
+    <h2 class="m-kv-card__title">Códigos y referencias</h2>
+    <dl class="m-kv-list">
+      {% if p.codigo_oem %}
+      <div class="m-kv-list__row"><dt class="m-kv-list__key">OEM</dt><dd class="m-kv-list__val">{{ p.codigo_oem }}</dd></div>
+      {% endif %}
+      {% if p.codigo_alternativo %}
+      <div class="m-kv-list__row"><dt class="m-kv-list__key">Alternativo</dt><dd class="m-kv-list__val">{{ p.codigo_alternativo }}</dd></div>
+      {% endif %}
+      {% if p.homologados %}
+      <div class="m-kv-list__row"><dt class="m-kv-list__key">Homologados</dt><dd class="m-kv-list__val">{{ p.homologados }}</dd></div>
+      {% endif %}
+    </dl>
+  </section>
+
+  <section class="m-kv-card">
+    <h2 class="m-kv-card__title">Especificaciones</h2>
+    <dl class="m-kv-list">
+      {% if p.motor %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Motor</dt><dd class="m-kv-list__val">{{ p.motor }}</dd></div>{% endif %}
+      {% if p.medidas %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Medidas</dt><dd class="m-kv-list__val">{{ p.medidas }}</dd></div>{% endif %}
+      {% if p.despiece %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Despiece</dt><dd class="m-kv-list__val">{{ p.despiece }}</dd></div>{% endif %}
+      {% if p.categoria %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Categoría</dt><dd class="m-kv-list__val">{{ p.categoria }}</dd></div>{% endif %}
+      {% if p.subcategoria %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Subcategoría</dt><dd class="m-kv-list__val">{{ p.subcategoria }}</dd></div>{% endif %}
+    </dl>
+  </section>
+
+  {% if p.etiquetas %}
+  <section class="m-kv-card">
+    <h2 class="m-kv-card__title">Etiquetas</h2>
+    <div class="m-tag-list">
+      {% for tag in p.etiquetas %}
+      <span class="m-tag">{{ tag }}</span>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
 
   {% if p.caracteristicas %}
   <section class="m-kv-card">
-    <h2 class="m-kv-card__title">Características</h2>
+    <h2 class="m-kv-card__title">Más datos</h2>
     <dl class="m-kv-list">
       {% for c in p.caracteristicas %}
       <div class="m-kv-list__row">

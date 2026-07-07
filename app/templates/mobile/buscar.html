@@ -5,6 +5,7 @@
 {% block content %}
 <section class="m-page-head">
   <h1 class="m-page-title">Buscar producto</h1>
+  <p class="m-page-sub">Código, OEM, homologados, medidas, motor y más</p>
 </section>
 
 <form class="m-search-form" action="{{ url_for('mobile.buscar') }}" method="get" role="search">
@@ -13,7 +14,7 @@
     name="q"
     id="mobile-search-input"
     class="m-search-input"
-    placeholder="Código, proveedor o descripción"
+    placeholder="Código, OEM, descripción, medidas…"
     value="{{ q }}"
     autocomplete="off"
     autocapitalize="characters"
@@ -22,19 +23,36 @@
   >
 </form>
 
-<div id="mobile-search-results" class="m-results" data-api="{{ url_for('mobile.api_buscar') }}">
+<div id="mobile-search-results" class="m-results" data-api="{{ url_for('mobile.api_productos_buscar') }}">
   {% if q and not resultados %}
   <p class="m-empty">Sin resultados para «{{ q }}».</p>
   {% elif q %}
   <ul class="m-card-list">
     {% for r in resultados %}
     <li>
-      <a href="{{ url_for('mobile.producto', codigo=r.codigo) }}" class="m-result-card">
-        <span class="m-result-card__code">{{ r.codigo }}</span>
-        <span class="m-result-card__desc">{{ r.descripcion }}</span>
-        <div class="m-result-card__footer">
-          <span class="m-badge">Stock {{ r.stock }}</span>
-          <span class="m-result-card__price">{{ r.precio_fmt }}</span>
+      <a href="{{ url_for('mobile.producto', codigo=r.codigo) }}" class="m-result-card m-result-card--rich">
+        <div class="m-result-card__media">
+          {% if r.imagen %}
+          <img src="{{ r.imagen }}" alt="" class="m-result-card__thumb" width="56" height="56" loading="lazy" decoding="async">
+          {% else %}
+          <span class="m-result-card__thumb m-result-card__thumb--empty" aria-hidden="true">📦</span>
+          {% endif %}
+        </div>
+        <div class="m-result-card__body">
+          <div class="m-result-card__head">
+            <span class="m-result-card__code">{{ r.codigo }}</span>
+            {% if r.match_en %}
+            <span class="m-result-card__match">{{ r.match_en }}</span>
+            {% endif %}
+          </div>
+          <span class="m-result-card__desc">{{ r.descripcion }}</span>
+          {% if r.meta_linea %}
+          <span class="m-result-card__meta">{{ r.meta_linea }}</span>
+          {% endif %}
+          <div class="m-result-card__footer">
+            <span class="m-badge">Stock {{ r.stock }}</span>
+            <span class="m-result-card__price">{{ r.precio_fmt }}</span>
+          </div>
         </div>
       </a>
     </li>

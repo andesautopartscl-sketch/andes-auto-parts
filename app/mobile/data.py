@@ -430,6 +430,7 @@ def _codigos_por_proveedor(term: str) -> list[str]:
 
 
 def buscar_productos(term: str, limit: int = 30) -> list[dict]:
+    """Búsqueda legacy (venta rápida / api/buscar) — delega al ERP _search_products."""
     items = _search_products(term, limit=limit)
     if not items:
         for codigo in _codigos_por_proveedor(term):
@@ -484,14 +485,17 @@ def _producto_caracteristicas(producto: Producto) -> list[dict]:
         if v:
             items.append({"label": label, "value": v})
 
+    _add("Motor", producto.motor)
+    _add("Versión", producto.version)
+    _add("Año", producto.anio)
     _add("Medidas", producto.medidas)
     aplicacion: list[str] = []
-    for part in (producto.modelo, producto.motor, producto.anio, producto.version):
+    for part in (producto.modelo,):
         p = (part or "").strip()
         if p:
             aplicacion.append(p)
     if aplicacion:
-        _add("Aplicaciones", " · ".join(aplicacion))
+        _add("Modelo", " · ".join(aplicacion))
     _add("OEM", producto.codigo_oem)
     _add("Código alternativo", producto.codigo_alternativo)
     _add("Homologados", producto.homologados)
@@ -506,7 +510,7 @@ def _producto_caracteristicas(producto: Producto) -> list[dict]:
     return items
 
 
-def producto_detalle(codigo_raw: str) -> dict | None:
+def producto_detalle(codigo_raw: str, *, puede_ver_precio: bool = True) -> dict | None:
     producto = _find_producto_by_codigo(db.session, codigo_raw)
     if producto is None or producto.activo is False:
         return None
@@ -566,12 +570,39 @@ def producto_detalle(codigo_raw: str) -> dict | None:
         for m in movs
     ]
     origen = (ref or {}).get("origen_compra") or "nacional"
+    etiquetas_nombres: list[str] = []
+    try:
+        for et in producto.etiquetas or []:
+            nombre = (getattr(et, "nombre", None) or "").strip()
+            if nombre:
+                etiquetas_nombres.append(nombre)
+    except Exception:
+        pass
+    categoria = ""
+    subcategoria = ""
+    try:
+        if producto.categoria_rel and (producto.categoria_rel.nombre or "").strip():
+            categoria = producto.categoria_rel.nombre.strip()
+        if producto.subcategoria_rel and (producto.subcategoria_rel.nombre or "").strip():
+            subcategoria = producto.subcategoria_rel.nombre.strip()
+    except Exception:
+        pass
     return {
         "codigo": codigo,
         "descripcion": (producto.descripcion or "").strip(),
         "marca": (producto.marca or "").strip(),
         "modelo": (producto.modelo or "").strip(),
+        "motor": (producto.motor or "").strip(),
+        "anio": (producto.anio or "").strip(),
+        "version": (producto.version or "").strip(),
+        "medidas": (producto.medidas or "").strip(),
         "codigo_oem": (producto.codigo_oem or "").strip(),
+        "codigo_alternativo": (producto.codigo_alternativo or "").strip(),
+        "homologados": (producto.homologados or "").strip(),
+        "despiece": (producto.despiece or "").strip(),
+        "categoria": categoria,
+        "subcategoria": subcategoria,
+        "etiquetas": etiquetas_nombres,
         "codigos_proveedor": codigos_proveedor,
         "imagen": imagenes_urls[0] if imagenes_urls else None,
         "imagenes_urls": imagenes_urls,
@@ -579,8 +610,10 @@ def producto_detalle(codigo_raw: str) -> dict | None:
         "tiene_360": bool(imagenes_360_urls),
         "despiece_imagen_src": despiece_src or None,
         "galeria": galeria,
-        "precio_neto": precio_neto,
-        "precio_venta_fmt": format_precio_publico_con_iva(precio_neto) if precio_neto > 0 else "—",
+        "precio_neto": precio_neto if puede_ver_precio else None,
+        "precio_venta_fmt": format_precio_publico_con_iva(precio_neto) if puede_ver_precio and precio_neto > 0 else "—",
+        "precio_neto_fmt": _fmt_monto(precio_neto, puede_ver_precio),
+        "puede_ver_precio": puede_ver_precio,
         "ficha_stock": ficha_stock,
         "origen": origen,
         "movimientos": movimientos,
@@ -600,54 +633,38 @@ def venta_detalle(doc_id: int) -> dict | None:
 
 
 def catalogo_completo() -> list[dict]:
-    """Catálogo activo para cache offline (código, descripción, precio, stock por bodega)."""
+    """Catálogo activo para cache offline con campos de búsqueda extendidos."""
+    from . import productos_buscar as mobile_productos_buscar
+
     productos = (
-        db.session.query(Producto.codigo, Producto.descripcion, Producto.marca, Producto.p_publico)
+        db.session.query(Producto)
         .filter(Producto.activo.is_(True))
         .order_by(Producto.codigo.asc())
         .all()
     )
     if not productos:
         return []
-    codigos = sorted({(c or "").strip().upper() for c, _, _, _ in productos if c})
-    stock_rows = (
-        ProductoVarianteStock.query.filter(
-            func.upper(ProductoVarianteStock.codigo_producto).in_(codigos)
-        ).all()
-        if codigos
-        else []
-    )
+    codigos = sorted({(p.codigo or "").strip().upper() for p in productos if p.codigo})
     stock_map: dict[str, list[dict]] = {}
-    for row in stock_rows:
-        codigo = (row.codigo_producto or "").strip().upper()
-        if not codigo:
-            continue
-        stock_map.setdefault(codigo, []).append(
-            {
-                "bodega": (row.bodega or "").strip(),
-                "marca": (row.marca or "").strip(),
-                "stock": int(row.stock or 0),
-            }
-        )
+    if codigos:
+        for row in ProductoVarianteStock.query.filter(
+            func.upper(ProductoVarianteStock.codigo_producto).in_(codigos)
+        ).all():
+            codigo = (row.codigo_producto or "").strip().upper()
+            if not codigo:
+                continue
+            stock_map.setdefault(codigo, []).append(
+                {
+                    "bodega": (row.bodega or "").strip(),
+                    "marca": (row.marca or "").strip(),
+                    "stock": int(row.stock or 0),
+                }
+            )
     out: list[dict] = []
-    for codigo_raw, descripcion, marca, p_publico in productos:
-        codigo = (codigo_raw or "").strip().upper()
-        if not codigo:
-            continue
-        precio = float(p_publico or 0)
-        bodegas = stock_map.get(codigo, [])
-        stock_total = sum(int(b.get("stock") or 0) for b in bodegas)
-        out.append(
-            {
-                "codigo": codigo,
-                "descripcion": (descripcion or "").strip(),
-                "marca": (marca or "").strip(),
-                "precio": precio,
-                "precio_fmt": format_precio_publico_con_iva(precio) if precio > 0 else "—",
-                "stock": stock_total,
-                "bodegas": bodegas,
-            }
-        )
+    for producto in productos:
+        item = mobile_productos_buscar.catalogo_item(producto, stock_map, puede_ver_precio=True)
+        if item:
+            out.append(item)
     return out
 
 

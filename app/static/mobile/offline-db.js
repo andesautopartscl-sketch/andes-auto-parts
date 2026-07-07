@@ -3,6 +3,7 @@
 
   var DB_NAME = "andes-mobile-offline";
   var DB_VERSION = 1;
+  var CATALOG_SCHEMA = 2;
   var CATALOG_STORE = "catalogo";
   var VENTAS_STORE = "ventas_recientes";
   var INGRESOS_STORE = "ingresos_recientes";
@@ -87,32 +88,130 @@
     });
   }
 
-  function searchCatalogLocal(db, query, limit) {
-    var q = String(query || "")
+  function normalizeText(value) {
+    return String(value || "")
       .trim()
-      .toLowerCase();
-    if (q.length < 2) return Promise.resolve([]);
-    limit = limit || 30;
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function splitTerms(query) {
+    var norm = normalizeText(query);
+    if (!norm) return [];
+    return norm.split(/\s+/).filter(Boolean);
+  }
+
+  function fieldBlob(row) {
+    if (row.search_text) return row.search_text;
+    return normalizeText(
+      [
+        row.codigo,
+        row.descripcion,
+        row.modelo,
+        row.motor,
+        row.marca,
+        row.codigo_oem,
+        row.codigo_alternativo,
+        row.homologados,
+        row.medidas,
+        row.anio,
+        row.version,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    );
+  }
+
+  function termInField(term, key, row) {
+    var val = normalizeText(row[key] || "");
+    if (!term || !val) return false;
+    if (val.indexOf(term) !== -1) return true;
+    if (key === "homologados") {
+      var tokens = val.split(/[^a-z0-9]+/).filter(Boolean);
+      return tokens.indexOf(term) !== -1;
+    }
+    return false;
+  }
+
+  function scoreRow(row, terms, rawQuery) {
+    var blob = fieldBlob(row);
+    for (var i = 0; i < terms.length; i++) {
+      if (blob.indexOf(terms[i]) === -1) return null;
+    }
+    var codigo = normalizeText(row.codigo);
+    var rawNorm = normalizeText(rawQuery).replace(/\s+/g, "");
+    if (codigo && (codigo === rawNorm || codigo === normalizeText(rawQuery))) {
+      return { rank: 0, match_en: "Código" };
+    }
+    for (var t = 0; t < terms.length; t++) {
+      if (codigo === terms[t]) return { rank: 0, match_en: "Código" };
+    }
+    for (var t2 = 0; t2 < terms.length; t2++) {
+      if (termInField(terms[t2], "codigo_oem", row)) return { rank: 1, match_en: "OEM" };
+      if (termInField(terms[t2], "codigo_alternativo", row)) return { rank: 1, match_en: "Alternativo" };
+      if (termInField(terms[t2], "homologados", row)) return { rank: 1, match_en: "Homologado" };
+    }
+    var desc = normalizeText(row.descripcion);
+    if (desc && terms[0] && desc.indexOf(terms[0]) === 0) {
+      return { rank: 2, match_en: "Descripción" };
+    }
+    var fields = ["medidas", "motor", "modelo", "marca", "anio", "version", "descripcion"];
+    var labels = {
+      medidas: "Medidas",
+      motor: "Motor",
+      modelo: "Modelo",
+      marca: "Marca",
+      anio: "Año",
+      version: "Versión",
+      descripcion: "Descripción",
+    };
+    for (var t3 = 0; t3 < terms.length; t3++) {
+      for (var f = 0; f < fields.length; f++) {
+        if (termInField(terms[t3], fields[f], row)) {
+          return { rank: 3, match_en: labels[fields[f]] };
+        }
+      }
+    }
+    return { rank: 3, match_en: "Descripción" };
+  }
+
+  function searchCatalogLocal(db, query, limit) {
+    var terms = splitTerms(query);
+    var raw = String(query || "").trim();
+    if (raw.length < 2 || !terms.length) return Promise.resolve([]);
+    limit = limit || 50;
     return new Promise(function (resolve) {
-      var out = [];
+      var scored = [];
       var store = txStore(db, CATALOG_STORE, "readonly");
       var req = store.openCursor();
       req.onsuccess = function (ev) {
         var cursor = ev.target.result;
         if (!cursor) {
-          resolve(out.slice(0, limit));
+          scored.sort(function (a, b) {
+            if (a.rank !== b.rank) return a.rank - b.rank;
+            return String(a.row.codigo || "").localeCompare(String(b.row.codigo || ""));
+          });
+          resolve(
+            scored.slice(0, limit).map(function (item) {
+              var row = item.row;
+              return {
+                codigo: row.codigo,
+                descripcion: row.descripcion,
+                stock: row.stock,
+                precio_fmt: row.precio_fmt || "—",
+                imagen: row.imagen || "",
+                meta_linea: row.meta_linea || "",
+                match_en: item.match_en,
+              };
+            })
+          );
           return;
         }
         var row = cursor.value || {};
-        var codigo = String(row.codigo || "").toLowerCase();
-        var desc = String(row.descripcion || "").toLowerCase();
-        var marca = String(row.marca || "").toLowerCase();
-        if (codigo.indexOf(q) !== -1 || desc.indexOf(q) !== -1 || marca.indexOf(q) !== -1) {
-          out.push(row);
-        }
-        if (out.length >= limit * 3) {
-          resolve(out.slice(0, limit));
-          return;
+        var match = scoreRow(row, terms, raw);
+        if (match) {
+          scored.push({ rank: match.rank, match_en: match.match_en, row: row });
         }
         cursor.continue();
       };
@@ -164,7 +263,8 @@
     });
   }
 
-  function shouldSyncCatalog(lastSync) {
+  function shouldSyncCatalog(lastSync, schemaVersion) {
+    if (Number(schemaVersion) !== CATALOG_SCHEMA) return true;
     if (!lastSync) return true;
     return Date.now() - Number(lastSync) > CATALOG_TTL_MS;
   }
@@ -178,8 +278,13 @@
     syncCatalog: function (apiUrl, options) {
       options = options || {};
       return openDb().then(function (db) {
-        return getMeta(db, "catalog_synced_at").then(function (lastSync) {
-          if (!options.force && !shouldSyncCatalog(lastSync)) {
+        return Promise.all([
+          getMeta(db, "catalog_synced_at"),
+          getMeta(db, "catalog_schema"),
+        ]).then(function (meta) {
+          var lastSync = meta[0];
+          var schemaVersion = meta[1];
+          if (!options.force && !shouldSyncCatalog(lastSync, schemaVersion)) {
             return { skipped: true, count: 0 };
           }
           return fetch(apiUrl, {
@@ -193,7 +298,9 @@
               var items = (data && data.items) || [];
               return putCatalogItems(db, items).then(function (count) {
                 return setMeta(db, "catalog_synced_at", Date.now()).then(function () {
-                  return { skipped: false, count: count };
+                  return setMeta(db, "catalog_schema", CATALOG_SCHEMA).then(function () {
+                    return { skipped: false, count: count };
+                  });
                 });
               });
             });
