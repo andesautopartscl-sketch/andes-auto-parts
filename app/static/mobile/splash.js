@@ -1,15 +1,8 @@
 (function () {
   "use strict";
 
-  var SPLASH_MIN_MS = 1500;
-  var SPLASH_MAX_MS = 8000;
-
-  function isStandalone() {
-    return (
-      window.matchMedia("(display-mode: standalone)").matches ||
-      window.navigator.standalone === true
-    );
-  }
+  var SPLASH_MIN_MS = 1200;
+  var SPLASH_MAX_MS = 5000;
 
   function hideSplash() {
     var splash = document.getElementById("mobile-splash");
@@ -17,7 +10,7 @@
     splash.classList.add("mobile-splash--hide");
     setTimeout(function () {
       splash.remove();
-    }, 420);
+    }, 480);
   }
 
   function waitMinDelay(started) {
@@ -28,31 +21,26 @@
     });
   }
 
-  function waitForCatalog() {
-    if (!window.AndesOfflineDb || !navigator.onLine) {
-      return Promise.resolve();
-    }
-    var api = document.body && document.body.getAttribute("data-catalog-api");
-    if (!api) return Promise.resolve();
-    return AndesOfflineDb.syncCatalog(api).catch(function () {
-      return null;
-    });
+  function markSplashReady() {
+    var splash = document.getElementById("mobile-splash");
+    if (!splash) return;
+    splash.classList.add("mobile-splash--ready");
+    var status = splash.querySelector(".mobile-splash__status");
+    if (status) status.textContent = "Listo";
   }
 
   document.addEventListener("DOMContentLoaded", function () {
     var splash = document.getElementById("mobile-splash");
     if (!splash) return;
-    if (!isStandalone()) {
-      splash.remove();
-      return;
-    }
+
     var started = Date.now();
     var finished = false;
 
     function finish() {
       if (finished) return;
       finished = true;
-      Promise.all([waitMinDelay(started), waitForCatalog()]).then(hideSplash);
+      markSplashReady();
+      waitMinDelay(started).then(hideSplash);
     }
 
     window.addEventListener("load", finish, { once: true });

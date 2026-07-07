@@ -108,8 +108,29 @@ def api_dashboard():
 @mobile_bp.route("/api/catalogo")
 @login_required
 def api_catalogo():
+    synced_at = mobile_data._catalog_sync_ts()
+    limit_raw = request.args.get("limit", type=int)
+    offset = max(0, request.args.get("offset", type=int) or 0)
+    if limit_raw is not None and limit_raw > 0:
+        items, total = mobile_data.catalogo_pagina(offset=offset, limit=limit_raw)
+        return jsonify(
+            success=True,
+            items=items,
+            count=len(items),
+            total=total,
+            offset=offset,
+            limit=limit_raw,
+            synced_at=synced_at,
+        )
     items = mobile_data.catalogo_completo()
-    return jsonify(success=True, items=items, count=len(items), synced_at=mobile_data._catalog_sync_ts())
+    return jsonify(
+        success=True,
+        items=items,
+        count=len(items),
+        total=len(items),
+        offset=0,
+        synced_at=synced_at,
+    )
 
 
 @mobile_bp.route("/api/productos/buscar")

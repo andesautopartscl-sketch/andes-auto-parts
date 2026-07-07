@@ -38,31 +38,39 @@
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
   data-sw-url="{{ url_for('mobile.service_worker') }}"
-  data-pwa-version="v2026.07.07-v21"
+  data-pwa-version="v2026.07.07-v22"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
+    <div class="mobile-splash__bg" aria-hidden="true"></div>
     <div class="mobile-splash__content">
-      <img
-        src="{{ 'logo_andes.png' | static_or_cloud }}"
-        alt="Andes Auto Parts"
-        class="mobile-splash__logo andes-logo-pulse"
-        width="96"
-        height="96"
-      >
+      <div class="mobile-splash__logo-wrap">
+        <svg class="mobile-splash__ring" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="mobile-splash__ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="3"/>
+          <circle class="mobile-splash__ring-progress" cx="60" cy="60" r="52" fill="none" stroke-width="3"/>
+        </svg>
+        <img
+          src="{{ 'logo_andes.png' | static_or_cloud }}"
+          alt="Andes Auto Parts"
+          class="mobile-splash__logo"
+          width="88"
+          height="88"
+        >
+      </div>
       <p class="mobile-splash__title">Andes Auto Parts</p>
       <p class="mobile-splash__subtitle">ERP móvil</p>
-      <div class="mobile-splash__loader" aria-hidden="true">
-        <span class="mobile-splash__dot"></span>
-        <span class="mobile-splash__dot"></span>
-        <span class="mobile-splash__dot"></span>
-      </div>
+      <p class="mobile-splash__status">Cargando…</p>
     </div>
-    <span class="mobile-splash__version">v2026.07.07-v19</span>
+    <span class="mobile-splash__version">v2026.07.07-v22</span>
   </div>
 
   <div id="catalog-sync-skeleton" class="catalog-sync-skeleton" hidden aria-hidden="true">
-    <img src="{{ 'logo_andes.png' | static_or_cloud }}" alt="" class="catalog-sync-skeleton__logo andes-logo-pulse" width="40" height="40">
-    <p class="catalog-sync-skeleton__text">Sincronizando catálogo…</p>
+    <div class="catalog-sync-skeleton__head">
+      <img src="{{ 'logo_andes.png' | static_or_cloud }}" alt="" class="catalog-sync-skeleton__logo" width="32" height="32">
+      <p class="catalog-sync-skeleton__text">Sincronizando catálogo…</p>
+    </div>
+    <div class="catalog-sync-skeleton__track" aria-hidden="true">
+      <div class="catalog-sync-skeleton__bar-fill"></div>
+    </div>
   </div>
 
   <div id="mobile-page-transition" class="mobile-page-transition" hidden aria-hidden="true">

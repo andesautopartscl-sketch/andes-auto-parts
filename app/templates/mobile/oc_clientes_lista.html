@@ -41,7 +41,13 @@
     {% endfor %}
   </ul>
   {% else %}
-  <p class="m-empty">{% if q or estado %}Sin órdenes con estos filtros.{% else %}No hay órdenes de compra registradas.{% endif %}</p>
+  <div class="m-empty-state">
+    <div class="m-empty-state__icon" aria-hidden="true">
+      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 14h32v40H16z"/><path d="M24 24h16M24 32h22M24 40h14"/></svg>
+    </div>
+    <p class="m-empty-state__title">Sin órdenes</p>
+    <p class="m-empty-state__text">{% if q or estado %}No hay OC con estos filtros.{% else %}No hay órdenes de compra registradas.{% endif %}</p>
+  </div>
   {% endif %}
 </div>
 

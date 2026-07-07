@@ -668,6 +668,43 @@ def catalogo_completo() -> list[dict]:
     return out
 
 
+def catalogo_pagina(offset: int = 0, limit: int = 1500) -> tuple[list[dict], int]:
+    """Página del catálogo activo para sincronización offline por lotes."""
+    from . import productos_buscar as mobile_productos_buscar
+
+    limit = max(1, min(int(limit or 1500), 2500))
+    offset = max(0, int(offset or 0))
+    base_q = db.session.query(Producto).filter(Producto.activo.is_(True))
+    total = base_q.count()
+    productos = (
+        base_q.order_by(Producto.codigo.asc()).offset(offset).limit(limit).all()
+    )
+    if not productos:
+        return [], total
+    codigos = sorted({(p.codigo or "").strip().upper() for p in productos if p.codigo})
+    stock_map: dict[str, list[dict]] = {}
+    if codigos:
+        for row in ProductoVarianteStock.query.filter(
+            func.upper(ProductoVarianteStock.codigo_producto).in_(codigos)
+        ).all():
+            codigo = (row.codigo_producto or "").strip().upper()
+            if not codigo:
+                continue
+            stock_map.setdefault(codigo, []).append(
+                {
+                    "bodega": (row.bodega or "").strip(),
+                    "marca": (row.marca or "").strip(),
+                    "stock": int(row.stock or 0),
+                }
+            )
+    out: list[dict] = []
+    for producto in productos:
+        item = mobile_productos_buscar.catalogo_item(producto, stock_map, puede_ver_precio=True)
+        if item:
+            out.append(item)
+    return out, total
+
+
 def stock_vista_rapida(codigo_raw: str) -> dict | None:
     """Vista compacta de stock (escáner barcode)."""
     detalle = producto_detalle(codigo_raw)

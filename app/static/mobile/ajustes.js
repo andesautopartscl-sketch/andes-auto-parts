@@ -84,14 +84,20 @@
       return;
     }
     showToast("Sincronizando…");
-    AndesOfflineDb.syncCatalog(api, { force: true })
+    var syncFn =
+      window.AndesCatalogSync && AndesCatalogSync.force
+        ? AndesCatalogSync.force.bind(AndesCatalogSync)
+        : function () {
+            return AndesOfflineDb.syncCatalog(api, { force: true });
+          };
+    syncFn()
       .then(function (r) {
         refreshLastSyncLabel();
         if (r && r.skipped) showToast("Catálogo ya estaba al día");
-        else showToast("Catálogo sincronizado");
+        else showToast("Catálogo sincronizado (" + (r && r.count ? r.count : 0) + ")");
       })
-      .catch(function () {
-        showToast("Error al sincronizar");
+      .catch(function (err) {
+        showToast((err && err.message) || "Error al sincronizar");
       });
   }
 

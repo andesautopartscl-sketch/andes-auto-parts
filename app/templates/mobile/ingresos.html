@@ -26,7 +26,13 @@
     {% endfor %}
   </ul>
   {% else %}
-  <p class="m-empty">No hay ingresos registrados.</p>
+  <div class="m-empty-state">
+    <div class="m-empty-state__icon" aria-hidden="true">
+      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 18h36l4 8v24H14z"/><path d="M22 18V12h20v6"/></svg>
+    </div>
+    <p class="m-empty-state__title">Sin ingresos</p>
+    <p class="m-empty-state__text">Aún no hay documentos de ingreso recientes.</p>
+  </div>
   {% endif %}
 </div>
 {% endblock %}

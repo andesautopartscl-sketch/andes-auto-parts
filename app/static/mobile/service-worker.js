@@ -1,5 +1,5 @@
-/* Andes Mobile PWA — service worker v21 */
-const SW_VERSION = "andes-mobile-v21";
+/* Andes Mobile PWA — service worker v22 */
+const SW_VERSION = "andes-mobile-v22";
 const CACHE_PREFIX = `${SW_VERSION}-`;
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
@@ -84,6 +84,10 @@ function isStaleWhileRevalidateApi(url) {
   if (url.pathname === "/m/api/buscar") return true;
   if (url.pathname.startsWith("/m/api/producto/")) return true;
   return false;
+}
+
+function isProductSearchApi(url) {
+  return url.pathname === "/m/api/productos/buscar";
 }
 
 function isCatalogApi(url) {
@@ -233,6 +237,11 @@ self.addEventListener("fetch", (event) => {
 
   if (isDashboardApi(url)) {
     event.respondWith(networkFirstApi(request, API_DASH_CACHE));
+    return;
+  }
+
+  if (isProductSearchApi(url)) {
+    event.respondWith(networkFirstApi(request, API_SWR_CACHE));
     return;
   }
 

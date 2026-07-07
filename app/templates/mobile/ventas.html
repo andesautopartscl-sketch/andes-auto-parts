@@ -27,7 +27,13 @@
     {% endfor %}
   </ul>
   {% else %}
-  <p class="m-empty">No hay ventas en este período.</p>
+  <div class="m-empty-state">
+    <div class="m-empty-state__icon" aria-hidden="true">
+      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h40v28H12z"/><path d="M20 28h24M20 36h16"/></svg>
+    </div>
+    <p class="m-empty-state__title">Sin ventas</p>
+    <p class="m-empty-state__text">No hay documentos en este período.</p>
+  </div>
   {% endif %}
 </div>
 {% endblock %}

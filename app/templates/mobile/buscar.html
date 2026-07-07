@@ -25,7 +25,13 @@
 
 <div id="mobile-search-results" class="m-results" data-api="{{ url_for('mobile.api_productos_buscar') }}">
   {% if q and not resultados %}
-  <p class="m-empty">Sin resultados para «{{ q }}».</p>
+  <div class="m-empty-state">
+    <div class="m-empty-state__icon" aria-hidden="true">
+      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="28" cy="28" r="16"/><path d="m42 42 14 14"/></svg>
+    </div>
+    <p class="m-empty-state__title">Sin resultados</p>
+    <p class="m-empty-state__text">No encontramos productos para «{{ q }}».</p>
+  </div>
   {% elif q %}
   <ul class="m-card-list">
     {% for r in resultados %}
@@ -59,9 +65,12 @@
     {% endfor %}
   </ul>
   {% else %}
-  <div class="m-search-empty" id="mobile-search-empty">
-    <span class="m-search-empty__icon" aria-hidden="true">🔍</span>
-    <p class="m-search-empty__text">Escribe al menos 2 caracteres para buscar productos</p>
+  <div class="m-empty-state m-empty-state--hint" id="mobile-search-empty">
+    <div class="m-empty-state__icon" aria-hidden="true">
+      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="28" cy="28" r="16"/><path d="m42 42 14 14"/></svg>
+    </div>
+    <p class="m-empty-state__title">Buscar productos</p>
+    <p class="m-empty-state__text">Escribe al menos 2 caracteres (código, OEM, descripción, medidas…)</p>
   </div>
   {% endif %}
 </div>
