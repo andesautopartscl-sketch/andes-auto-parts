@@ -16,7 +16,7 @@ from google.cloud import vision
 from google.oauth2 import service_account
 
 # Identificador de revisión del parser (visible en respuesta API para depuración).
-OCR_PARSER_REV = "fecha-mundo-v8"
+OCR_PARSER_REV = "fecha-mundo-v9"
 
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 MAX_PDF_BYTES = 12 * 1024 * 1024
@@ -77,17 +77,29 @@ def _as_monto_int(val: int | float | None) -> int | None:
     return int(round(float(val)))
 
 
-_RUT_RE = re.compile(
-    r"\b(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]|\d{7,8}-[\dkK])\b",
-    re.IGNORECASE,
-)
+# Permite espacio OCR típico en el DV: "78.031.825- 2"
+_RUT_BODY = r"(?:\d{1,2}\.?\d{3}\.?\d{3}|\d{7,8})\s*-\s*[\dkK]"
+_RUT_RE = re.compile(rf"\b({_RUT_BODY})\b", re.IGNORECASE)
 
 
 _RECEPTOR_KW = ("receptor", "señor", "senor", "señores", "senores", "cliente", "comprador", "destinatario")
 _RUT_COLON_RE = re.compile(
-    r"R\.?\s*U\.?\s*T\.?\s*:\s*(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]|\d{7,8}-[\dkK])",
+    rf"R\.?\s*U\.?\s*T\.?\s*:\s*({_RUT_BODY})",
     re.IGNORECASE,
 )
+
+
+def _normalize_rut_token(raw: str | None) -> str | None:
+    """Compacta espacios OCR alrededor del guion del RUT."""
+    if not raw:
+        return None
+    s = re.sub(r"\s+", "", str(raw).strip())
+    if not re.fullmatch(r"\d{7,9}-[\dkK]", s, re.IGNORECASE):
+        # Ya venía con puntos: XX.XXX.XXX-X
+        s2 = re.sub(r"\s+", "", str(raw).strip())
+        s2 = re.sub(r"(\d)\s*-\s*([\dkK])$", r"\1-\2", s2, flags=re.IGNORECASE)
+        return s2 or None
+    return s
 
 
 def _is_receptor_context(texto: str, rut_start: int, lookback: int = 120) -> bool:
@@ -100,28 +112,30 @@ def _extract_rut_emisor(texto: str) -> str | None:
     """Prioriza RUT del emisor/proveedor, no del receptor/comprador."""
     # Boleta térmica: el RUT del emisor aparece pegado al inicio ("RUT:84.726.100-5").
     # Suele ser el primero del documento, antes del RUT del cliente/receptor.
-    m = re.search(r"RUT:\s*(\d{1,2}\.\d{3}\.\d{3}-[\dkK])", texto, re.IGNORECASE)
+    m = re.search(rf"RUT:\s*({_RUT_BODY})", texto, re.IGNORECASE)
     if m and not _is_receptor_context(texto, m.start()):
-        return m.group(1)
+        return _normalize_rut_token(m.group(1))
 
     emisor_patterns = [
-        r"R\.?\s*U\.?\s*T\.?\s*Emisor\s*:?\s*(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]|\d{7,8}-[\dkK])",
-        r"Emisor[\s\S]{0,120}?R\.?\s*U\.?\s*T\.?\s*:?\s*(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]|\d{7,8}-[\dkK])",
-        r"RUT[\s\S]{0,30}?Emisor[\s\S]{0,80}?(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]|\d{7,8}-[\dkK])",
+        rf"R\.?\s*U\.?\s*T\.?\s*Emisor\s*:?\s*({_RUT_BODY})",
+        rf"Emisor[\s\S]{{0,120}}?R\.?\s*U\.?\s*T\.?\s*:?\s*({_RUT_BODY})",
+        rf"RUT[\s\S]{{0,30}}?Emisor[\s\S]{{0,80}}?({_RUT_BODY})",
     ]
     for pat in emisor_patterns:
         m = re.search(pat, texto, re.IGNORECASE)
         if m:
-            return m.group(1)
+            return _normalize_rut_token(m.group(1))
 
     # Header emisor: "R.U.T.: XX.XXX.XXX-X" (con dos puntos; receptor suele ir sin ":")
     for m in _RUT_COLON_RE.finditer(texto):
         if not _is_receptor_context(texto, m.start()):
-            return m.group(1)
+            return _normalize_rut_token(m.group(1))
 
     candidates: list[tuple[int, int, str]] = []
     for m in _RUT_RE.finditer(texto):
-        rut = m.group(1)
+        rut = _normalize_rut_token(m.group(1))
+        if not rut:
+            continue
         if _is_receptor_context(texto, m.start()):
             continue
         start = max(0, m.start() - 80)
@@ -4848,25 +4862,42 @@ def parsear_factura_chilena(texto: str) -> dict[str, Any]:
     return resultado
 
 
-def _extract_pdf_bundle(pdf_bytes: bytes) -> dict[str, Any]:
-    """Una sola apertura PyMuPDF: texto nativo, blobs DTE e imagen de vista previa."""
+def _extract_pdf_bundle(
+    pdf_bytes: bytes,
+    *,
+    render_preview: bool = False,
+    native_text: str | None = None,
+    dte_blobs: list[str] | None = None,
+) -> dict[str, Any]:
+    """Extrae texto nativo, blobs DTE y opcionalmente PNG para vista previa/OCR.
+
+    Importante: para performance, cuando `render_preview=False` evitamos
+    renderizar la página (get_pixmap), que puede tardar varios minutos
+    dependiendo del PDF.
+    """
     bundle: dict[str, Any] = {
-        "native_text": "",
-        "dte_blobs": [],
+        "native_text": native_text or "",
+        "dte_blobs": dte_blobs or [],
         "preview_png": b"",
     }
     if not pdf_bytes:
         return bundle
 
-    bundle["dte_blobs"] = _iter_dte_pdf_text_blobs(pdf_bytes)
+    if dte_blobs is None:
+        bundle["dte_blobs"] = _iter_dte_pdf_text_blobs(pdf_bytes)
 
     try:
         import fitz  # PyMuPDF
 
         with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-            if doc.page_count >= 1:
-                bundle["native_text"] = (doc.load_page(0).get_text("text") or "").strip()
-                page = doc.load_page(0)
+            if doc.page_count < 1:
+                return bundle
+
+            page = doc.load_page(0)
+            if not bundle["native_text"]:
+                bundle["native_text"] = (page.get_text("text") or "").strip()
+
+            if render_preview:
                 pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
                 bundle["preview_png"] = pix.tobytes("png")
     except Exception:
@@ -4916,18 +4947,18 @@ def _enrich_with_invoice_registry(resultado: dict[str, Any]) -> dict[str, Any]:
 
 
 def _pdf_native_parse_is_sufficient(resultado: dict[str, Any]) -> bool:
-    if not resultado.get("rut_proveedor"):
-        return False
     has_total = resultado.get("total") or resultado.get("total_neto")
     has_doc = bool(resultado.get("numero_documento"))
+    has_rut = bool(resultado.get("rut_proveedor"))
     productos = resultado.get("productos") or []
     dte_productos = resultado.get("_dte_productos") or []
+    # Productos + totales bastan para evitar Vision (RUT opcional tras normalizar DV OCR).
     if productos and has_total:
         return True
     if dte_productos and has_doc and has_total:
         return True
     texto = (resultado.get("ocr_texto_crudo") or "").strip()
-    if has_doc and has_total and len(texto) >= 350:
+    if has_rut and has_doc and has_total and len(texto) >= 350:
         return True
     return False
 
@@ -5121,10 +5152,9 @@ def analizar_factura(image_base64: str, media_type: str) -> dict[str, Any]:
         if len(file_bytes) > MAX_PDF_BYTES:
             raise ValueError("El PDF es demasiado grande (máx. 12 MB)")
         t0 = __import__("time").perf_counter()
-        bundle = _extract_pdf_bundle(file_bytes)
+        bundle = _extract_pdf_bundle(file_bytes, render_preview=False)
         pdf_native = bundle.get("native_text") or ""
         dte_blobs = bundle.get("dte_blobs") or []
-        preview_png = bundle.get("preview_png") or b""
 
         fast = _try_parse_pdf_without_vision(file_bytes, bundle)
         if fast is not None:
@@ -5136,15 +5166,23 @@ def analizar_factura(image_base64: str, media_type: str) -> dict[str, Any]:
             )
             return fast
 
+        # OCR requerido: recién acá renderizamos la primera página.
+        bundle_ocr = _extract_pdf_bundle(
+            file_bytes,
+            render_preview=True,
+            native_text=pdf_native,
+            dte_blobs=dte_blobs,
+        )
+        preview_png = bundle_ocr.get("preview_png") or b""
         if preview_png:
             image_bytes = preview_png
-            preview_base64 = "data:image/png;base64," + base64.b64encode(preview_png).decode(
-                "ascii"
+            preview_base64 = (
+                "data:image/png;base64," + base64.b64encode(preview_png).decode("ascii")
             )
         else:
             image_bytes = _convert_pdf_first_page_to_png(file_bytes)
-            preview_base64 = "data:image/png;base64," + base64.b64encode(image_bytes).decode(
-                "ascii"
+            preview_base64 = (
+                "data:image/png;base64," + base64.b64encode(image_bytes).decode("ascii")
             )
         logger.info(
             "analizar_factura PDF requiere OCR (prep %.2fs, native=%d chars)",

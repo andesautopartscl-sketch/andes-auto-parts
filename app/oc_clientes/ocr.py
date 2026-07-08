@@ -24,7 +24,7 @@ from app.ventas.models import Cliente
 
 logger = logging.getLogger(__name__)
 
-OCR_PARSER_REV = "oc-cliente-v5"
+OCR_PARSER_REV = "oc-cliente-v6"
 RUT_PROPIO = "78074288-7"
 RUT_PROPIO_NORM = clean_rut(RUT_PROPIO)
 
@@ -32,6 +32,8 @@ MAX_FILE_BYTES = 12 * 1024 * 1024
 MIN_PDF_NATIVE_CHARS = 200
 VISION_SCOPES = ["https://www.googleapis.com/auth/cloud-vision"]
 FUZZY_THRESHOLD = 92
+_VISION_OCR_TIMEOUT_SEC = 120.0
+_vision_client_cache: dict[str, vision.ImageAnnotatorClient] = {}
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -159,7 +161,16 @@ def _is_standalone_code_line(line: str) -> str | None:
     return None
 
 
+def _is_unit_token(line: str) -> bool:
+    return bool(re.fullmatch(r"(SAN|UND|UN|UNIDAD|\$|S|KIT|SET)", (line or "").strip(), re.I))
+
+
 def _collect_following_descriptions(lines: list[str], start: int) -> tuple[list[str], int]:
+    """Toma solo la descripción del ítem actual (1 línea de pieza + unidad).
+
+    Evita pegar el siguiente ítem (p. ej. otro PARACHOQUE…) cuando el OCR
+    no trae número/código de la 2.ª fila.
+    """
     parts: list[str] = []
     i = start
     while i < len(lines):
@@ -170,13 +181,17 @@ def _collect_following_descriptions(lines: list[str], start: int) -> tuple[list[
             break
         if re.fullmatch(r"\d{1,3}", cur) and int(cur) <= 200:
             break
-        if re.fullmatch(r"(SAN|UND|UN|UNIDAD|\$|S|KIT|SET)", cur, re.I):
+        if _is_unit_token(cur):
             i += 1
+            if parts:
+                break
             continue
         if _is_description_line(cur):
             parts.append(cur)
             i += 1
-            continue
+            while i < len(lines) and _is_unit_token(lines[i]):
+                i += 1
+            break
         break
     return parts, i
 
@@ -354,21 +369,28 @@ def _preprocess_image_for_ocr(image_bytes: bytes) -> bytes:
 
 
 def _vision_ocr_text(image_bytes: bytes, cred_path: Path) -> str:
-    credentials = service_account.Credentials.from_service_account_file(
-        str(cred_path),
-        scopes=VISION_SCOPES,
-    )
-    client = vision.ImageAnnotatorClient(credentials=credentials)
+    client = _vision_client_cache.get(str(cred_path.resolve()))
+    if client is None:
+        credentials = service_account.Credentials.from_service_account_file(
+            str(cred_path),
+            scopes=VISION_SCOPES,
+        )
+        client = vision.ImageAnnotatorClient(credentials=credentials)
+        _vision_client_cache[str(cred_path.resolve())] = client
     processed = _preprocess_image_for_ocr(image_bytes)
     image = vision.Image(content=processed)
     image_context = vision.ImageContext(language_hints=["es"])
 
     try:
         response = client.document_text_detection(
-            image=image, image_context=image_context
+            image=image,
+            image_context=image_context,
+            timeout=_VISION_OCR_TIMEOUT_SEC,
         )
     except Exception as exc:
-        raise ValueError("No se pudo contactar a Google Cloud Vision") from exc
+        raise ValueError(
+            "No se pudo contactar a Google Cloud Vision (timeout o red)."
+        ) from exc
 
     if response.error.message:
         raise ValueError(response.error.message)
@@ -400,7 +422,8 @@ def _convert_pdf_first_page_to_png(pdf_bytes: bytes) -> bytes:
             if doc.page_count < 1:
                 raise ValueError("El PDF no tiene páginas")
             page = doc.load_page(0)
-            pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0), alpha=False)
+            # Render más liviano: reduce tiempo/cuello de botella en PDFs pesados.
+            pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
             return pix.tobytes("png")
     except ImportError as exc:
         raise ValueError(
@@ -421,11 +444,26 @@ def _extract_text_from_file(file_bytes: bytes, ext: str, cred_path: Path) -> tup
     """Retorna (texto, fuente) donde fuente es 'pdf_text', 'vision' o 'vision_pdf'."""
     ext = (ext or "").lower().lstrip(".")
     if ext == "pdf":
+        t0 = __import__("time").perf_counter()
         native = _extract_pdf_native_text(file_bytes)
+        logger.info(
+            "oc OCR pdf native chars=%s (%.2fs)",
+            len(native or ""),
+            __import__("time").perf_counter() - t0,
+        )
         if len(native) >= MIN_PDF_NATIVE_CHARS:
             return native, "pdf_text"
+        logger.info("oc OCR pdf: renderizando 1ra página PNG para OCR…")
         png = _convert_pdf_first_page_to_png(file_bytes)
-        return _vision_ocr_text(png, cred_path), "vision_pdf"
+        logger.info("oc OCR pdf: PNG listo (%s bytes), llamando Vision…", len(png))
+        t1 = __import__("time").perf_counter()
+        texto = _vision_ocr_text(png, cred_path)
+        logger.info(
+            "oc OCR pdf: Vision listo (%.2fs), texto chars=%s",
+            __import__("time").perf_counter() - t1,
+            len(texto or ""),
+        )
+        return texto, "vision_pdf"
     return _vision_ocr_text(file_bytes, cred_path), "vision"
 
 
@@ -650,6 +688,12 @@ def _extract_observaciones(texto: str) -> dict[str, str | None]:
             break
         if re.match(r"^(?:Neto|Noto|IVA|Total)\s*\$?\s*:?\s*$", s, re.I):
             continue
+        if re.match(
+            r"^(?:Fecha|Forma|Maneda|Moneda|Cantidad|Precio|Descto|Totil|Rut|Rat)\b",
+            s,
+            re.I,
+        ):
+            break
         if re.fullmatch(r"[\d.,]+", s):
             continue
         obs_lines.append(s)
@@ -685,7 +729,240 @@ def _extract_observaciones(texto: str) -> dict[str, str | None]:
             if vm:
                 vehiculo = re.sub(r"\s+", " ", vm.group(1)).strip()
                 break
+    elif re.search(r"\bCHANGAN\b", obs, re.IGNORECASE) or re.search(
+        r"\bCHANGAN\b", texto, re.IGNORECASE
+    ):
+        marca = "CHANGAN"
+        for ln in obs.splitlines():
+            vm = re.search(
+                r"(CHANGAN\s+HUNTER(?:\s+4X4)?\s+[\d.]+\s+\d{4})",
+                ln,
+                re.IGNORECASE,
+            )
+            if vm:
+                vehiculo = re.sub(r"\s+", " ", vm.group(1)).strip().upper()
+                break
+        if not vehiculo:
+            for ln in obs.splitlines():
+                vm = re.search(
+                    r"(HUNTER(?:\s+4X4)?\s+[\d.]+\s+\d{4})",
+                    ln,
+                    re.IGNORECASE,
+                )
+                if vm:
+                    vehiculo = "CHANGAN " + re.sub(r"\s+", " ", vm.group(1)).strip().upper()
+                    break
+    elif re.search(r"\bHUNTER\s+4X4\b", obs, re.IGNORECASE) or re.search(
+        r"\bHUNTER\s+4X4\b", texto, re.IGNORECASE
+    ):
+        marca = "CHANGAN"
+        for ln in (obs or texto).splitlines():
+            vm = re.search(
+                r"(HUNTER(?:\s+4X4)?\s+[\d.]+\s+\d{4})",
+                ln,
+                re.IGNORECASE,
+            )
+            if vm:
+                vehiculo = "CHANGAN " + re.sub(r"\s+", " ", vm.group(1)).strip().upper()
+                break
     return {"texto": obs, "marca": marca, "vehiculo": vehiculo}
+
+
+def _is_price_block_end(line: str) -> bool:
+    return bool(
+        re.match(
+            r"^(facturar|presentar|observ|neto|noto|iva)\b",
+            (line or "").strip(),
+            re.I,
+        )
+    )
+
+
+def _extract_items_columnar_prices(texto: str) -> list[tuple[int, float, float]]:
+    """Precios/cantidades en bloque columnar tras encabezado Cantidad."""
+    lines = [ln.strip() for ln in texto.splitlines()]
+    header_i = _find_cantidad_header_index(lines)
+    if header_i is None:
+        return []
+
+    rows: list[tuple[int, float, float]] = []
+    qty = 1
+    pending_price: float | None = None
+
+    for ln in lines[header_i + 1 :]:
+        if _is_price_block_end(ln):
+            break
+        if not ln or _is_table_header_word(ln):
+            continue
+        if re.fullmatch(r"\d{1,4}", ln):
+            qty = max(int(ln), 1)
+            continue
+        amt = _parse_monto_chileno(ln)
+        if amt is None or amt < 500:
+            continue
+        if pending_price is None:
+            pending_price = amt
+            continue
+        subtotal = amt
+        precio = pending_price
+        if qty == 1 and abs(subtotal - precio) / max(precio, 1) <= 0.15:
+            subtotal = precio
+        elif subtotal < precio * 0.5:
+            subtotal = round(precio * qty, 2)
+        rows.append((qty, precio, subtotal))
+        pending_price = None
+        qty = 1
+
+    if pending_price is not None:
+        rows.append((qty, pending_price, round(pending_price * qty, 2)))
+
+    return rows
+
+
+def _split_piece_phrases(text: str) -> list[str]:
+    """Separa descripciones pegadas del OCR (2 parachoques en un solo string)."""
+    s = re.sub(r"\s+", " ", (text or "").strip())
+    if not s:
+        return []
+    parts = re.split(
+        r"(?=\bPARACHOQUES?\s+(?:DELANTERO|TRASERO|DELANT|TRAS)\b)",
+        s,
+        flags=re.IGNORECASE,
+    )
+    out = [p.strip(" -|,") for p in parts if p and p.strip(" -|,")]
+    if len(out) >= 2:
+        return out
+    return [s]
+
+
+def _looks_like_piece_description(line: str) -> bool:
+    s = (line or "").strip()
+    if not s or len(s) < 6:
+        return False
+    if not _is_description_line(s):
+        return False
+    return bool(
+        re.search(
+            r"\b(PARACHOQUE|GUARDAFANGO|OPTICA|FAROL|RADIADOR|CAPOT|"
+            r"PUERTA|MOLDURA|ESPEJO|TERMINAL|BISEL|SOPORTE|DEFENSA)\b",
+            s,
+            re.I,
+        )
+    )
+
+
+def _extract_orphan_description_items(
+    texto: str,
+    already: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Descripciones sueltas (sin N°/código) que el OCR dejó fuera del 1.er ítem."""
+    zone = _item_table_zone(texto)
+    lines = [ln.strip() for ln in zone.splitlines() if ln.strip()]
+    taken: set[str] = set()
+    for it in already:
+        for part in _split_piece_phrases(it.get("descripcion") or ""):
+            taken.add(re.sub(r"\s+", " ", part).strip().upper())
+
+    orphans: list[dict[str, Any]] = []
+    for ln in lines:
+        if _match_item_code_line(ln) or _is_standalone_code_line(ln):
+            continue
+        if _is_table_section_end(ln) or _is_unit_token(ln) or _is_table_header_word(ln):
+            continue
+        if not _looks_like_piece_description(ln):
+            continue
+        key = re.sub(r"\s+", " ", ln).strip().upper()
+        if key in taken:
+            continue
+        taken.add(key)
+        orphans.append(
+            {
+                "numero_item": len(already) + len(orphans) + 1,
+                "codigo_producto": "",
+                "descripcion": ln[:255],
+                "cantidad": 1,
+                "precio_unitario": 0.0,
+                "subtotal": 0.0,
+            }
+        )
+    return orphans
+
+
+def _repair_merged_item_descriptions(
+    rows: list[dict[str, Any]],
+    prices: list[tuple[int, float, float]],
+) -> list[dict[str, Any]]:
+    """Si 1 ítem juntó 2 piezas y hay 2 precios, parte descripción y filas."""
+    if len(rows) != 1 or len(prices) < 2:
+        return rows
+    phrases = _split_piece_phrases(rows[0].get("descripcion") or "")
+    if len(phrases) < 2:
+        return rows
+    base = dict(rows[0])
+    out: list[dict[str, Any]] = []
+    for idx, phrase in enumerate(phrases[: len(prices)]):
+        item = dict(base)
+        item["numero_item"] = idx + 1
+        item["descripcion"] = phrase[:255]
+        if idx > 0:
+            item["codigo_producto"] = ""
+            item["codigo_ocr_original"] = ""
+        out.append(item)
+    return out
+
+
+def _merge_items_rows_with_prices(
+    rows: list[dict[str, Any]],
+    prices: list[tuple[int, float, float]],
+    neto_leido: float | None,
+) -> list[dict[str, Any]]:
+    if not rows:
+        return rows
+
+    rows = _repair_merged_item_descriptions(rows, prices)
+
+    out: list[dict[str, Any]] = []
+    for idx, row in enumerate(rows):
+        item = dict(row)
+        if idx < len(prices) and not float(item.get("precio_unitario") or 0):
+            qty, precio, subtotal = prices[idx]
+            item["cantidad"] = qty
+            item["precio_unitario"] = precio
+            item["subtotal"] = subtotal
+        elif idx < len(prices):
+            qty, precio, subtotal = prices[idx]
+            if not float(item.get("precio_unitario") or 0):
+                item["cantidad"] = qty
+                item["precio_unitario"] = precio
+                item["subtotal"] = subtotal
+        elif prices and idx == 0:
+            _, precio, _ = prices[0]
+            qty = int(item.get("cantidad") or 1)
+            item["precio_unitario"] = precio
+            item["subtotal"] = round(precio * qty, 2)
+        out.append(item)
+
+    # Hay más precios que filas: crear ítems placeholder con esos montos.
+    if len(prices) > len(out):
+        for extra_i in range(len(out), len(prices)):
+            qty, precio, subtotal = prices[extra_i]
+            out.append(
+                {
+                    "numero_item": len(out) + 1,
+                    "codigo_producto": "",
+                    "descripcion": "",
+                    "cantidad": qty,
+                    "precio_unitario": precio,
+                    "subtotal": subtotal,
+                }
+            )
+
+    if len(out) == 1 and neto_leido and not prices:
+        if not float(out[0].get("precio_unitario") or 0):
+            out[0]["precio_unitario"] = neto_leido
+            out[0]["subtotal"] = neto_leido
+
+    return out
 
 
 def _extract_items_table_rows(texto: str) -> list[dict[str, Any]]:
@@ -781,88 +1058,10 @@ def _extract_items_table_rows(texto: str) -> list[dict[str, Any]]:
 
         i += 1
 
+    orphans = _extract_orphan_description_items(texto, items)
+    if orphans:
+        items.extend(orphans)
     return items
-
-
-def _is_price_block_end(line: str) -> bool:
-    return bool(
-        re.match(
-            r"^(facturar|presentar|observ|neto|noto|iva)\b",
-            (line or "").strip(),
-            re.I,
-        )
-    )
-
-
-def _extract_items_columnar_prices(texto: str) -> list[tuple[int, float, float]]:
-    """Precios/cantidades en bloque columnar tras encabezado Cantidad."""
-    lines = [ln.strip() for ln in texto.splitlines()]
-    header_i = _find_cantidad_header_index(lines)
-    if header_i is None:
-        return []
-
-    rows: list[tuple[int, float, float]] = []
-    qty = 1
-    pending_price: float | None = None
-
-    for ln in lines[header_i + 1 :]:
-        if _is_price_block_end(ln):
-            break
-        if not ln or _is_table_header_word(ln):
-            continue
-        if re.fullmatch(r"\d{1,4}", ln):
-            qty = max(int(ln), 1)
-            continue
-        amt = _parse_monto_chileno(ln)
-        if amt is None or amt < 500:
-            continue
-        if pending_price is None:
-            pending_price = amt
-            continue
-        subtotal = amt
-        precio = pending_price
-        if qty == 1 and abs(subtotal - precio) / max(precio, 1) <= 0.15:
-            subtotal = precio
-        elif subtotal < precio * 0.5:
-            subtotal = round(precio * qty, 2)
-        rows.append((qty, precio, subtotal))
-        pending_price = None
-        qty = 1
-
-    if pending_price is not None:
-        rows.append((qty, pending_price, round(pending_price * qty, 2)))
-
-    return rows
-
-
-def _merge_items_rows_with_prices(
-    rows: list[dict[str, Any]],
-    prices: list[tuple[int, float, float]],
-    neto_leido: float | None,
-) -> list[dict[str, Any]]:
-    if not rows:
-        return rows
-    out: list[dict[str, Any]] = []
-    for idx, row in enumerate(rows):
-        item = dict(row)
-        if idx < len(prices) and not float(item.get("precio_unitario") or 0):
-            qty, precio, subtotal = prices[idx]
-            item["cantidad"] = qty
-            item["precio_unitario"] = precio
-            item["subtotal"] = subtotal
-        elif prices:
-            _, precio, _ = prices[0]
-            qty = int(item.get("cantidad") or 1)
-            item["precio_unitario"] = precio
-            item["subtotal"] = round(precio * qty, 2)
-        out.append(item)
-
-    if len(out) == 1 and neto_leido and not prices:
-        if not float(out[0].get("precio_unitario") or 0):
-            out[0]["precio_unitario"] = neto_leido
-            out[0]["subtotal"] = neto_leido
-
-    return out
 
 
 def _extract_items_columnar_single(texto: str, neto_leido: float | None) -> dict[str, Any] | None:
@@ -1022,7 +1221,7 @@ def _extract_items(texto: str, neto_leido: float | None = None) -> list[dict[str
             elif len(items) == 1 and obs.get("texto"):
                 for ln in obs["texto"].splitlines():
                     ln = ln.strip()
-                    if re.match(r"^(MAXUS|GREAT\s*WALL|JAC)\b", ln, re.I):
+                    if re.match(r"^(MAXUS|GREAT\s*WALL|JAC|CHANGAN|HUNTER)\b", ln, re.I):
                         if ln.upper() not in desc.upper():
                             desc = f"{desc} {ln}".strip() if desc else ln
                         break
