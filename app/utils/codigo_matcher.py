@@ -95,18 +95,55 @@ def aplicar_fuzzy_a_productos(
     if not productos or not rut_proveedor:
         return productos
 
+    rut_norm = clean_rut(rut_proveedor)
+    if not rut_norm:
+        return productos
+
+    mapeos = ProveedorCodigoInterno.query.filter_by(
+        proveedor_rut=rut_norm
+    ).all()
+    if not mapeos:
+        return productos
+
+    dict_mapeos = {
+        m.codigo_proveedor.upper().strip(): m.codigo_interno
+        for m in mapeos
+        if m.codigo_proveedor
+    }
+    if not dict_mapeos:
+        return productos
+
+    codigos = list(dict_mapeos.keys())
+
     for producto in productos:
         codigo_ocr = producto.get("codigo_proveedor", "")
         if not codigo_ocr:
             continue
 
-        match = fuzzy_match_codigo(codigo_ocr, rut_proveedor, threshold)
-        if match:
+        codigo_norm = codigo_ocr.upper().strip()
+        if codigo_norm in dict_mapeos:
             producto["codigo_ocr_original"] = codigo_ocr
-            producto["codigo_proveedor"] = match["codigo_proveedor"]
-            producto["codigo_interno"] = match["codigo_interno"]
-            producto["match_score"] = match["score"]
-            producto["match_type"] = match["match_type"]
+            producto["codigo_proveedor"] = codigo_norm
+            producto["codigo_interno"] = dict_mapeos[codigo_norm]
+            producto["match_score"] = 100
+            producto["match_type"] = "exact"
+            continue
+
+        match = process.extractOne(
+            codigo_norm,
+            codigos,
+            scorer=fuzz.ratio,
+            score_cutoff=threshold,
+        )
+        if not match:
+            continue
+
+        matched_codigo, score, _ = match
+        producto["codigo_ocr_original"] = codigo_ocr
+        producto["codigo_proveedor"] = matched_codigo
+        producto["codigo_interno"] = dict_mapeos[matched_codigo]
+        producto["match_score"] = int(score)
+        producto["match_type"] = "fuzzy"
 
     return productos
 

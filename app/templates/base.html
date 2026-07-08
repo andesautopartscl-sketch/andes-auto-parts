@@ -875,6 +875,123 @@ function toggleMenu(id) {
 		});
 	};
 
+	window._submitModuleForm = function (form, options) {
+		options = options || {};
+		if (!form) {
+			return;
+		}
+		var container = document.getElementById('appMainContent');
+		if (!container) {
+			form.submit();
+			return;
+		}
+		var submitter = options.submitter || null;
+		var actionRaw = (submitter && submitter.getAttribute('formaction')) || form.getAttribute('action') || window.location.href;
+		var pushUrl = actionRaw;
+		try {
+			var actU = new URL(actionRaw, window.location.origin);
+			pushUrl = actU.pathname + actU.search;
+		} catch (eAct) {}
+
+		closeAppModal();
+		var softNav = !!options.softNav;
+		if (!softNav) {
+			showLoading(container);
+		}
+
+		moduleLoadSeq += 1;
+		var loadId = moduleLoadSeq;
+		if (moduleLoadAbort) {
+			try {
+				moduleLoadAbort.abort();
+			} catch (e) {}
+		}
+		moduleLoadAbort = new AbortController();
+
+		if (typeof window.ensureCsrfForms === 'function') {
+			window.ensureCsrfForms(form);
+		}
+		var fd = new FormData(form);
+		if (submitter && submitter.name && !fd.has(submitter.name)) {
+			fd.append(submitter.name, submitter.value || '');
+		}
+
+		fetch(actionRaw, {
+			method: 'POST',
+			body: fd,
+			signal: moduleLoadAbort.signal,
+			headers: {
+				'X-Requested-With': 'XMLHttpRequest',
+				'Accept': 'text/html'
+			},
+			credentials: 'same-origin'
+		})
+		.then(function (res) {
+			if (loadId !== moduleLoadSeq) {
+				return Promise.reject({ stale: true });
+			}
+			if (res.redirected && res.url.indexOf('/login') !== -1) {
+				window.location.href = res.url;
+				return Promise.reject(new Error('redirect'));
+			}
+			if (!res.ok) throw new Error('HTTP ' + res.status);
+			var finalUrl = res.url || '';
+			return res.text().then(function (html) {
+				return { html: html, finalUrl: finalUrl };
+			});
+		})
+		.then(function (data) {
+			if (loadId !== moduleLoadSeq) {
+				return Promise.reject({ stale: true });
+			}
+			container.innerHTML = data.html;
+			return executeScripts(container).then(function () {
+				return data.finalUrl;
+			});
+		})
+		.then(function (finalUrl) {
+			if (loadId !== moduleLoadSeq) {
+				return;
+			}
+			try {
+				if (finalUrl) {
+					var parsed = new URL(finalUrl, window.location.origin);
+					pushUrl = parsed.pathname + parsed.search + parsed.hash;
+				}
+			} catch (e) {}
+			clearHistEtiquetasSessionIfNotHistorialUrl(pushUrl);
+			if (!options.skipHistory && window.history && window.history.replaceState) {
+				history.replaceState({ moduleUrl: pushUrl }, '', pushUrl);
+			}
+			updateSidebarActive(pushUrl);
+			document.dispatchEvent(new CustomEvent('app:module-loaded', { detail: { url: pushUrl } }));
+			if (typeof options.onDone === 'function') {
+				options.onDone(null, pushUrl);
+			}
+		})
+		.catch(function (err) {
+			if (typeof options.onDone === 'function') {
+				if (!err || (!err.stale && err.name !== 'AbortError' && err.message !== 'redirect')) {
+					options.onDone(err);
+				}
+			}
+			if (err && err.stale) {
+				return;
+			}
+			if (err && err.name === 'AbortError') {
+				return;
+			}
+			if (err && err.message === 'redirect') {
+				return;
+			}
+			if (loadId !== moduleLoadSeq) {
+				return;
+			}
+			var msg = (err && err.message) ? err.message : 'Error';
+			container.innerHTML = '<div style="padding:40px;text-align:center;color:#dc2626;">❌ Error al guardar: ' + msg + '</div>';
+		});
+	};
+
 	/* Handle browser back/forward */
 	window.addEventListener('popstate', function (e) {
 		if (e.state && e.state.moduleUrl) {
@@ -923,6 +1040,12 @@ function toggleMenu(id) {
 			closeAppModal();
 		}
 	});
+
+	/* Tras recarga completa (POST de formularios, F5, enlace directo): reabrir el acordeón
+	   del módulo que corresponde a la URL actual (p. ej. BODEGA en ajuste/ingreso). */
+	try {
+		updateSidebarActive(window.location.pathname + window.location.search + window.location.hash);
+	} catch (eSidebarInit) {}
 })();
 </script>
 {% include 'partials/idle_session_warning.html' %}

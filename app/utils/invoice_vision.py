@@ -21,6 +21,13 @@ OCR_PARSER_REV = "fecha-mundo-v8"
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 MAX_PDF_BYTES = 12 * 1024 * 1024
 VISION_SCOPES = ["https://www.googleapis.com/auth/cloud-vision"]
+_DTE_XML_MARKERS = ("FchEmis", "<Detalle", "<DTE", "MntTotal", "<VlrCodigo", "<EnvioDTE")
+_DTE_XML_MARKERS_BYTES = tuple(m.encode("ascii") for m in _DTE_XML_MARKERS)
+_MAX_DTE_XML_CHUNK = 400_000
+_MAX_DTE_BLOB_CHARS = 600_000
+_VISION_OCR_TIMEOUT_SEC = 120.0
+
+_vision_client_cache: dict[str, vision.ImageAnnotatorClient] = {}
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 logger = logging.getLogger(__name__)
@@ -161,40 +168,127 @@ def _fecha_iso_a_dd_mm_yyyy(y: int, mo: int, d: int) -> str | None:
     return f"{d:02d}-{mo:02d}-{y}"
 
 
+def _text_looks_like_dte_xml(text: str) -> bool:
+    if not text or len(text) < 40 or "<" not in text:
+        return False
+    return any(marker in text for marker in _DTE_XML_MARKERS)
+
+
+def _bytes_might_be_dte_xml(raw: bytes) -> bool:
+    if not raw or len(raw) < 40 or b"<" not in raw[:16384]:
+        return False
+    sample = raw if len(raw) <= 131072 else raw[:65536] + raw[-65536:]
+    return any(marker in sample for marker in _DTE_XML_MARKERS_BYTES)
+
+
+def _decode_dte_blob(raw: bytes | str | None) -> str | None:
+    if not raw:
+        return None
+    if isinstance(raw, str):
+        text = raw.strip()
+        return text if _text_looks_like_dte_xml(text) else None
+    for encoding in ("utf-8", "latin-1"):
+        text = raw.decode(encoding, errors="ignore")
+        if _text_looks_like_dte_xml(text):
+            return text
+    return None
+
+
+def _dte_blobs_complete(blobs: list[str]) -> bool:
+    return any(
+        "FchEmis" in blob and "<Detalle" in blob and "MntTotal" in blob
+        for blob in blobs
+    )
+
+
+def _clip_dte_blob(text: str) -> str:
+    if len(text) <= _MAX_DTE_BLOB_CHARS:
+        return text
+    return text[:_MAX_DTE_BLOB_CHARS]
+
+
+def _extract_dte_xml_chunks_from_bytes(pdf_bytes: bytes) -> list[str]:
+    """Fragmentos XML embebidos sin decodificar el PDF completo (evita regex sobre MB)."""
+    if not pdf_bytes or b"FchEmis" not in pdf_bytes:
+        return []
+    chunks: list[str] = []
+    seen: set[str] = set()
+    pos = 0
+    while len(chunks) < 8:
+        idx = pdf_bytes.find(b"FchEmis", pos)
+        if idx == -1:
+            break
+        start = max(0, idx - 48_000)
+        end = min(len(pdf_bytes), idx + _MAX_DTE_XML_CHUNK)
+        raw = pdf_bytes[start:end]
+        for encoding in ("utf-8", "latin-1"):
+            text = raw.decode(encoding, errors="ignore")
+            for opener in ("<?xml", "<EnvioDTE", "<SetDTE", "<DTE"):
+                cut = text.find(opener)
+                if cut >= 0:
+                    text = text[cut:]
+                    break
+            text = _clip_dte_blob(text.strip())
+            if not _text_looks_like_dte_xml(text):
+                continue
+            key = text[:160]
+            if key in seen:
+                break
+            seen.add(key)
+            chunks.append(text)
+            break
+        pos = idx + 7
+    return chunks
+
+
+def _pdf_has_dte_markers(pdf_bytes: bytes) -> bool:
+    return any(marker in pdf_bytes for marker in _DTE_XML_MARKERS_BYTES)
+
+
 def _iter_dte_pdf_text_blobs(pdf_bytes: bytes) -> list[str]:
-    """Texto/XML embebido en PDF DTE (streams, archivos adjuntos, cuerpo)."""
+    """Texto/XML embebido en PDF DTE (archivos adjuntos y streams con XML)."""
     if not pdf_bytes:
         return []
     blobs: list[str] = []
     seen: set[str] = set()
 
-    def add_blob(raw: bytes | str | None) -> None:
-        if not raw:
+    def add_text(text: str | None) -> None:
+        if not text:
             return
-        if isinstance(raw, bytes):
-            for encoding in ("utf-8", "latin-1"):
-                text = raw.decode(encoding, errors="ignore")
-                if text and text not in seen and len(text) >= 40:
-                    seen.add(text)
-                    blobs.append(text)
-                break
-        else:
-            text = str(raw)
-            if text and text not in seen and len(text) >= 40:
-                seen.add(text)
-                blobs.append(text)
+        text = _clip_dte_blob(text.strip())
+        if not text or text in seen or not _text_looks_like_dte_xml(text):
+            return
+        seen.add(text)
+        blobs.append(text)
 
-    add_blob(pdf_bytes)
+    for chunk in _extract_dte_xml_chunks_from_bytes(pdf_bytes):
+        add_text(chunk)
+        if _dte_blobs_complete(blobs):
+            return blobs
+
+    if _dte_blobs_complete(blobs) or not _pdf_has_dte_markers(pdf_bytes):
+        return blobs
 
     try:
         import fitz  # PyMuPDF
 
         with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
             for i in range(doc.embfile_count()):
-                add_blob(doc.embfile_get(i))
-            for xref in range(1, doc.xref_length()):
+                add_text(_decode_dte_blob(doc.embfile_get(i)))
+                if _dte_blobs_complete(blobs):
+                    return blobs
+
+            xref_limit = min(doc.xref_length(), 400)
+            for xref in range(1, xref_limit):
                 try:
-                    add_blob(doc.xref_stream(xref))
+                    if not doc.xref_is_stream(xref):
+                        continue
+                    stream = doc.xref_stream(xref)
+                    if not stream or not _bytes_might_be_dte_xml(stream):
+                        continue
+                    add_text(_decode_dte_blob(stream))
+                    if _dte_blobs_complete(blobs):
+                        return blobs
                 except Exception:
                     continue
     except Exception:
@@ -202,9 +296,12 @@ def _iter_dte_pdf_text_blobs(pdf_bytes: bytes) -> list[str]:
     return blobs
 
 
-def _extract_fecha_from_dte_pdf(pdf_bytes: bytes) -> str | None:
+def _extract_fecha_from_dte_pdf(
+    pdf_bytes: bytes,
+    blobs: list[str] | None = None,
+) -> str | None:
     """Fecha de emisión desde XML embebido en PDF DTE chileno (FchEmis)."""
-    if not pdf_bytes:
+    if not pdf_bytes and not blobs:
         return None
 
     def from_text(blob: str) -> str | None:
@@ -222,7 +319,7 @@ def _extract_fecha_from_dte_pdf(pdf_bytes: bytes) -> str | None:
                     return parsed
         return None
 
-    for blob in _iter_dte_pdf_text_blobs(pdf_bytes):
+    for blob in blobs if blobs is not None else _iter_dte_pdf_text_blobs(pdf_bytes):
         found = from_text(blob)
         if found:
             return found
@@ -245,9 +342,12 @@ def _extract_productos_from_dte_xml(blob: str) -> list[dict[str, Any]]:
     """Ítems desde XML DTE chileno (CdgItem / QtyItem / PrcItem)."""
     if not blob or "<" not in blob:
         return []
+    blob = _clip_dte_blob(blob)
     productos: list[dict[str, Any]] = []
     blocks = re.findall(r"<Detalle\b[^>]*>.*?</Detalle>", blob, re.IGNORECASE | re.DOTALL)
     if not blocks:
+        if len(blob) > 120_000:
+            return []
         blocks = [blob]
     for block in blocks:
         code_m = re.search(r"<VlrCodigo>([^<]+)</VlrCodigo>", block, re.IGNORECASE)
@@ -297,10 +397,13 @@ def _extract_montos_from_dte_xml(blob: str) -> tuple[int | None, int | None, int
     return neto, iva, total
 
 
-def _extract_productos_from_dte_pdf(pdf_bytes: bytes) -> list[dict[str, Any]]:
+def _extract_productos_from_dte_pdf(
+    pdf_bytes: bytes,
+    blobs: list[str] | None = None,
+) -> list[dict[str, Any]]:
     """Productos desde XML embebido en PDF DTE (Facele y similares)."""
     best: list[dict[str, Any]] = []
-    for blob in _iter_dte_pdf_text_blobs(pdf_bytes):
+    for blob in blobs if blobs is not None else _iter_dte_pdf_text_blobs(pdf_bytes):
         productos = _extract_productos_from_dte_xml(blob)
         if len(productos) > len(best):
             best = productos
@@ -309,8 +412,9 @@ def _extract_productos_from_dte_pdf(pdf_bytes: bytes) -> list[dict[str, Any]]:
 
 def _extract_montos_from_dte_pdf(
     pdf_bytes: bytes,
+    blobs: list[str] | None = None,
 ) -> tuple[int | None, int | None, int | None]:
-    for blob in _iter_dte_pdf_text_blobs(pdf_bytes):
+    for blob in blobs if blobs is not None else _iter_dte_pdf_text_blobs(pdf_bytes):
         neto, iva, total = _extract_montos_from_dte_xml(blob)
         if neto is not None and total is not None:
             return neto, iva, total
@@ -4744,6 +4848,133 @@ def parsear_factura_chilena(texto: str) -> dict[str, Any]:
     return resultado
 
 
+def _extract_pdf_bundle(pdf_bytes: bytes) -> dict[str, Any]:
+    """Una sola apertura PyMuPDF: texto nativo, blobs DTE e imagen de vista previa."""
+    bundle: dict[str, Any] = {
+        "native_text": "",
+        "dte_blobs": [],
+        "preview_png": b"",
+    }
+    if not pdf_bytes:
+        return bundle
+
+    bundle["dte_blobs"] = _iter_dte_pdf_text_blobs(pdf_bytes)
+
+    try:
+        import fitz  # PyMuPDF
+
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+            if doc.page_count >= 1:
+                bundle["native_text"] = (doc.load_page(0).get_text("text") or "").strip()
+                page = doc.load_page(0)
+                pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
+                bundle["preview_png"] = pix.tobytes("png")
+    except Exception:
+        if not bundle["native_text"]:
+            bundle["native_text"] = _extract_pdf_native_text(pdf_bytes)
+    return bundle
+
+
+def _apply_pdf_dte_fields(
+    resultado: dict[str, Any],
+    pdf_bytes: bytes,
+    dte_blobs: list[str],
+) -> None:
+    dte_productos = _extract_productos_from_dte_pdf(pdf_bytes, dte_blobs)
+    if dte_productos:
+        resultado["_dte_productos"] = dte_productos
+        dte_neto, dte_iva, dte_total = _extract_montos_from_dte_pdf(pdf_bytes, dte_blobs)
+        if dte_neto is not None:
+            resultado["_dte_neto"] = dte_neto
+        if dte_iva is not None:
+            resultado["_dte_iva"] = dte_iva
+        if dte_total is not None:
+            resultado["_dte_total"] = dte_total
+        try:
+            from app.utils.invoice_providers import registry as _inv_registry
+
+            _specific = _inv_registry.find(
+                resultado.get("rut_proveedor"), resultado.get("ocr_texto_crudo") or ""
+            )
+            if getattr(_specific, "nombre", "") == "repuesto_center":
+                parsed = _specific.parse(dict(resultado))
+                resultado.update(parsed)
+                resultado["productos_n"] = len(resultado.get("productos") or [])
+        except Exception:
+            pass
+
+
+def _enrich_with_invoice_registry(resultado: dict[str, Any]) -> dict[str, Any]:
+    try:
+        from app.utils.invoice_providers import registry as _inv_registry
+
+        texto = resultado.get("ocr_texto_crudo") or ""
+        parser = _inv_registry.find(resultado.get("rut_proveedor"), texto)
+        return parser.parse(resultado)
+    except Exception:
+        return resultado
+
+
+def _pdf_native_parse_is_sufficient(resultado: dict[str, Any]) -> bool:
+    if not resultado.get("rut_proveedor"):
+        return False
+    has_total = resultado.get("total") or resultado.get("total_neto")
+    has_doc = bool(resultado.get("numero_documento"))
+    productos = resultado.get("productos") or []
+    dte_productos = resultado.get("_dte_productos") or []
+    if productos and has_total:
+        return True
+    if dte_productos and has_doc and has_total:
+        return True
+    texto = (resultado.get("ocr_texto_crudo") or "").strip()
+    if has_doc and has_total and len(texto) >= 350:
+        return True
+    return False
+
+
+def _try_parse_pdf_without_vision(
+    file_bytes: bytes,
+    bundle: dict[str, Any],
+) -> dict[str, Any] | None:
+    pdf_native = (bundle.get("native_text") or "").strip()
+    dte_blobs = bundle.get("dte_blobs") or []
+    preview_png = bundle.get("preview_png") or b""
+
+    if len(pdf_native) < 80 and not dte_blobs:
+        return None
+
+    texto = pdf_native or ""
+    if not texto and dte_blobs:
+        texto = dte_blobs[0][:8000]
+
+    resultado = parsear_factura_chilena(texto)
+    resultado["ocr_texto_crudo"] = texto
+    resultado["ocr_fuente"] = "pdf_native"
+    _apply_pdf_dte_fields(resultado, file_bytes, dte_blobs)
+    resultado = _enrich_with_invoice_registry(resultado)
+
+    if not resultado.get("fecha"):
+        if pdf_native:
+            fecha_native = _extract_fecha_emision(_normalize_ocr_text(pdf_native))
+            if fecha_native:
+                resultado["fecha"] = fecha_native
+                resultado["fecha_fuente"] = "pdf_text"
+        if not resultado.get("fecha"):
+            fecha_xml = _extract_fecha_from_dte_pdf(file_bytes, dte_blobs)
+            if fecha_xml:
+                resultado["fecha"] = fecha_xml
+                resultado["fecha_fuente"] = "dte_xml"
+
+    if not _pdf_native_parse_is_sufficient(resultado):
+        return None
+
+    if preview_png:
+        resultado["preview_base64"] = (
+            "data:image/png;base64," + base64.b64encode(preview_png).decode("ascii")
+        )
+    return resultado
+
+
 def _convert_pdf_first_page_to_png(pdf_bytes: bytes) -> bytes:
     """Convierte la primera página del PDF a PNG (PyMuPDF; pdf2image como respaldo)."""
     last_error: Exception | None = None
@@ -4755,7 +4986,7 @@ def _convert_pdf_first_page_to_png(pdf_bytes: bytes) -> bytes:
             if doc.page_count < 1:
                 raise ValueError("El PDF no tiene páginas")
             page = doc.load_page(0)
-            pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0), alpha=False)
+            pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
             return pix.tobytes("png")
     except ImportError as exc:
         last_error = exc
@@ -4814,22 +5045,36 @@ def _preprocess_image_for_ocr(image_bytes: bytes) -> bytes:
         return image_bytes
 
 
+def _get_vision_client(cred_path: Path) -> vision.ImageAnnotatorClient:
+    key = str(cred_path.resolve())
+    client = _vision_client_cache.get(key)
+    if client is None:
+        credentials = service_account.Credentials.from_service_account_file(
+            str(cred_path),
+            scopes=VISION_SCOPES,
+        )
+        client = vision.ImageAnnotatorClient(credentials=credentials)
+        _vision_client_cache[key] = client
+    return client
+
+
 def _vision_ocr_text(image_bytes: bytes, cred_path: Path) -> str:
-    credentials = service_account.Credentials.from_service_account_file(
-        str(cred_path),
-        scopes=VISION_SCOPES,
-    )
-    client = vision.ImageAnnotatorClient(credentials=credentials)
+    client = _get_vision_client(cred_path)
     processed = _preprocess_image_for_ocr(image_bytes)
     image = vision.Image(content=processed)
     image_context = vision.ImageContext(language_hints=["es"])
 
     try:
         response = client.document_text_detection(
-            image=image, image_context=image_context
+            image=image,
+            image_context=image_context,
+            timeout=_VISION_OCR_TIMEOUT_SEC,
         )
     except Exception as exc:
-        raise ValueError("No se pudo contactar a Google Cloud Vision") from exc
+        raise ValueError(
+            "No se pudo contactar a Google Cloud Vision (timeout o red). "
+            "Revisá conexión a internet e intentá de nuevo."
+        ) from exc
 
     if response.error.message:
         raise ValueError(response.error.message)
@@ -4869,11 +5114,43 @@ def analizar_factura(image_base64: str, media_type: str) -> dict[str, Any]:
         raise ValueError("Base64 inválido") from exc
 
     preview_base64: str | None = None
+    dte_blobs: list[str] = []
+    pdf_native = ""
+    image_bytes: bytes
     if mt == "application/pdf":
         if len(file_bytes) > MAX_PDF_BYTES:
             raise ValueError("El PDF es demasiado grande (máx. 12 MB)")
-        image_bytes = _convert_pdf_first_page_to_png(file_bytes)
-        preview_base64 = "data:image/png;base64," + base64.b64encode(image_bytes).decode("ascii")
+        t0 = __import__("time").perf_counter()
+        bundle = _extract_pdf_bundle(file_bytes)
+        pdf_native = bundle.get("native_text") or ""
+        dte_blobs = bundle.get("dte_blobs") or []
+        preview_png = bundle.get("preview_png") or b""
+
+        fast = _try_parse_pdf_without_vision(file_bytes, bundle)
+        if fast is not None:
+            logger.info(
+                "analizar_factura PDF sin OCR (%.2fs) rut=%s productos=%s",
+                __import__("time").perf_counter() - t0,
+                fast.get("rut_proveedor"),
+                len(fast.get("productos") or []),
+            )
+            return fast
+
+        if preview_png:
+            image_bytes = preview_png
+            preview_base64 = "data:image/png;base64," + base64.b64encode(preview_png).decode(
+                "ascii"
+            )
+        else:
+            image_bytes = _convert_pdf_first_page_to_png(file_bytes)
+            preview_base64 = "data:image/png;base64," + base64.b64encode(image_bytes).decode(
+                "ascii"
+            )
+        logger.info(
+            "analizar_factura PDF requiere OCR (prep %.2fs, native=%d chars)",
+            __import__("time").perf_counter() - t0,
+            len(pdf_native),
+        )
     else:
         image_bytes = file_bytes
         if len(image_bytes) > MAX_IMAGE_BYTES:
@@ -4882,56 +5159,37 @@ def analizar_factura(image_base64: str, media_type: str) -> dict[str, Any]:
     if len(image_bytes) > MAX_IMAGE_BYTES:
         raise ValueError("La imagen generada desde el PDF es demasiado grande (máx. 12 MB)")
 
+    t_ocr = __import__("time").perf_counter()
     texto_ocr = _vision_ocr_text(image_bytes, cred_path).strip()
+    logger.info("analizar_factura Vision OCR %.2fs", __import__("time").perf_counter() - t_ocr)
     if not texto_ocr:
         raise ValueError("No se detectó texto en el documento. Pruebe con mejor calidad.")
 
     texto_parts: list[str] = []
-    pdf_native = ""
-    if mt == "application/pdf":
-        pdf_native = _extract_pdf_native_text(file_bytes)
-        if pdf_native:
-            texto_parts.append(pdf_native)
+    if pdf_native:
+        texto_parts.append(pdf_native)
     texto_parts.append(texto_ocr)
     texto = "\n".join(texto_parts)
 
     resultado = parsear_factura_chilena(texto)
     resultado["ocr_texto_crudo"] = texto
+    resultado["ocr_fuente"] = "vision"
 
     if mt == "application/pdf":
-        dte_productos = _extract_productos_from_dte_pdf(file_bytes)
-        if dte_productos:
-            resultado["_dte_productos"] = dte_productos
-            dte_neto, dte_iva, dte_total = _extract_montos_from_dte_pdf(file_bytes)
-            if dte_neto is not None:
-                resultado["_dte_neto"] = dte_neto
-            if dte_iva is not None:
-                resultado["_dte_iva"] = dte_iva
-            if dte_total is not None:
-                resultado["_dte_total"] = dte_total
-            try:
-                from app.utils.invoice_providers import registry as _inv_registry
-
-                _specific = _inv_registry.find(
-                    resultado.get("rut_proveedor"), texto
-                )
-                if getattr(_specific, "nombre", "") == "repuesto_center":
-                    resultado = _specific.parse(resultado)
-                    resultado["productos_n"] = len(resultado.get("productos") or [])
-            except Exception:
-                pass
+        _apply_pdf_dte_fields(resultado, file_bytes, dte_blobs)
 
     if not resultado.get("fecha"):
         if mt == "application/pdf":
-            fecha_xml = _extract_fecha_from_dte_pdf(file_bytes)
-            if fecha_xml:
-                resultado["fecha"] = fecha_xml
-                resultado["fecha_fuente"] = "dte_xml"
-            elif pdf_native:
+            if pdf_native:
                 fecha_native = _extract_fecha_emision(_normalize_ocr_text(pdf_native))
                 if fecha_native:
                     resultado["fecha"] = fecha_native
                     resultado["fecha_fuente"] = "pdf_text"
+            if not resultado.get("fecha"):
+                fecha_xml = _extract_fecha_from_dte_pdf(file_bytes, dte_blobs)
+                if fecha_xml:
+                    resultado["fecha"] = fecha_xml
+                    resultado["fecha_fuente"] = "dte_xml"
 
     if not resultado.get("fecha"):
         header_text = _ocr_document_header_text(image_bytes, cred_path)

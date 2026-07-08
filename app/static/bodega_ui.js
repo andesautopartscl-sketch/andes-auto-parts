@@ -42,6 +42,53 @@
         }
     }
 
+    /** POST de formularios Bodega vía SPA (ajuste, ingreso, salida, recepción). */
+    function submitBodegaFormPost(form, submitter, onDone) {
+        if (typeof window._submitModuleForm === "function") {
+            window._submitModuleForm(form, {
+                submitter: submitter || null,
+                softNav: true,
+                onDone: onDone
+            });
+            return;
+        }
+        if (submitter && typeof form.requestSubmit === "function") {
+            form.requestSubmit(submitter);
+        } else {
+            form.submit();
+        }
+    }
+
+    function bindBodegaFormSpaSubmit(form) {
+        if (!form || form.dataset.bodegaSpaSubmitBound === "1") {
+            return;
+        }
+        form.dataset.bodegaSpaSubmitBound = "1";
+        form.addEventListener("submit", function (ev) {
+            var sub = ev.submitter;
+            var method = ((sub && sub.getAttribute("formmethod")) || form.getAttribute("method") || "get").toLowerCase();
+            if (method === "get") {
+                ev.preventDefault();
+                var action = (sub && sub.getAttribute("formaction")) || form.getAttribute("action") || window.location.pathname;
+                try {
+                    var base = new URL(action, window.location.origin);
+                    var fd = new FormData(form);
+                    fd.forEach(function (val, key) {
+                        if (key !== "csrf_token") {
+                            base.searchParams.set(key, val);
+                        }
+                    });
+                    navigateBodegaConsult(base.pathname + "?" + base.searchParams.toString());
+                } catch (eGet) {
+                    form.submit();
+                }
+                return;
+            }
+            ev.preventDefault();
+            submitBodegaFormPost(form, sub);
+        });
+    }
+
     /** Stock por variante en modal buscar producto; 0 es válido (no usar || con stock total). */
     function productSearchStockQty(it) {
         if (!it) return 0;
@@ -2185,8 +2232,9 @@
             });
             if (promises.length === 0) {
                 syncValorNetoInputsForSubmit();
-                form.dataset.ingresoSubmitting = "1";
-                form.submit();
+                submitBodegaFormPost(form, btnGuardarIngreso, function () {
+                    releaseIngresoSubmit();
+                });
                 return;
             }
             Promise.all(promises).then(function (results) {
@@ -2205,16 +2253,13 @@
                     return;
                 }
                 syncValorNetoInputsForSubmit();
-                form.dataset.ingresoSubmitting = "1";
-                form.submit();
+                submitBodegaFormPost(form, btnGuardarIngreso, function () {
+                    releaseIngresoSubmit();
+                });
             });
         }
 
         form.addEventListener("submit", function (ev) {
-            if (form.dataset.ingresoSubmitting === "1") {
-                form.dataset.ingresoSubmitting = "0";
-                return;
-            }
             if (!marcasUrl) {
                 return;
             }
@@ -4664,6 +4709,7 @@
         initAjusteProductSearch(form);
         initAjusteAutoConsult(form);
         initAjusteMultiRows(form);
+        bindBodegaFormSpaSubmit(form);
     }
 
     function initSalidaAutoConsult(form) {
@@ -4775,6 +4821,7 @@
         bindMarcaSugerenciasForm(form);
         initSalidaProductSearch(form);
         initSalidaAutoConsult(form);
+        bindBodegaFormSpaSubmit(form);
     }
 
     function initRecepcionHelp(form) {
@@ -4942,6 +4989,7 @@
         initRecepcionHelp(form);
         initRecepcionProductSearch(form);
         initRecepcionAutoConsult(form);
+        bindBodegaFormSpaSubmit(form);
     }
 
     window.initBodegaUI = function initBodegaUI() {
