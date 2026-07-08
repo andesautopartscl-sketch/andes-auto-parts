@@ -61,6 +61,9 @@ def main() -> int:
         "test_fecha_emision_123310",
         "test_fixture",
         "test_fixture_123310",
+        "test_fixture_124980",
+        "test_fixture_124980_bad_footer",
+        "test_fixture_124980_native_pdf",
     ):
         _register(mundo, fn_name, f"mundo.{fn_name}")
 

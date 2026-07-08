@@ -16,7 +16,7 @@ from google.cloud import vision
 from google.oauth2 import service_account
 
 # Identificador de revisión del parser (visible en respuesta API para depuración).
-OCR_PARSER_REV = "fecha-mundo-v9"
+OCR_PARSER_REV = "mundo-v11"
 
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 MAX_PDF_BYTES = 12 * 1024 * 1024
@@ -705,6 +705,122 @@ def _dte_footer_line_value(line: str) -> int | None:
     return _parse_monto_chileno(m.group(1))
 
 
+def _scan_labeled_footer_amount_after(
+    lines: list[str], idx: int, *, max_ahead: int = 5
+) -> int | None:
+    """Monto en líneas siguientes a etiqueta Neto/IVA/Total (layout Mundo Repuestos)."""
+    for nxt in lines[idx + 1 : idx + 1 + max_ahead]:
+        s = (nxt or "").strip()
+        if not s:
+            continue
+        if re.search(
+            r"timbre|verifique|son\s*:|observaciones|documentos referenciados",
+            s,
+            re.IGNORECASE,
+        ):
+            break
+        if re.fullmatch(r"neto\s*:?\s*|total\s*:?\s*", s, re.IGNORECASE):
+            break
+        val = _dte_footer_line_value(s)
+        if val is not None:
+            return val
+        if re.match(r"^[\$:]+\s*$", s):
+            continue
+        m = re.match(r"^[\$:]+\s*([\d.,]+)\s*$", s)
+        if m:
+            val = _parse_monto_chileno(m.group(1))
+            if val is not None:
+                return val
+        m = re.match(r"^[\$]?\s*([\d.,]+)\s*$", s)
+        if m:
+            val = _parse_monto_chileno(m.group(1))
+            if val is not None and val >= 500:
+                return val
+    return None
+
+
+def _extract_labeled_stacked_footer_montos(
+    lines: list[str],
+) -> tuple[int | None, int | None, int | None]:
+    """Pie apilado: Neto / 19% IVA / Total (Mundo Repuestos y DTE similares)."""
+    best: tuple[int | None, int | None, int | None] = (None, None, None)
+    block: dict[str, int | None] = {"neto": None, "iva": None, "total": None}
+
+    def flush() -> None:
+        nonlocal best, block
+        if block["neto"] is not None and block["total"] is not None:
+            best = (block["neto"], block["iva"], block["total"])
+        block = {"neto": None, "iva": None, "total": None}
+
+    for idx, line in enumerate(lines):
+        low = line.lower().strip().strip(":").strip()
+        if re.fullmatch(r"neto\s*:?\s*", low, re.IGNORECASE):
+            val = _dte_footer_line_value(line) or _scan_labeled_footer_amount_after(
+                lines, idx
+            )
+            if val is not None and val >= 1000:
+                block["neto"] = val
+            continue
+        if re.search(r"19\s*%\s*I\.?\s*V\.?\s*A", line, re.IGNORECASE):
+            val = _dte_footer_line_value(line) or _scan_labeled_footer_amount_after(
+                lines, idx
+            )
+            if val is not None and val >= 100:
+                block["iva"] = val
+            continue
+        if re.fullmatch(r"total\s*:?\s*", low, re.IGNORECASE):
+            val = _dte_footer_line_value(line) or _scan_labeled_footer_amount_after(
+                lines, idx
+            )
+            if val is not None and val >= 1000:
+                block["total"] = val
+                flush()
+
+    if block["neto"] is not None and block["total"] is not None:
+        flush()
+    return best
+
+
+def _montos_triplet_plausible(
+    neto: int | None, iva: int | None, total: int | None
+) -> bool:
+    if neto is None or total is None or neto < 1000 or total < 1000:
+        return False
+    if iva is None:
+        return neto < total
+    return abs(neto + iva - total) <= max(5, int(round(total * 0.01)))
+
+
+def _collect_chilean_amounts_from_lines(lines: list[str]) -> list[int]:
+    amounts: list[int] = []
+    for line in lines:
+        if not _is_chilean_price_line(line):
+            continue
+        m = _PRICE_LINE_RE.match((line or "").strip())
+        if not m:
+            continue
+        val = _parse_monto_chileno(m.group(1))
+        if val is not None and val >= 500:
+            amounts.append(val)
+    return amounts
+
+
+def _detect_chilean_tax_footer_triplet(
+    amounts: list[int],
+) -> tuple[int, int, int] | None:
+    """Detecta neto/IVA/total por aritmética 19% (pie mezclado en columna Valor)."""
+    uniq = sorted({int(a) for a in amounts if a >= 1000}, reverse=True)
+    for total in uniq:
+        for neto in uniq:
+            if neto >= total:
+                continue
+            iva = total - neto
+            if abs(iva - round(neto * 0.19)) <= max(2, int(round(neto * 0.01))):
+                if total >= 5000 and neto >= 5000 and iva >= 100:
+                    return neto, iva, total
+    return None
+
+
 def _extract_dte_footer_montos(lines: list[str]) -> tuple[int | None, int | None, int | None]:
     """Pie factura electrónica chilena: MONTO NETO / IVA 19% / EXENTO / TOTAL."""
     start = next(
@@ -1059,6 +1175,31 @@ def _extract_montos(texto: str) -> tuple[int | None, int | None, int | None]:
             iva = int(total - total_neto)
 
     total_neto, iva, total = _repair_swapped_dte_montos(total_neto, iva, total)
+
+    labeled_neto, labeled_iva, labeled_total = _extract_labeled_stacked_footer_montos(lines)
+    if _montos_triplet_plausible(labeled_neto, labeled_iva, labeled_total):
+        if (total_neto or 0) < 1000:
+            total_neto = labeled_neto
+            iva = labeled_iva if labeled_iva is not None else iva
+            total = labeled_total
+        elif not _montos_triplet_plausible(total_neto, iva, total):
+            total_neto = labeled_neto
+            iva = labeled_iva if labeled_iva is not None else iva
+            total = labeled_total
+        elif labeled_iva is not None and iva is not None:
+            lbl_err = abs(labeled_neto + labeled_iva - labeled_total)  # type: ignore[operator]
+            cur_err = abs((total_neto or 0) + iva - (total or 0))
+            if lbl_err < cur_err:
+                total_neto = labeled_neto
+                iva = labeled_iva
+                total = labeled_total
+
+    if not _montos_triplet_plausible(total_neto, iva, total):
+        triplet = _detect_chilean_tax_footer_triplet(
+            _collect_chilean_amounts_from_lines(lines)
+        )
+        if triplet:
+            total_neto, iva, total = triplet
 
     return total_neto, iva, total
 
@@ -1628,13 +1769,53 @@ def _is_mundo_footer_price_stop(line: str) -> bool:
 
 
 def _footer_montos_factura(texto: str) -> set[int]:
+    lines = [ln.strip() for ln in (texto or "").splitlines() if ln.strip()]
+    labeled_neto, labeled_iva, labeled_total = _extract_labeled_stacked_footer_montos(
+        lines
+    )
+    if _montos_triplet_plausible(labeled_neto, labeled_iva, labeled_total):
+        return {int(x) for x in (labeled_neto, labeled_iva, labeled_total) if x}
+
+    triplet = _detect_chilean_tax_footer_triplet(
+        _collect_chilean_amounts_from_lines(lines)
+    )
+    if triplet:
+        return {triplet[0], triplet[1], triplet[2]}
+
     neto, iva, total = _extract_montos(texto)
-    return {int(x) for x in (neto, iva, total) if x}
+    if _montos_triplet_plausible(neto, iva, total):
+        return {int(x) for x in (neto, iva, total) if x}
+    return set()
+
+
+def _strip_document_totals_from_precios(
+    precios: list[int], texto: str | None, n_items: int
+) -> list[int]:
+    """Quita neto/total del pie cuando el OCR los mezcla con precios de línea."""
+    if not precios:
+        return precios
+    footer = _footer_montos_factura(texto or "")
+    out = [p for p in precios if p not in footer]
+    if len(out) < len(precios):
+        precios = out
+    while precios and footer and precios[0] in footer:
+        precios = precios[1:]
+    if n_items > 0 and len(precios) > n_items:
+        while len(precios) > n_items and precios[0] >= 25_000:
+            sample = precios[1 : n_items + 2]
+            if sample and precios[0] > 3 * max(sample):
+                precios = precios[1:]
+            else:
+                break
+    return precios
 
 
 def _filter_footer_montos_from_precios(
-    precios: list[int], texto: str | None = None
+    precios: list[int], texto: str | None = None, *, n_items: int = 0
 ) -> list[int]:
+    if not precios:
+        return precios
+    precios = _strip_document_totals_from_precios(list(precios), texto, n_items)
     if not precios or not texto:
         return precios
     footer = _footer_montos_factura(texto)
@@ -1737,16 +1918,16 @@ def _extract_precios_mundo_columnar(
     Returns (precios, son_unitarios).
     """
     unit = _filter_footer_montos_from_precios(
-        _extract_precios_unit_seccion(lines, indices), texto
+        _extract_precios_unit_seccion(lines, indices), texto, n_items=n_items
     )
     if n_items > 0 and len(unit) >= n_items:
         return unit[:n_items], True
 
     valor = _filter_footer_montos_from_precios(
-        _extract_precios_valor_seccion(lines, indices), texto
+        _extract_precios_valor_seccion(lines, indices), texto, n_items=n_items
     )
     candidatos = _filter_footer_montos_from_precios(
-        _extract_precios_valor_antes_tabla(lines), texto
+        _extract_precios_valor_antes_tabla(lines), texto, n_items=n_items
     )
     merged = candidatos or valor
     if merged:
@@ -1933,12 +2114,36 @@ def _extract_productos_columnas(lines: list[str]) -> list[dict[str, Any]]:
         codigos_zone = _collect_codigos_columnas_zone(lines, start, end)
         cantidades_zone = _collect_cantidades_columnas_zone(lines, start, end)
         precios_zone = _collect_precios_columnas_zone(lines, start, end)
-        precios_son_unitarios = False
-        if not precios_zone:
-            precios_zone, precios_son_unitarios = _extract_precios_mundo_columnar(
-                lines, indices, "\n".join(lines), len(codigos_zone)
-            )
         texto_col = "\n".join(lines)
+        n_zone = len(codigos_zone)
+        precios_zone = _strip_document_totals_from_precios(
+            precios_zone, texto_col, n_zone
+        )
+        precios_zone = _filter_footer_montos_from_precios(
+            precios_zone, texto_col, n_items=n_zone
+        )
+        precios_son_unitarios = False
+        mundo_precios, mundo_unit_flag = _extract_precios_mundo_columnar(
+            lines, indices, texto_col, n_zone
+        )
+        if not precios_zone:
+            precios_zone = mundo_precios
+            precios_son_unitarios = mundo_unit_flag
+        elif n_zone >= 2 and precios_zone:
+            footer = _footer_montos_factura(texto_col)
+            if precios_zone[0] in footer or precios_zone[0] >= 50_000:
+                precios_zone = mundo_precios
+                precios_son_unitarios = mundo_unit_flag
+            elif len(precios_zone) >= 2 * n_zone:
+                units_try = precios_zone[:n_zone]
+                totals_try = precios_zone[n_zone : 2 * n_zone]
+                qty_try = cantidades_zone or [1] * n_zone
+                if not _mundo_unit_total_pairs_match(units_try, totals_try, qty_try):
+                    if len(mundo_precios) >= n_zone:
+                        precios_zone = mundo_precios
+                        precios_son_unitarios = mundo_unit_flag
+        if not precios_zone:
+            precios_zone, precios_son_unitarios = mundo_precios, mundo_unit_flag
         if len(codigos_zone) >= 2:
             n = len(codigos_zone)
             if len(precios_zone) >= 2 * n:
@@ -2127,7 +2332,10 @@ def _select_unit_prices(
     if not precios or not cantidades:
         return []
     n = len(cantidades)
-    precios = _filter_footer_montos_from_precios(list(precios), texto)
+    precios = _filter_footer_montos_from_precios(
+        list(precios), texto, n_items=n
+    )
+    precios = _strip_document_totals_from_precios(precios, texto, n)
     if not precios:
         return []
 
@@ -2147,6 +2355,9 @@ def _select_unit_prices(
             return units_split
 
     # PDF columnas: N ítems → 2N montos intercalados (unitario, total línea).
+    if len(precios) >= 2 * n and not precios_son_unitarios:
+        return [precios[i * 2] for i in range(n)]
+
     if len(precios) >= 2 * n:
         units: list[int] = []
         for i in range(n):
@@ -2156,6 +2367,9 @@ def _select_unit_prices(
             if total_idx < len(precios):
                 line_total = precios[total_idx]
                 if unit * qty == line_total:
+                    units.append(unit)
+                    continue
+                if qty == 1 and abs(unit - line_total) <= 2:
                     units.append(unit)
                     continue
                 if line_total % qty == 0:
@@ -4952,14 +5166,29 @@ def _pdf_native_parse_is_sufficient(resultado: dict[str, Any]) -> bool:
     has_rut = bool(resultado.get("rut_proveedor"))
     productos = resultado.get("productos") or []
     dte_productos = resultado.get("_dte_productos") or []
-    # Productos + totales bastan para evitar Vision (RUT opcional tras normalizar DV OCR).
-    if productos and has_total:
+    neto = resultado.get("total_neto")
+    total = resultado.get("total")
+    principal = total or neto
+
+    if principal is not None and int(principal) < 1000:
+        return False
+
+    if productos:
+        if any(int(p.get("valor_neto") or 0) >= 50_000 for p in productos):
+            return False
+        if neto and int(neto) >= 1000:
+            suma = _suma_productos_neto(productos)
+            if suma <= 0 or abs(suma - int(neto)) > max(1000, int(neto * 0.12)):
+                return False
+
+    if productos and has_total and principal is not None and int(principal) >= 1000:
         return True
     if dte_productos and has_doc and has_total:
         return True
     texto = (resultado.get("ocr_texto_crudo") or "").strip()
     if has_rut and has_doc and has_total and len(texto) >= 350:
-        return True
+        if principal is not None and int(principal) >= 1000:
+            return True
     return False
 
 

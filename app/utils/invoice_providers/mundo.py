@@ -48,6 +48,26 @@ class MundoParser(BaseInvoiceParser):
         if invoice_vision._has_xinwang_column_layout(lines):
             return data
 
+        # Montos: pie apilado Mundo, DTE embebido o triplete neto/IVA/total en el texto.
+        ln, li, lt = invoice_vision._extract_labeled_stacked_footer_montos(lines)
+        if invoice_vision._montos_triplet_plausible(ln, li, lt):
+            data["total_neto"] = ln
+            if li is not None:
+                data["iva"] = li
+            data["total"] = lt
+        elif data.get("_dte_neto") is not None:
+            data["total_neto"] = data.get("_dte_neto")
+            if data.get("_dte_iva") is not None:
+                data["iva"] = data.get("_dte_iva")
+            if data.get("_dte_total") is not None:
+                data["total"] = data.get("_dte_total")
+        elif (data.get("total_neto") or 0) < 1000:
+            triplet = invoice_vision._detect_chilean_tax_footer_triplet(
+                invoice_vision._collect_chilean_amounts_from_lines(lines)
+            )
+            if triplet:
+                data["total_neto"], data["iva"], data["total"] = triplet
+
         rebuilt = invoice_vision._extract_productos_columnar_bundle(texto_norm, lines)
         if rebuilt:
             data["productos"] = rebuilt
