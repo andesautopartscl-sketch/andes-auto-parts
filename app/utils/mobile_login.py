@@ -1,30 +1,29 @@
-"""Detección de contexto PWA / mobile para redirects post-login."""
+"""Bridge: helpers de login PWA (implementación en andes_mobile/server)."""
 from __future__ import annotations
 
-from flask import Request, url_for
+import importlib.util
+import sys
 
-from app.utils.login_wall import safe_next_path
-
-MOBILE_PWA_COOKIE = "andes_mobile_pwa"
-
-
-def is_mobile_login_context(request: Request, next_url: str | None = None) -> bool:
-    nxt = safe_next_path(next_url) or ""
-    if nxt.startswith("/m"):
-        return True
-    if (request.cookies.get(MOBILE_PWA_COOKIE) or "").strip() == "1":
-        return True
-    ref = (request.referrer or "").lower()
-    if "/m/" in ref or ref.rstrip("/").endswith("/m"):
-        return True
-    ua = (request.user_agent.string or "").lower()
-    if any(token in ua for token in ("iphone", "ipad", "android", "mobile", "samsung")):
-        return True
-    return False
+from app.utils.mobile_ui_paths import mobile_server_dir
 
 
-def mobile_login_target(next_url: str | None = None) -> str:
-    nxt = safe_next_path(next_url)
-    if nxt and nxt.startswith("/m"):
-        return nxt
-    return url_for("mobile.home")
+def _load():
+    path = mobile_server_dir() / "mobile_login.py"
+    if not path.is_file():
+        raise RuntimeError(f"No se encontró mobile_login en {path}")
+    name = "andes_mobile_login_ext"
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"No se pudo cargar {path}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_mod = _load()
+MOBILE_PWA_COOKIE = _mod.MOBILE_PWA_COOKIE
+is_mobile_login_context = _mod.is_mobile_login_context
+mobile_login_target = _mod.mobile_login_target

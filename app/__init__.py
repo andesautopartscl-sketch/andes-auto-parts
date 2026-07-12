@@ -196,6 +196,30 @@ def create_app():
     if not app.logger.handlers:
         logging.basicConfig(level=logging.INFO)
 
+    # UI móvil separada (andes_mobile/ o C:\App movil andes): solo /m/ y /static/mobile/*.
+    from jinja2 import ChoiceLoader, FileSystemLoader
+
+    from app.utils.mobile_ui_paths import mobile_static_dir, mobile_templates_parent, mobile_ui_root
+
+    _mobile_root = mobile_ui_root()
+    _mobile_tpl_parent = mobile_templates_parent()
+    if _mobile_root is None or _mobile_tpl_parent is None:
+        app.logger.warning(
+            "Andes Mobile no encontrado (andes_mobile/). "
+            "Las rutas /m/ fallarán hasta que exista la carpeta."
+        )
+    else:
+        app.jinja_loader = ChoiceLoader(
+            [FileSystemLoader(str(_mobile_tpl_parent)), app.jinja_loader]
+        )
+        app.logger.info("Mobile UI: %s", _mobile_root)
+
+    @app.route("/static/mobile/<path:filename>")
+    def andes_mobile_static(filename):
+        from flask import send_from_directory
+
+        return send_from_directory(mobile_static_dir(), filename)
+
     from app.extensions import limiter
     from flask_limiter.errors import RateLimitExceeded
 

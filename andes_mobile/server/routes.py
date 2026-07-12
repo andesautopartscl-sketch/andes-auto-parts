@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-from pathlib import Path
 
 from flask import abort, current_app, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
@@ -12,7 +11,7 @@ from app.oc_clientes.models import OC_ESTADOS, OC_ESTADO_LABELS
 from app.seguridad.models import Usuario as UsuarioSistema
 from app.utils.finance_visibility import user_can_view_finanzas
 
-from . import mobile_bp
+from .bootstrap import mobile_bp
 from . import clientes as mobile_clientes
 from . import data as mobile_data
 from . import etiquetas as mobile_etiquetas
@@ -82,7 +81,9 @@ def _nombre_presentable() -> str:
 @mobile_bp.route("/service-worker.js")
 def service_worker():
     """SW con scope /m/ — exento del login wall vía login_wall.py."""
-    root = Path(current_app.root_path) / "static" / "mobile"
+    from app.utils.mobile_ui_paths import mobile_static_dir
+
+    root = mobile_static_dir()
     response = send_from_directory(root, "service-worker.js", mimetype="application/javascript")
     response.headers["Cache-Control"] = "no-cache"
     response.headers["Service-Worker-Allowed"] = "/"
