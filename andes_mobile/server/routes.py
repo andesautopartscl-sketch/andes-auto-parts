@@ -52,6 +52,36 @@ def _saludo_hora() -> str:
     return "Buenas noches"
 
 
+def _fecha_hoy_legible() -> str:
+    """Fecha corta en español para el home (sin depender de locale del SO)."""
+    dias = (
+        "Lunes",
+        "Martes",
+        "Miércoles",
+        "Jueves",
+        "Viernes",
+        "Sábado",
+        "Domingo",
+    )
+    meses = (
+        "ene",
+        "feb",
+        "mar",
+        "abr",
+        "may",
+        "jun",
+        "jul",
+        "ago",
+        "sep",
+        "oct",
+        "nov",
+        "dic",
+    )
+    now = datetime.now()
+    # weekday(): lunes=0 … domingo=6
+    return f"{dias[now.weekday()]} {now.day} {meses[now.month - 1]}"
+
+
 def _nombre_presentable() -> str:
     """Primer nombre legible para saludo en Home (no el username técnico)."""
     uid = session.get("usuario_id")
@@ -99,6 +129,8 @@ def home():
         kpis=kpis,
         saludo=_saludo_hora(),
         nombre_presentable=_nombre_presentable(),
+        fecha_hoy=_fecha_hoy_legible(),
+        fecha_iso=datetime.now().date().isoformat(),
         **_nav_ctx("inicio"),
     )
 
