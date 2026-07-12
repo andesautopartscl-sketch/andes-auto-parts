@@ -4,51 +4,34 @@
     <meta charset="UTF-8">
     <title>OC {{ oc.numero_oc }} | Andes Auto Parts</title>
     <style>
-        body { font-family: Arial, sans-serif; font-size: 13px; color: #0f172a; margin: 24px; }
-        h1 { font-size: 20px; margin: 0 0 4px; }
-        .meta { color: #64748b; margin-bottom: 16px; }
-        table { width: 100%; border-collapse: collapse; margin: 12px 0; }
-        th, td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; }
-        th { background: #f8fafc; }
-        .totals { text-align: right; margin-top: 12px; }
-        @media print { .no-print { display: none; } }
+        body { margin: 0; background: #f1f5f9; font-family: Arial, sans-serif; }
+        .oc-print-standalone-bar {
+            padding: 10px 16px; background: #fff; border-bottom: 1px solid #e2e8f0;
+            display: flex; gap: 8px; align-items: center;
+        }
+        .oc-print-standalone-wrap { max-width: 920px; margin: 20px auto; padding: 0 20px 28px; }
+        .oc-print-standalone-sheet {
+            background: #fff; padding: 28px 32px;
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.1); border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #fff; }
+            .oc-print-standalone-wrap { margin: 0; padding: 0; max-width: none; }
+            .oc-print-standalone-sheet { box-shadow: none; padding: 0; border-radius: 0; }
+        }
     </style>
 </head>
 <body>
-    <button class="no-print" onclick="window.print()">Imprimir</button>
-    <h1>Orden de Compra Cliente</h1>
-    <p class="meta">N° OC: <strong>{{ oc.numero_oc }}</strong> · Estado: {{ estado_label }} · Fecha: {{ oc.fecha_oc.strftime('%d/%m/%Y') if oc.fecha_oc else '—' }}{% if oc.vendedor %} · Vendedor: {{ oc.vendedor }}{% endif %}</p>
-
-    {% if cliente %}
-    <p><strong>Cliente:</strong> {{ cliente.nombre }}{% if cliente.rut %} · RUT {{ cliente.rut|format_rut }}{% endif %}<br>
-    {% if oc.direccion_despacho %}<strong>Despacho:</strong> {{ oc.direccion_despacho }}{% endif %}</p>
-    {% endif %}
-
-    <table>
-        <thead>
-            <tr><th>Código</th><th>Descripción</th><th>Cant.</th><th>Precio neto</th><th>Subtotal</th></tr>
-        </thead>
-        <tbody>
-            {% for it in oc.items %}
-            <tr>
-                <td>{{ it.codigo_producto or '—' }}</td>
-                <td>{{ it.descripcion or '—' }}</td>
-                <td>{{ it.cantidad }}</td>
-                <td>${{ '{:,.0f}'.format(it.precio_unitario or 0).replace(',', '.') }}</td>
-                <td>${{ '{:,.0f}'.format(it.subtotal or 0).replace(',', '.') }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <div class="totals">
-        <div>Neto: ${{ '{:,.0f}'.format(oc.neto or 0).replace(',', '.') }}</div>
-        <div>IVA 19%: ${{ '{:,.0f}'.format(oc.iva or 0).replace(',', '.') }}</div>
-        <div><strong>Total: ${{ '{:,.0f}'.format(oc.total or 0).replace(',', '.') }}</strong></div>
+    <div class="oc-print-standalone-bar no-print">
+        <button type="button" onclick="window.print()" style="padding:6px 14px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Imprimir</button>
+        <button type="button" onclick="window.close()" style="padding:6px 14px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cerrar</button>
     </div>
-
-    {% if oc.observaciones %}
-    <p><strong>Observaciones:</strong> {{ oc.observaciones }}</p>
-    {% endif %}
+    <div class="oc-print-standalone-wrap">
+        <div class="oc-print-standalone-sheet">
+            {% include 'oc_clientes/_imprimir_sheet.html' %}
+        </div>
+    </div>
 </body>
 </html>

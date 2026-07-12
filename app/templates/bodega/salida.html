@@ -85,6 +85,10 @@
     color: #64748b;
     line-height: 1.35;
 }
+/* .field { display:flex } en bodega anula el atributo HTML hidden */
+#salidaIncorporacionWrap[hidden] {
+    display: none !important;
+}
 .salida-stock-grupo {
     margin-top: 8px;
     font-size: 12px;
@@ -430,6 +434,23 @@
                 {% endif %}
             </div>
             <div class="field field-full">
+                <label for="observacion_motivo">Motivo (opcional)</label>
+                <select id="observacion_motivo" name="observacion_motivo">
+                    <option value="">— Sin motivo especial —</option>
+                    {% for motivo in (salida_motivo_opciones or []) %}
+                    <option value="{{ motivo }}" {% if form_data.observacion_motivo == motivo %}selected{% endif %}>{{ motivo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field field-full" id="salidaIncorporacionWrap" hidden>
+                <label for="codigo_destino">Código destino (incorporación) *</label>
+                <input id="codigo_destino" name="codigo_destino" maxlength="100"
+                       value="{{ form_data.codigo_destino or '' }}"
+                       placeholder="Ej: AR240RC — producto que absorbe el costo"
+                       autocomplete="off" style="text-transform:uppercase;">
+                <p id="salidaIncorporacionHint" class="salida-cantidad-cap" style="margin-top:6px;"></p>
+            </div>
+            <div class="field field-full">
                 <label for="observacion">Observación</label>
                 <textarea id="observacion" name="observacion" placeholder="Motivo de salida, cliente, reserva o documento interno">{{ form_data.observacion }}</textarea>
             </div>
@@ -463,6 +484,11 @@
                 <div class="salida-help-section">
                     <h4 class="salida-help-section-title">3) Registrar</h4>
                     <p class="salida-help-text">Completá la <strong>observación</strong> si querés dejar motivo, cliente o referencia interna. Pulsá <strong>Guardar salida</strong> para descontar el stock; el sistema valida que haya existencia suficiente.</p>
+                </div>
+
+                <div class="salida-help-section">
+                    <h4 class="salida-help-section-title">Incorporación a producto</h4>
+                    <p class="salida-help-text">Si el motivo es <strong>Incorporación a producto</strong>, indicá el <strong>código destino</strong>. Se descuenta el origen, queda trazabilidad en el movimiento y, si el destino ya tiene costo, se prorratea el valor y se ajusta el P. venta manteniendo el margen.</p>
                 </div>
 
                 <button type="button" class="btn" id="salidaHelpClose">Cerrar</button>
@@ -685,6 +711,133 @@
     }
     bindSalidaHelp();
     document.addEventListener("app:module-loaded", bindSalidaHelp);
+})();
+</script>
+<script>
+(function () {
+    var MOTIVO_INC = {{ (motivo_incorporacion or 'Incorporación a producto') | tojson }};
+    var previewUrl = {{ url_for('bodega.api_incorporacion_preview') | tojson }};
+    var motivoSel = document.getElementById('observacion_motivo');
+    var wrap = document.getElementById('salidaIncorporacionWrap');
+    var destInp = document.getElementById('codigo_destino');
+    var hint = document.getElementById('salidaIncorporacionHint');
+    var codigoInp = document.getElementById('codigo');
+    var marcaInp = document.getElementById('marca');
+    var bodegaSel = document.getElementById('bodega');
+    var cantidadInp = document.getElementById('cantidad');
+    var previewTimer = null;
+
+    function toggleInc() {
+        if (!motivoSel || !wrap || !destInp) return;
+        var on = motivoSel.value === MOTIVO_INC;
+        wrap.hidden = !on;
+        destInp.required = on;
+        if (!on) {
+            destInp.setCustomValidity('');
+            if (hint) {
+                hint.textContent = '';
+                hint.style.color = '';
+            }
+        } else {
+            refreshPreview();
+        }
+    }
+
+    function validarDestinoObligatorio() {
+        if (!motivoSel || motivoSel.value !== MOTIVO_INC) {
+            if (destInp) destInp.setCustomValidity('');
+            return true;
+        }
+        var dest = (destInp && destInp.value || '').trim();
+        if (!dest) {
+            if (destInp) {
+                destInp.setCustomValidity('Debés indicar el código destino para Incorporación a producto.');
+                destInp.reportValidity();
+                destInp.focus();
+            }
+            if (hint) {
+                hint.textContent = 'Obligatorio: ingresá el código destino (ej. AR240RC) para poder guardar la salida.';
+                hint.style.color = '#b91c1c';
+            }
+            if (wrap) wrap.hidden = false;
+            return false;
+        }
+        if (destInp) destInp.setCustomValidity('');
+        return true;
+    }
+
+    function refreshPreview() {
+        if (!hint || !destInp || !codigoInp) return;
+        if (!motivoSel || motivoSel.value !== MOTIVO_INC) {
+            hint.textContent = '';
+            return;
+        }
+        var dest = (destInp.value || '').trim().toUpperCase();
+        var origen = (codigoInp.value || '').trim().toUpperCase();
+        var qty = parseInt((cantidadInp && cantidadInp.value || '').trim(), 10);
+        if (!dest) {
+            hint.textContent = 'Indicá el código que absorbe el costo (ej. AR240RC).';
+            return;
+        }
+        if (!origen) {
+            hint.textContent = 'Consultá primero el producto origen.';
+            return;
+        }
+        if (!qty || qty <= 0) {
+            hint.textContent = 'Indicá la cantidad a incorporar.';
+            return;
+        }
+        hint.textContent = 'Calculando prorrateo…';
+        var params = new URLSearchParams({
+            codigo_origen: origen,
+            codigo_destino: dest,
+            cantidad: String(qty),
+            marca: (marcaInp && marcaInp.value || '').trim(),
+            bodega: (bodegaSel && bodegaSel.value || '').trim()
+        });
+        fetch(previewUrl + '?' + params.toString(), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                hint.textContent = (data && data.mensaje) ? data.mensaje : '';
+                hint.style.color = (data && data.puede_prorratear) ? '#166534' : '#92400e';
+            })
+            .catch(function () {
+                hint.textContent = 'No se pudo calcular la vista previa.';
+                hint.style.color = '#b45309';
+            });
+    }
+
+    function schedulePreview() {
+        if (previewTimer) window.clearTimeout(previewTimer);
+        previewTimer = window.setTimeout(refreshPreview, 350);
+    }
+
+    if (motivoSel) {
+        motivoSel.addEventListener('change', toggleInc);
+        toggleInc();
+    }
+    if (destInp) {
+        destInp.addEventListener('input', function () {
+            destInp.value = (destInp.value || '').toUpperCase();
+            destInp.setCustomValidity('');
+            schedulePreview();
+        });
+        destInp.addEventListener('blur', refreshPreview);
+    }
+    if (cantidadInp) cantidadInp.addEventListener('input', schedulePreview);
+
+    var form = document.getElementById('salidaForm');
+    if (form) {
+        form.addEventListener('submit', function (ev) {
+            var submitter = ev.submitter;
+            var method = ((submitter && submitter.getAttribute('formmethod')) || form.getAttribute('method') || 'post').toLowerCase();
+            if (method !== 'post') return;
+            if (!validarDestinoObligatorio()) {
+                ev.preventDefault();
+                ev.stopPropagation();
+            }
+        });
+    }
 })();
 </script>
 {% endblock %}

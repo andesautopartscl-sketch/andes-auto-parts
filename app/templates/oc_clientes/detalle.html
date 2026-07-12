@@ -101,6 +101,37 @@
     text-transform: none; letter-spacing: normal; color: #475569; margin-bottom: 12px;
 }
 .oc-modal-box label.checkbox-row input { width: auto; margin: 0; }
+.oc-meta-vendedor { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.oc-meta-empty { color: #94a3b8; }
+.oc-meta-add-btn { padding: 2px 8px !important; font-size: 10px !important; }
+.oc-print-modal .oc-print-modal-box {
+    background: #fff; border-radius: 10px; width: 100%; max-width: 920px;
+    max-height: 92vh; display: flex; flex-direction: column;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.22); overflow: hidden;
+}
+.oc-print-modal-toolbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 14px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0;
+}
+.oc-print-modal-toolbar h3 { margin: 0; font-size: 14px; font-weight: 700; color: #0f172a; }
+.oc-print-modal-actions { display: flex; gap: 6px; }
+.oc-print-modal-body {
+    overflow-y: auto; padding: 20px; background: linear-gradient(180deg, #dbe3ef 0%, #e8edf4 100%); flex: 1;
+}
+.oc-print-modal-body .oc-print-sheet {
+    padding: 28px 32px; box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12); border-radius: 8px;
+    border: 1px solid #fff;
+}
+@media print {
+    body.oc-printing * { visibility: hidden !important; }
+    body.oc-printing #ocPrintSheet,
+    body.oc-printing #ocPrintSheet * { visibility: visible !important; }
+    body.oc-printing #ocPrintSheet {
+        position: absolute; left: 0; top: 0; width: 100%;
+        padding: 0 !important; box-shadow: none !important; border-radius: 0 !important;
+    }
+    body.oc-printing .no-print { display: none !important; }
+}
 @media (max-width: 960px) {
     .oc-meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .oc-meta-item.span-2 { grid-column: span 2; }
@@ -123,7 +154,7 @@
         </div>
         <div class="oc-detail-actions">
             <a class="btn sm" href="{{ url_for('oc_clientes.lista') }}">← Listado</a>
-            <a class="btn sm outline" href="{{ url_for('oc_clientes.imprimir', oid=oc.id) }}" target="_blank">Imprimir</a>
+            <button type="button" class="btn sm outline" id="btnImprimir">Imprimir</button>
             {% if puede_modificar %}
                 {% if oc.estado == 'recibida' %}
                 <a class="btn sm outline" href="{{ url_for('oc_clientes.editar', oid=oc.id, from='detalle') }}">Editar</a>
@@ -165,7 +196,16 @@
                 </div>
                 <div class="oc-meta-item">
                     <dt>Vendedor</dt>
-                    <dd>{{ oc.vendedor or '—' }}</dd>
+                    <dd class="oc-meta-vendedor">
+                        {% if oc.vendedor %}
+                        {{ oc.vendedor }}
+                        {% else %}
+                        <span class="oc-meta-empty">—</span>
+                        {% if puede_modificar and oc.estado != 'anulada' %}
+                        <button type="button" class="btn sm outline oc-meta-add-btn" id="btnVendedor">Agregar</button>
+                        {% endif %}
+                        {% endif %}
+                    </dd>
                 </div>
                 <div class="oc-meta-item span-2">
                     <dt>Dirección despacho</dt>
@@ -228,6 +268,7 @@
                         <tr>
                             <th>Código</th>
                             <th>Descripción</th>
+                            <th>Marca</th>
                             <th style="text-align:center;">Cant.</th>
                             <th style="text-align:right;">Precio</th>
                             <th style="text-align:right;">Subtotal</th>
@@ -240,6 +281,7 @@
                         <tr>
                             <td class="code">{{ it.codigo_producto or '—' }}</td>
                             <td>{{ it.descripcion or '—' }}</td>
+                            <td>{{ it.marca or '—' }}</td>
                             <td class="num" style="text-align:center;">{{ it.cantidad }}</td>
                             <td class="num">${{ '{:,.0f}'.format(it.precio_unitario or 0).replace(',', '.') }}</td>
                             <td class="num">${{ '{:,.0f}'.format(it.subtotal or 0).replace(',', '.') }}</td>
@@ -247,7 +289,7 @@
                             <td class="num" style="text-align:center;">{% if it.stock_descontado %}Sí{% elif it.en_inventario %}No{% else %}N/A{% endif %}</td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="7" class="empty">Sin ítems.</td></tr>
+                        <tr><td colspan="8" class="empty">Sin ítems.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -303,6 +345,29 @@
 </div>
 {% endif %}
 
+{% if puede_modificar and not oc.vendedor and oc.estado != 'anulada' %}
+<div class="oc-modal" id="modalVendedor">
+    <div class="oc-modal-box">
+        <h3>Asignar vendedor</h3>
+        <form method="post" action="{{ url_for('oc_clientes.asignar_vendedor', oid=oc.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label for="vendedor_asignar">Vendedor</label>
+            <input id="vendedor_asignar" name="vendedor" list="vendedoresDatalist" required maxlength="120"
+                   autocomplete="off" placeholder="Nombre del vendedor">
+            <datalist id="vendedoresDatalist">
+                {% for v in vendedores_opciones %}
+                <option value="{{ v }}"></option>
+                {% endfor %}
+            </datalist>
+            <div style="display:flex;gap:6px;justify-content:flex-end;">
+                <button type="button" class="btn sm modal-cancel">Cancelar</button>
+                <button type="submit" class="btn sm primary">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
 {% if puede_modificar and oc.estado == 'entregada' %}
 <div class="oc-modal" id="modalPago">
     <div class="oc-modal-box">
@@ -330,6 +395,7 @@
 {% if puede_modificar %}
 {% include 'oc_clientes/_anular_modal.html' %}
 {% endif %}
+{% include 'oc_clientes/_imprimir_modal.html' %}
 {% endblock %}
 
 {% block extra_scripts %}
@@ -348,7 +414,14 @@
     function closeModals() { document.querySelectorAll('.oc-modal').forEach(function (m) { m.classList.remove('open'); }); }
 
     document.getElementById('btnEntregar')?.addEventListener('click', function () { openModal('modalEntregar'); });
+    document.getElementById('btnVendedor')?.addEventListener('click', function () { openModal('modalVendedor'); });
     document.getElementById('btnPago')?.addEventListener('click', function () { openModal('modalPago'); });
+    document.getElementById('btnImprimir')?.addEventListener('click', function () { openModal('modalImprimir'); });
+    document.getElementById('btnOcPrintGo')?.addEventListener('click', function () {
+        document.body.classList.add('oc-printing');
+        window.print();
+    });
+    window.addEventListener('afterprint', function () { document.body.classList.remove('oc-printing'); });
     document.querySelectorAll('.modal-cancel').forEach(function (b) { b.addEventListener('click', closeModals); });
     document.querySelectorAll('.oc-modal').forEach(function (m) {
         m.addEventListener('click', function (e) { if (e.target === m) closeModals(); });

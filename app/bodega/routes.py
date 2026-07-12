@@ -142,6 +142,8 @@ INGRESO_METODOS_PAGO_OPCIONES = [
     "Documento de pago",
 ]
 
+MOTIVO_INCORPORACION = "Incorporación a producto"
+
 AJUSTE_OBSERVACION_OPCIONES = [
     "Conteo físico",
     "Diferencia de inventario",
@@ -151,7 +153,431 @@ AJUSTE_OBSERVACION_OPCIONES = [
     "Regularización por despacho",
     "Ajuste por auditoría",
     "Reclasificación interna",
+    MOTIVO_INCORPORACION,
 ]
+
+SALIDA_MOTIVO_OPCIONES = [
+    "Salida general",
+    "Cliente / reserva",
+    "Merma / daño",
+    "Corrección administrativa",
+    MOTIVO_INCORPORACION,
+]
+
+
+def _es_motivo_incorporacion(motivo: str | None) -> bool:
+    return (motivo or "").strip() == MOTIVO_INCORPORACION
+
+
+def _ingreso_items_costo(
+    codigo: str,
+    marca: str | None,
+    bodega: str | None,
+) -> list[IngresoDocumentoItem]:
+    """Líneas de ingreso vigentes con costo, para un código (+ marca opcional) y bodega."""
+    code = (codigo or "").strip().upper()
+    if not code:
+        return []
+    marca_n = (marca or "").strip().upper()
+    bodega_n = _normalize_bodega(bodega)
+    q = (
+        db.session.query(IngresoDocumentoItem)
+        .join(IngresoDocumento, IngresoDocumento.id == IngresoDocumentoItem.ingreso_documento_id)
+        .filter(or_(IngresoDocumento.anulado.is_(False), IngresoDocumento.anulado.is_(None)))
+        .filter(func.upper(IngresoDocumentoItem.codigo_producto) == code)
+        .filter(IngresoDocumentoItem.bodega == bodega_n)
+    )
+    if marca_n:
+        q = q.filter(func.upper(func.trim(IngresoDocumentoItem.marca)) == marca_n)
+    rows = q.all()
+    return [
+        it
+        for it in rows
+        if int(it.cantidad or 0) > 0 and float(it.valor_neto or 0) > 0
+    ]
+
+
+def _costo_unitario_ponderado(items: list[IngresoDocumentoItem]) -> float | None:
+    total_qty = 0
+    total_val = 0.0
+    for it in items:
+        qty = int(it.cantidad or 0)
+        vn = float(it.valor_neto or 0)
+        if qty > 0 and vn > 0:
+            total_qty += qty
+            total_val += vn * qty
+    if total_qty <= 0 or total_val <= 0:
+        return None
+    return total_val / total_qty
+
+
+def _margen_efectivo_destino(
+    items: list[IngresoDocumentoItem],
+    codigo: str,
+    marca: str | None,
+    bodega: str | None,
+) -> float | None:
+    """Margen % a conservar al recalcular P. venta (override variante o última línea)."""
+    code = (codigo or "").strip().upper()
+    marca_n = (marca or "").strip().upper()
+    bodega_n = _normalize_bodega(bodega)
+    if code and marca_n:
+        v = (
+            db.session.query(ProductoVarianteStock)
+            .filter_by(
+                codigo_producto=code,
+                marca=marca_n,
+                bodega=bodega_n,
+                origen_compra=ORIGEN_COMPRA_DEFAULT,
+            )
+            .first()
+        )
+        om = getattr(v, "margen_override_pct", None) if v else None
+        if om is not None:
+            try:
+                mg = float(om)
+                if 0 <= mg < 100:
+                    return mg
+            except (TypeError, ValueError):
+                pass
+    for it in sorted(items, key=lambda x: int(x.id or 0), reverse=True):
+        if it.margen_pct is not None:
+            try:
+                mg = float(it.margen_pct)
+                if 0 <= mg < 100:
+                    return mg
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
+def _precio_desde_costo_y_margen(costo: float, margen_pct: float | None) -> float | None:
+    if costo <= 0:
+        return None
+    if margen_pct is None:
+        return None
+    denom = 1.0 - float(margen_pct) / 100.0
+    if denom <= 0:
+        return None
+    return round(costo / denom, 2)
+
+
+def _margen_desde_costo_y_precio(costo: float, precio: float) -> float | None:
+    if costo <= 0 or precio <= 0 or precio <= costo:
+        return None
+    return round((1.0 - float(costo) / float(precio)) * 100.0, 2)
+
+
+def _precio_venta_real_destino(
+    codigo: str,
+    marca: str | None,
+    bodega: str | None,
+    items: list[IngresoDocumentoItem],
+) -> float | None:
+    """
+    P. venta neto vigente del destino (el que realmente se vende), no el
+    recalculado desde margen de un ingreso puntual con costo bajo.
+    Prioridad: override variante → catálogo P_PUBLICO → última línea de ingreso.
+    """
+    code = (codigo or "").strip().upper()
+    marca_n = (marca or "").strip().upper()
+    bodega_n = _normalize_bodega(bodega)
+    if code and marca_n:
+        v = (
+            db.session.query(ProductoVarianteStock)
+            .filter_by(
+                codigo_producto=code,
+                marca=marca_n,
+                bodega=bodega_n,
+                origen_compra=ORIGEN_COMPRA_DEFAULT,
+            )
+            .first()
+        )
+        op = getattr(v, "precio_publico_neto_override", None) if v else None
+        if op is not None:
+            try:
+                pv = float(op)
+                if pv > 0:
+                    return round(pv, 2)
+            except (TypeError, ValueError):
+                pass
+    prod = _producto_por_codigo(code)
+    if prod is not None:
+        try:
+            pv_cat = float(prod.get("precio_publico") or 0)
+            if pv_cat > 0:
+                return round(pv_cat, 2)
+        except (TypeError, ValueError, AttributeError):
+            pass
+    if items:
+        last = max(items, key=lambda x: int(x.id or 0))
+        if last.precio_venta_neto is not None:
+            try:
+                pv = float(last.precio_venta_neto)
+                if pv > 0:
+                    return round(pv, 2)
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
+def _resolver_marca_destino_incorporacion(
+    codigo_destino: str,
+    bodega: str,
+    marca_origen: str | None,
+) -> str:
+    """Elige marca del destino: misma que origen si existe; si no, la de mayor stock."""
+    code = (codigo_destino or "").strip().upper()
+    bodega_n = _normalize_bodega(bodega)
+    marca_o = (marca_origen or "").strip().upper()
+    variantes = _stock_variantes_por_codigo(code)
+    en_bodega = [v for v in variantes if (v.get("bodega") or "").strip() == bodega_n]
+    if marca_o and any((v.get("marca") or "").strip().upper() == marca_o for v in en_bodega):
+        return marca_o
+    if en_bodega:
+        best = max(en_bodega, key=lambda v: int(v.get("stock") or 0))
+        return (best.get("marca") or "").strip().upper()
+    if variantes:
+        best = max(variantes, key=lambda v: int(v.get("stock") or 0))
+        return (best.get("marca") or "").strip().upper()
+    prod = _producto_por_codigo(code)
+    return _normalize_brand((prod or {}).get("marca") or "") if prod else ""
+
+
+def _preview_incorporacion(
+    codigo_origen: str,
+    codigo_destino: str,
+    cantidad: int,
+    marca_origen: str | None,
+    bodega: str | None,
+) -> dict:
+    """Datos de prorrateo para UI / validación (no persiste)."""
+    origen = (codigo_origen or "").strip().upper()
+    destino = (codigo_destino or "").strip().upper()
+    bodega_n = _normalize_bodega(bodega)
+    marca_o = (marca_origen or "").strip().upper()
+    out: dict = {
+        "ok": False,
+        "codigo_origen": origen,
+        "codigo_destino": destino,
+        "cantidad": int(cantidad or 0),
+        "puede_prorratear": False,
+        "costo_origen_unitario": None,
+        "total_transferir": None,
+        "costo_destino_antes": None,
+        "costo_destino_despues": None,
+        "precio_venta_antes": None,
+        "precio_venta_despues": None,
+        "margen_pct": None,
+        "marca_destino": "",
+        "mensaje": "",
+    }
+    if not origen or not destino:
+        out["mensaje"] = "Indicá código origen y destino."
+        return out
+    if origen == destino:
+        out["mensaje"] = "El código destino debe ser distinto al origen."
+        return out
+    if cantidad is None or int(cantidad) <= 0:
+        out["mensaje"] = "La cantidad a incorporar debe ser mayor a 0."
+        return out
+    if _producto_por_codigo(destino) is None:
+        out["mensaje"] = f"El código destino {destino} no existe o está inactivo."
+        return out
+
+    items_origen = _ingreso_items_costo(origen, marca_o or None, bodega_n)
+    if not items_origen and marca_o:
+        items_origen = _ingreso_items_costo(origen, None, bodega_n)
+    costo_o = _costo_unitario_ponderado(items_origen)
+    if costo_o is None:
+        out["mensaje"] = (
+            f"No hay costo de ingreso para {origen}. "
+            "Se registrará la trazabilidad, pero no se puede prorratear valor."
+        )
+        out["ok"] = True
+        return out
+
+    total = round(costo_o * int(cantidad), 2)
+    out["costo_origen_unitario"] = round(costo_o, 2)
+    out["total_transferir"] = total
+    out["ok"] = True
+
+    marca_d = _resolver_marca_destino_incorporacion(destino, bodega_n, marca_o)
+    out["marca_destino"] = marca_d
+    items_dest = _ingreso_items_costo(destino, marca_d or None, bodega_n)
+    if not items_dest and marca_d:
+        items_dest = _ingreso_items_costo(destino, None, bodega_n)
+    costo_d = _costo_unitario_ponderado(items_dest)
+    if not items_dest or costo_d is None:
+        out["mensaje"] = (
+            f"Costo a incorporar: ${total:,.0f} ({int(cantidad)} × ${costo_o:,.0f}). "
+            f"{destino} aún no tiene ingresos con costo: al ingresarlo, sumá ese valor al V. neto. "
+            "El movimiento dejará la trazabilidad."
+        ).replace(",", ".")
+        return out
+
+    total_qty = sum(int(it.cantidad or 0) for it in items_dest)
+    extra_u = total / total_qty if total_qty > 0 else 0.0
+    costo_despues = costo_d + extra_u
+    # P. venta: usar el precio real de venta (catálogo), no margen de un ingreso
+    # con costo puntual bajo (eso inflaba el precio sugerido).
+    pv_antes = _precio_venta_real_destino(destino, marca_d, bodega_n, items_dest)
+    pv_despues = None
+    margen_real = None
+    if pv_antes is not None and costo_d > 0:
+        pv_despues = round(float(pv_antes) * (costo_despues / costo_d), 2)
+        margen_real = _margen_desde_costo_y_precio(costo_despues, pv_despues)
+
+    out["puede_prorratear"] = True
+    out["costo_destino_antes"] = round(costo_d, 2)
+    out["costo_destino_despues"] = round(costo_despues, 2)
+    out["precio_venta_antes"] = pv_antes
+    out["precio_venta_despues"] = pv_despues
+    out["margen_pct"] = margen_real
+    out["mensaje"] = (
+        f"Se transferirán ${total:,.0f} a {destino}: costo "
+        f"${costo_d:,.0f} → ${costo_despues:,.0f}"
+        + (
+            f"; P. venta ${pv_antes:,.0f} → ${pv_despues:,.0f}"
+            if pv_antes is not None and pv_despues is not None
+            else ""
+        )
+        + "."
+    ).replace(",", ".")
+    return out
+
+
+def _aplicar_prorrateo_incorporacion(
+    codigo_origen: str,
+    codigo_destino: str,
+    cantidad: int,
+    marca_origen: str | None,
+    bodega: str | None,
+) -> dict:
+    """
+    Prorratea el costo del origen en los ingresos del destino y ajusta P. venta
+    en proporción al nuevo costo (partiendo del precio real de catálogo).
+    No altera stock del destino.
+    """
+    preview = _preview_incorporacion(
+        codigo_origen, codigo_destino, cantidad, marca_origen, bodega
+    )
+    if not preview.get("ok"):
+        return preview
+    if not preview.get("puede_prorratear"):
+        return preview
+
+    destino = preview["codigo_destino"]
+    bodega_n = _normalize_bodega(bodega)
+    marca_d = preview.get("marca_destino") or ""
+    total = float(preview["total_transferir"] or 0)
+    items_dest = _ingreso_items_costo(destino, marca_d or None, bodega_n)
+    if not items_dest and marca_d:
+        items_dest = _ingreso_items_costo(destino, None, bodega_n)
+    total_qty = sum(int(it.cantidad or 0) for it in items_dest)
+    if total_qty <= 0 or total <= 0:
+        preview["puede_prorratear"] = False
+        preview["mensaje"] = "No se pudo prorratear: destino sin líneas de costo válidas."
+        return preview
+
+    extra_u = total / total_qty
+    costo_antes = float(preview.get("costo_destino_antes") or 0)
+    costo_despues = float(preview.get("costo_destino_despues") or 0)
+    nuevo_pv = preview.get("precio_venta_despues")
+    factor_pv = (costo_despues / costo_antes) if costo_antes > 0 else 1.0
+
+    for it in items_dest:
+        old_vn = float(it.valor_neto or 0)
+        it.valor_neto = round(old_vn + extra_u, 2)
+        # Mantener el P. venta real (escalado) en cada línea; recalcular margen de la línea.
+        try:
+            old_pv = float(it.precio_venta_neto) if it.precio_venta_neto is not None else None
+        except (TypeError, ValueError):
+            old_pv = None
+        if nuevo_pv is not None:
+            it.precio_venta_neto = float(nuevo_pv)
+        elif old_pv and old_pv > 0:
+            it.precio_venta_neto = round(old_pv * factor_pv, 2)
+        if it.precio_venta_neto is not None and float(it.valor_neto or 0) > 0:
+            mg_linea = _margen_desde_costo_y_precio(float(it.valor_neto), float(it.precio_venta_neto))
+            if mg_linea is not None:
+                it.margen_pct = mg_linea
+
+    variante = None
+    if marca_d:
+        variante = _obtener_o_crear_variante(destino, marca_d, bodega_n)
+    if nuevo_pv is not None:
+        _propagar_precio_venta_ingreso_a_catalogo(destino, float(nuevo_pv), variante)
+        # No pisar override con el margen inflado del último ingreso; usar margen real.
+        if variante is not None and preview.get("margen_pct") is not None:
+            variante.margen_override_pct = float(preview["margen_pct"])
+
+    nota = (
+        f"Incorporación desde {preview['codigo_origen']}×{int(cantidad)} "
+        f"(+${total:,.0f} en costo)".replace(",", ".")
+    )
+    for it in items_dest:
+        prev_nota = (it.nota or "").strip()
+        if nota not in prev_nota:
+            it.nota = f"{prev_nota}. {nota}".strip(". ").strip()[:255]
+
+    preview["mensaje"] = (
+        f"Costo prorrateado en {destino}: "
+        f"${preview['costo_destino_antes']:,.0f} → ${preview['costo_destino_despues']:,.0f}"
+        + (
+            f"; P. venta ${preview['precio_venta_antes']:,.0f} → ${preview['precio_venta_despues']:,.0f}"
+            if preview.get("precio_venta_antes") is not None
+            and preview.get("precio_venta_despues") is not None
+            else ""
+        )
+        + "."
+    ).replace(",", ".")
+    return preview
+
+
+def _validar_codigo_destino_incorporacion(
+    motivo: str | None,
+    codigo_origen: str,
+    codigo_destino_raw: str,
+) -> tuple[str | None, str | None]:
+    """
+    Si el motivo es incorporación, exige código destino distinto y existente.
+    Retorna (codigo_destino_normalizado | None, error | None).
+    """
+    if not _es_motivo_incorporacion(motivo):
+        return None, None
+    destino = (codigo_destino_raw or "").strip().upper()
+    origen = (codigo_origen or "").strip().upper()
+    if not destino:
+        return None, "Con Incorporación a producto debés indicar el código destino."
+    if destino == origen:
+        return None, "El código destino debe ser distinto al producto que estás moviendo."
+    if _producto_por_codigo(destino) is None:
+        return None, f"El código destino {destino} no existe o está inactivo."
+    return destino, None
+
+
+def _observacion_con_incorporacion(
+    base: str,
+    codigo_destino: str | None,
+    prorrateo: dict | None = None,
+) -> str:
+    parts: list[str] = []
+    b = (base or "").strip()
+    if b:
+        parts.append(b)
+    if codigo_destino:
+        parts.append(f"→ {codigo_destino.strip().upper()}")
+    if prorrateo:
+        total = prorrateo.get("total_transferir")
+        if total is not None:
+            parts.append(f"costo ${float(total):,.0f}".replace(",", "."))
+        if prorrateo.get("puede_prorratear"):
+            parts.append("prorrateado")
+        elif total is not None:
+            parts.append("pendiente en ingreso destino")
+    text_obs = ". ".join(parts)
+    return text_obs[:255]
 
 
 def _parse_metodo_pago_ingreso() -> str:
@@ -2970,26 +3396,48 @@ def ingreso_anular(doc_id: int):
     return redirect(url_for("bodega.ingreso_historial"))
 
 
+@bodega_bp.route("/api/incorporacion-preview", methods=["GET"])
+@admin_required
+def api_incorporacion_preview():
+    """Vista previa de prorrateo al incorporar un código en otro (ajuste/salida)."""
+    cantidad = _parse_int((request.args.get("cantidad") or "").strip())
+    data = _preview_incorporacion(
+        (request.args.get("codigo_origen") or "").strip().upper(),
+        (request.args.get("codigo_destino") or "").strip().upper(),
+        int(cantidad or 0),
+        _normalize_brand(request.args.get("marca") or ""),
+        _normalize_bodega(request.args.get("bodega") or ""),
+    )
+    return jsonify(data)
+
+
 @bodega_bp.route("/salida", methods=["GET", "POST"])
 @admin_required
 def salida():
     if request.method == "POST" and not has_permission(session.get("user"), session.get("rol"), "bodega_salida"):
         return _deny_bodega_perm("No tienes permiso para registrar salidas de stock.")
     if request.method == "POST":
+        obs_motivo = (request.form.get("observacion_motivo") or "").strip()
+        obs_detalle = (request.form.get("observacion") or "").strip()
         form_data = {
             "codigo": (request.form.get("codigo") or "").strip().upper(),
             "marca": _normalize_brand(request.form.get("marca") or ""),
             "bodega": _normalize_bodega(request.form.get("bodega") or ""),
             "cantidad": (request.form.get("cantidad") or "").strip(),
-            "observacion": (request.form.get("observacion") or "").strip(),
+            "observacion_motivo": obs_motivo,
+            "observacion": obs_detalle,
+            "codigo_destino": (request.form.get("codigo_destino") or "").strip().upper(),
         }
     else:
+        obs_motivo = (request.args.get("observacion_motivo") or "").strip()
         form_data = {
             "codigo": (request.args.get("codigo") or "").strip().upper(),
             "marca": _normalize_brand(request.args.get("marca") or ""),
             "bodega": _normalize_bodega(request.args.get("bodega") or ""),
             "cantidad": (request.args.get("cantidad") or "").strip(),
+            "observacion_motivo": obs_motivo,
             "observacion": (request.args.get("observacion") or "").strip(),
+            "codigo_destino": (request.args.get("codigo_destino") or "").strip().upper(),
         }
     message = None
     producto = None
@@ -3008,52 +3456,87 @@ def salida():
 
     if request.method == "POST":
         cantidad = _parse_int(form_data["cantidad"])
+        codigo_destino, err_dest = _validar_codigo_destino_incorporacion(
+            form_data.get("observacion_motivo"),
+            form_data["codigo"],
+            form_data.get("codigo_destino") or "",
+        )
         if not form_data["codigo"]:
             message = {"type": "error", "text": "Debes ingresar un codigo de producto."}
         elif cantidad is None:
             message = {"type": "error", "text": "La cantidad debe ser un entero mayor a 0."}
+        elif err_dest:
+            message = {"type": "error", "text": err_dest}
         else:
             producto = _producto_por_codigo(form_data["codigo"])
             variantes_disponibles = _stock_variantes_por_codigo(form_data["codigo"])
             if producto is None:
                 message = {"type": "error", "text": "El producto no existe o esta inactivo."}
             else:
-                observacion = form_data["observacion"] or f"Salida manual de bodega (-{cantidad})"
+                base_obs = form_data["observacion"] or ""
+                if form_data.get("observacion_motivo"):
+                    base_obs = (
+                        f"{form_data['observacion_motivo']}. {base_obs}".strip(". ").strip()
+                        if base_obs
+                        else form_data["observacion_motivo"]
+                    )
+                if not base_obs:
+                    base_obs = f"Salida manual de bodega (-{cantidad})"
                 try:
-                    if _requiere_variante(form_data["codigo"], form_data["marca"]):
-                        if not form_data["marca"]:
+                    usa_variante = _requiere_variante(form_data["codigo"], form_data["marca"])
+                    if usa_variante and not form_data["marca"]:
+                        message = {
+                            "type": "error",
+                            "text": "Este codigo trabaja por variantes. Debes indicar una marca.",
+                        }
+                    elif usa_variante:
+                        disp_var = _stock_contexto_para_ajuste(
+                            form_data["codigo"],
+                            form_data["marca"],
+                            form_data["bodega"],
+                            producto,
+                            variantes_disponibles,
+                        )
+                        if cantidad > disp_var:
                             message = {
                                 "type": "error",
-                                "text": "Este codigo trabaja por variantes. Debes indicar una marca.",
+                                "text": f"No hay stock suficiente en esa variante. Disponible: {disp_var}.",
                             }
                         else:
-                            disp_var = _stock_contexto_para_ajuste(
-                                form_data["codigo"],
-                                form_data["marca"],
-                                form_data["bodega"],
-                                producto,
-                                variantes_disponibles,
-                            )
-                            if cantidad > disp_var:
-                                message = {
-                                    "type": "error",
-                                    "text": f"No hay stock suficiente en esa variante. Disponible: {disp_var}.",
-                                }
-                            else:
-                                nuevo_stock_variante = _aplicar_movimiento_variante(
+                            prorrateo = None
+                            if codigo_destino:
+                                prorrateo = _aplicar_prorrateo_incorporacion(
                                     form_data["codigo"],
-                                    "salida",
-                                    -cantidad,
-                                    observacion,
-                                    marca=form_data["marca"],
-                                    bodega=form_data["bodega"],
+                                    codigo_destino,
+                                    int(cantidad),
+                                    form_data["marca"],
+                                    form_data["bodega"],
                                 )
-                                producto = _producto_por_codigo(form_data["codigo"])
-                                variantes_disponibles = _stock_variantes_por_codigo(form_data["codigo"])
-                                message = {
-                                    "type": "success",
-                                    "text": f"Salida aplicada a variante {form_data['marca']} ({form_data['bodega']}). Stock variante: {nuevo_stock_variante}.",
-                                }
+                                if not prorrateo.get("ok"):
+                                    raise ValueError(
+                                        prorrateo.get("mensaje") or "No se pudo validar la incorporación."
+                                    )
+                            observacion = _observacion_con_incorporacion(
+                                base_obs, codigo_destino, prorrateo
+                            )
+                            nuevo_stock_variante = _aplicar_movimiento_variante(
+                                form_data["codigo"],
+                                "salida",
+                                -cantidad,
+                                observacion,
+                                marca=form_data["marca"],
+                                bodega=form_data["bodega"],
+                            )
+                            producto = _producto_por_codigo(form_data["codigo"])
+                            variantes_disponibles = _stock_variantes_por_codigo(form_data["codigo"])
+                            extra = f" {prorrateo['mensaje']}" if prorrateo and prorrateo.get("mensaje") else ""
+                            message = {
+                                "type": "success",
+                                "text": (
+                                    f"Salida aplicada a variante {form_data['marca']} ({form_data['bodega']}). "
+                                    f"Stock variante: {nuevo_stock_variante}.{extra}"
+                                ),
+                            }
                     else:
                         stock_anterior = int(producto["stock_actual"] or 0)
                         if cantidad > stock_anterior:
@@ -3062,6 +3545,22 @@ def salida():
                                 "text": f"No puedes dejar stock negativo. Disponible actual: {stock_anterior}.",
                             }
                         else:
+                            prorrateo = None
+                            if codigo_destino:
+                                prorrateo = _aplicar_prorrateo_incorporacion(
+                                    form_data["codigo"],
+                                    codigo_destino,
+                                    int(cantidad),
+                                    form_data["marca"],
+                                    form_data["bodega"],
+                                )
+                                if not prorrateo.get("ok"):
+                                    raise ValueError(
+                                        prorrateo.get("mensaje") or "No se pudo validar la incorporación."
+                                    )
+                            observacion = _observacion_con_incorporacion(
+                                base_obs, codigo_destino, prorrateo
+                            )
                             nuevo_stock = stock_anterior - cantidad
                             _aplicar_movimiento_stock(
                                 form_data["codigo"],
@@ -3071,13 +3570,27 @@ def salida():
                                 observacion,
                             )
                             producto = _producto_por_codigo(form_data["codigo"])
+                            extra = f" {prorrateo['mensaje']}" if prorrateo and prorrateo.get("mensaje") else ""
                             message = {
                                 "type": "success",
-                                "text": f"Salida aplicada correctamente. Stock actual: {nuevo_stock}.",
+                                "text": f"Salida aplicada correctamente. Stock actual: {nuevo_stock}.{extra}",
                             }
                 except Exception as exc:
                     db.session.rollback()
                     message = {"type": "error", "text": f"No se pudo registrar la salida: {exc}"}
+
+        if message and message.get("type") == "success":
+            form_data = {
+                "codigo": "",
+                "marca": "",
+                "bodega": DEFAULT_BODEGA,
+                "cantidad": "",
+                "observacion_motivo": "",
+                "observacion": "",
+                "codigo_destino": "",
+            }
+            producto = None
+            variantes_disponibles = []
 
     salida_variantes_por_bodega = None
     salida_stock_max = None
@@ -3115,6 +3628,8 @@ def salida():
             bodegas_opciones=bodegas_opciones,
             salida_variantes_por_bodega=salida_variantes_por_bodega,
             salida_stock_max=salida_stock_max,
+            salida_motivo_opciones=SALIDA_MOTIVO_OPCIONES,
+            motivo_incorporacion=MOTIVO_INCORPORACION,
         ),
     )
 
@@ -3136,6 +3651,7 @@ def ajuste():
             "observacion_motivo": obs_motivo,
             "observacion_detalle": obs_detalle[:255],
             "observacion": obs_compuesta[:255],
+            "codigo_destino": (request.form.get("codigo_destino") or "").strip().upper(),
             "ajuste_lineas": _form_data_lineas_ajuste(request.form),
         }
     else:
@@ -3153,6 +3669,7 @@ def ajuste():
             "observacion_motivo": obs_motivo,
             "observacion_detalle": obs_detalle[:255],
             "observacion": obs_compuesta[:255],
+            "codigo_destino": (request.args.get("codigo_destino") or "").strip().upper(),
             "ajuste_lineas": [],
         }
 
@@ -3191,10 +3708,17 @@ def ajuste():
     if request.method == "POST":
         multipost = request.form.get("ajuste_multivariante") == "1"
         nuevo_stock = _parse_int(form_data["nuevo_stock"], allow_zero=True)
+        codigo_destino, err_dest = _validar_codigo_destino_incorporacion(
+            form_data.get("observacion_motivo"),
+            form_data["codigo"],
+            form_data.get("codigo_destino") or "",
+        )
         if not form_data["codigo"]:
             message = {"type": "error", "text": "Debes ingresar un codigo de producto."}
         elif not (form_data.get("observacion_motivo") or "").strip():
             message = {"type": "error", "text": "Debes seleccionar el motivo del ajuste."}
+        elif err_dest:
+            message = {"type": "error", "text": err_dest}
         elif multipost:
             if not (form_data.get("bodega") or "").strip():
                 message = {"type": "error", "text": "Debes ingresar la bodega."}
@@ -3236,29 +3760,69 @@ def ajuste():
                                     "text": "No hay cambios para aplicar en ninguna variante.",
                                 }
                             else:
-                                for marca, nuevo_s, stock_anterior, delta in cambios:
-                                    observacion = (
-                                        f"{base_observacion}. Variante {marca} / {form_data['bodega']} "
-                                        f"{stock_anterior} -> {nuevo_s}"
+                                qty_baja = sum(-d for _, _, _, d in cambios if d < 0)
+                                if codigo_destino and qty_baja <= 0:
+                                    message = {
+                                        "type": "error",
+                                        "text": (
+                                            "Incorporación a producto solo aplica cuando bajás stock "
+                                            "(el origen debe disminuir)."
+                                        ),
+                                    }
+                                else:
+                                    prorrateo = None
+                                    if codigo_destino and qty_baja > 0:
+                                        marca_costo = max(
+                                            ((m, -d) for m, _, _, d in cambios if d < 0),
+                                            key=lambda t: t[1],
+                                        )[0]
+                                        prorrateo = _aplicar_prorrateo_incorporacion(
+                                            form_data["codigo"],
+                                            codigo_destino,
+                                            int(qty_baja),
+                                            marca_costo,
+                                            form_data["bodega"],
+                                        )
+                                        if not prorrateo.get("ok"):
+                                            raise ValueError(
+                                                prorrateo.get("mensaje")
+                                                or "No se pudo validar la incorporación."
+                                            )
+                                    for marca, nuevo_s, stock_anterior, delta in cambios:
+                                        observacion = _observacion_con_incorporacion(
+                                            (
+                                                f"{base_observacion}. Variante {marca} / {form_data['bodega']} "
+                                                f"{stock_anterior} -> {nuevo_s}"
+                                            ),
+                                            codigo_destino if delta < 0 else None,
+                                            prorrateo if delta < 0 else None,
+                                        )
+                                        _aplicar_movimiento_variante(
+                                            form_data["codigo"],
+                                            "ajuste",
+                                            delta,
+                                            observacion,
+                                            marca=marca,
+                                            bodega=form_data["bodega"],
+                                            nuevo_stock_variante=int(nuevo_s),
+                                            commit=False,
+                                        )
+                                    db.session.commit()
+                                    producto = _producto_por_codigo(form_data["codigo"])
+                                    variantes_disponibles = _stock_variantes_por_codigo(form_data["codigo"])
+                                    resumen = ", ".join(f"{m}→{ns}" for m, ns, _, _ in cambios)
+                                    extra = (
+                                        f" {prorrateo['mensaje']}"
+                                        if prorrateo and prorrateo.get("mensaje")
+                                        else ""
                                     )
-                                    _aplicar_movimiento_variante(
-                                        form_data["codigo"],
-                                        "ajuste",
-                                        delta,
-                                        observacion,
-                                        marca=marca,
-                                        bodega=form_data["bodega"],
-                                        nuevo_stock_variante=int(nuevo_s),
-                                        commit=False,
-                                    )
-                                db.session.commit()
-                                producto = _producto_por_codigo(form_data["codigo"])
-                                variantes_disponibles = _stock_variantes_por_codigo(form_data["codigo"])
-                                resumen = ", ".join(f"{m}→{ns}" for m, ns, _, _ in cambios)
-                                message = {
-                                    "type": "success",
-                                    "text": f"Ajuste aplicado a {len(cambios)} variante(s) en {form_data['bodega']}: {resumen}.",
-                                }
+                                    message = {
+                                        "type": "success",
+                                        "text": (
+                                            f"Ajuste aplicado a {len(cambios)} variante(s) en "
+                                            f"{form_data['bodega']}: {resumen}.{extra}"
+                                        ),
+                                    }
                         except Exception as exc:
                             db.session.rollback()
                             message = {"type": "error", "text": f"No se pudo registrar el ajuste: {exc}"}
@@ -3288,10 +3852,36 @@ def ajuste():
                             delta = int(nuevo_stock) - stock_anterior
                             if delta == 0:
                                 message = {"type": "error", "text": "No hay cambios para aplicar en la variante seleccionada."}
+                            elif codigo_destino and delta >= 0:
+                                message = {
+                                    "type": "error",
+                                    "text": (
+                                        "Incorporación a producto solo aplica cuando bajás stock "
+                                        "(el origen debe disminuir)."
+                                    ),
+                                }
                             else:
-                                observacion = (
-                                    f"{base_observacion}. Variante {form_data['marca']} / {form_data['bodega']} "
-                                    f"{stock_anterior} -> {nuevo_stock}"
+                                prorrateo = None
+                                if codigo_destino and delta < 0:
+                                    prorrateo = _aplicar_prorrateo_incorporacion(
+                                        form_data["codigo"],
+                                        codigo_destino,
+                                        int(-delta),
+                                        form_data["marca"],
+                                        form_data["bodega"],
+                                    )
+                                    if not prorrateo.get("ok"):
+                                        raise ValueError(
+                                            prorrateo.get("mensaje")
+                                            or "No se pudo validar la incorporación."
+                                        )
+                                observacion = _observacion_con_incorporacion(
+                                    (
+                                        f"{base_observacion}. Variante {form_data['marca']} / {form_data['bodega']} "
+                                        f"{stock_anterior} -> {nuevo_stock}"
+                                    ),
+                                    codigo_destino,
+                                    prorrateo,
                                 )
                                 _aplicar_movimiento_variante(
                                     form_data["codigo"],
@@ -3304,17 +3894,51 @@ def ajuste():
                                 )
                                 producto = _producto_por_codigo(form_data["codigo"])
                                 variantes_disponibles = _stock_variantes_por_codigo(form_data["codigo"])
+                                extra = (
+                                    f" {prorrateo['mensaje']}"
+                                    if prorrateo and prorrateo.get("mensaje")
+                                    else ""
+                                )
                                 message = {
                                     "type": "success",
-                                    "text": f"Ajuste aplicado a variante {form_data['marca']} ({form_data['bodega']}). Stock variante: {nuevo_stock}.",
+                                    "text": (
+                                        f"Ajuste aplicado a variante {form_data['marca']} ({form_data['bodega']}). "
+                                        f"Stock variante: {nuevo_stock}.{extra}"
+                                    ),
                                 }
                     else:
                         stock_anterior = int(producto["stock_actual"] or 0)
                         delta = nuevo_stock - stock_anterior
                         if delta == 0:
                             message = {"type": "error", "text": "No hay cambios para aplicar en el stock."}
+                        elif codigo_destino and delta >= 0:
+                            message = {
+                                "type": "error",
+                                "text": (
+                                    "Incorporación a producto solo aplica cuando bajás stock "
+                                    "(el origen debe disminuir)."
+                                ),
+                            }
                         else:
-                            observacion = f"{base_observacion}. Stock {stock_anterior} -> {nuevo_stock}"
+                            prorrateo = None
+                            if codigo_destino and delta < 0:
+                                prorrateo = _aplicar_prorrateo_incorporacion(
+                                    form_data["codigo"],
+                                    codigo_destino,
+                                    int(-delta),
+                                    form_data["marca"],
+                                    form_data["bodega"],
+                                )
+                                if not prorrateo.get("ok"):
+                                    raise ValueError(
+                                        prorrateo.get("mensaje")
+                                        or "No se pudo validar la incorporación."
+                                    )
+                            observacion = _observacion_con_incorporacion(
+                                f"{base_observacion}. Stock {stock_anterior} -> {nuevo_stock}",
+                                codigo_destino,
+                                prorrateo,
+                            )
                             _aplicar_movimiento_stock(
                                 form_data["codigo"],
                                 "ajuste",
@@ -3323,9 +3947,14 @@ def ajuste():
                                 observacion,
                             )
                             producto = _producto_por_codigo(form_data["codigo"])
+                            extra = (
+                                f" {prorrateo['mensaje']}"
+                                if prorrateo and prorrateo.get("mensaje")
+                                else ""
+                            )
                             message = {
                                 "type": "success",
-                                "text": f"Ajuste aplicado correctamente. Stock actual: {nuevo_stock}.",
+                                "text": f"Ajuste aplicado correctamente. Stock actual: {nuevo_stock}.{extra}",
                             }
                 except Exception as exc:
                     db.session.rollback()
@@ -3340,6 +3969,7 @@ def ajuste():
                 "observacion_motivo": "",
                 "observacion_detalle": "",
                 "observacion": "",
+                "codigo_destino": "",
                 "ajuste_lineas": [],
             }
             producto = None
@@ -3388,6 +4018,7 @@ def ajuste():
             stock_suma_variantes_bodega=stock_suma_variantes_bodega,
             stock_suma_variantes_total=stock_suma_variantes_total,
             ajuste_observacion_opciones=AJUSTE_OBSERVACION_OPCIONES,
+            motivo_incorporacion=MOTIVO_INCORPORACION,
         ),
     )
 

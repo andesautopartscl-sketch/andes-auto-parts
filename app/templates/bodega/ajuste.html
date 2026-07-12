@@ -79,6 +79,10 @@
     padding: 8px 10px;
     line-height: 1.4;
 }
+/* .field { display:flex } en bodega anula el atributo HTML hidden */
+#ajusteIncorporacionWrap[hidden] {
+    display: none !important;
+}
 .ajuste-marca-hint {
     margin: 2px 0 0;
     font-size: 10px;
@@ -593,6 +597,14 @@
                     {% endfor %}
                 </select>
             </div>
+            <div class="field field-full" id="ajusteIncorporacionWrap" hidden>
+                <label for="codigo_destino">Código destino (incorporación) *</label>
+                <input id="codigo_destino" name="codigo_destino" maxlength="100"
+                       value="{{ form_data.codigo_destino or '' }}"
+                       placeholder="Ej: AR240RC — producto que absorbe el costo"
+                       autocomplete="off" style="text-transform:uppercase;">
+                <p id="ajusteIncorporacionHint" class="ajuste-marca-hint" style="margin-top:6px;"></p>
+            </div>
             <div class="field field-full">
                 <label for="observacion_detalle">Detalle (opcional)</label>
                 <input id="observacion_detalle" name="observacion_detalle" maxlength="255"
@@ -642,6 +654,15 @@
                     </ul>
                 </div>
                 {% endif %}
+
+                <div class="ajuste-help-section">
+                    <h4 class="ajuste-help-section-title">Incorporación a producto</h4>
+                    <ul class="ajuste-help-list">
+                        <li>Elegí motivo <strong>Incorporación a producto</strong> y el <strong>código destino</strong> (ej. AR240RC).</li>
+                        <li>El stock del origen debe <strong>bajar</strong>. Si el destino ya tiene ingresos con costo, se prorratea el valor y se recalcula el P. venta manteniendo el margen.</li>
+                        <li>Si el destino aún no tiene costo, el movimiento queda registrado y el monto a sumar se indica para el próximo ingreso.</li>
+                    </ul>
+                </div>
 
                 <button type="button" class="btn" id="ajusteHelpClose">Cerrar</button>
             </div>
@@ -760,4 +781,179 @@
 })();
 </script>
 {% endif %}
+<script>
+(function () {
+    var MOTIVO_INC = {{ (motivo_incorporacion or 'Incorporación a producto') | tojson }};
+    var previewUrl = {{ url_for('bodega.api_incorporacion_preview') | tojson }};
+    var motivoSel = document.getElementById('observacion_motivo');
+    var wrap = document.getElementById('ajusteIncorporacionWrap');
+    var destInp = document.getElementById('codigo_destino');
+    var hint = document.getElementById('ajusteIncorporacionHint');
+    var codigoInp = document.getElementById('codigo');
+    var marcaInp = document.getElementById('marca');
+    var bodegaSel = document.getElementById('bodega');
+    var nuevoStockInp = document.getElementById('nuevo_stock');
+    var previewTimer = null;
+
+    function stockActualContexto() {
+        var meta = document.querySelector('.ajuste-stock-meta-line strong:last-child');
+        var boxes = document.querySelectorAll('.ajuste-producto-panel .summary-box');
+        for (var i = 0; i < boxes.length; i++) {
+            var h = boxes[i].querySelector('h4');
+            if (h && /stock/i.test(h.textContent || '')) {
+                var p = boxes[i].querySelector('p');
+                var n = parseInt((p && p.textContent || '').replace(/[^\d-]/g, ''), 10);
+                if (!isNaN(n)) return n;
+            }
+        }
+        if (meta) {
+            var n2 = parseInt((meta.textContent || '').replace(/[^\d-]/g, ''), 10);
+            if (!isNaN(n2)) return n2;
+        }
+        return null;
+    }
+
+    function cantidadIncorporar() {
+        var rows = document.querySelectorAll('#ajusteVariantesBody tr.ajuste-variante-row');
+        if (rows && rows.length) {
+            var total = 0;
+            rows.forEach(function (tr) {
+                var actCell = tr.querySelector('.ajuste-stock-act');
+                var nuevoInp = tr.querySelector('input[name="linea_nuevo_stock"]');
+                if (!actCell || !nuevoInp) return;
+                var actTxt = (actCell.textContent || '').trim();
+                if (actTxt === '—' || actTxt === '') return;
+                var act = parseInt(actTxt.replace(/[^\d-]/g, ''), 10);
+                var neu = parseInt((nuevoInp.value || '').trim(), 10);
+                if (!isNaN(act) && !isNaN(neu) && neu < act) total += (act - neu);
+            });
+            return total;
+        }
+        var act = stockActualContexto();
+        var neu = parseInt((nuevoStockInp && nuevoStockInp.value || '').trim(), 10);
+        if (act == null || isNaN(neu)) return 0;
+        return Math.max(0, act - neu);
+    }
+
+    function toggleInc() {
+        if (!motivoSel || !wrap || !destInp) return;
+        var on = motivoSel.value === MOTIVO_INC;
+        wrap.hidden = !on;
+        destInp.required = on;
+        if (!on) {
+            destInp.setCustomValidity('');
+            if (hint) {
+                hint.textContent = '';
+                hint.style.color = '';
+            }
+        } else {
+            refreshPreview();
+        }
+    }
+
+    function validarDestinoObligatorio() {
+        if (!motivoSel || motivoSel.value !== MOTIVO_INC) {
+            if (destInp) destInp.setCustomValidity('');
+            return true;
+        }
+        var dest = (destInp && destInp.value || '').trim();
+        if (!dest) {
+            if (destInp) {
+                destInp.setCustomValidity('Debés indicar el código destino para Incorporación a producto.');
+                destInp.reportValidity();
+                destInp.focus();
+            }
+            if (hint) {
+                hint.textContent = 'Obligatorio: ingresá el código destino (ej. AR240RC) para poder aplicar el ajuste.';
+                hint.style.color = '#b91c1c';
+            }
+            if (wrap) wrap.hidden = false;
+            return false;
+        }
+        if (destInp) destInp.setCustomValidity('');
+        return true;
+    }
+
+    function refreshPreview() {
+        if (!hint || !destInp || !codigoInp) return;
+        if (!motivoSel || motivoSel.value !== MOTIVO_INC) {
+            hint.textContent = '';
+            return;
+        }
+        var dest = (destInp.value || '').trim().toUpperCase();
+        var origen = (codigoInp.value || '').trim().toUpperCase();
+        var qty = cantidadIncorporar();
+        if (!dest) {
+            hint.textContent = 'Indicá el código que absorbe el costo (ej. AR240RC).';
+            return;
+        }
+        if (!origen) {
+            hint.textContent = 'Consultá primero el producto origen.';
+            return;
+        }
+        if (qty <= 0) {
+            hint.textContent = 'Para incorporar, el nuevo stock debe ser menor al actual (baja de cantidad).';
+            return;
+        }
+        hint.textContent = 'Calculando prorrateo…';
+        var params = new URLSearchParams({
+            codigo_origen: origen,
+            codigo_destino: dest,
+            cantidad: String(qty),
+            marca: (marcaInp && marcaInp.value || '').trim(),
+            bodega: (bodegaSel && bodegaSel.value || '').trim()
+        });
+        fetch(previewUrl + '?' + params.toString(), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                hint.textContent = (data && data.mensaje) ? data.mensaje : '';
+                if (data && data.puede_prorratear) {
+                    hint.style.color = '#166534';
+                } else {
+                    hint.style.color = '#92400e';
+                }
+            })
+            .catch(function () {
+                hint.textContent = 'No se pudo calcular la vista previa.';
+                hint.style.color = '#b45309';
+            });
+    }
+
+    function schedulePreview() {
+        if (previewTimer) window.clearTimeout(previewTimer);
+        previewTimer = window.setTimeout(refreshPreview, 350);
+    }
+
+    if (motivoSel) {
+        motivoSel.addEventListener('change', toggleInc);
+        toggleInc();
+    }
+    if (destInp) {
+        destInp.addEventListener('input', function () {
+            destInp.value = (destInp.value || '').toUpperCase();
+            destInp.setCustomValidity('');
+            schedulePreview();
+        });
+        destInp.addEventListener('blur', refreshPreview);
+    }
+    if (nuevoStockInp) nuevoStockInp.addEventListener('input', schedulePreview);
+    document.addEventListener('input', function (ev) {
+        var t = ev.target;
+        if (t && t.name === 'linea_nuevo_stock') schedulePreview();
+    });
+
+    var form = document.getElementById('ajusteForm');
+    if (form) {
+        form.addEventListener('submit', function (ev) {
+            var submitter = ev.submitter;
+            var method = ((submitter && submitter.getAttribute('formmethod')) || form.getAttribute('method') || 'post').toLowerCase();
+            if (method !== 'post') return;
+            if (!validarDestinoObligatorio()) {
+                ev.preventDefault();
+                ev.stopPropagation();
+            }
+        });
+    }
+})();
+</script>
 {% endblock %}

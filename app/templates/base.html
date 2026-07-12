@@ -515,6 +515,87 @@ function toggleMenu(id) {
 		}, Promise.resolve());
 	}
 
+	/* Bodega carga bodega.css en el fragmento SPA (base_content). Si el <link> vive
+	   dentro de #appMainContent, al cambiar de pantalla el navegador retira la hoja y
+	   .filters / .form-grid quedan sin grid un instante (parpadeo). Se ancla en <head>
+	   mientras el módulo Bodega está activo y se quita al salir del módulo. */
+	function styleHrefPath(href) {
+		try {
+			return new URL(href, window.location.origin).pathname;
+		} catch (e) {
+			return String(href || '').split('?')[0];
+		}
+	}
+
+	function isBodegaModuleUrl(url) {
+		try {
+			return /\/bodega(\/|$)/.test(new URL(url || '', window.location.origin).pathname);
+		} catch (e) {
+			return String(url || '').indexOf('/bodega') !== -1;
+		}
+	}
+
+	function findHeadStylesheet(href) {
+		var target = styleHrefPath(href);
+		return Array.from(document.querySelectorAll('head link[rel="stylesheet"]')).find(function (link) {
+			return styleHrefPath(link.getAttribute('href')) === target;
+		}) || null;
+	}
+
+	function removeBodegaStylesheet() {
+		document.querySelectorAll('head link[rel="stylesheet"]').forEach(function (link) {
+			var href = link.getAttribute('href') || '';
+			if (href.indexOf('bodega.css') !== -1 && link.parentNode) {
+				link.parentNode.removeChild(link);
+			}
+		});
+	}
+
+	function syncBodegaModuleStyles(container, url) {
+		if (!isBodegaModuleUrl(url)) {
+			removeBodegaStylesheet();
+			return Promise.resolve();
+		}
+		var links = Array.from(container.querySelectorAll('link[rel="stylesheet"]'));
+		return Promise.all(links.map(function (link) {
+			var href = link.getAttribute('href');
+			if (!href || href.indexOf('bodega.css') === -1) {
+				return Promise.resolve();
+			}
+			if (link.parentNode) {
+				link.parentNode.removeChild(link);
+			}
+			var existing = findHeadStylesheet(href);
+			if (existing) {
+				return Promise.resolve();
+			}
+			return new Promise(function (resolve) {
+				var headLink = document.createElement('link');
+				headLink.rel = 'stylesheet';
+				headLink.href = href;
+				headLink.setAttribute('data-andes-bodega-style', '1');
+				headLink.onload = resolve;
+				headLink.onerror = resolve;
+				document.head.appendChild(headLink);
+			});
+		}));
+	}
+
+	function injectModuleHtml(container, html, url) {
+		/* Parsear fuera del DOM y esperar bodega.css en <head> antes de pintar.
+		   Si se hace innerHTML primero, Ingreso (y otras pantallas Bodega) se ven
+		   un instante sin grid/estilos al entrar desde otro módulo (FOUC). */
+		var temp = document.createElement('div');
+		temp.innerHTML = html;
+		return syncBodegaModuleStyles(temp, url).then(function () {
+			container.innerHTML = '';
+			while (temp.firstChild) {
+				container.appendChild(temp.firstChild);
+			}
+			return executeScripts(container);
+		});
+	}
+
 	function updateSidebarActive(url) {
 		/* Misma ruta puede diferir por query (ej. /ventas/facturacion vs ?tipo_documento=boleta).
 		   También por hash: /buscar vs /buscar#exportar-excel (mismo pathname, ítems distintos en el menú). */
@@ -821,8 +902,7 @@ function toggleMenu(id) {
 			if (loadId !== moduleLoadSeq) {
 				return Promise.reject({ stale: true });
 			}
-			container.innerHTML = data.html;
-			return executeScripts(container).then(function () {
+			return injectModuleHtml(container, data.html, url).then(function () {
 				return data.finalUrl;
 			});
 		})
@@ -944,8 +1024,7 @@ function toggleMenu(id) {
 			if (loadId !== moduleLoadSeq) {
 				return Promise.reject({ stale: true });
 			}
-			container.innerHTML = data.html;
-			return executeScripts(container).then(function () {
+			return injectModuleHtml(container, data.html, pushUrl).then(function () {
 				return data.finalUrl;
 			});
 		})

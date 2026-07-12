@@ -13,7 +13,7 @@ from app.utils.decorators import login_required, permission_required
 from app.utils.permissions import has_permission
 from app.utils.rut_utils import format_rut
 from app.ventas.models import Cliente
-from app.ventas.routes import METODO_PAGO_LABELS, METODO_PAGO_OPTIONS, _client_by_id, _entity_snapshot, _full_address
+from app.ventas.routes import COMPANY_INFO, METODO_PAGO_LABELS, METODO_PAGO_OPTIONS, _client_by_id, _entity_snapshot, _full_address
 
 from .models import OC_ESTADOS, OC_ESTADO_LABELS, OrdenCompraCliente, OrdenCompraClienteItem, oc_estado_label
 from .services import (
@@ -199,6 +199,31 @@ def _parse_date(value: str | None, default: datetime | None = None) -> datetime 
         return datetime.strptime(raw[:10], "%Y-%m-%d")
     except ValueError:
         return default
+
+
+def _parse_date_with_time_from_default(
+    value: str | None,
+    default: datetime | None = None,
+) -> datetime | None:
+    """
+    Parsea una fecha (YYYY-MM-DD) y le inyecta la hora/min/seg del `default`.
+    Útil para inputs HTML type="date" (sin hora) cuando queremos registrar el evento
+    con la hora real del momento, manteniendo el día elegido por el usuario.
+    """
+    base = _parse_date(value, None)
+    if base is None:
+        return default
+    if default is None:
+        return base
+    try:
+        return base.replace(
+            hour=default.hour,
+            minute=default.minute,
+            second=default.second,
+            microsecond=default.microsecond,
+        )
+    except Exception:
+        return base
 
 
 def _safe_int(value, default: int = 0) -> int:
@@ -660,10 +685,44 @@ def detalle(oid: int):
         badge=_estado_badge(oc.estado),
         metodo_labels=METODO_PAGO_LABELS,
         metodo_pago_options=[(k, METODO_PAGO_LABELS.get(k, k)) for k in METODO_PAGO_OPTIONS if k != "saldo_favor"],
+        vendedores_opciones=[v.nombre for v in listar_vendedores_catalogo()],
         puede_modificar=_can_modify(),
+        company=COMPANY_INFO,
         active_page="oc_clientes",
         _partial=_partial,
     )
+
+
+@oc_clientes_bp.route("/<int:oid>/vendedor", methods=["POST"])
+@login_required
+@permission_required("mod_oc_clientes")
+def asignar_vendedor(oid: int):
+    oc = db.session.get(OrdenCompraCliente, oid)
+    if oc is None:
+        flash("Orden no encontrada.", "error")
+        return redirect(url_for("oc_clientes.lista"))
+    if (oc.estado or "") == "anulada":
+        flash("No se puede asignar vendedor a una OC anulada.", "error")
+        return redirect(url_for("oc_clientes.detalle", oid=oid))
+    if (oc.vendedor or "").strip():
+        flash("Esta OC ya tiene vendedor asignado.", "error")
+        return redirect(url_for("oc_clientes.detalle", oid=oid))
+
+    nombre = (request.form.get("vendedor") or "").strip()
+    if not nombre:
+        flash("Ingrese el nombre del vendedor.", "error")
+        return redirect(url_for("oc_clientes.detalle", oid=oid))
+
+    try:
+        oc.vendedor = resolver_nombre_vendedor_oc(nombre)
+        oc.updated_at = datetime.utcnow()
+        db.session.commit()
+        flash(f"Vendedor asignado: {oc.vendedor}.", "success")
+    except Exception as exc:
+        db.session.rollback()
+        flash(f"No se pudo asignar el vendedor: {exc}", "error")
+
+    return redirect(url_for("oc_clientes.detalle", oid=oid))
 
 
 @oc_clientes_bp.route("/<int:oid>/entregar", methods=["POST"])
@@ -678,8 +737,9 @@ def marcar_entregada(oid: int):
         flash("Solo se puede marcar entregada una OC en estado recibida.", "error")
         return redirect(url_for("oc_clientes.detalle", oid=oid))
 
+    now = datetime.now()
     fecha_raw = (request.form.get("fecha_entrega_real") or "").strip()
-    fecha_entrega = _parse_date(fecha_raw, datetime.now()) or datetime.now()
+    fecha_entrega = _parse_date_with_time_from_default(fecha_raw, now) or now
     guia = (request.form.get("numero_guia_despacho") or "").strip()[:60]
     descontar = (request.form.get("descontar_stock") or "").strip().lower() in {"1", "on", "true", "yes"}
 
@@ -721,7 +781,11 @@ def registrar_pago(oid: int):
         return redirect(url_for("oc_clientes.detalle", oid=oid))
 
     numero_factura = (request.form.get("numero_factura") or "").strip()
-    fecha_pago = _parse_date((request.form.get("fecha_pago") or "").strip(), datetime.now()) or datetime.now()
+    now = datetime.now()
+    fecha_pago = _parse_date_with_time_from_default(
+        (request.form.get("fecha_pago") or "").strip(),
+        now,
+    ) or now
     metodo = (request.form.get("metodo_pago") or "").strip().lower()
 
     if not numero_factura:
@@ -751,7 +815,11 @@ def registrar_pago_multiple():
     for oc_id in oc_ids:
         facturas[oc_id] = (request.form.get(f"numero_factura_{oc_id}") or "").strip()
 
-    fecha_pago = _parse_date((request.form.get("fecha_pago") or "").strip(), datetime.now()) or datetime.now()
+    now = datetime.now()
+    fecha_pago = _parse_date_with_time_from_default(
+        (request.form.get("fecha_pago") or "").strip(),
+        now,
+    ) or now
     metodo = (request.form.get("metodo_pago") or "").strip().lower()
     referencia = (request.form.get("referencia_pago") or "").strip()
     monto_raw = (request.form.get("monto_recibido") or "").strip().replace(".", "").replace(",", ".")
@@ -851,6 +919,7 @@ def imprimir(oid: int):
         oc=oc,
         cliente=cliente,
         estado_label=_estado_label(oc.estado),
+        company=COMPANY_INFO,
     )
 
 

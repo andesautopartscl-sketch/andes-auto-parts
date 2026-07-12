@@ -5,5 +5,29 @@
     <li class="flash-msg {{ cat }}">{{ msg }}</li>
     {% endfor %}
 </ul>
+<script>
+(function () {
+    var msgs = document.querySelectorAll('.flash-list .flash-msg.success');
+    if (!msgs.length) return;
+    msgs.forEach(function (el) {
+        var remove = function () {
+            el.style.transition = 'opacity 0.35s ease';
+            el.style.opacity = '0';
+            window.setTimeout(function () {
+                if (el.parentNode) el.parentNode.removeChild(el);
+                var list = el.closest('.flash-list');
+                if (list && !list.children.length) list.remove();
+            }, 350);
+        };
+        var timer = window.setTimeout(remove, 8000);
+        el.style.cursor = 'pointer';
+        el.setAttribute('title', 'Clic para cerrar');
+        el.addEventListener('click', function () {
+            window.clearTimeout(timer);
+            remove();
+        });
+    });
+})();
+</script>
 {% endif %}
 {% endwith %}
