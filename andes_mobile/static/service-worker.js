@@ -1,5 +1,5 @@
-/* Andes Mobile PWA — service worker v27 */
-const SW_VERSION = "andes-mobile-v27";
+/* Andes Mobile PWA — service worker v28 */
+const SW_VERSION = "andes-mobile-v28";
 const CACHE_PREFIX = `${SW_VERSION}-`;
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
