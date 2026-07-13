@@ -5,12 +5,13 @@
 {% block content %}
 <section class="m-home">
   <header class="m-home__greeting">
-    <div class="m-home__greeting-top">
-      <p class="m-home__saludo">{{ saludo }}</p>
-      <time class="m-home__date" datetime="{{ fecha_iso }}">{{ fecha_hoy }}</time>
-    </div>
+    <p class="m-home__saludo">{{ saludo }},</p>
     <h1 class="m-home__name">{{ nombre_presentable or 'Usuario' }}</h1>
-    <p class="m-home__tagline">Operaciones del día</p>
+    <p class="m-home__meta">
+      <span class="m-home__tagline">Operaciones del día</span>
+      <span class="m-home__meta-sep" aria-hidden="true">·</span>
+      <time class="m-home__date" datetime="{{ fecha_iso }}">{{ fecha_hoy }}</time>
+    </p>
   </header>
 
   <section class="m-home-summary m-home-animate" style="--delay: 40ms" aria-label="Resumen de hoy">

@@ -13,8 +13,8 @@
   <link rel="manifest" href="{{ url_for('static', filename='mobile/manifest.json') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='mobile/icons/apple-touch-icon.png') }}">
   <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='mobile/icons/icon-192.png') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/fonts/inter.css') }}?v=29">
-  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/mobile.min.css') }}?v=29">
+  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/fonts/inter.css') }}?v=30">
+  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/mobile.min.css') }}?v=30">
   <script>
   (function () {
     try {
@@ -35,7 +35,7 @@
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
   data-sw-url="{{ url_for('mobile.service_worker') }}"
-  data-pwa-version="v2026.07.15-v29"
+  data-pwa-version="v2026.07.15-v30"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
     <div class="mobile-splash__bg" aria-hidden="true">
@@ -58,7 +58,7 @@
         <div class="mobile-splash__progress-fill" id="mobile-splash-progress"></div>
       </div>
     </div>
-    <span class="mobile-splash__version">v2026.07.15-v29</span>
+    <span class="mobile-splash__version">v2026.07.15-v30</span>
   </div>
 
   <div id="catalog-sync-skeleton" class="catalog-sync-skeleton" hidden aria-hidden="true">
