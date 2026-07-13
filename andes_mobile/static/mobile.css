@@ -48,8 +48,8 @@ body.mobile-app {
   color: var(--andes-text);
   background: var(--surface-base);
   min-height: 100dvh;
-  /* +8px evita que la 1ª línea del home quede bajo el borde del header fijo */
-  padding-top: calc(var(--mobile-header-height) + var(--safe-top) + 8px);
+  /* Holgura real bajo el header fijo (evita cortar la 1ª línea del home) */
+  padding-top: calc(var(--mobile-header-height) + var(--safe-top) + 28px);
   padding-bottom: calc(var(--mobile-nav-height) + var(--safe-bottom) + 8px);
   padding-left: var(--safe-left);
   padding-right: var(--safe-right);
@@ -67,8 +67,10 @@ body.mobile-app {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: calc(var(--mobile-header-height) + var(--safe-top));
-  padding: var(--safe-top) 16px 0;
+  /* padding-top = safe area; la barra útil es --mobile-header-height */
+  height: auto;
+  min-height: calc(var(--mobile-header-height) + var(--safe-top));
+  padding: var(--safe-top) 16px 10px;
   padding-left: calc(16px + var(--safe-left));
   padding-right: calc(16px + var(--safe-right));
   background: var(--surface-overlay);
@@ -77,11 +79,12 @@ body.mobile-app {
   color: var(--andes-navy);
   border-bottom: 0.5px solid rgba(27, 43, 107, 0.1);
   box-shadow: var(--shadow-sm);
-  transition: height 0.22s ease, box-shadow 0.22s ease;
+  transition: min-height 0.22s ease, padding 0.22s ease, box-shadow 0.22s ease;
 }
 
 .mobile-header--compact {
   --mobile-header-height: 48px;
+  padding-bottom: 6px;
   box-shadow: 0 1px 0 rgba(27, 43, 107, 0.06);
 }
 
@@ -149,7 +152,7 @@ body.mobile-app {
 }
 
 .mobile-main {
-  padding: 24px 16px 20px;
+  padding: 8px 16px 20px;
   max-width: 640px;
   margin: 0 auto;
 }
@@ -158,12 +161,12 @@ body.mobile-app {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding-bottom: 8px;
+  padding: 12px 0 8px;
 }
 
 .m-home__greeting {
   margin: 0;
-  padding: 8px 2px 0;
+  padding: 4px 2px 0;
 }
 
 .m-home__greeting-top {
