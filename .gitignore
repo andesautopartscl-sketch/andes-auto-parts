@@ -18,7 +18,8 @@ env/
 Thumbs.db
 
 # Local databases and generated docs
-# data/andes.db is tracked intentionally (Render free tier persistence)
+# data/andes.db stays tracked for Render baseline, but LOCAL changes must NEVER
+# be committed/pushed. Prefer: git update-index --skip-worktree data/andes.db
 data/*.db-wal
 data/*.db-shm
 data/fts_timing.txt

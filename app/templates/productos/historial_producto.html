@@ -225,7 +225,9 @@
                                 <td>{{ m.row.observacion or '-' }}</td>
                                 <td class="hist-cell-jump">
                                     {% if m.view_url %}
-                                    <a class="hist-embed-jump" href="{{ m.view_url }}" data-module-url="{{ m.view_url }}">{{ m.view_label or 'Abrir' }}</a>
+                                    {# Sin data-module-url: en el iframe del historial debe navegar a la vista
+                                       de solo lectura (embed), no cargar Editar ingreso con sidebar. #}
+                                    <a class="hist-embed-jump" href="{{ m.view_url }}">{{ m.view_label or 'Abrir' }}</a>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -270,7 +272,7 @@
                                 <td title="{{ c.proveedor }}">{{ c.proveedor }}</td>
                                 <td>
                                     {% if c.doc_url %}
-                                    <a class="hist-embed-jump" href="{{ c.doc_url }}" data-module-url="{{ c.doc_url }}">{{ c.numero_documento }}</a>
+                                    <a class="hist-embed-jump" href="{{ c.doc_url }}">{{ c.numero_documento }}</a>
                                     {% else %}
                                     {{ c.numero_documento }}
                                     {% endif %}

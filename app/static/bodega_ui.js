@@ -59,33 +59,248 @@
         }
     }
 
+    /** Confirmación elegante (reemplaza window.confirm nativo del navegador). */
+    function ensureBodegaConfirmStyles() {
+        var css =
+            ".bodega-confirm-overlay{position:fixed;inset:0;z-index:1300;display:flex;align-items:center;justify-content:center;" +
+            "padding:20px;background:rgba(15,23,42,.48);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);}" +
+            ".bodega-confirm-card{width:min(400px,94vw);background:#fff;border:1px solid #e2e8f0;border-radius:14px;" +
+            "box-shadow:0 22px 50px rgba(15,23,42,.22);padding:18px 18px 14px;animation:bodegaConfirmIn .16s ease-out;}" +
+            ".bodega-confirm-card.with-auth{width:min(440px,94vw);}" +
+            "@keyframes bodegaConfirmIn{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}" +
+            ".bodega-confirm-eyebrow{margin:0 0 6px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;}" +
+            ".bodega-confirm-title{margin:0 0 8px;font-size:15px;font-weight:800;color:#0f172a;line-height:1.3;}" +
+            ".bodega-confirm-msg{margin:0;font-size:13px;line-height:1.45;color:#475569;white-space:pre-wrap;}" +
+            ".bodega-confirm-auth{margin-top:14px;display:grid;gap:10px;}" +
+            ".bodega-confirm-auth label{display:block;font-size:11px;font-weight:700;color:#475569;margin:0 0 4px;}" +
+            ".bodega-confirm-auth input{width:100%;box-sizing:border-box;min-height:36px;padding:0 10px;" +
+            "border:1px solid #dbe3ee;border-radius:9px;font-size:13px;color:#0f172a;}" +
+            ".bodega-confirm-auth input:focus{outline:none;border-color:#94a3b8;box-shadow:0 0 0 3px rgba(148,163,184,.25);}" +
+            ".bodega-confirm-auth-err{margin:0;font-size:12px;color:#be123c;display:none;}" +
+            ".bodega-confirm-auth-err.show{display:block;}" +
+            ".bodega-confirm-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}" +
+            ".bodega-confirm-btn{min-height:34px;padding:0 14px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid transparent;}" +
+            ".bodega-confirm-btn.cancel{background:#fff;border-color:#dbe3ee;color:#334155;}" +
+            ".bodega-confirm-btn.cancel:hover{background:#f8fafc;}" +
+            ".bodega-confirm-btn.ok{background:#0f766e;border-color:#0f766e;color:#fff;}" +
+            ".bodega-confirm-btn.ok:hover{background:#0d9488;}" +
+            ".bodega-confirm-btn.ok.danger{background:#be123c;border-color:#be123c;}" +
+            ".bodega-confirm-btn.ok.danger:hover{background:#e11d48;}" +
+            ".bodega-confirm-btn.ok:focus{outline:none;box-shadow:0 0 0 3px rgba(45,212,191,.35);}" +
+            ".bodega-confirm-btn.ok.danger:focus{box-shadow:0 0 0 3px rgba(251,113,133,.35);}";
+        var styl = document.getElementById("bodegaConfirmStyles");
+        if (!styl) {
+            styl = document.createElement("style");
+            styl.id = "bodegaConfirmStyles";
+            document.head.appendChild(styl);
+        }
+        styl.textContent = css;
+    }
+
+    /**
+     * Resolve: false | true | { authUser, authPassword }
+     * Con requireAuth, solo resuelve el objeto si usuario y clave no están vacíos.
+     */
+    function bodegaConfirm(message, options) {
+        options = options || {};
+        ensureBodegaConfirmStyles();
+        return new Promise(function (resolve) {
+            var prev = document.getElementById("bodegaConfirmOverlay");
+            if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+
+            var requireAuth = !!options.requireAuth;
+            var authOnly = !!options.authOnly;
+            var showAuth = requireAuth || authOnly;
+            var overlay = document.createElement("div");
+            overlay.id = "bodegaConfirmOverlay";
+            overlay.className = "bodega-confirm-overlay";
+            overlay.setAttribute("role", "dialog");
+            overlay.setAttribute("aria-modal", "true");
+
+            var card = document.createElement("div");
+            card.className = "bodega-confirm-card" + (showAuth ? " with-auth" : "");
+            var okLabel = options.okLabel || (authOnly ? "Continuar" : "Aceptar");
+            var isDanger =
+                !authOnly && /elimin|borrar|delete|reasign/i.test(okLabel + " " + (options.title || ""));
+            var authHtml = showAuth
+                ? '<div class="bodega-confirm-auth">' +
+                  '<p class="bodega-confirm-auth-err" id="bodegaConfirmAuthErr">Ingresa usuario y clave de autorización.</p>' +
+                  '<div><label for="bodegaConfirmAuthUser">Usuario autorización</label>' +
+                  '<input id="bodegaConfirmAuthUser" type="text" autocomplete="username" required></div>' +
+                  '<div><label for="bodegaConfirmAuthPass">Clave</label>' +
+                  '<input id="bodegaConfirmAuthPass" type="password" autocomplete="current-password" required></div>' +
+                  "</div>"
+                : "";
+            var defaultTitle = authOnly
+                ? "Autorización requerida"
+                : "¿Confirmar acción?";
+            card.innerHTML =
+                '<p class="bodega-confirm-eyebrow">' +
+                escProductSearch(options.eyebrow || "Confirmación") +
+                "</p>" +
+                '<h3 class="bodega-confirm-title">' +
+                escProductSearch(options.title || defaultTitle) +
+                "</h3>" +
+                '<p class="bodega-confirm-msg"></p>' +
+                authHtml +
+                '<div class="bodega-confirm-actions">' +
+                '<button type="button" class="bodega-confirm-btn cancel">' +
+                escProductSearch(options.cancelLabel || "Cancelar") +
+                "</button>" +
+                '<button type="button" class="bodega-confirm-btn ok' +
+                (isDanger ? " danger" : "") +
+                '">' +
+                escProductSearch(okLabel) +
+                "</button>" +
+                "</div>";
+            card.querySelector(".bodega-confirm-msg").textContent = String(message || "");
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+
+            var userInp = showAuth ? card.querySelector("#bodegaConfirmAuthUser") : null;
+            var passInp = showAuth ? card.querySelector("#bodegaConfirmAuthPass") : null;
+            var errEl = showAuth ? card.querySelector("#bodegaConfirmAuthErr") : null;
+
+            var settled = false;
+            function finish(result) {
+                if (settled) return;
+                settled = true;
+                document.removeEventListener("keydown", onKey, true);
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                resolve(result);
+            }
+            function tryAccept() {
+                if (!showAuth) {
+                    finish(true);
+                    return;
+                }
+                var u = (userInp && userInp.value ? userInp.value : "").trim();
+                var p = passInp && passInp.value != null ? String(passInp.value) : "";
+                if (!u || !p) {
+                    if (errEl) errEl.classList.add("show");
+                    if (!u && userInp) userInp.focus();
+                    else if (passInp) passInp.focus();
+                    return;
+                }
+                if (errEl) errEl.classList.remove("show");
+                finish({ authUser: u, authPassword: p });
+            }
+            function onKey(e) {
+                if (e.key === "Escape") {
+                    e.preventDefault();
+                    finish(false);
+                } else if (e.key === "Enter") {
+                    e.preventDefault();
+                    tryAccept();
+                }
+            }
+            overlay.addEventListener("click", function (e) {
+                if (e.target === overlay) finish(false);
+            });
+            card.querySelector(".bodega-confirm-btn.cancel").addEventListener("click", function () {
+                finish(false);
+            });
+            card.querySelector(".bodega-confirm-btn.ok").addEventListener("click", function () {
+                tryAccept();
+            });
+            document.addEventListener("keydown", onKey, true);
+            setTimeout(function () {
+                if (showAuth && userInp) userInp.focus();
+                else {
+                    var okBtn = card.querySelector(".bodega-confirm-btn.ok");
+                    if (okBtn) okBtn.focus();
+                }
+            }, 0);
+        });
+    }
+
+    function setOrCreateHiddenInput(form, name, value) {
+        if (!form || !name) return;
+        var el = form.querySelector('input[name="' + name + '"]');
+        if (!el) {
+            el = document.createElement("input");
+            el.type = "hidden";
+            el.name = name;
+            form.appendChild(el);
+        }
+        el.value = value == null ? "" : String(value);
+    }
+
+    function proceedBodegaFormSubmit(form, sub) {
+        var method = ((sub && sub.getAttribute("formmethod")) || form.getAttribute("method") || "get").toLowerCase();
+        if (method === "get") {
+            var action = (sub && sub.getAttribute("formaction")) || form.getAttribute("action") || window.location.pathname;
+            try {
+                var base = new URL(action, window.location.origin);
+                var fd = new FormData(form);
+                fd.forEach(function (val, key) {
+                    if (key !== "csrf_token") {
+                        base.searchParams.set(key, val);
+                    }
+                });
+                navigateBodegaConsult(base.pathname + "?" + base.searchParams.toString());
+            } catch (eGet) {
+                form.submit();
+            }
+            return;
+        }
+        submitBodegaFormPost(form, sub);
+    }
+
     function bindBodegaFormSpaSubmit(form) {
         if (!form || form.dataset.bodegaSpaSubmitBound === "1") {
             return;
         }
         form.dataset.bodegaSpaSubmitBound = "1";
         form.addEventListener("submit", function (ev) {
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
             var sub = ev.submitter;
-            var method = ((sub && sub.getAttribute("formmethod")) || form.getAttribute("method") || "get").toLowerCase();
-            if (method === "get") {
-                ev.preventDefault();
-                var action = (sub && sub.getAttribute("formaction")) || form.getAttribute("action") || window.location.pathname;
-                try {
-                    var base = new URL(action, window.location.origin);
-                    var fd = new FormData(form);
-                    fd.forEach(function (val, key) {
-                        if (key !== "csrf_token") {
-                            base.searchParams.set(key, val);
-                        }
-                    });
-                    navigateBodegaConsult(base.pathname + "?" + base.searchParams.toString());
-                } catch (eGet) {
-                    form.submit();
-                }
+            var confirmMsg = (form.getAttribute("data-confirm") || "").trim();
+            if (!confirmMsg) {
+                proceedBodegaFormSubmit(form, sub);
                 return;
             }
-            ev.preventDefault();
-            submitBodegaFormPost(form, sub);
+            var title = (form.getAttribute("data-confirm-title") || "").trim() || "¿Confirmar acción?";
+            var okLabel = (form.getAttribute("data-confirm-ok") || "").trim() || "Aceptar";
+            var requireAuth =
+                form.getAttribute("data-confirm-auth") === "1" ||
+                form.getAttribute("data-confirm-auth") === "true";
+
+            function runConfirm(authCreds) {
+                return bodegaConfirm(confirmMsg, {
+                    title: title,
+                    okLabel: okLabel,
+                    cancelLabel: "Cancelar",
+                    eyebrow: "Bodega · Variantes"
+                }).then(function (ok) {
+                    if (!ok) return;
+                    if (authCreds) {
+                        setOrCreateHiddenInput(form, "auth_user", authCreds.authUser || "");
+                        setOrCreateHiddenInput(form, "auth_password", authCreds.authPassword || "");
+                    }
+                    proceedBodegaFormSubmit(form, sub);
+                });
+            }
+
+            if (requireAuth) {
+                bodegaConfirm(
+                    "Ingresa usuario y clave de quien autoriza esta operación (debe tener permiso de gestionar variantes).",
+                    {
+                        title: "Autorización requerida",
+                        okLabel: "Continuar",
+                        cancelLabel: "Cancelar",
+                        eyebrow: "Bodega · Variantes",
+                        authOnly: true
+                    }
+                ).then(function (authResult) {
+                    if (!authResult || typeof authResult !== "object") return;
+                    return runConfirm(authResult);
+                });
+                return;
+            }
+
+            runConfirm(null);
         });
     }
 
@@ -3660,6 +3875,8 @@
         var previewUrl = (sheet && sheet.getAttribute("data-preview-url")) || "";
         var logoSrc = (sheet && sheet.getAttribute("data-logo-src")) || "";
         var registerUrl = (btnPrintLabels && btnPrintLabels.getAttribute("data-register-url")) || "";
+        var canVerOem = (etiquetasProductSearchResults && etiquetasProductSearchResults.getAttribute("data-ver-oem") === "1");
+        var canVerStock = (etiquetasProductSearchResults && etiquetasProductSearchResults.getAttribute("data-ver-stock") === "1");
         var thermalStyleId = "thermal-page-size-style";
         var lastPrintRegistrationAt = 0;
         var searchTimer = null;
@@ -3779,10 +3996,14 @@
                 return;
             }
             labelSearchResults.innerHTML = items.map(function (item) {
+                var oemHtml = canVerOem
+                    ? "<div class='search-chip muted'>OEM: " + highlightText(item.codigo_oem || "-", searchTerm) + "</div>"
+                    : "";
+                var rowClass = "search-assist-item" + (canVerOem ? " has-oem" : "");
                 return "" +
-                    "<div class='search-assist-item'>" +
+                    "<div class='" + rowClass + "'>" +
                         "<div class='search-chip'><strong>" + highlightText(item.codigo || "", searchTerm) + "</strong></div>" +
-                        "<div class='search-chip muted'>OEM: " + highlightText(item.codigo_oem || "-", searchTerm) + "</div>" +
+                        oemHtml +
                         "<div class='search-chip' title='" + escapeHtml(item.descripcion || "") + "'>" + highlightText(item.descripcion || "", searchTerm) + "</div>" +
                         "<button type='button' class='search-add-btn' data-code='" + escapeHtml(item.codigo || "") + "'>Agregar</button>" +
                     "</div>";
@@ -3868,11 +4089,28 @@
                             "<div class='search-help'>Sin resultados para esta busqueda.</div>";
                         return;
                     }
+                    var showOem = (typeof data.ver_oem === "boolean") ? data.ver_oem : canVerOem;
+                    var showStock = (typeof data.ver_stock === "boolean") ? data.ver_stock : canVerStock;
                     etiquetasProductSearchResults.innerHTML = items.map(function (item) {
+                        var oemHtml = showOem
+                            ? "<div class='search-chip muted'>OEM: " + highlightText(item.codigo_oem || "-", q) + "</div>"
+                            : "";
+                        var stockVal = item.stock;
+                        var stockNum = (stockVal == null || stockVal === "") ? null : Number(stockVal);
+                        var stockHtml = "";
+                        if (showStock) {
+                            var stockLabel = (stockNum == null || isNaN(stockNum)) ? "-" : String(Math.trunc(stockNum));
+                            var stockClass = "search-chip stock-chip" + (stockNum === 0 ? " stock-zero" : "");
+                            stockHtml = "<div class='" + stockClass + "' title='Stock total'>Stock: " + escapeHtml(stockLabel) + "</div>";
+                        }
+                        var rowClass = "search-assist-item"
+                            + (showOem ? " has-oem" : "")
+                            + (showStock ? " has-stock" : "");
                         return "" +
-                            "<div class='search-assist-item'>" +
+                            "<div class='" + rowClass + "'>" +
                                 "<div class='search-chip'><strong>" + highlightText(item.codigo || "", q) + "</strong></div>" +
-                                "<div class='search-chip muted'>OEM: " + highlightText(item.codigo_oem || "-", q) + "</div>" +
+                                oemHtml +
+                                stockHtml +
                                 "<div class='search-chip' title='" + escapeHtml(item.descripcion || "") + "'>" +
                                     highlightText(item.descripcion || "", q) + "</div>" +
                                 "<button type='button' class='search-add-btn' data-code='" + escapeHtml(item.codigo || "") + "'>Agregar</button>" +
@@ -4992,13 +5230,148 @@
         bindBodegaFormSpaSubmit(form);
     }
 
+    function initVariantesCatalogoView(root) {
+        var page =
+            (root && root.querySelector && root.querySelector(".variantes-page")) ||
+            document.querySelector(".variantes-page");
+        if (!page) {
+            return;
+        }
+
+        var filtros = page.querySelector("#variantesFiltrosForm");
+        if (filtros) {
+            bindBodegaFormSpaSubmit(filtros);
+        }
+        page.querySelectorAll("form.variantes-spa-form").forEach(function (form) {
+            bindBodegaFormSpaSubmit(form);
+        });
+
+        /* Un solo listener por página (delegación). Evita el doble-bind del SPA
+           que abría+cerraba en el mismo click y dejaba la sección siempre abierta. */
+        if (page.dataset.variantesFoldDelegate !== "1") {
+            page.dataset.variantesFoldDelegate = "1";
+            page.addEventListener(
+                "click",
+                function (ev) {
+                    var btn = ev.target.closest(".variantes-fold-toggle");
+                    if (!btn || !page.contains(btn)) {
+                        return;
+                    }
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    if (typeof ev.stopImmediatePropagation === "function") {
+                        ev.stopImmediatePropagation();
+                    }
+                    var fold = btn.closest(".variantes-fold");
+                    if (!fold || !page.contains(fold)) {
+                        return;
+                    }
+                    var body = fold.querySelector(":scope > .variantes-fold-body");
+                    var willOpen = !fold.classList.contains("is-open");
+                    fold.classList.toggle("is-open", willOpen);
+                    if (body) {
+                        if (willOpen) {
+                            body.hidden = false;
+                            body.removeAttribute("hidden");
+                        } else {
+                            body.hidden = true;
+                            body.setAttribute("hidden", "");
+                        }
+                    }
+                    btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+                },
+                true
+            );
+        }
+
+        bindVariantesHelp();
+    }
+
+    function placeVariantesHelpPanel(btn, panel) {
+        if (!btn || !panel || panel.hidden) {
+            return;
+        }
+        var br = btn.getBoundingClientRect();
+        var gap = 10;
+        var w = Math.min(460, window.innerWidth - 32);
+        panel.style.position = "fixed";
+        panel.style.width = w + "px";
+        panel.style.left = Math.max(8, Math.min(br.left, window.innerWidth - w - 8)) + "px";
+        var h = panel.offsetHeight || 280;
+        var top = br.top - h - gap;
+        if (top < 8) {
+            top = br.bottom + gap;
+            if (top + h > window.innerHeight - 8) {
+                top = Math.max(8, window.innerHeight - h - 8);
+            }
+        }
+        panel.style.top = top + "px";
+        panel.style.bottom = "auto";
+        panel.style.right = "auto";
+    }
+
+    function bindVariantesHelp() {
+        var btn = document.getElementById("variantesHelpBtn");
+        var panel = document.getElementById("variantesHelpPanel");
+        var closeBtn = document.getElementById("variantesHelpClose");
+        if (!btn || !panel || btn.dataset.variantesHelpBound === "1") {
+            return;
+        }
+        btn.dataset.variantesHelpBound = "1";
+
+        function closeHelp() {
+            panel.setAttribute("hidden", "");
+            panel.hidden = true;
+            btn.setAttribute("aria-expanded", "false");
+        }
+
+        function openHelp() {
+            panel.removeAttribute("hidden");
+            panel.hidden = false;
+            btn.setAttribute("aria-expanded", "true");
+            requestAnimationFrame(function () {
+                placeVariantesHelpPanel(btn, panel);
+            });
+        }
+
+        btn.addEventListener("click", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (panel.hidden) {
+                openHelp();
+            } else {
+                closeHelp();
+            }
+        });
+        if (closeBtn) {
+            closeBtn.addEventListener("click", function (e) {
+                e.preventDefault();
+                closeHelp();
+            });
+        }
+        document.addEventListener("click", function (ev) {
+            if (panel.hidden) {
+                return;
+            }
+            if (btn.contains(ev.target) || panel.contains(ev.target)) {
+                return;
+            }
+            closeHelp();
+        });
+        document.addEventListener("keydown", function (ev) {
+            if (ev.key === "Escape") {
+                closeHelp();
+            }
+        });
+    }
+
     window.initBodegaUI = function initBodegaUI() {
         /* SPA: scripts run after innerHTML but before pushState; pathname can still be "/" */
         var path = location.pathname || "";
         var onBodegaRoute = /^\/bodega(\/|$)/.test(path);
         var hasBodegaFragment =
             document.querySelector(
-                "#salidaForm, #ingresoForm, #ajusteForm, #recepcionForm, #labelsForm, #bodegasCatalogoHelpBtn"
+                "#salidaForm, #ingresoForm, #ajusteForm, #recepcionForm, #labelsForm, #bodegasCatalogoHelpBtn, #variantesFiltrosForm"
             ) != null;
         if (!onBodegaRoute && !hasBodegaFragment) {
             return;
@@ -5011,6 +5384,7 @@
         initSalidaView(root);
         initRecepcionView(root);
         initEtiquetasView(root);
+        initVariantesCatalogoView(root);
     };
 
     if (document.readyState === "loading") {

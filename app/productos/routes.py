@@ -1527,7 +1527,7 @@ def _ultimo_ingreso_ref_variante(codigo: str, marca: str | None, bodega: str | N
         vn = float(it.valor_neto or 0)
         if qty > 0 and vn > 0:
             total_qty += qty
-            total_vn += vn
+            total_vn += qty * vn
     costo_u = (total_vn / total_qty) if total_qty > 0 and total_vn > 0 else None
 
     item = q.order_by(IngresoDocumento.created_at.desc(), IngresoDocumentoItem.id.desc()).first()
@@ -2800,7 +2800,10 @@ def historial_producto(codigo):
             if ref_type == "ingreso":
                 ingreso_id = int(getattr(m, "ingreso_documento_id", 0) or 0)
                 if ingreso_id > 0 and can_open_ingreso:
-                    view_url = url_for("bodega.ingreso_editar", doc_id=ingreso_id)
+                    view_kwargs = {"doc_id": ingreso_id}
+                    if embed_modal:
+                        view_kwargs["embed"] = 1
+                    view_url = url_for("bodega.ingreso_ver", **view_kwargs)
                     view_label = f"Ingreso #{ingreso_id}"
             elif ref_type == "factura":
                 if ref_number and can_open_facturacion:
@@ -2861,7 +2864,15 @@ def historial_producto(codigo):
                     "total_neto": total_neto,
                     "precio_venta_neto": float(getattr(item, "precio_venta_neto", 0) or 0),
                     "doc_id": int(getattr(doc, "id", 0) or 0),
-                    "doc_url": url_for("bodega.ingreso_editar", doc_id=doc.id) if int(getattr(doc, "id", 0) or 0) > 0 and can_open_ingreso else None,
+                    "doc_url": (
+                        url_for(
+                            "bodega.ingreso_ver",
+                            doc_id=doc.id,
+                            **({"embed": 1} if embed_modal else {}),
+                        )
+                        if int(getattr(doc, "id", 0) or 0) > 0 and can_open_ingreso
+                        else None
+                    ),
                 }
             )
 

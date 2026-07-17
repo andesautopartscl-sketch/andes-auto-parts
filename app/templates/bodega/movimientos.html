@@ -204,7 +204,7 @@
                     <td><span class="badge {{ movimiento.tipo }}">{{ movimiento.tipo|upper }}</span></td>
                     <td>{{ movimiento.cantidad }}</td>
                     <td>
-                        {% if movimiento.valor_neto_ref is not none %}
+                        {% if movimiento.valor_neto_ref is defined and movimiento.valor_neto_ref is not none %}
                         ${{ '{:,.0f}'.format(movimiento.valor_neto_ref).replace(',', '.') }}
                         {% else %}
                         —

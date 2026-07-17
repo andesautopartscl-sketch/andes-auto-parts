@@ -7,7 +7,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, session, url_for
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import bindparam, func, or_, select, text
 import barcode
 import qrcode
 from barcode.writer import ImageWriter
@@ -21,6 +21,7 @@ from app.utils.decorators import admin_required, login_required
 from app.utils.invoice_vision import analizar_factura, garantizar_producto_factura, reconcile_factura_totals_con_lineas
 from app.utils.invoice_providers import registry as invoice_parser_registry
 from app.utils.codigo_matcher import aplicar_fuzzy_a_productos
+from app.utils.finance_visibility import user_can_view_finanzas
 from app.utils.permissions import has_permission
 from app.utils.phone_format import phone_to_compact_e164
 from app.utils.rut_utils import clean_rut, format_rut, is_valid_rut
@@ -37,6 +38,7 @@ from .models import (
     ProveedorCodigoInterno,
 )
 from . import catalogo as bodega_catalogo
+from . import variantes_ops
 from .marcas_ref_cl import MARCAS_REF_AUTOMOTRIZ_CL
 from app.inventario.models import LabelPrintHistory, TransferenciaStock
 
@@ -1028,6 +1030,15 @@ def _buscar_productos_para_etiquetas(search_term: str, limit: int = 30):
         OR UPPER(COALESCE(MODELO, '')) LIKE UPPER(:like)
         OR UPPER(COALESCE(MARCA, '')) LIKE UPPER(:like)
     """
+    # Stock preliminar (columnas legacy). Se reemplaza al final con la suma de variantes.
+    _stock_total_expr = """
+        COALESCE(STOCK_10JUL, 0)
+        + COALESCE(STOCK_BRASIL, 0)
+        + COALESCE(STOCK_G_AVENIDA, 0)
+        + COALESCE(STOCK_ORIENTALES, 0)
+        + COALESCE(STOCK_B20_OUTLET, 0)
+        + COALESCE(STOCK_TRANSITO, 0)
+    """
 
     query = text(
         f"""
@@ -1035,7 +1046,8 @@ def _buscar_productos_para_etiquetas(search_term: str, limit: int = 30):
             CODIGO AS codigo,
             COALESCE(DESCRIPCION, '') AS descripcion,
             COALESCE(MODELO, '') AS modelo,
-            COALESCE([CODIGO OEM], '') AS codigo_oem
+            COALESCE([CODIGO OEM], '') AS codigo_oem,
+            ({_stock_total_expr}) AS stock
         FROM productos
         WHERE COALESCE(ACTIVO, 1) = 1
           AND ({_like_fields})
@@ -1091,7 +1103,8 @@ def _buscar_productos_para_etiquetas(search_term: str, limit: int = 30):
                     CODIGO AS codigo,
                     COALESCE(DESCRIPCION, '') AS descripcion,
                     COALESCE(MODELO, '') AS modelo,
-                    COALESCE([CODIGO OEM], '') AS codigo_oem
+                    COALESCE([CODIGO OEM], '') AS codigo_oem,
+                    ({_stock_total_expr}) AS stock
                 FROM productos
                 WHERE COALESCE(ACTIVO, 1) = 1
                   AND ({" AND ".join(token_predicates)})
@@ -1101,7 +1114,58 @@ def _buscar_productos_para_etiquetas(search_term: str, limit: int = 30):
             )
             rows = db.session.execute(token_query, params).mappings().all()
 
-    return [dict(r) for r in rows]
+    items = [dict(r) for r in rows]
+    return _aplicar_stock_variantes_a_items(items)
+
+
+def _aplicar_stock_variantes_a_items(items: list[dict]) -> list[dict]:
+    """Fuente de verdad del stock en etiquetas: suma de productos_variantes_stock."""
+    if not items:
+        return items
+
+    codes: list[str] = []
+    seen: set[str] = set()
+    for raw in items:
+        code = (raw.get("codigo") or "").strip().upper()
+        if not code or code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+
+    stock_by_code: dict[str, int] = {}
+    if codes:
+        params = {f"c{i}": code for i, code in enumerate(codes)}
+        placeholders = ", ".join(f":c{i}" for i in range(len(codes)))
+        variant_rows = db.session.execute(
+            text(
+                f"""
+                SELECT UPPER(codigo_producto) AS codigo, COALESCE(SUM(stock), 0) AS stock
+                FROM productos_variantes_stock
+                WHERE UPPER(codigo_producto) IN ({placeholders})
+                GROUP BY UPPER(codigo_producto)
+                """
+            ),
+            params,
+        ).mappings().all()
+        for row in variant_rows:
+            code = (row.get("codigo") or "").strip().upper()
+            if not code:
+                continue
+            try:
+                stock_by_code[code] = int(row.get("stock") or 0)
+            except (TypeError, ValueError):
+                stock_by_code[code] = 0
+
+    for item in items:
+        code = (item.get("codigo") or "").strip().upper()
+        if code in stock_by_code:
+            item["stock"] = stock_by_code[code]
+            continue
+        try:
+            item["stock"] = int(item.get("stock") or 0)
+        except (TypeError, ValueError):
+            item["stock"] = 0
+    return items
 
 
 def _actualizar_stock(codigo: str, nuevo_stock: int) -> None:
@@ -1529,6 +1593,34 @@ def _validar_autorizacion_anulacion_ingreso(username: str, password: str) -> tup
     rol_name = (u.rol.nombre if getattr(u, "rol", None) and u.rol.nombre else "") or ""
     if not has_permission(u.usuario, rol_name, "bodega_ingreso"):
         return False, "El usuario no tiene permiso para anular ingresos.", None
+    return True, "", u
+
+
+def _validar_autorizacion_variantes(username: str, password: str) -> tuple[bool, str, Usuario | None]:
+    """Usuario + clave de quien autoriza eliminar/reasignar variantes (permiso dedicado)."""
+    user_name = (username or "").strip()
+    raw_pass = password or ""
+    if not user_name or not raw_pass:
+        return False, "Debes ingresar usuario y contraseña para autorizar la operación.", None
+
+    u = Usuario.query.filter_by(usuario=user_name).first()
+    if u is None:
+        return False, "Usuario de autorización no válido.", None
+    if not bool(u.activo):
+        return False, "El usuario de autorización está inactivo.", None
+    if bool(getattr(u, "bloqueado_seguridad", False)):
+        return False, "El usuario de autorización está bloqueado.", None
+
+    try:
+        ok = check_password_hash(u.password_hash or "", raw_pass)
+    except Exception:
+        ok = False
+    if not ok:
+        return False, "Contraseña de autorización incorrecta.", None
+
+    rol_name = (u.rol.nombre if getattr(u, "rol", None) and u.rol.nombre else "") or ""
+    if not has_permission(u.usuario, rol_name, "bodega_variantes_gestionar"):
+        return False, "El usuario no tiene permiso para gestionar variantes de stock.", None
     return True, "", u
 
 
@@ -1987,6 +2079,232 @@ def bodegas_catalogo():
     )
 
 
+@bodega_bp.route("/variantes", methods=["GET", "POST"])
+@admin_required
+def variantes_catalogo():
+    """Consulta y administración controlada de variantes de stock (marca + producto + bodega)."""
+    if request.method == "POST":
+        if not has_permission(session.get("user"), session.get("rol"), "bodega_variantes_gestionar"):
+            flash(
+                "No tienes permiso para crear/editar/eliminar variantes "
+                "(asigna «Gestionar variantes de stock» en Seguridad).",
+                "error",
+            )
+            return redirect(url_for("bodega.variantes_catalogo"))
+
+        action = (request.form.get("action") or "").strip().lower()
+        # Conservar filtros al volver
+        back_kw = {
+            "marca": (request.form.get("filtro_marca") or request.args.get("marca") or "").strip(),
+            "codigo": (request.form.get("filtro_codigo") or request.args.get("codigo") or "").strip(),
+            "bodega": (request.form.get("filtro_bodega") or request.args.get("bodega") or "").strip(),
+            "stock": (request.form.get("filtro_stock") or request.args.get("stock") or "").strip(),
+        }
+        back_kw = {k: v for k, v in back_kw.items() if v}
+
+        err: str | None = None
+        ok_msg: str | None = None
+        auth_actor: Usuario | None = None
+        if action in ("eliminar", "editar_marca", "eliminar_marca"):
+            auth_ok, auth_err, auth_actor = _validar_autorizacion_variantes(
+                request.form.get("auth_user") or "",
+                request.form.get("auth_password") or "",
+            )
+            if not auth_ok:
+                flash(auth_err or "Autorización inválida.", "error")
+                return redirect(url_for("bodega.variantes_catalogo", **back_kw))
+
+        if action == "crear":
+            err = variantes_ops.crear_en_catalogo(request.form.get("marca") or "")
+            if not err:
+                ok_msg = (
+                    f"Variante «{(request.form.get('marca') or '').strip().upper()}» "
+                    "creada en el catálogo (sin asignar a código)."
+                )
+        elif action == "editar_marca":
+            origen = request.form.get("marca_origen") or ""
+            destino = request.form.get("marca_destino") or request.form.get("nueva_marca") or ""
+            err = variantes_ops.editar_marca_catalogo(origen, destino)
+            if not err:
+                who = (auth_actor.usuario if auth_actor else "") or ""
+                base = (
+                    f"Variante «{origen.strip().upper()}» editada a "
+                    f"«{destino.strip().upper()}»."
+                )
+                ok_msg = f"{base} Autorizó: {who}." if who else base
+        elif action == "eliminar_marca":
+            err = variantes_ops.eliminar_marca_catalogo(
+                request.form.get("marca_origen") or "",
+                request.form.get("marca_destino") or "",
+            )
+            if not err:
+                who = (auth_actor.usuario if auth_actor else "") or ""
+                m = (request.form.get("marca_origen") or "").strip().upper()
+                ok_msg = f"Variante «{m}» eliminada del catálogo (autorizó: {who})." if who else f"Variante «{m}» eliminada."
+        elif action == "eliminar":
+            vid = request.form.get("variante_id", type=int)
+            if not vid:
+                err = "Falta el id de variante."
+            else:
+                err = variantes_ops.eliminar_variante_fila(
+                    vid,
+                    request.form.get("marca_destino") or "",
+                )
+                if not err:
+                    who = (auth_actor.usuario if auth_actor else "") or ""
+                    ok_msg = f"Asignación eliminada / reasignada (autorizó: {who})." if who else "Asignación eliminada / reasignada."
+        else:
+            err = "Acción no reconocida."
+
+        if err:
+            flash(err, "error")
+        elif ok_msg:
+            flash(ok_msg, "success")
+        return redirect(url_for("bodega.variantes_catalogo", **back_kw))
+
+    variantes_ops.sync_catalogo_from_stock()
+
+    marca_q = _normalize_brand(request.args.get("marca") or "")
+    codigo_q = (request.args.get("codigo") or "").strip().upper()
+    bodega_q = (request.args.get("bodega") or "").strip()
+    stock_filtro = (request.args.get("stock") or "").strip().lower()
+    if stock_filtro not in ("", "con", "sin"):
+        stock_filtro = ""
+    page = max(1, request.args.get("page", 1, type=int) or 1)
+    per_page = 100
+
+    def _apply_common_filters(q):
+        if marca_q:
+            q = q.filter(func.upper(ProductoVarianteStock.marca).like(f"%{marca_q}%"))
+        if codigo_q:
+            q = q.filter(func.upper(ProductoVarianteStock.codigo_producto).like(f"%{codigo_q}%"))
+        if bodega_q:
+            q = q.filter(ProductoVarianteStock.bodega.ilike(f"%{bodega_q}%"))
+        if stock_filtro == "con":
+            q = q.filter(ProductoVarianteStock.stock > 0)
+        elif stock_filtro == "sin":
+            q = q.filter(ProductoVarianteStock.stock <= 0)
+        return q
+
+    resumen_q = (
+        db.session.query(
+            ProductoVarianteStock.marca.label("marca"),
+            func.count(ProductoVarianteStock.id).label("filas"),
+            func.count(func.distinct(ProductoVarianteStock.codigo_producto)).label("productos"),
+            func.count(func.distinct(ProductoVarianteStock.bodega)).label("bodegas"),
+            func.coalesce(func.sum(ProductoVarianteStock.stock), 0).label("stock_total"),
+        )
+        .group_by(ProductoVarianteStock.marca)
+    )
+    resumen_q = _apply_common_filters(resumen_q)
+    usage_by_marca = {
+        variantes_ops.normalize_brand(r.marca): r
+        for r in resumen_q.all()
+        if variantes_ops.normalize_brand(r.marca)
+    }
+
+    # Sin filtros de uso (código/bodega/stock): mostrar también nombres del catálogo con uso 0.
+    from types import SimpleNamespace
+
+    resumen_marcas: list = []
+    if codigo_q or bodega_q or stock_filtro:
+        resumen_marcas = sorted(usage_by_marca.values(), key=lambda r: (r.marca or "").upper())
+    else:
+        names = list(variantes_ops.listar_catalogo_nombres(limit=800))
+        for m in usage_by_marca:
+            if m not in names:
+                names.append(m)
+        names.sort()
+        for m in names:
+            if marca_q and marca_q not in m:
+                continue
+            u = usage_by_marca.get(m)
+            if u is not None:
+                resumen_marcas.append(u)
+            else:
+                resumen_marcas.append(
+                    SimpleNamespace(marca=m, filas=0, productos=0, bodegas=0, stock_total=0)
+                )
+        if len(resumen_marcas) > 500:
+            resumen_marcas = resumen_marcas[:500]
+
+    detail_q = _apply_common_filters(ProductoVarianteStock.query)
+    total_filas = detail_q.count()
+    total_pages = max(1, (total_filas + per_page - 1) // per_page)
+    if page > total_pages:
+        page = total_pages
+    filas = (
+        detail_q.order_by(
+            func.upper(ProductoVarianteStock.marca).asc(),
+            func.upper(ProductoVarianteStock.codigo_producto).asc(),
+            ProductoVarianteStock.bodega.asc(),
+            ProductoVarianteStock.origen_compra.asc(),
+        )
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    descripciones: dict[str, str] = {}
+    marcas_catalogo: dict[str, str] = {}
+    codigos = sorted(
+        {(r.codigo_producto or "").strip().upper() for r in filas if (r.codigo_producto or "").strip()}
+    )
+    if codigos:
+        prod_rows = db.session.execute(
+            text(
+                """
+                SELECT UPPER(TRIM(CODIGO)) AS codigo,
+                       COALESCE(DESCRIPCION, '') AS descripcion,
+                       COALESCE(MARCA, '') AS marca_catalogo
+                FROM productos
+                WHERE UPPER(TRIM(CODIGO)) IN :codigos
+                """
+            ).bindparams(bindparam("codigos", expanding=True)),
+            {"codigos": codigos},
+        ).mappings().all()
+        for pr in prod_rows:
+            c = (pr["codigo"] or "").strip().upper()
+            if not c:
+                continue
+            descripciones[c] = (pr["descripcion"] or "").strip()
+            marcas_catalogo[c] = (pr["marca_catalogo"] or "").strip()
+
+    total_marcas = len(resumen_marcas)
+    stock_filtrado = int(sum(int(r.stock_total or 0) for r in resumen_marcas))
+    marcas_opciones = variantes_ops.listar_marcas_distintas()
+    bodegas_opciones = bodega_catalogo.list_bodegas_operativas()
+    puede_gestionar = has_permission(
+        session.get("user"), session.get("rol"), "bodega_variantes_gestionar"
+    )
+
+    return render_template(
+        "bodega/variantes_catalogo.html",
+        **_base_context(
+            "variantes",
+            resumen_marcas=resumen_marcas,
+            filas=filas,
+            descripciones=descripciones,
+            marcas_catalogo=marcas_catalogo,
+            total_filas=total_filas,
+            total_marcas=total_marcas,
+            stock_filtrado=stock_filtrado,
+            page=page,
+            total_pages=total_pages,
+            per_page=per_page,
+            marcas_opciones=marcas_opciones,
+            bodegas_opciones=bodegas_opciones,
+            puede_gestionar=puede_gestionar,
+            filtros={
+                "marca": marca_q,
+                "codigo": codigo_q,
+                "bodega": bodega_q,
+                "stock": stock_filtro,
+            },
+        ),
+    )
+
+
 @bodega_bp.route("/")
 @admin_required
 def index():
@@ -2420,8 +2738,15 @@ def _marcas_sugeridas_variante(codigo: str | None) -> list[str]:
             if s and s not in registradas_codigo:
                 registradas_codigo.append(s)
 
-    # Resto de sugerencias: referencia CL + marcas globales, excluyendo las ya registradas en este código.
+    # Resto de sugerencias: referencia CL + catálogo editable + marcas en stock.
     resto: set[str] = set(MARCAS_REF_AUTOMOTRIZ_CL)
+    try:
+        for m in variantes_ops.listar_catalogo_nombres(limit=800):
+            mm = (m or "").strip().upper()
+            if mm:
+                resto.add(mm)
+    except Exception:
+        pass
     for m in _ajuste_marcas_desde_bd(500):
         mm = (m or "").strip().upper()
         if mm:
@@ -2869,6 +3194,101 @@ def ingreso_historial():
     )
 
 
+def _ingreso_wants_embed_partial() -> bool:
+    if (request.args.get("embed") or "").strip() == "1":
+        return True
+    return (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
+
+
+def _ingreso_detalle_contexto(doc: IngresoDocumento, items: list[IngresoDocumentoItem]) -> dict:
+    total_neto = (
+        db.session.query(
+            func.sum(
+                func.coalesce(IngresoDocumentoItem.valor_neto, 0)
+                * func.coalesce(IngresoDocumentoItem.cantidad, 0)
+            )
+        )
+        .filter(IngresoDocumentoItem.ingreso_documento_id == doc.id)
+        .scalar()
+        or 0
+    )
+    total_con_iva = _ingreso_total_con_iva(
+        float(doc.total_factura) if getattr(doc, "total_factura", None) is not None else None,
+        float(total_neto or 0),
+    )
+    iva_referencia = (
+        float(doc.iva_factura)
+        if getattr(doc, "iva_factura", None) is not None
+        else float(total_con_iva or 0) - float(total_neto or 0)
+    )
+    proveedor_codes: dict[int, str] = {}
+    rut_doc = _normalize_rut(doc.proveedor_rut or "")
+    if rut_doc and items:
+        codigos_internos = sorted(
+            {(it.codigo_producto or "").strip().upper() for it in items if (it.codigo_producto or "").strip()}
+        )
+        if codigos_internos:
+            links = (
+                ProveedorCodigoInterno.query
+                .filter_by(proveedor_rut=rut_doc)
+                .filter(ProveedorCodigoInterno.codigo_interno.in_(codigos_internos))
+                .order_by(ProveedorCodigoInterno.updated_at.desc(), ProveedorCodigoInterno.id.desc())
+                .all()
+            )
+            cp_by_codigo: dict[str, str] = {}
+            for lk in links:
+                ci = (lk.codigo_interno or "").strip().upper()
+                if ci and ci not in cp_by_codigo:
+                    cp_by_codigo[ci] = (lk.codigo_proveedor or "").strip()
+            for it in items:
+                proveedor_codes[int(it.id)] = cp_by_codigo.get((it.codigo_producto or "").strip().upper(), "")
+    return {
+        "total_neto": float(total_neto or 0),
+        "iva_referencia": float(iva_referencia or 0),
+        "total_con_iva": float(total_con_iva or 0),
+        "total_factura_referencia": (
+            float(doc.total_factura) if getattr(doc, "total_factura", None) is not None else None
+        ),
+        "proveedor_codes": proveedor_codes,
+    }
+
+
+@bodega_bp.route("/ingreso/ver/<int:doc_id>", methods=["GET"])
+@admin_required
+def ingreso_ver(doc_id: int):
+    """Vista de solo lectura del ingreso (p. ej. desde historial de producto)."""
+    if not has_permission(session.get("user"), session.get("rol"), "bodega_ingreso"):
+        return _deny_bodega_perm("No tienes permiso para ver ingresos de stock.")
+
+    doc = db.session.get(IngresoDocumento, doc_id)
+    if doc is None:
+        flash("Ingreso no encontrado.", "error")
+        return redirect(url_for("bodega.ingreso_historial"))
+
+    items = (
+        IngresoDocumentoItem.query
+        .filter_by(ingreso_documento_id=doc.id)
+        .order_by(IngresoDocumentoItem.id.asc())
+        .all()
+    )
+    detalle = _ingreso_detalle_contexto(doc, items)
+    embed_modal = (request.args.get("embed") or "").strip() == "1"
+    rut_fmt = format_rut(doc.proveedor_rut or "") if (doc.proveedor_rut or "").strip() else ""
+    return render_template(
+        "bodega/ingreso_ver.html",
+        **_base_context(
+            "ingreso_historial",
+            doc=doc,
+            items=items,
+            proveedor_rut_fmt=rut_fmt or (doc.proveedor_rut or ""),
+            puede_ver_finanzas=user_can_view_finanzas(session.get("user"), session.get("rol")),
+            embed_modal=embed_modal,
+            _partial=_ingreso_wants_embed_partial(),
+            **detalle,
+        ),
+    )
+
+
 @bodega_bp.route("/ingreso/editar/<int:doc_id>", methods=["GET", "POST"])
 @admin_required
 def ingreso_editar(doc_id: int):
@@ -3228,57 +3648,15 @@ def ingreso_editar(doc_id: int):
             flash(f"No se pudo actualizar el ingreso: {exc}", "error")
             return redirect(url_for("bodega.ingreso_editar", doc_id=doc.id))
 
-    total_neto = (
-        db.session.query(
-            func.sum(
-                func.coalesce(IngresoDocumentoItem.valor_neto, 0)
-                * func.coalesce(IngresoDocumentoItem.cantidad, 0)
-            )
-        )
-        .filter(IngresoDocumentoItem.ingreso_documento_id == doc.id)
-        .scalar()
-        or 0
-    )
-    total_con_iva = _ingreso_total_con_iva(
-        float(doc.total_factura) if getattr(doc, "total_factura", None) is not None else None,
-        float(total_neto or 0),
-    )
-    iva_referencia = (
-        float(doc.iva_factura)
-        if getattr(doc, "iva_factura", None) is not None
-        else float(total_con_iva or 0) - float(total_neto or 0)
-    )
-    proveedor_codes: dict[int, str] = {}
-    rut_doc = _normalize_rut(doc.proveedor_rut or "")
-    if rut_doc and items:
-        codigos_internos = sorted({(it.codigo_producto or "").strip().upper() for it in items if (it.codigo_producto or "").strip()})
-        if codigos_internos:
-            links = (
-                ProveedorCodigoInterno.query
-                .filter_by(proveedor_rut=rut_doc)
-                .filter(ProveedorCodigoInterno.codigo_interno.in_(codigos_internos))
-                .order_by(ProveedorCodigoInterno.updated_at.desc(), ProveedorCodigoInterno.id.desc())
-                .all()
-            )
-            cp_by_codigo: dict[str, str] = {}
-            for lk in links:
-                ci = (lk.codigo_interno or "").strip().upper()
-                if ci and ci not in cp_by_codigo:
-                    cp_by_codigo[ci] = (lk.codigo_proveedor or "").strip()
-            for it in items:
-                proveedor_codes[int(it.id)] = cp_by_codigo.get((it.codigo_producto or "").strip().upper(), "")
+    detalle = _ingreso_detalle_contexto(doc, items)
     return render_template(
         "bodega/ingreso_editar.html",
         **_base_context(
             "ingreso_historial",
             doc=doc,
             items=items,
-            total_neto=float(total_neto or 0),
-            iva_referencia=float(iva_referencia or 0),
-            total_con_iva=float(total_con_iva or 0),
-            total_factura_referencia=float(doc.total_factura) if getattr(doc, "total_factura", None) is not None else None,
-            proveedor_codes=proveedor_codes,
             metodos_pago_opciones=INGRESO_METODOS_PAGO_OPCIONES,
+            **detalle,
         ),
     )
 
@@ -4313,15 +4691,47 @@ def etiquetas():
 @admin_required
 def etiquetas_buscar_productos():
     q = (request.args.get("q") or "").strip()
+    can_ver_stock = has_permission(session.get("user"), session.get("rol"), "ver_stock")
+    can_ver_oem = has_permission(session.get("user"), session.get("rol"), "ver_oem")
     if len(q) < 2:
-        return jsonify({"success": True, "items": []})
+        return jsonify({
+            "success": True,
+            "items": [],
+            "ver_stock": can_ver_stock,
+            "ver_oem": can_ver_oem,
+        })
 
     try:
         items = _buscar_productos_para_etiquetas(q, limit=40)
-        return jsonify({"success": True, "items": items})
+        safe_items = []
+        for raw in items:
+            item = {
+                "codigo": raw.get("codigo") or "",
+                "descripcion": raw.get("descripcion") or "",
+                "modelo": raw.get("modelo") or "",
+            }
+            if can_ver_oem:
+                item["codigo_oem"] = raw.get("codigo_oem") or ""
+            if can_ver_stock:
+                try:
+                    item["stock"] = int(raw.get("stock") or 0)
+                except (TypeError, ValueError):
+                    item["stock"] = 0
+            safe_items.append(item)
+        return jsonify({
+            "success": True,
+            "items": safe_items,
+            "ver_stock": can_ver_stock,
+            "ver_oem": can_ver_oem,
+        })
     except Exception:
         db.session.rollback()
-        return jsonify({"success": False, "items": []}), 500
+        return jsonify({
+            "success": False,
+            "items": [],
+            "ver_stock": can_ver_stock,
+            "ver_oem": can_ver_oem,
+        }), 500
 
 
 @bodega_bp.route("/etiquetas/ultimas_facturas_ingreso", methods=["GET"])
@@ -4502,6 +4912,13 @@ def movimientos():
 
     movimientos_data = query.order_by(MovimientoStock.fecha.desc()).limit(500).all()
 
+    # Siempre inicializar: la plantilla usa estos attrs; si no hay ingresos en el
+    # resultado (p. ej. solo ajustes), el bloque de enriquecimiento no corre y
+    # Jinja termina con Undefined → TypeError al formatear valor_neto_ref.
+    for mv in movimientos_data:
+        mv.codigo_proveedor_ref = ""
+        mv.valor_neto_ref = None
+
     # Enriquecer grilla: código proveedor asociado y valor neto unitario del ítem de ingreso.
     ingreso_rows = [
         mv for mv in movimientos_data
@@ -4557,8 +4974,6 @@ def movimientos():
                 cp_reverse.setdefault((rk, ck), lk.codigo_proveedor or "")
 
         for mv in movimientos_data:
-            mv.codigo_proveedor_ref = ""
-            mv.valor_neto_ref = None
             if (mv.tipo or "").strip().lower() != "ingreso" or not mv.ingreso_documento_id:
                 continue
             doc_id = int(mv.ingreso_documento_id or 0)

@@ -4,55 +4,162 @@
 
 {% block extra_head %}
 <style>
+.productos-edit-page {
+    --pe-font: "Inter", "Segoe UI", system-ui, sans-serif;
+    --pe-text: #0f172a;
+    --pe-muted: #64748b;
+    --pe-line: #dbe3ef;
+    --pe-panel: #ffffff;
+    --pe-soft: #f5f8fc;
+    --pe-accent: #1d4ed8;
+    font-family: var(--pe-font);
+    color: var(--pe-text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: 0;
+}
+.productos-edit-page,
+.productos-edit-page input,
+.productos-edit-page select,
+.productos-edit-page button,
+.productos-edit-page textarea,
+.productos-edit-page .btn,
+.productos-edit-page .badge,
+.productos-edit-page .vc-table {
+    font-family: var(--pe-font);
+}
+
+.productos-edit-page .topbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px 16px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+    padding: 0 1px;
+}
 .productos-edit-page .topbar .page-title {
-    font-size: 1.25rem;
+    font-size: 1.05rem;
+    font-weight: 700;
     line-height: 1.2;
     margin: 0 0 2px;
+    color: var(--pe-text);
+    letter-spacing: -0.01em;
 }
 .productos-edit-page .topbar .page-subtitle {
-    font-size: 13px;
+    font-size: 11.5px;
+    font-weight: 400;
     line-height: 1.35;
-    color: #64748b;
+    color: var(--pe-muted);
     margin: 0;
+    max-width: 34rem;
+    letter-spacing: 0;
+}
+.productos-edit-page .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.productos-edit-page .topbar-actions .pe-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 9px;
+    border-radius: 7px;
+    border: 1px solid var(--pe-line);
+    background: var(--pe-panel);
+    color: #334155;
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+    box-shadow: none;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+}
+.productos-edit-page .topbar-actions .pe-nav-btn svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    opacity: 0.85;
+}
+.productos-edit-page .topbar-actions .pe-nav-btn:hover {
+    background: var(--pe-soft);
+    border-color: #c5d0e0;
+    color: var(--pe-text);
+}
+.productos-edit-page .topbar-actions .pe-nav-btn.pe-nav-btn--primary {
+    background: var(--pe-accent);
+    border-color: var(--pe-accent);
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(29, 78, 216, 0.18);
+}
+.productos-edit-page .topbar-actions .pe-nav-btn.pe-nav-btn--primary:hover {
+    background: #1e40af;
+    border-color: #1e40af;
+    color: #fff;
+}
+.productos-edit-page .topbar-actions .pe-nav-btn.pe-nav-btn--primary svg {
+    opacity: 1;
 }
 
 .productos-edit-page .card {
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 12px 14px;
-    margin-bottom: 10px;
-    background: #fff;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+    border: 1px solid var(--pe-line);
+    border-radius: 10px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    background: var(--pe-panel);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.productos-edit-page .card-buscar {
+    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 28px);
 }
 
 .productos-edit-page .row {
     display: flex;
-    gap: 8px 10px;
+    gap: 6px 8px;
     flex-wrap: wrap;
 }
 
 .productos-edit-page .field {
-    flex: 1 1 200px;
+    flex: 1 1 160px;
 }
 
 .productos-edit-page .field label {
     display: block;
-    margin-bottom: 3px;
-    font-size: 11px;
-    font-weight: 700;
-    color: #334155;
-    letter-spacing: 0.02em;
+    margin-bottom: 2px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.01em;
 }
 
 .productos-edit-page input,
 .productos-edit-page select,
 .productos-edit-page .tax-filter-input {
     width: 100%;
-    padding: 7px 10px;
+    padding: 5px 8px;
     border: 1px solid #cbd5e1;
-    border-radius: 7px;
-    font-size: 13px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--pe-text);
+    background: #fff;
     box-sizing: border-box;
+    min-height: 28px;
+    transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+.productos-edit-page input:focus,
+.productos-edit-page select:focus,
+.productos-edit-page .tax-filter-input:focus {
+    outline: none;
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.14);
+}
+.productos-edit-page input::placeholder {
+    color: #94a3b8;
+    font-weight: 400;
 }
 
 .productos-edit-page .input-readonly {
@@ -62,37 +169,69 @@
 
 .productos-edit-page .actions {
     display: flex;
-    gap: 8px;
-    margin-top: 8px;
+    gap: 6px;
+    margin-top: 6px;
     flex-wrap: wrap;
     align-items: center;
+}
+.productos-edit-page .actions .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 7px;
+    border: 1px solid var(--pe-accent);
+    background: var(--pe-accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: none;
+}
+.productos-edit-page .actions .btn-primary:hover {
+    background: #1e40af;
+    border-color: #1e40af;
+}
+.productos-edit-page .actions .btn-primary svg {
+    width: 12px;
+    height: 12px;
 }
 
 .productos-edit-page .row-buscar-producto {
     display: flex;
     align-items: flex-end;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
 }
 .productos-edit-page .row-buscar-producto .field-buscar-grow {
-    flex: 1 1 220px;
+    flex: 1 1 200px;
     min-width: 0;
+}
+.productos-edit-page .row-buscar-producto #codigoBuscar {
+    height: 30px;
+    font-size: 12.5px;
+    padding: 0 9px;
+    border-radius: 7px;
+    background: #fff;
+    min-height: 30px;
 }
 .productos-edit-page .btn-limpiar-busqueda {
     flex: 0 0 auto;
-    height: 36px;
-    padding: 0 14px;
+    height: 30px;
+    padding: 0 10px;
     border-radius: 7px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid var(--pe-line);
     background: #fff;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 500;
     color: #475569;
     cursor: pointer;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 }
 .productos-edit-page .btn-limpiar-busqueda:hover {
-    background: #f8fafc;
-    border-color: #94a3b8;
+    background: var(--pe-soft);
+    border-color: #c5d0e0;
     color: #0f172a;
 }
 
@@ -103,10 +242,10 @@
 .productos-edit-page .badge {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 3px 8px;
+    gap: 3px;
+    padding: 2px 7px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
 }
 
@@ -121,11 +260,11 @@
 }
 
 .productos-edit-page .msg {
-    margin-top: 6px;
-    padding: 6px 10px;
-    border-radius: 7px;
-    font-size: 12px;
-    line-height: 1.35;
+    margin-top: 5px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.3;
 }
 
 .productos-edit-page .msg-ok {
@@ -141,11 +280,11 @@
 }
 
 .productos-edit-page .form-sec {
-    margin: 10px 0 6px;
-    font-size: 12px;
-    font-weight: 800;
-    color: #0f172a;
-    letter-spacing: 0.03em;
+    margin: 8px 0 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
 }
 .productos-edit-page .form-sec:first-of-type {
@@ -156,62 +295,62 @@
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
+    gap: 6px;
+    padding: 5px 8px;
     background: #f8fafc;
     border: 1px solid #e2e8f0;
-    border-radius: 8px;
+    border-radius: 6px;
 }
 .productos-edit-page .activo-box input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    min-width: 16px;
+    width: 14px;
+    height: 14px;
+    min-width: 14px;
     cursor: pointer;
     accent-color: #16a34a;
 }
 .productos-edit-page .activo-box label {
     margin: 0;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
 }
 .productos-edit-page .activo-hint {
-    font-size: 11px;
+    font-size: 10px;
     color: #64748b;
     padding-left: 2px;
 }
 
 .productos-edit-page .vc-variantes-module {
-    margin-bottom: 26px;
-    padding-bottom: 2px;
+    margin-bottom: 12px;
+    padding-bottom: 0;
 }
 .productos-edit-page .vc-variantes-intro {
-    margin-top: 4px;
+    margin-top: 2px;
 }
 .productos-edit-page .vc-block-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 .productos-edit-page .vc-block-title {
     margin: 0;
-    font-size: 12px;
-    font-weight: 800;
-    color: #0f172a;
-    letter-spacing: 0.03em;
+    font-size: 10px;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
 }
 .productos-edit-page .vc-total-erp {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     flex-shrink: 0;
 }
 .productos-edit-page .vc-total-erp-label {
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 700;
     color: #64748b;
     text-transform: uppercase;
@@ -219,23 +358,23 @@
 }
 .productos-edit-page .vc-total-erp-val {
     display: inline-block;
-    min-width: 1.5rem;
-    padding: 2px 8px;
+    min-width: 1.25rem;
+    padding: 1px 6px;
     border-radius: 999px;
     background: #e0f2fe;
     border: 1px solid #7dd3fc;
-    font-size: 11px;
-    font-weight: 800;
+    font-size: 10px;
+    font-weight: 700;
     color: #0369a1;
     font-variant-numeric: tabular-nums;
-    line-height: 1.4;
+    line-height: 1.35;
     text-align: center;
 }
 .productos-edit-page .precios-sec-head {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin: 10px 0 6px;
+    gap: 6px;
+    margin: 8px 0 4px;
     flex-wrap: wrap;
 }
 .productos-edit-page .precios-sec-head .precios-sec-title {
@@ -246,14 +385,14 @@
     flex: 0 0 auto;
 }
 .productos-edit-page .precios-help-btn {
-    width: 28px;
-    height: 28px;
+    width: 22px;
+    height: 22px;
     border-radius: 999px;
     border: 1px solid #93c5fd;
     background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
     color: #1e3a8a;
     cursor: pointer;
-    box-shadow: 0 2px 8px rgba(30, 64, 175, 0.12);
+    box-shadow: 0 1px 4px rgba(30, 64, 175, 0.1);
     padding: 0;
     display: inline-flex;
     align-items: center;
@@ -261,8 +400,8 @@
     transition: transform .15s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
 }
 .productos-edit-page .precios-help-btn svg {
-    width: 16px;
-    height: 16px;
+    width: 12px;
+    height: 12px;
     display: block;
 }
 .productos-edit-page .precios-help-btn:hover {
@@ -315,20 +454,20 @@
 .productos-edit-page .vc-table-wrap {
     width: 100%;
     overflow-x: auto;
-    margin-top: 8px;
+    margin-top: 4px;
     border: 1px solid #e2e8f0;
-    border-radius: 8px;
+    border-radius: 7px;
     background: #fafafa;
 }
 .productos-edit-page .vc-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 11px;
-    line-height: 1.3;
+    line-height: 1.25;
 }
 .productos-edit-page .vc-table th,
 .productos-edit-page .vc-table td {
-    padding: 3px 6px;
+    padding: 2px 5px;
     text-align: left;
     border-bottom: 1px solid #e2e8f0;
 }
@@ -404,61 +543,63 @@
 }
 
 .productos-edit-page .tax-filter-input {
-    margin-bottom: 4px;
+    margin-bottom: 3px;
 }
 
 /* Formulario de edición: densidad similar a tabla "Por variante" */
 .productos-edit-page #formCard input,
 .productos-edit-page #formCard select,
 .productos-edit-page #formCard .tax-filter-input {
-    padding: 5px 8px;
-    font-size: 12px;
-    line-height: 1.3;
-    border-radius: 6px;
-    min-height: 30px;
+    padding: 3px 7px;
+    font-size: 11.5px;
+    line-height: 1.25;
+    border-radius: 5px;
+    min-height: 26px;
 }
 .productos-edit-page #formCard .field label {
-    margin-bottom: 2px;
+    margin-bottom: 1px;
     font-size: 10px;
-    letter-spacing: 0.03em;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: #64748b;
 }
 .productos-edit-page #formCard .form-sec {
-    margin: 8px 0 5px;
-    font-size: 11px;
+    margin: 7px 0 3px;
+    font-size: 10px;
 }
 .productos-edit-page #formCard .form-sec:first-of-type {
     margin-top: 0;
 }
 .productos-edit-page #formCard .field-codigo {
-    flex: 0 0 132px;
-    max-width: 150px;
+    flex: 0 0 110px;
+    max-width: 130px;
 }
 .productos-edit-page #formCard .field-nombre {
-    flex: 1 1 200px;
-    min-width: 140px;
-}
-.productos-edit-page #formCard .field-app {
-    flex: 1 1 120px;
-    min-width: 100px;
-}
-.productos-edit-page #formCard .field-medidas {
-    flex: 1 1 160px;
+    flex: 1 1 180px;
     min-width: 120px;
 }
+.productos-edit-page #formCard .field-app {
+    flex: 1 1 100px;
+    min-width: 88px;
+}
+.productos-edit-page #formCard .field-medidas {
+    flex: 1 1 120px;
+    min-width: 90px;
+}
 .productos-edit-page #formCard .field-tax {
-    flex: 1 1 200px;
-    min-width: 160px;
+    flex: 1 1 170px;
+    min-width: 140px;
 }
 .productos-edit-page #formCard .tax-inline {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px;
     align-items: stretch;
 }
 .productos-edit-page #formCard .tax-inline .tax-filter-input {
-    flex: 0 1 40%;
-    min-width: 90px;
-    max-width: 150px;
+    flex: 0 1 36%;
+    min-width: 80px;
+    max-width: 130px;
     width: auto;
     margin-bottom: 0;
 }
@@ -467,18 +608,43 @@
     min-width: 0;
 }
 .productos-edit-page #formCard > .row {
-    gap: 6px 8px;
+    gap: 4px 6px;
 }
 .productos-edit-page #formCard .activo-box {
-    padding: 6px 8px;
+    padding: 4px 7px;
 }
 .productos-edit-page #formCard .activo-box label {
-    font-size: 12px;
+    font-size: 11px;
 }
 
 body.dark .productos-edit-page .card {
     background: #1f2937;
     border-color: #374151;
+}
+body.dark .productos-edit-page .card-buscar {
+    background: linear-gradient(180deg, #152033 0%, #1f2937 48px);
+}
+body.dark .productos-edit-page .page-subtitle {
+    color: #94a3b8;
+}
+body.dark .productos-edit-page .topbar-actions .pe-nav-btn {
+    background: #111827;
+    border-color: #374151;
+    color: #e5e7eb;
+}
+body.dark .productos-edit-page .topbar-actions .pe-nav-btn:hover {
+    background: #273449;
+    border-color: #4b5563;
+    color: #f8fafc;
+}
+body.dark .productos-edit-page .topbar-actions .pe-nav-btn.pe-nav-btn--primary {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+}
+body.dark .productos-edit-page .topbar-actions .pe-nav-btn.pe-nav-btn--primary:hover {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
 }
 body.dark .productos-edit-page .btn-limpiar-busqueda {
     background: #111827;
@@ -491,10 +657,14 @@ body.dark .productos-edit-page .btn-limpiar-busqueda:hover {
     color: #f8fafc;
 }
 
-body.dark .productos-edit-page .form-sec,
-body.dark .productos-edit-page .page-title,
+body.dark .productos-edit-page .form-sec {
+    color: #94a3b8;
+}
+body.dark .productos-edit-page .page-title {
+    color: #f1f5f9;
+}
 body.dark .productos-edit-page .field label {
-    color: #e5e7eb;
+    color: #94a3b8;
 }
 
 body.dark .productos-edit-page #formCard input:not([type="checkbox"]),
@@ -509,7 +679,7 @@ body.dark .productos-edit-page #formCard .input-readonly {
 }
 
 body.dark .productos-edit-page .vc-block-title {
-    color: #e5e7eb;
+    color: #94a3b8;
 }
 body.dark .productos-edit-page .vc-total-erp-label {
     color: #9ca3af;
@@ -596,19 +766,19 @@ body.dark .productos-edit-page .vc-table .btn-vc-save:hover {
 
 /* Galería de imágenes */
 .productos-edit-page .gal-module {
-    margin-top: 4px;
+    margin-top: 2px;
 }
 .productos-edit-page .gal-hint {
-    margin: 0 0 10px;
-    font-size: 12px;
+    margin: 0 0 6px;
+    font-size: 11px;
     color: #64748b;
-    line-height: 1.4;
+    line-height: 1.35;
 }
 .productos-edit-page .gal-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
-    min-height: 48px;
+    gap: 8px;
+    min-height: 40px;
 }
 .productos-edit-page .gal-item {
     position: relative;
@@ -732,13 +902,22 @@ body.dark .productos-edit-page .gal-btn {
         <p class="page-subtitle">Busca un producto, edita sus datos y guarda cambios sin salir del flujo principal.</p>
     </div>
     <div class="topbar-actions">
-        <a class="btn" href="{{ url_for('productos.buscar') }}" data-module-url="{{ url_for('productos.buscar') }}">🔍 Buscar</a>
-        <a class="btn" href="{{ url_for('productos.ver_desactivados') }}" data-module-url="{{ url_for('productos.ver_desactivados') }}">📦 Desactivados</a>
-        <a class="btn btn-primary" href="{{ url_for('productos.modal_crear_producto') }}" data-modal-url="{{ url_for('productos.modal_crear_producto') }}">➕ Crear producto</a>
+        <a class="pe-nav-btn" href="{{ url_for('productos.buscar') }}" data-module-url="{{ url_for('productos.buscar') }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            Buscar
+        </a>
+        <a class="pe-nav-btn" href="{{ url_for('productos.ver_desactivados') }}" data-module-url="{{ url_for('productos.ver_desactivados') }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3.5 9.5L12 14l8.5-4.5"/><path d="M12 14v8"/></svg>
+            Desactivados
+        </a>
+        <a class="pe-nav-btn pe-nav-btn--primary" href="{{ url_for('productos.modal_crear_producto') }}" data-modal-url="{{ url_for('productos.modal_crear_producto') }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Crear producto
+        </a>
     </div>
 </div>
 
-<section class="card">
+<section class="card card-buscar">
     <div class="row row-buscar-producto">
         <div class="field field-buscar-grow">
             <label for="codigoBuscar">Buscar producto</label>
@@ -747,7 +926,10 @@ body.dark .productos-edit-page .gal-btn {
         <button type="button" class="btn-limpiar-busqueda" id="btnLimpiarEdicionBusqueda" title="Vaciar búsqueda y ocultar la ficha del producto">Limpiar</button>
     </div>
     <div class="actions">
-        <button class="btn btn-primary" type="button" onclick="buscarProductoParaEditar()">Buscar producto</button>
+        <button class="btn btn-primary" type="button" onclick="buscarProductoParaEditar()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            Buscar producto
+        </button>
         <span id="estadoBadge" class="badge hidden"></span>
     </div>
     <div id="msgBusqueda"></div>
@@ -830,6 +1012,7 @@ body.dark .productos-edit-page .gal-btn {
                 <ul class="precios-help-list">
                     <li>El <strong>precio mayorista</strong> por cliente se define en la ficha del cliente (RUT).</li>
                     <li>Por <strong>variante</strong> (bodega y marca): el <strong>costo</strong> sale de los ingresos; podés ajustar <strong>margen %</strong> y <strong>precio público neto</strong> (sin IVA) en la tabla.</li>
+                    <li>Si cambiás el <strong>margen %</strong>, se recalcula el <strong>precio público</strong> (y al revés), usando el costo neto de la fila. Fórmula: precio = costo ÷ (1 − margen/100).</li>
                     <li>Esos valores se guardan como <strong>referencia para ventas</strong> (misma lógica que al cargar producto en documentos).</li>
                     <li>Dejá un campo <strong>vacío</strong> y guardá la fila para volver al valor del <strong>último ingreso</strong> en ese campo.</li>
                 </ul>
@@ -1547,6 +1730,71 @@ function setMsgVc(text, ok) {
     el.textContent = text;
 }
 
+function parseVcCosto(tr) {
+    if (!tr) return null;
+    var raw = tr.getAttribute('data-costo');
+    if (raw == null || raw === '') return null;
+    var x = Number(raw);
+    return isFinite(x) && x > 0 ? x : null;
+}
+
+function parseVcInputNum(el) {
+    if (!el) return null;
+    var s = String(el.value || '').trim().replace(',', '.');
+    if (!s) return null;
+    var x = Number(s);
+    return isFinite(x) ? x : null;
+}
+
+function setVcCostoAttr(tr, costo) {
+    if (!tr) return;
+    var x = Number(costo);
+    if (costo != null && costo !== '' && isFinite(x) && x > 0) {
+        tr.setAttribute('data-costo', String(x));
+    } else {
+        tr.removeAttribute('data-costo');
+    }
+}
+
+/** Misma lógica que ingresos bodega: P = costo / (1 − margen/100). */
+function vcRecalcPrecioDesdeMargen(tr) {
+    if (!tr || tr.dataset.vcSilent === '1') return;
+    var inM = tr.querySelector('.vc-in-margen');
+    var inP = tr.querySelector('.vc-in-precio');
+    var costo = parseVcCosto(tr);
+    if (!inM || !inP || costo == null) return;
+    var mg = parseVcInputNum(inM);
+    if (mg == null || mg >= 100) return;
+    var denom = 1 - mg / 100;
+    if (denom <= 0) return;
+    tr.dataset.vcSilent = '1';
+    inP.value = numForVarianteInput(costo / denom, 2);
+    tr.dataset.vcSilent = '';
+}
+
+/** Inverso: margen = 100 × (1 − costo / P). */
+function vcRecalcMargenDesdePrecio(tr) {
+    if (!tr || tr.dataset.vcSilent === '1') return;
+    var inM = tr.querySelector('.vc-in-margen');
+    var inP = tr.querySelector('.vc-in-precio');
+    var costo = parseVcCosto(tr);
+    if (!inM || !inP || costo == null) return;
+    var pvRaw = (inP.value || '').trim();
+    if (!pvRaw) {
+        tr.dataset.vcSilent = '1';
+        inM.value = '';
+        tr.dataset.vcSilent = '';
+        return;
+    }
+    var pv = parseVcInputNum(inP);
+    if (pv == null || pv <= 0) return;
+    var mg = 100 * (1 - costo / pv);
+    if (!isFinite(mg) || mg < 0 || mg >= 100) return;
+    tr.dataset.vcSilent = '1';
+    inM.value = numForVarianteInput(mg, 4);
+    tr.dataset.vcSilent = '';
+}
+
 function guardarVarianteFila(btn) {
     var tr = btn && btn.closest ? btn.closest('tr') : null;
     if (!tr) return;
@@ -1572,10 +1820,13 @@ function guardarVarianteFila(btn) {
             setMsgVc('Referencia de variante guardada.', true);
             var rw = data.row;
             if (rw && mEl && pEl) {
+                tr.dataset.vcSilent = '1';
                 mEl.value = numForVarianteInput(rw.margen_pct, 4);
                 pEl.value = numForVarianteInput(rw.precio_publico_neto, 2);
+                tr.dataset.vcSilent = '';
                 var costTd = tr.querySelector('.vc-costo-display');
                 if (costTd) costTd.textContent = fmtNumCl(rw.costo_ingreso_neto);
+                setVcCostoAttr(tr, rw.costo_ingreso_neto);
             }
         })
         .catch(function () {
@@ -1619,6 +1870,7 @@ function renderVariantesComerciales(items) {
         tr.appendChild(tdTxt(v.bodega || '—', ''));
         tr.appendChild(tdTxt(v.marca || '—', ''));
         tr.appendChild(tdTxt(String(v.stock != null ? v.stock : 0), 'num'));
+        setVcCostoAttr(tr, v.costo_ingreso_neto);
         var tdCost = document.createElement('td');
         tdCost.className = 'num vc-costo-display';
         tdCost.textContent = fmtNumCl(v.costo_ingreso_neto);
@@ -1632,7 +1884,9 @@ function renderVariantesComerciales(items) {
         inM.setAttribute('min', '0');
         inM.setAttribute('max', '99.99');
         inM.setAttribute('placeholder', '—');
+        inM.setAttribute('title', 'Al cambiar, recalcula P. público neto con el costo de la fila');
         inM.value = v.margen_pct != null && v.margen_pct !== '' ? numForVarianteInput(v.margen_pct, 4) : '';
+        inM.addEventListener('input', function () { vcRecalcPrecioDesdeMargen(tr); });
         tdM.appendChild(inM);
         tr.appendChild(tdM);
         var tdP = document.createElement('td');
@@ -1643,7 +1897,9 @@ function renderVariantesComerciales(items) {
         inP.setAttribute('step', '0.01');
         inP.setAttribute('min', '0');
         inP.setAttribute('placeholder', '—');
+        inP.setAttribute('title', 'Al cambiar, recalcula margen % con el costo de la fila');
         inP.value = v.precio_publico_neto != null && v.precio_publico_neto !== '' ? numForVarianteInput(v.precio_publico_neto, 2) : '';
+        inP.addEventListener('input', function () { vcRecalcMargenDesdePrecio(tr); });
         tdP.appendChild(inP);
         tr.appendChild(tdP);
         var tdAct = document.createElement('td');

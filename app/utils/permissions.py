@@ -46,6 +46,7 @@ PERMISSION_CATALOG: list[dict] = [
             {"key": "bodega_ingreso", "label": "Registrar ingreso de stock"},
             {"key": "bodega_salida", "label": "Registrar salida de stock"},
             {"key": "bodega_ajuste", "label": "Registrar ajustes de stock"},
+            {"key": "bodega_variantes_gestionar", "label": "Gestionar variantes de stock (crear/editar/eliminar con autorización)"},
             {"key": "bodega_picking", "label": "Gestionar picking de venta"},
             {"key": "bodega_etiquetas", "label": "Imprimir y gestionar etiquetas"},
         ],
@@ -56,6 +57,8 @@ PERMISSION_CATALOG: list[dict] = [
             {"key": "productos_crear_editar", "label": "Crear y editar productos"},
             {"key": "productos_desactivar_reactivar", "label": "Desactivar / reactivar productos"},
             {"key": "productos_importar_exportar", "label": "Importar / exportar productos"},
+            {"key": "ver_stock", "label": "Ver stock en buscador de etiquetas"},
+            {"key": "ver_oem", "label": "Ver código OEM en buscador de etiquetas"},
         ],
     },
     {
@@ -148,12 +151,16 @@ def get_user_permissions(username: str | None, role_name: str | None = None) -> 
     try:
         from flask import session as _sess
         _cached = _sess.get("_perms_cache")
+        _cached_perms = _cached.get("perms") if isinstance(_cached, dict) else None
         if (
             isinstance(_cached, dict)
             and _cached.get("username") == username
             and _time.time() - _cached.get("_ts", 0) < 60
+            and isinstance(_cached_perms, dict)
+            # Si se agregaron llaves al catálogo, forzar rebuild (evita SuperAdmin sin ver_stock/ver_oem).
+            and all(k in _cached_perms for k in ALL_PERMISSION_KEYS)
         ):
-            return _cached["perms"]
+            return _cached_perms
     except RuntimeError:
         pass  # sin contexto de request (startup, seeds)
 

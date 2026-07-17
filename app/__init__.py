@@ -664,6 +664,25 @@ def create_app():
             conn.execute(
                 text(
                     """
+                    CREATE TABLE IF NOT EXISTS variantes_marcas_catalogo (
+                        id INTEGER PRIMARY KEY,
+                        nombre VARCHAR(120) NOT NULL UNIQUE,
+                        activo BOOLEAN NOT NULL DEFAULT 1,
+                        orden INTEGER NOT NULL DEFAULT 0,
+                        nota VARCHAR(255) DEFAULT '',
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_variantes_marcas_catalogo_nombre ON variantes_marcas_catalogo(nombre)")
+            )
+
+            conn.execute(
+                text(
+                    """
                     CREATE TABLE IF NOT EXISTS bodega_picking_ventas (
                         id INTEGER PRIMARY KEY,
                         orden_venta_id INTEGER NOT NULL UNIQUE,

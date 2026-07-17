@@ -596,13 +596,36 @@
 
 .search-assist-item {
     display: grid;
-    grid-template-columns: 120px 150px minmax(0, 1fr) auto;
+    grid-template-columns: 120px minmax(0, 1fr) auto;
     gap: 8px;
     align-items: center;
     border: 1px solid #dbe3ef;
     border-radius: 10px;
     padding: 7px 9px;
     background: #fff;
+}
+
+.search-assist-item.has-oem {
+    grid-template-columns: 120px 150px minmax(0, 1fr) auto;
+}
+
+.search-assist-item.has-stock {
+    grid-template-columns: 120px 72px minmax(0, 1fr) auto;
+}
+
+.search-assist-item.has-oem.has-stock {
+    grid-template-columns: 120px 140px 72px minmax(0, 1fr) auto;
+}
+
+.search-chip.stock-chip {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    text-align: right;
+    color: #0f172a;
+}
+
+.search-chip.stock-chip.stock-zero {
+    color: #b91c1c;
 }
 
 .search-assist-actions {
@@ -1382,7 +1405,9 @@ html[data-print-mode="thermal"] .barcode img {
                 <button type="button" class="btn btn-primary" id="etiquetasProductSearchBtn">Buscar</button>
             </div>
             <div id="etiquetasProductSearchStatus" class="etiquetas-product-search-status">Escribe al menos 2 caracteres y pulsa Buscar.</div>
-            <div id="etiquetasProductSearchResults" class="etiquetas-product-modal-results"></div>
+            <div id="etiquetasProductSearchResults" class="etiquetas-product-modal-results"
+                 data-ver-oem="{{ 1 if user_permissions.ver_oem else 0 }}"
+                 data-ver-stock="{{ 1 if user_permissions.ver_stock else 0 }}"></div>
         </div>
     </div>
 </div>
@@ -1458,6 +1483,8 @@ html[data-print-mode="thermal"] .barcode img {
     const etiquetasProductSearchStatus = document.getElementById('etiquetasProductSearchStatus');
     const etiquetasProductSearchResults = document.getElementById('etiquetasProductSearchResults');
     const URL_ETIQUETAS_BUSCAR = '{{ url_for("bodega.etiquetas_buscar_productos") }}';
+    const CAN_VER_OEM = {{ 'true' if user_permissions.ver_oem else 'false' }};
+    const CAN_VER_STOCK = {{ 'true' if user_permissions.ver_stock else 'false' }};
     const sheet = document.getElementById('sheet');
 
     function bindSearchResultRows(container) {
@@ -1473,12 +1500,30 @@ html[data-print-mode="thermal"] .barcode img {
         });
     }
 
-    function buildSearchResultsHtml(items, searchTerm) {
+    function buildSearchResultsHtml(items, searchTerm, opts) {
+        var showOem = !!(opts && opts.showOem);
+        var showStock = !!(opts && opts.showStock);
+        var rowClass = 'search-assist-item'
+            + (showOem ? ' has-oem' : '')
+            + (showStock ? ' has-stock' : '');
         return items.map(function (item) {
+            var oemHtml = showOem
+                ? '<div class="search-chip muted">OEM: ' + highlightText(item.codigo_oem || '—', searchTerm) + '</div>'
+                : '';
+            var stockVal = item.stock;
+            var stockNum = (stockVal == null || stockVal === '') ? null : Number(stockVal);
+            var stockHtml = '';
+            if (showStock) {
+                var stockLabel = (stockNum == null || isNaN(stockNum)) ? '—' : String(Math.trunc(stockNum));
+                var stockClass = 'search-chip stock-chip'
+                    + (stockNum === 0 ? ' stock-zero' : '');
+                stockHtml = '<div class="' + stockClass + '" title="Stock total">Stock: ' + escapeHtml(stockLabel) + '</div>';
+            }
             return '' +
-                '<div class="search-assist-item">' +
+                '<div class="' + rowClass + '">' +
                     '<div class="search-chip"><strong>' + highlightText(item.codigo || '', searchTerm) + '</strong></div>' +
-                    '<div class="search-chip muted">OEM: ' + highlightText(item.codigo_oem || '—', searchTerm) + '</div>' +
+                    oemHtml +
+                    stockHtml +
                     '<div class="search-chip" title="' + escapeHtml(item.descripcion || '') + '">' + highlightText(item.descripcion || '', searchTerm) + '</div>' +
                     '<div class="search-assist-actions">' +
                         '<label class="search-qty-label">Cant. <input type="number" class="search-qty-input" min="1" max="50" step="1" value="1" aria-label="Cantidad"></label>' +
@@ -1488,13 +1533,13 @@ html[data-print-mode="thermal"] .barcode img {
         }).join('');
     }
 
-    function renderSearchResultsIn(container, items, searchTerm) {
+    function renderSearchResultsIn(container, items, searchTerm, opts) {
         if (!container) return;
         if (!items || !items.length) {
             container.innerHTML = '<div class="search-help">Sin resultados para esta búsqueda.</div>';
             return;
         }
-        container.innerHTML = buildSearchResultsHtml(items, searchTerm);
+        container.innerHTML = buildSearchResultsHtml(items, searchTerm, opts || {});
         bindSearchResultRows(container);
     }
 
@@ -1529,12 +1574,17 @@ html[data-print-mode="thermal"] .barcode img {
                     return;
                 }
                 var items = data.items || [];
+                var showOem = (typeof data.ver_oem === 'boolean') ? data.ver_oem : CAN_VER_OEM;
+                var showStock = (typeof data.ver_stock === 'boolean') ? data.ver_stock : CAN_VER_STOCK;
                 if (etiquetasProductSearchStatus) {
                     etiquetasProductSearchStatus.textContent = items.length
                         ? (items.length + ' resultado(s).')
                         : 'Sin resultados para esta búsqueda.';
                 }
-                renderSearchResultsIn(etiquetasProductSearchResults, items, q);
+                renderSearchResultsIn(etiquetasProductSearchResults, items, q, {
+                    showOem: showOem,
+                    showStock: showStock
+                });
             })
             .catch(function () {
                 if (etiquetasProductSearchStatus) {
@@ -2276,7 +2326,10 @@ html[data-print-mode="thermal"] .barcode img {
     }
 
     function renderSearchResults(items, searchTerm) {
-        renderSearchResultsIn(labelSearchResults, items, searchTerm);
+        renderSearchResultsIn(labelSearchResults, items, searchTerm, {
+            showOem: CAN_VER_OEM,
+            showStock: false
+        });
     }
 
     let searchTimer = null;

@@ -1788,7 +1788,7 @@ def _ultimo_ingreso_ref(codigo: str, marca: str | None, bodega: str | None, orig
         vn = float(it.valor_neto or 0)
         if qty > 0 and vn > 0:
             total_qty += qty
-            total_vn += vn
+            total_vn += qty * vn
     costo_u = (total_vn / total_qty) if total_qty > 0 and total_vn > 0 else None
 
     item = q.order_by(IngresoDocumento.created_at.desc(), IngresoDocumentoItem.id.desc()).first()

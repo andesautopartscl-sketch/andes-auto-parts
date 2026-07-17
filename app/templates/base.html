@@ -169,6 +169,21 @@ body.search-lite-app .content {
 	overflow: visible;
 	padding: 4px 5px 28px;
 }
+.app-modal-dialog--producto-historial {
+	width: min(920px, 96vw);
+	max-height: 90vh;
+	overflow: hidden;
+	padding: 12px 12px 16px;
+}
+.app-modal-dialog--producto-historial .app-modal-iframe--historial {
+	display: block;
+	width: 100%;
+	height: min(78vh, 760px);
+	min-height: 420px;
+	border: 0;
+	border-radius: 12px;
+	background: #fff;
+}
 
 /* Ficha en iframe: el scroll va en el overlay (#appModal), no en el diálogo ni dentro del iframe (evita doble barra). */
 .app-modal.app-modal--tall-iframe.is-open {
@@ -702,7 +717,10 @@ function toggleMenu(id) {
 		var modal = document.getElementById('appModal');
 		var modalBody = document.getElementById('appModalBody');
 		var dlg = document.querySelector('#appModal .app-modal-dialog');
-		if (dlg) dlg.classList.remove('app-modal-dialog--producto-ficha');
+		if (dlg) {
+			dlg.classList.remove('app-modal-dialog--producto-ficha');
+			dlg.classList.remove('app-modal-dialog--producto-historial');
+		}
 		if (modal) modal.classList.remove('app-modal--tall-iframe');
 		document.body.classList.remove('app-modal-is-open');
 		if (!modal || !modalBody) return;
@@ -725,9 +743,29 @@ function toggleMenu(id) {
 	window.openRemoteModal = function (url) {
 		var modalBody = document.getElementById('appModalBody');
 		if (!modalBody) return;
-		/* Ficha técnica: página standalone con muchos estilos; aislar en iframe para no romper el layout. */
+		/* Ficha / historial: iframe aislado (evita CSS mezclado de Bodega / “modal feo”). */
 		var pathOnly = (url || '').split('?')[0].split('#')[0];
 		var isProductoFicha = /\/producto\/[^/]+$/.test(pathOnly);
+		var isProductoHistorial = /\/producto\/[^/]+\/historial\/?$/.test(pathOnly);
+		if (isProductoHistorial) {
+			var srcH = (url || '').split('#')[0];
+			if (srcH.indexOf('embed=') === -1) {
+				srcH += (srcH.indexOf('?') === -1 ? '?' : '&') + 'embed=1';
+			}
+			srcH += (srcH.indexOf('?') === -1 ? '?' : '&') + '_v=' + Date.now();
+			var dlgH = document.querySelector('#appModal .app-modal-dialog');
+			if (dlgH) {
+				dlgH.classList.remove('app-modal-dialog--producto-ficha');
+				dlgH.classList.add('app-modal-dialog--producto-historial');
+			}
+			var modalH = document.getElementById('appModal');
+			if (modalH) modalH.classList.remove('app-modal--tall-iframe');
+			modalBody.innerHTML =
+				'<iframe class="app-modal-iframe app-modal-iframe--historial" title="Historial del producto" src="' +
+				srcH.replace(/"/g, '&quot;') + '"></iframe>';
+			openAppModal();
+			return;
+		}
 		if (isProductoFicha) {
 			/* Evita caché del iframe: si no, el navegador puede mostrar HTML/CSS viejo aunque el servidor ya cambió. */
 			var srcNoHash = (url || '').split('#')[0];

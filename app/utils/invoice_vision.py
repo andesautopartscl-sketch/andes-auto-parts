@@ -5174,12 +5174,14 @@ def _pdf_native_parse_is_sufficient(resultado: dict[str, Any]) -> bool:
         return False
 
     if productos:
-        if any(int(p.get("valor_neto") or 0) >= 50_000 for p in productos):
-            return False
+        # Precios altos (>= 50k) pueden ser ítems reales (p.ej. Xinwang) o montos
+        # de pie mal parseados. Solo rechazarlos si no cuadran con el neto.
         if neto and int(neto) >= 1000:
             suma = _suma_productos_neto(productos)
             if suma <= 0 or abs(suma - int(neto)) > max(1000, int(neto * 0.12)):
                 return False
+        elif any(int(p.get("valor_neto") or 0) >= 50_000 for p in productos):
+            return False
 
     if productos and has_total and principal is not None and int(principal) >= 1000:
         return True

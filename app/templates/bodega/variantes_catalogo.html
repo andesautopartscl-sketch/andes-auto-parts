@@ -1,0 +1,828 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+
+{% block title %}Variantes de stock | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+.variantes-page {
+    font-size: 12px;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    box-sizing: border-box;
+    position: relative;
+    padding-bottom: 56px;
+}
+/* Esta vista: usar todo el ancho útil del área de contenido (sin tocar otras pantallas). */
+#appMainContent:has(.variantes-page),
+.content:has(.variantes-page) {
+    max-width: none !important;
+    width: 100%;
+}
+.variantes-topbar {
+    margin-bottom: 4px;
+    align-items: flex-start;
+    gap: 6px;
+}
+.variantes-topbar .page-title {
+    font-size: 1.1rem;
+    margin-bottom: 0;
+    line-height: 1.15;
+}
+.variantes-topbar .page-subtitle {
+    font-size: 11px;
+    line-height: 1.25;
+    margin: 1px 0 0;
+    color: #64748b;
+}
+.variantes-topbar .topbar-actions {
+    gap: 4px;
+}
+.variantes-topbar .topbar-actions .link-btn {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 6px;
+}
+.variantes-note {
+    margin: 0 0 6px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    color: #1e3a8a;
+    font-size: 11px;
+    line-height: 1.3;
+}
+.variantes-flash {
+    margin: 0 0 6px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.3;
+}
+.variantes-flash.success {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    color: #065f46;
+}
+.variantes-flash.error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+}
+.variantes-filters-card.table-card,
+.variantes-create-card.table-card,
+.variantes-resumen-card.table-card,
+.variantes-detalle-card.table-card {
+    padding: 6px 8px !important;
+    margin-top: 0 !important;
+    margin-bottom: 6px !important;
+}
+.variantes-filters-card .section-title,
+.variantes-create-card .section-title,
+.variantes-resumen-card .section-title,
+.variantes-detalle-card .section-title {
+    font-size: 12px;
+    margin: 0 0 4px;
+    font-weight: 700;
+}
+.variantes-filters-card .filters,
+.variantes-create-form {
+    gap: 4px 6px;
+}
+.variantes-create-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+.variantes-filters-card .field,
+.variantes-create-form .field {
+    margin: 0;
+    min-width: 0;
+}
+.variantes-filters-card .field label,
+.variantes-create-form .field label {
+    font-size: 10px;
+    font-weight: 600;
+    margin-bottom: 1px;
+    color: #475569;
+    display: block;
+    line-height: 1.2;
+}
+.variantes-filters-card .field input,
+.variantes-filters-card .field select,
+.variantes-create-form .field input,
+.variantes-create-form .field select,
+.variantes-inline-form input,
+.variantes-inline-form select {
+    min-height: 24px;
+    height: 24px;
+    padding: 2px 6px;
+    font-size: 11px;
+    border-radius: 5px;
+    border: 1px solid #cbd5e1;
+    box-sizing: border-box;
+    background: #fff;
+}
+.variantes-filters-card .actions,
+.variantes-create-form .actions {
+    margin-top: 0 !important;
+    gap: 4px;
+}
+.variantes-filters-card .actions .btn,
+.variantes-create-form .actions .btn,
+.variantes-inline-form .btn {
+    font-size: 11px;
+    padding: 3px 8px;
+    min-height: 24px;
+    height: 24px;
+    border-radius: 5px;
+    line-height: 1.2;
+}
+.variantes-filters-card .actions .link-btn {
+    font-size: 11px;
+    padding: 3px 7px;
+}
+.variantes-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 0 0 6px;
+}
+.variantes-stat {
+    min-width: 72px;
+    padding: 3px 7px;
+    border: 1px solid #e2e8f0;
+    border-radius: 5px;
+    background: #f8fafc;
+}
+.variantes-stat .lbl {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #64748b;
+    line-height: 1.1;
+}
+.variantes-stat .val {
+    display: block;
+    margin-top: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.2;
+}
+.variantes-table-wrap {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    overflow-x: auto;
+    width: 100%;
+    max-width: 100%;
+}
+.variantes-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+.variantes-detalle-card .variantes-data-table {
+    min-width: 0;
+    width: 100%;
+}
+.variantes-data-table thead th {
+    padding: 4px 6px !important;
+    font-size: 9px !important;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-align: left;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    color: #64748b;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+.variantes-data-table tbody td {
+    padding: 4px 6px !important;
+    font-size: 11px !important;
+    line-height: 1.25;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f5f9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.variantes-detalle-card .variantes-data-table tbody td:nth-child(3) {
+    white-space: normal;
+}
+.variantes-data-table tbody td.col-acciones {
+    overflow: visible;
+    white-space: nowrap;
+    text-overflow: clip;
+}
+.variantes-data-table tbody tr:hover td {
+    background: #f8fafc;
+}
+.variantes-data-table .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    width: 6%;
+}
+.variantes-resumen-table .col-marca { width: 18%; }
+.variantes-resumen-table .num { width: 8%; }
+.variantes-resumen-table .col-acciones { width: 42%; }
+.variantes-detalle-card .variantes-data-table th:nth-child(1),
+.variantes-detalle-card .variantes-data-table td:nth-child(1) { width: 12%; }
+.variantes-detalle-card .variantes-data-table th:nth-child(2),
+.variantes-detalle-card .variantes-data-table td:nth-child(2) { width: 10%; }
+.variantes-detalle-card .variantes-data-table th:nth-child(3),
+.variantes-detalle-card .variantes-data-table td:nth-child(3) { width: 36%; }
+.variantes-detalle-card .variantes-data-table th:nth-child(4),
+.variantes-detalle-card .variantes-data-table td:nth-child(4) { width: 12%; }
+.variantes-detalle-card .variantes-data-table th:nth-child(5),
+.variantes-detalle-card .variantes-data-table td:nth-child(5) { width: 6%; }
+.variantes-detalle-card .variantes-data-table .col-acciones { width: 24%; min-width: 220px; }
+
+.variantes-row-actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+.variantes-row-actions .links {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding-right: 10px;
+    border-right: 1px solid #e2e8f0;
+    flex: 0 0 auto;
+}
+.variantes-act-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    border-right: 0;
+    flex: 0 0 auto;
+}
+.variantes-act-group + .variantes-act-group {
+    padding-left: 10px;
+    border-left: 1px solid #e2e8f0;
+}
+.variantes-act-group input {
+    width: 100px !important;
+    min-width: 100px !important;
+    max-width: 120px !important;
+    height: 22px !important;
+    min-height: 22px !important;
+    padding: 0 6px !important;
+    font-size: 10px !important;
+    border-radius: 4px !important;
+    border: 1px solid #dbe3ee !important;
+    background: #fff;
+}
+.variantes-btn-icon {
+    width: 22px;
+    height: 22px;
+    min-height: 22px !important;
+    padding: 0 !important;
+    font-size: 11px !important;
+    line-height: 1 !important;
+    border-radius: 4px !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.variantes-btn-muted.variantes-btn-icon {
+    background: #fff;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+}
+.variantes-btn-muted.variantes-btn-icon:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+.variantes-btn-danger.variantes-btn-icon {
+    background: #fff;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+.variantes-btn-danger.variantes-btn-icon:hover {
+    background: #fef2f2;
+}
+.variantes-data-table .links a {
+    color: #2563eb;
+    text-decoration: none;
+    font-size: 10px;
+    font-weight: 600;
+    margin: 0;
+}
+.variantes-data-table .links a:hover {
+    text-decoration: underline;
+}
+.variantes-marca-link {
+    color: #2563eb;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 11px;
+}
+.variantes-marca-link:hover {
+    text-decoration: underline;
+}
+.variantes-empty {
+    padding: 8px 10px !important;
+    font-size: 11px !important;
+    line-height: 1.3;
+    color: #64748b;
+}
+.variantes-pager {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    margin-top: 4px;
+    font-size: 11px;
+    color: #475569;
+}
+.variantes-pager .link-btn {
+    font-size: 11px;
+    padding: 2px 7px;
+}
+.variantes-inline-form input,
+.variantes-inline-form select {
+    min-width: 78px;
+    max-width: 160px;
+    width: 110px;
+}
+.variantes-btn-danger {
+    background: #fff;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+}
+.variantes-btn-danger:hover {
+    background: #fef2f2;
+}
+.variantes-btn-muted {
+    background: #fff;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+}
+.variantes-hint {
+    font-size: 10px;
+    color: #64748b;
+    margin: 0 0 4px;
+    line-height: 1.25;
+}
+.variantes-fold.table-card {
+    padding: 0 !important;
+    overflow: hidden;
+}
+.variantes-fold-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 8px;
+    margin: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f172a;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    background: #f8fafc;
+    border: none;
+    border-bottom: 1px solid transparent;
+    box-sizing: border-box;
+    text-align: left;
+    font-family: inherit;
+}
+.variantes-fold-toggle:hover {
+    background: #f1f5f9;
+}
+.variantes-fold.is-open > .variantes-fold-toggle {
+    border-bottom-color: #e2e8f0;
+}
+.variantes-fold-toggle::before {
+    content: "▸";
+    color: #64748b;
+    font-size: 11px;
+    width: 12px;
+    flex-shrink: 0;
+}
+.variantes-fold.is-open > .variantes-fold-toggle::before {
+    content: "▾";
+}
+.variantes-fold-meta {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 600;
+    color: #64748b;
+}
+.variantes-fold-body {
+    padding: 6px 8px 8px;
+}
+.variantes-fold:not(.is-open) > .variantes-fold-body,
+.variantes-fold-body[hidden] {
+    display: none !important;
+}
+
+/* Ayuda (mismo criterio visual que catálogo de bodegas) */
+.variantes-help-anchor {
+    position: absolute;
+    bottom: 14px;
+    left: 14px;
+    z-index: 6;
+}
+.variantes-help-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid #93c5fd;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    color: #1e3a8a;
+    font-weight: 800;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.14);
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .15s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+}
+.variantes-help-btn svg {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+.variantes-help-btn:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border-color: #60a5fa;
+    box-shadow: 0 12px 24px rgba(30, 64, 175, 0.2);
+}
+.variantes-help-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+.variantes-help-panel {
+    position: fixed;
+    z-index: 1300;
+    width: min(460px, calc(100vw - 32px));
+    max-height: min(72vh, 460px);
+    overflow: auto;
+    padding: 14px 16px;
+    border: 1px solid #dbe4f0;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 16px 42px rgba(15, 23, 42, 0.16);
+}
+.variantes-help-panel[hidden] {
+    display: none !important;
+}
+.variantes-help-title {
+    margin: 0 0 10px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.variantes-help-section {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+.variantes-help-section-title {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+.variantes-help-text {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #334155;
+}
+.variantes-help-panel > .btn {
+    font-size: 13px;
+    padding: 6px 14px;
+    min-height: 32px;
+    margin-top: 4px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="variantes-page">
+<div class="topbar variantes-topbar">
+    <div>
+        <h1 class="page-title">Variantes de stock</h1>
+        <p class="page-subtitle">Nombres de variante del ERP. Más detalle en la ayuda (ícono abajo).</p>
+        {% if not puede_gestionar %}
+        <p class="variantes-hint">Las acciones de gestión requieren el permiso «Gestionar variantes de stock» (Seguridad → Permisos).</p>
+        {% endif %}
+    </div>
+    <div class="topbar-actions">
+        <a class="link-btn" href="{{ url_for('bodega.movimientos') }}" data-module-url="{{ url_for('bodega.movimientos') }}">📊 Movimientos</a>
+        <a class="link-btn" href="{{ url_for('bodega.bodegas_catalogo') }}" data-module-url="{{ url_for('bodega.bodegas_catalogo') }}">📦 Bodegas</a>
+        <a class="link-btn" href="{{ url_for('bodega.index') }}" data-module-url="{{ url_for('bodega.index') }}">🏠 Panel</a>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, text in messages %}
+    <div class="variantes-flash {{ category }}">{{ text }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<div class="table-card variantes-filters-card">
+    <h2 class="section-title">Filtros</h2>
+    <form id="variantesFiltrosForm" method="get" action="{{ url_for('bodega.variantes_catalogo') }}" class="filters">
+        <div class="field">
+            <label for="marca">Marca / variante</label>
+            <input id="marca" name="marca" value="{{ filtros.marca }}" placeholder="Ej: AFTER" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="codigo">Código interno</label>
+            <input id="codigo" name="codigo" value="{{ filtros.codigo }}" placeholder="Ej: VGP011042" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="bodega">Bodega</label>
+            <input id="bodega" name="bodega" value="{{ filtros.bodega }}" placeholder="Ej: Bodega 1" list="variantesBodegasList" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="stock">Stock</label>
+            <select id="stock" name="stock">
+                <option value="" {% if not filtros.stock %}selected{% endif %}>Todos</option>
+                <option value="con" {% if filtros.stock == 'con' %}selected{% endif %}>Solo con stock</option>
+                <option value="sin" {% if filtros.stock == 'sin' %}selected{% endif %}>Solo sin stock</option>
+            </select>
+        </div>
+        <div class="actions" style="margin-top:0;">
+            <button class="btn btn-primary" type="submit">Buscar</button>
+            <a class="link-btn" href="{{ url_for('bodega.variantes_catalogo') }}" data-module-url="{{ url_for('bodega.variantes_catalogo') }}">Limpiar</a>
+        </div>
+    </form>
+</div>
+
+{% if puede_gestionar %}
+<div class="table-card variantes-create-card">
+    <h2 class="section-title">Crear variante</h2>
+    <p class="variantes-hint">Solo el nombre. No se asigna a ningún código (eso es en Ingreso / ajuste).</p>
+    <form method="post" action="{{ url_for('bodega.variantes_catalogo') }}" class="variantes-create-form variantes-spa-form">
+        <input type="hidden" name="action" value="crear">
+        <input type="hidden" name="filtro_marca" value="{{ filtros.marca }}">
+        <input type="hidden" name="filtro_codigo" value="{{ filtros.codigo }}">
+        <input type="hidden" name="filtro_bodega" value="{{ filtros.bodega }}">
+        <input type="hidden" name="filtro_stock" value="{{ filtros.stock }}">
+        <div class="field" style="min-width:220px;flex:1;">
+            <label for="crear_marca">Marca / variante</label>
+            <input id="crear_marca" name="marca" required placeholder="Ej: AFTERMARKET" list="variantesMarcasList" autocomplete="off">
+        </div>
+        <div class="actions">
+            <button class="btn btn-primary" type="submit">Crear</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="variantes-stats">
+    <div class="variantes-stat">
+        <span class="lbl">Marcas</span>
+        <span class="val">{{ total_marcas }}</span>
+    </div>
+    <div class="variantes-stat">
+        <span class="lbl">Filas variante</span>
+        <span class="val">{{ total_filas }}</span>
+    </div>
+    <div class="variantes-stat">
+        <span class="lbl">Stock filtrado</span>
+        <span class="val">{{ stock_filtrado }}</span>
+    </div>
+</div>
+
+<div class="table-card variantes-resumen-card variantes-fold{% if filtros.marca %} is-open{% endif %}">
+    <button type="button" class="variantes-fold-toggle" aria-expanded="{{ 'true' if filtros.marca else 'false' }}">
+        Catálogo de variantes
+        <span class="variantes-fold-meta">{{ total_marcas }} nombre{{ 's' if total_marcas != 1 else '' }} · Crear / Editar / Eliminar</span>
+    </button>
+    <div class="variantes-fold-body"{% if not filtros.marca %} hidden{% endif %}>
+    {% if resumen_marcas %}
+    <div class="variantes-table-wrap">
+        <table class="variantes-data-table variantes-resumen-table">
+            <thead>
+                <tr>
+                    <th class="col-marca">Marca</th>
+                    <th class="num">Prod.</th>
+                    <th class="num">Filas</th>
+                    <th class="num">Bod.</th>
+                    <th class="num">Stock</th>
+                    <th class="col-acciones">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in resumen_marcas %}
+                <tr>
+                    <td class="col-marca">
+                        <a class="variantes-marca-link"
+                           href="{{ url_for('bodega.variantes_catalogo', marca=r.marca, codigo=filtros.codigo or none, bodega=filtros.bodega or none, stock=filtros.stock or none) }}"
+                           data-module-url="{{ url_for('bodega.variantes_catalogo', marca=r.marca, codigo=filtros.codigo or none, bodega=filtros.bodega or none, stock=filtros.stock or none) }}">{{ r.marca or '—' }}</a>
+                    </td>
+                    <td class="num">{{ r.productos }}</td>
+                    <td class="num">{{ r.filas }}</td>
+                    <td class="num">{{ r.bodegas }}</td>
+                    <td class="num">{{ r.stock_total }}</td>
+                    <td class="col-acciones">
+                        <div class="variantes-row-actions">
+                            <span class="links">
+                                <a href="{{ url_for('bodega.movimientos', marca=r.marca) }}" data-module-url="{{ url_for('bodega.movimientos', marca=r.marca) }}">Mov.</a>
+                            </span>
+                            {% if puede_gestionar %}
+                            <form method="post" action="{{ url_for('bodega.variantes_catalogo') }}" class="variantes-act-group variantes-spa-form"
+                                  title="Editar nombre de variante"
+                                  data-confirm="Se renombrará «{{ r.marca }}» en el catálogo{% if r.filas and r.filas > 0 %} y se moverá el stock/historial a ese nombre{% endif %}."
+                                  data-confirm-title="¿Editar variante?"
+                                  data-confirm-ok="Editar"
+                                  data-confirm-auth="1">
+                                <input type="hidden" name="action" value="editar_marca">
+                                <input type="hidden" name="marca_origen" value="{{ r.marca }}">
+                                <input type="hidden" name="filtro_marca" value="{{ filtros.marca }}">
+                                <input type="hidden" name="filtro_codigo" value="{{ filtros.codigo }}">
+                                <input type="hidden" name="filtro_bodega" value="{{ filtros.bodega }}">
+                                <input type="hidden" name="filtro_stock" value="{{ filtros.stock }}">
+                                <input name="marca_destino" list="variantesMarcasList" placeholder="Nuevo nombre" required autocomplete="off" style="width:110px !important;max-width:110px !important;min-width:110px !important;" aria-label="Nuevo nombre">
+                                <button class="btn variantes-btn-muted variantes-btn-icon" type="submit" title="Editar">✎</button>
+                            </form>
+                            <form method="post" action="{{ url_for('bodega.variantes_catalogo') }}" class="variantes-act-group variantes-spa-form"
+                                  title="Eliminar del catálogo"
+                                  data-confirm="{% if r.filas and r.filas > 0 %}«{{ r.marca }}» tiene {{ r.filas }} fila(s). Se reasignará a la marca destino y se quitará del catálogo.{% else %}Se eliminará «{{ r.marca }}» del catálogo.{% endif %}"
+                                  data-confirm-title="¿Eliminar variante?"
+                                  data-confirm-ok="Eliminar"
+                                  data-confirm-auth="1">
+                                <input type="hidden" name="action" value="eliminar_marca">
+                                <input type="hidden" name="marca_origen" value="{{ r.marca }}">
+                                <input type="hidden" name="filtro_marca" value="{{ filtros.marca }}">
+                                <input type="hidden" name="filtro_codigo" value="{{ filtros.codigo }}">
+                                <input type="hidden" name="filtro_bodega" value="{{ filtros.bodega }}">
+                                <input type="hidden" name="filtro_stock" value="{{ filtros.stock }}">
+                                <input name="marca_destino" list="variantesMarcasList"
+                                       placeholder="{% if r.filas and r.filas > 0 %}Destino*{% else %}Destino{% endif %}"
+                                       {% if r.filas and r.filas > 0 %}required{% endif %}
+                                       autocomplete="off"
+                                       style="width:100px !important;max-width:100px !important;min-width:100px !important;"
+                                       aria-label="Marca destino">
+                                <button class="btn variantes-btn-danger variantes-btn-icon" type="submit" title="Eliminar">✕</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="variantes-empty">No hay marcas/variantes con estos filtros.</div>
+    {% endif %}
+    </div>
+</div>
+
+<div class="table-card variantes-detalle-card variantes-fold is-open">
+    <button type="button" class="variantes-fold-toggle" aria-expanded="true">
+        Uso por producto (asignaciones)
+        <span class="variantes-fold-meta">{{ total_filas }} fila{{ 's' if total_filas != 1 else '' }} · Destino</span>
+    </button>
+    <div class="variantes-fold-body">
+    {% if filas %}
+    <div class="variantes-table-wrap">
+        <table class="variantes-data-table">
+            <thead>
+                <tr>
+                    <th>Marca</th>
+                    <th>Código</th>
+                    <th>Descripción</th>
+                    <th>Catálogo</th>
+                    <th class="num">Stock</th>
+                    <th class="col-acciones">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in filas %}
+                {% set code = (v.codigo_producto or '')|upper %}
+                <tr title="{{ v.bodega or '' }} · {{ (v.origen_compra or 'nacional')|capitalize }}">
+                    <td><strong>{{ v.marca or '—' }}</strong></td>
+                    <td><strong>{{ v.codigo_producto }}</strong></td>
+                    <td>{{ descripciones.get(code, '—') }}</td>
+                    <td>{{ marcas_catalogo.get(code, '—') or '—' }}</td>
+                    <td class="num">{{ v.stock }}</td>
+                    <td class="col-acciones">
+                        <div class="variantes-row-actions">
+                            <span class="links">
+                                <a href="{{ url_for('productos.ver_producto', codigo=v.codigo_producto) }}"
+                                   data-modal-url="{{ url_for('productos.ver_producto', codigo=v.codigo_producto) }}"
+                                   title="Ficha del producto">Ficha</a>
+                                <a href="{{ url_for('productos.historial_producto', codigo=v.codigo_producto, embed=1, solo_mov=1) }}"
+                                   data-modal-url="{{ url_for('productos.historial_producto', codigo=v.codigo_producto, embed=1, solo_mov=1) }}"
+                                   title="Historial / movimientos">Mov.</a>
+                            </span>
+                            {% if puede_gestionar %}
+                            <form method="post" action="{{ url_for('bodega.variantes_catalogo') }}" class="variantes-act-group variantes-spa-form"
+                                  title="Cambiar destino / quitar asignación"
+                                  data-confirm="{% if v.stock and v.stock > 0 %}Se moverá el stock de «{{ v.marca }}» en {{ v.codigo_producto }} a la marca destino.{% else %}Se quitará la asignación de «{{ v.marca }}» en {{ v.codigo_producto }}.{% endif %}"
+                                  data-confirm-title="¿Cambiar destino?"
+                                  data-confirm-ok="Aplicar"
+                                  data-confirm-auth="1">
+                                <input type="hidden" name="action" value="eliminar">
+                                <input type="hidden" name="variante_id" value="{{ v.id }}">
+                                <input type="hidden" name="filtro_marca" value="{{ filtros.marca }}">
+                                <input type="hidden" name="filtro_codigo" value="{{ filtros.codigo }}">
+                                <input type="hidden" name="filtro_bodega" value="{{ filtros.bodega }}">
+                                <input type="hidden" name="filtro_stock" value="{{ filtros.stock }}">
+                                <input name="marca_destino"
+                                       placeholder="{% if v.stock and v.stock > 0 %}Destino*{% else %}Destino{% endif %}"
+                                       {% if v.stock and v.stock > 0 %}required{% endif %}
+                                       autocomplete="off"
+                                       class="variantes-destino-input"
+                                       aria-label="Marca destino"
+                                       title="Escribí la marca destino (ej. AFTERMARKET)">
+                                <button class="btn variantes-btn-danger variantes-btn-icon" type="submit" title="Destino / quitar">✕</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if total_pages > 1 %}
+    <div class="variantes-pager">
+        <span>Página {{ page }} de {{ total_pages }} ({{ total_filas }} filas)</span>
+        {% if page > 1 %}
+        <a class="link-btn"
+           href="{{ url_for('bodega.variantes_catalogo', marca=filtros.marca or none, codigo=filtros.codigo or none, bodega=filtros.bodega or none, stock=filtros.stock or none, page=page-1) }}"
+           data-module-url="{{ url_for('bodega.variantes_catalogo', marca=filtros.marca or none, codigo=filtros.codigo or none, bodega=filtros.bodega or none, stock=filtros.stock or none, page=page-1) }}">← Anterior</a>
+        {% endif %}
+        {% if page < total_pages %}
+        <a class="link-btn"
+           href="{{ url_for('bodega.variantes_catalogo', marca=filtros.marca or none, codigo=filtros.codigo or none, bodega=filtros.bodega or none, stock=filtros.stock or none, page=page+1) }}"
+           data-module-url="{{ url_for('bodega.variantes_catalogo', marca=filtros.marca or none, codigo=filtros.codigo or none, bodega=filtros.bodega or none, stock=filtros.stock or none, page=page+1) }}">Siguiente →</a>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="variantes-empty">No hay filas de variante con estos filtros.</div>
+    {% endif %}
+    </div>
+</div>
+
+<div class="variantes-help-anchor">
+    <button type="button" class="variantes-help-btn" id="variantesHelpBtn" aria-expanded="false" aria-controls="variantesHelpPanel" title="Ayuda de variantes de stock" aria-label="Ayuda">
+        <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+            <path d="M32 8c-10.5 0-19 7.7-19 17.2 0 2.7 2.2 4.8 4.9 4.8 2.7 0 4.9-2.2 4.9-4.8 0-4.1 4.1-7.4 9.2-7.4 5.1 0 9.2 3.3 9.2 7.4 0 3.3-2.4 5.1-5.8 7.5-3.9 2.8-8.7 6.3-8.7 13.6 0 2.7 2.2 4.8 4.9 4.8s4.9-2.2 4.9-4.8c0-2 1.1-3 4.7-5.6 3.9-2.8 9.8-7 9.8-15.5C51 15.7 42.5 8 32 8z" fill="currentColor"/>
+            <circle cx="32" cy="55" r="5.5" fill="currentColor"/>
+        </svg>
+    </button>
+    <div id="variantesHelpPanel" class="variantes-help-panel" role="region" aria-labelledby="variantesHelpTitle" hidden>
+        <h3 id="variantesHelpTitle" class="variantes-help-title">Cómo usar variantes de stock</h3>
+        <div class="variantes-help-section">
+            <p class="variantes-help-section-title">Qué es esta pantalla</p>
+            <p class="variantes-help-text">Catálogo de variantes: crear, editar y eliminar nombres. La asignación a códigos se hace en Ingreso y otros menús.</p>
+        </div>
+        <div class="variantes-help-section">
+            <p class="variantes-help-section-title">Acciones</p>
+            <p class="variantes-help-text"><strong>Crear</strong> solo agrega el nombre al catálogo (aparece en Ingreso). <strong>Editar</strong> renombra; si ya hay stock, lo mueve. En detalle, <strong>Destino</strong> cambia la asignación de un código concreto.</p>
+        </div>
+        <div class="variantes-help-section">
+            <p class="variantes-help-section-title">Seguridad</p>
+            <p class="variantes-help-text">Editar y eliminar piden usuario y clave de quien tenga el permiso «Gestionar variantes de stock».</p>
+        </div>
+        <button type="button" class="btn" id="variantesHelpClose">Cerrar</button>
+    </div>
+</div>
+
+<datalist id="variantesMarcasList">
+    {% for m in marcas_opciones %}
+    <option value="{{ m }}"></option>
+    {% endfor %}
+</datalist>
+<datalist id="variantesBodegasList">
+    {% for b in bodegas_opciones %}
+    <option value="{{ b }}"></option>
+    {% endfor %}
+</datalist>
+</div>
+{% endblock %}

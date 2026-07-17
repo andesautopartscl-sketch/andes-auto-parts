@@ -597,6 +597,9 @@ html {
 				<a class="{% if active_page == 'bodegas' %}nav-active{% endif %}"
 				   href="{{ url_for('bodega.bodegas_catalogo') }}"
 				   data-module-url="{{ url_for('bodega.bodegas_catalogo') }}">📦 Bodegas (catálogo)</a>
+				<a class="{% if active_page == 'variantes' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.variantes_catalogo') }}"
+				   data-module-url="{{ url_for('bodega.variantes_catalogo') }}">🏷 Variantes</a>
 				<a class="{% if active_page == 'ingreso' %}nav-active{% endif %}"
 				   href="{{ url_for('bodega.ingreso') }}"
 				   data-module-url="{{ url_for('bodega.ingreso') }}">📥 Ingreso de productos</a>

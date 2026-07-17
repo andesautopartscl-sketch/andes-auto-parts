@@ -16,6 +16,25 @@ class CatalogoBodega(db.Model):
     nota = db.Column(db.String(255), default="")
 
 
+class CatalogoVarianteMarca(db.Model):
+    """Catálogo de nombres de variante/marca (sin asignar a código; eso ocurre en ingreso u otros menús)."""
+
+    __tablename__ = "variantes_marcas_catalogo"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    activo = db.Column(db.Boolean, nullable=False, default=True)
+    orden = db.Column(db.Integer, nullable=False, default=0)
+    nota = db.Column(db.String(255), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+
 class MovimientoStock(db.Model):
     __tablename__ = "movimientos_stock"
 

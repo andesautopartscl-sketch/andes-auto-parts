@@ -18,6 +18,59 @@ body.dark .results-meta {
     color:#e5e7eb;
 }
 
+body.dark .buscar-page > .topbar {
+    background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+    border-color: #374151;
+    box-shadow: none;
+}
+
+body.dark .buscar-page .page-meta .meta-chip {
+    background: #111827;
+    border-color: #374151;
+    box-shadow: none;
+}
+
+body.dark .buscar-page .page-meta .meta-label {
+    color: #94a3b8;
+}
+
+body.dark .buscar-page .page-meta .meta-value {
+    color: #e5e7eb;
+}
+
+body.dark .buscar-page .search-card,
+body.dark .buscar-page .table-card {
+    background: #1f2937;
+    border-color: #374151;
+    box-shadow: none;
+}
+
+body.dark .buscar-page .search-form label {
+    background: #0f172a;
+    border-color: #334155;
+    color: #93c5fd;
+}
+
+body.dark .buscar-page .search-form input {
+    background: #111827;
+    border-color: #4b5563;
+    color: #e5e7eb;
+    box-shadow: none;
+}
+
+body.dark .buscar-page .table-card-head {
+    border-bottom-color: #374151;
+}
+
+body.dark .buscar-page .topbar-actions .btn,
+body.dark .buscar-page .search-form .btn.btn-secondary,
+body.dark .buscar-page .pagination-bar .btn {
+    background: #1f2937;
+    border-color: #4b5563;
+    color: #e5e7eb;
+    box-shadow: none;
+}
+
 body.dark table {
     background:#1c2433;
     color:white;
@@ -103,73 +156,285 @@ body.dark .import-result-stats dd { color:#4ade80; }
 body.dark .import-result-notes { color:#bbf7d0; }
 body.dark .import-result-dismiss { color:#86efac; }
 
-.toolbar-row {
-    display:flex;
-    gap:14px;
-    flex-wrap:wrap;
-    margin-bottom:18px;
+/* --- Chrome compacto profesional (.buscar-page) --- */
+.buscar-page {
+    --bp-navy: #1e3c72;
+    --bp-blue: #1d4ed8;
+    --bp-blue-dark: #1e40af;
+    --bp-line: #dbe3ef;
+    --bp-muted: #64748b;
+    --bp-text: #0f172a;
+    --bp-panel: #fff;
+    --bp-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 16px rgba(15, 23, 42, 0.07);
+    --bp-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 2px 6px rgba(15, 23, 42, 0.06);
 }
 
-.stats-card,
-.search-card,
-.table-card {
-    background:#fff;
-    border:1px solid #e2e8f0;
-    border-radius:16px;
-    box-shadow:0 10px 25px rgba(0,0,0,0.05);
+.buscar-page > .topbar {
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%);
+    border: 1px solid var(--bp-line);
+    border-radius: 12px;
+    box-shadow: var(--bp-shadow-sm);
 }
 
-.stats-card {
-    padding:16px 18px;
-    min-width:180px;
+.buscar-page .page-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--bp-text);
+    line-height: 1.2;
 }
 
-.stats-card span {
-    display:block;
-    color:#64748b;
-    font-size:12px;
-    text-transform:uppercase;
-    letter-spacing:.06em;
-    margin-bottom:6px;
+.buscar-page .page-title::before {
+    content: "";
+    width: 3px;
+    height: 1.05em;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #60a5fa 0%, var(--bp-navy) 100%);
+    flex-shrink: 0;
 }
 
-.stats-card strong {
-    font-size:30px;
-    color:#0f172a;
+.buscar-page .page-subtitle {
+    display: none;
 }
 
-.search-card {
-    padding:18px;
-    margin-bottom:18px;
+.buscar-page .page-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0 0;
+    font-size: 11.5px;
+    color: var(--bp-muted);
+    line-height: 1.3;
 }
 
-.search-form {
-    display:grid;
-    grid-template-columns:minmax(0, 1fr) auto auto auto;
-    gap:10px;
-    align-items:end;
+.buscar-page .page-meta .meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
-.search-form label {
-    display:block;
-    margin-bottom:6px;
-    font-size:13px;
-    font-weight:600;
-    color:#334155;
+.buscar-page .page-meta .meta-label {
+    color: #64748b;
+    font-weight: 600;
 }
 
-.search-form input {
-    width:100%;
-    padding:11px 12px;
-    border:1px solid #cbd5e1;
-    border-radius:10px;
-    font-size:14px;
+.buscar-page .page-meta .meta-value {
+    color: var(--bp-text);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
 }
 
-.table-card {
-    padding:18px;
+.buscar-page .topbar-actions {
+    gap: 6px;
+}
+
+.buscar-page .topbar-actions .btn,
+.buscar-page .search-form .btn,
+.buscar-page .pagination-bar .btn,
+.buscar-page .modal-buttons .btn,
+.buscar-page .modal-buttons .btn-primary,
+.buscar-page .modal-buttons .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 32px;
+    padding: 5px 11px;
+    border-radius: 8px;
+    border: 1px solid var(--bp-line);
+    background: var(--bp-panel);
+    color: var(--bp-text);
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+    box-shadow: var(--bp-shadow-sm);
+    transition: background .12s ease, border-color .12s ease, color .12s ease, box-shadow .12s ease;
+}
+
+.buscar-page .topbar-actions .btn:hover,
+.buscar-page .search-form .btn:hover,
+.buscar-page .pagination-bar .btn:hover {
+    background: #eff6ff;
+    border-color: #93c5fd;
+    transform: none;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+}
+
+.buscar-page .btn.btn-primary,
+.buscar-page .btn-primary {
+    background: linear-gradient(180deg, #3b82f6 0%, var(--bp-blue) 100%);
+    border-color: var(--bp-blue);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(29, 78, 216, 0.28);
+}
+
+.buscar-page .btn.btn-primary:hover,
+.buscar-page .btn-primary:hover {
+    background: linear-gradient(180deg, #2563eb 0%, var(--bp-blue-dark) 100%);
+    border-color: var(--bp-blue-dark);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(29, 78, 216, 0.34);
+}
+
+.buscar-page .btn.btn-secondary,
+.buscar-page .btn-secondary {
+    background: #fff;
+    border-color: #d4dce8;
+    color: #334155;
+}
+
+.buscar-page .btn.btn-secondary:hover,
+.buscar-page .btn-secondary:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    color: var(--bp-text);
+}
+
+.buscar-page .search-card {
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    background: linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%);
+    border: 1px solid var(--bp-line);
+    border-radius: 12px;
+    box-shadow: var(--bp-shadow);
+}
+
+.buscar-page .search-form {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.buscar-page .search-form label {
+    margin: 0;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--bp-navy);
+    white-space: nowrap;
+    background: #eef4ff;
+    border: 1px solid #dbe7ff;
+    border-radius: 7px;
+}
+
+.buscar-page .search-form .search-field {
+    position: relative;
+    min-width: 0;
+}
+
+.buscar-page .search-form .search-field::before {
+    content: "";
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    margin-top: -6px;
+    border: 1.7px solid #94a3b8;
+    border-radius: 50%;
+    box-sizing: border-box;
+    pointer-events: none;
+    opacity: .85;
+}
+
+.buscar-page .search-form .search-field::after {
+    content: "";
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    width: 5px;
+    height: 1.7px;
+    margin-top: 3px;
+    background: #94a3b8;
+    border-radius: 1px;
+    transform: rotate(45deg);
+    pointer-events: none;
+    opacity: .85;
+}
+
+.buscar-page .search-form input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 7px 10px 7px 30px;
+    border: 1px solid #c5d0e0;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--bp-text);
+    background: #fff;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition: border-color .12s ease, box-shadow .12s ease;
+}
+
+.buscar-page .search-form input:focus {
+    outline: none;
+    border-color: #60a5fa;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03), 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.buscar-page .search-form input::placeholder {
+    color: #94a3b8;
+}
+
+.buscar-page .table-card {
+    padding: 10px 12px 12px;
     min-width: 0;
     max-width: 100%;
+    background: var(--bp-panel);
+    border: 1px solid var(--bp-line);
+    border-radius: 12px;
+    box-shadow: var(--bp-shadow);
+}
+
+.buscar-page .table-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eef2f7;
+}
+
+.buscar-page .table-card-head h3 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--bp-text);
+    letter-spacing: -0.01em;
+}
+
+.buscar-page .results-meta {
+    margin: 0;
+    color: var(--bp-muted);
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.buscar-page .results-meta b {
+    color: #475569;
+    font-weight: 700;
 }
 
 /* Tabla contenida en el cuadro: sin scroll horizontal; filas con scroll vertical */
@@ -284,6 +549,8 @@ td mark {
     color:#7c2d12;
     padding:0 2px;
     border-radius:4px;
+    font: inherit;
+    font-weight: inherit;
 }
 
 .results-meta {
@@ -297,14 +564,14 @@ td mark {
     flex-wrap:wrap;
     align-items:center;
     justify-content:center;
-    gap:12px 18px;
-    margin-top:16px;
-    padding-top:14px;
+    gap:8px 12px;
+    margin-top:10px;
+    padding-top:10px;
     border-top:1px solid #e2e8f0;
 }
 
 .pagination-info {
-    font-size:14px;
+    font-size:12px;
     color:#334155;
 }
 
@@ -359,6 +626,10 @@ body.dark .pagination-info {
 .modal-buttons {
     margin-top:20px;
     text-align:right;
+    display:flex;
+    justify-content:flex-end;
+    gap:8px;
+    flex-wrap:wrap;
 }
 
 .spinner {
@@ -377,14 +648,23 @@ body.dark .pagination-info {
 }
 
 @media (max-width: 960px) {
-    .search-form {
-        grid-template-columns:1fr;
+    .buscar-page .search-form {
+        grid-template-columns: 1fr 1fr;
+    }
+    .buscar-page .search-form label,
+    .buscar-page .search-form .search-field {
+        grid-column: 1 / -1;
+    }
+    .buscar-page .search-form .btn,
+    .buscar-page .search-form a.btn {
+        width: 100%;
     }
 }
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="buscar-page">
 <div class="topbar">
     <div>
         <h1 class="page-title">Buscar productos</h1>
@@ -393,6 +673,10 @@ body.dark .pagination-info {
         {% else %}
         <p class="page-subtitle">Explora el catálogo activo, valida stock y administra importación/exportación desde el mismo panel.</p>
         {% endif %}
+        <p class="page-meta">
+            <span class="meta-chip"><span class="meta-label">Total</span> <span class="meta-value">{{ total_count if total_count is defined else (productos|length) }}</span></span>
+            <span class="meta-chip"><span class="meta-label">Usuario</span> <span class="meta-value">{{ session['user'] }}</span></span>
+        </p>
     </div>
     <div class="topbar-actions">
         {% if search_lite|default(false) %}
@@ -401,34 +685,23 @@ body.dark .pagination-info {
             <button type="submit" class="btn btn-secondary">Cerrar sesión</button>
         </form>
         {% else %}
-        <a class="btn"
+        <a class="btn btn-secondary"
             href="{{ url_for('productos.editar_productos_view') }}"
-            data-module-url="{{ url_for('productos.editar_productos_view') }}">✏ Editar</a>
-        <a class="btn"
+            data-module-url="{{ url_for('productos.editar_productos_view') }}">Editar</a>
+        <a class="btn btn-secondary"
             href="{{ url_for('productos.ver_desactivados') }}"
-            data-module-url="{{ url_for('productos.ver_desactivados') }}">📦 Desactivados</a>
+            data-module-url="{{ url_for('productos.ver_desactivados') }}">Desactivados</a>
         <a class="btn btn-primary"
             href="{{ url_for('productos.modal_crear_producto') }}"
-            data-modal-url="{{ url_for('productos.modal_crear_producto') }}">➕ Crear producto</a>
+            data-modal-url="{{ url_for('productos.modal_crear_producto') }}">Crear producto</a>
         {% endif %}
-    </div>
-</div>
-
-<div class="toolbar-row">
-    <div class="stats-card">
-        <span>Resultados (total)</span>
-        <strong>{{ total_count if total_count is defined else (productos|length) }}</strong>
-    </div>
-    <div class="stats-card">
-        <span>Usuario</span>
-        <strong style="font-size:20px;">{{ session['user'] }}</strong>
     </div>
 </div>
 
 <section class="search-card">
     <form method="get" class="search-form" id="buscarProductosForm" action="{{ url_for('productos.buscar') }}" data-buscar-base="{{ url_for('productos.buscar') }}">
-        <div>
-            <label for="q">Búsqueda general</label>
+        <label for="q">Búsqueda</label>
+        <div class="search-field">
             <input id="q" name="q" value="{{ q or '' }}" autocomplete="off" placeholder="Interno · OEM · descripción" spellcheck="false" title="Búsqueda por código interno, OEM o texto en descripción">
         </div>
         <button class="btn btn-primary" type="submit" id="btnBuscarProductosSubmit">Buscar</button>
@@ -438,17 +711,19 @@ body.dark .pagination-info {
 </section>
 
 <section class="table-card">
-    <h3 style="margin:0 0 8px;font-size:18px;color:#0f172a;">Resultados de búsqueda</h3>
-    <p class="results-meta">
-        <b>Total:</b> {{ total_count if total_count is defined else (productos|length) }}
-        {% if total_count is defined and total_count and productos|length %}
-        · <b>Mostrando:</b>
-        {{ ((page - 1) * per_page + 1) }}–{{ (page - 1) * per_page + (productos|length) }}
-        {% endif %}
-        {% if per_page is defined %}
-        · <b>Por página:</b> {{ per_page }}
-        {% endif %}
-    </p>
+    <div class="table-card-head">
+        <h3>Resultados</h3>
+        <p class="results-meta">
+            <b>Total:</b> {{ total_count if total_count is defined else (productos|length) }}
+            {% if total_count is defined and total_count and productos|length %}
+            · <b>Mostrando:</b>
+            {{ ((page - 1) * per_page + 1) }}–{{ (page - 1) * per_page + (productos|length) }}
+            {% endif %}
+            {% if per_page is defined %}
+            · <b>Por página:</b> {{ per_page }}
+            {% endif %}
+        </p>
+    </div>
 
     {% if productos %}
     <div class="table-wrap">
@@ -535,7 +810,7 @@ body.dark .pagination-info {
         <h3 id="descModalTitle">Detalle</h3>
         <div id="descText" style="white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow:auto;"></div>
         <div class="modal-buttons">
-            <button class="btn-primary" onclick="closeDescModal()">Cerrar</button>
+            <button class="btn btn-primary" onclick="closeDescModal()">Cerrar</button>
         </div>
     </div>
 </div>
@@ -554,8 +829,8 @@ body.dark .pagination-info {
             <div id="importMessage" style="margin-top:15px; font-weight:500;"></div>
 
             <div class="modal-buttons">
-                <button type="button" class="btn-secondary" onclick="closeImportModal()">Cancelar</button>
-                <button type="button" class="btn-primary" onclick="enviarImportacion()">📤 Importar</button>
+                <button type="button" class="btn btn-secondary" onclick="closeImportModal()">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="enviarImportacion()">📤 Importar</button>
             </div>
         </form>
     </div>
@@ -594,12 +869,13 @@ body.dark .pagination-info {
         <div id="exportMessage" style="margin-top:14px; font-weight:500;"></div>
 
         <div class="modal-buttons">
-            <button type="button" class="btn-secondary" onclick="closeExportModal()">Cancelar</button>
-            <button type="button" class="btn-primary" onclick="enviarExportacion()">📥 Exportar</button>
+            <button type="button" class="btn btn-secondary" onclick="closeExportModal()">Cancelar</button>
+            <button type="button" class="btn btn-primary" onclick="enviarExportacion()">📥 Exportar</button>
         </div>
     </div>
 </div>
 {% endif %}
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -852,8 +1128,17 @@ window._syncBuscarExcelHashModals = function (fromUrl) {
 })();
 {% endif %}
 
-/* Búsqueda en vivo: debounce + SPA _loadModule; vacío = catálogo general */
+/* Búsqueda en vivo: debounce + SPA _loadModule; vacío = catálogo general.
+   Preserva texto/foco/cursor solo en softNav dentro de /buscar.
+   Al salir a otro módulo se limpia el estado para no reaplicar el filtro. */
 (function () {
+    var st = window.__buscarLiveState || (window.__buscarLiveState = {
+        q: null,
+        selStart: 0,
+        selEnd: 0,
+        expectFocusRestore: false
+    });
+
     function debounce(fn, wait) {
         var t;
         return function () {
@@ -862,6 +1147,54 @@ window._syncBuscarExcelHashModals = function (fromUrl) {
             var ctx = this;
             t = setTimeout(function () { fn.apply(ctx, a); }, wait);
         };
+    }
+
+    function clearLiveState() {
+        st.q = null;
+        st.selStart = 0;
+        st.selEnd = 0;
+        st.expectFocusRestore = false;
+    }
+
+    function isBuscarPath(urlOrPath) {
+        try {
+            var p = new URL(urlOrPath || '', window.location.origin).pathname.replace(/\/$/, '') || '/';
+            return p === '/buscar';
+        } catch (e) {
+            var s = String(urlOrPath || '');
+            return s.indexOf('/buscar') !== -1 && s.indexOf('/buscar_') === -1;
+        }
+    }
+
+    function snapshotInput(inp) {
+        if (!inp) return;
+        st.q = inp.value || '';
+        try {
+            st.selStart = inp.selectionStart || 0;
+            st.selEnd = inp.selectionEnd || 0;
+        } catch (e) {}
+    }
+
+    function restoreInput(inp) {
+        /* Solo restaurar si veníamos de softNav (escribía mientras recargaba).
+           Entrar desde el menú u otro módulo usa el valor del servidor. */
+        if (!inp || !st.expectFocusRestore || st.q === null) return;
+        if ((inp.value || '') !== st.q) {
+            inp.value = st.q;
+        }
+        try {
+            inp.focus();
+            inp.setSelectionRange(st.selStart, st.selEnd);
+        } catch (e) {}
+        st.expectFocusRestore = false;
+    }
+
+    function urlQ() {
+        try {
+            return new URL(window.location.href).searchParams.get('q') || '';
+        } catch (e) {
+            return '';
+        }
     }
 
     function buildBuscarLiveUrl(qTrim) {
@@ -912,17 +1245,55 @@ window._syncBuscarExcelHashModals = function (fromUrl) {
             return;
         }
 
+        /* Tras softNav el HTML trae el q del servidor; si el usuario seguía
+           escribiendo, restauramos su texto y el cursor. Si no, alineamos estado. */
+        var midSoftNav = !!st.expectFocusRestore;
+        if (midSoftNav) {
+            restoreInput(inp);
+        } else {
+            st.q = inp.value || '';
+            st.selStart = (inp.value || '').length;
+            st.selEnd = st.selStart;
+        }
+
         var debouncedNav = debounce(function () {
+            snapshotInput(inp);
+            st.expectFocusRestore = true;
             navigateBuscarModule(buildBuscarLiveUrl((inp.value || '').trim()));
         }, 360);
 
-        inp.addEventListener('input', debouncedNav);
+        /* Si durante el fetch escribió más, relanzar con el texto actual. */
+        if (midSoftNav && st.q !== null && (st.q || '').trim() !== urlQ().trim()) {
+            st.expectFocusRestore = true;
+            debouncedNav();
+        }
+
+        inp.addEventListener('input', function () {
+            snapshotInput(inp);
+            st.expectFocusRestore = true;
+            debouncedNav();
+        });
         inp.addEventListener('paste', function () {
-            window.setTimeout(debouncedNav, 0);
+            window.setTimeout(function () {
+                snapshotInput(inp);
+                st.expectFocusRestore = true;
+                debouncedNav();
+            }, 0);
+        });
+        inp.addEventListener('keyup', function () { snapshotInput(inp); });
+        inp.addEventListener('click', function () { snapshotInput(inp); });
+        inp.addEventListener('blur', function () {
+            /* Tear-down del softNav: input desconectado → mantener intención de foco.
+               Clic fuera: input sigue conectado → el usuario salió del campo. */
+            if (st.expectFocusRestore && !inp.isConnected) return;
+            st.expectFocusRestore = false;
+            snapshotInput(inp);
         });
 
         form.addEventListener('submit', function (e) {
             e.preventDefault();
+            snapshotInput(inp);
+            st.expectFocusRestore = true;
             navigateBuscarModule(buildBuscarLiveUrl((inp.value || '').trim()));
         });
 
@@ -932,13 +1303,34 @@ window._syncBuscarExcelHashModals = function (fromUrl) {
                 e.preventDefault();
                 e.stopPropagation();
                 inp.value = '';
+                st.q = '';
+                st.selStart = 0;
+                st.selEnd = 0;
+                st.expectFocusRestore = false;
                 navigateBuscarModule(buildBuscarLiveUrl(''));
             }, true);
         }
     }
 
-    document.addEventListener('DOMContentLoaded', initBuscarLiveSearch);
-    document.addEventListener('app:module-loaded', initBuscarLiveSearch);
+    function onModuleLoaded(ev) {
+        var url = (ev && ev.detail && ev.detail.url) ? String(ev.detail.url) : (window.location.pathname + window.location.search);
+        if (!isBuscarPath(url)) {
+            clearLiveState();
+            return;
+        }
+        initBuscarLiveSearch();
+    }
+
+    if (window.__buscarLiveModuleLoadedHandler) {
+        document.removeEventListener('app:module-loaded', window.__buscarLiveModuleLoadedHandler);
+    }
+    window.__buscarLiveModuleLoadedHandler = onModuleLoaded;
+    document.addEventListener('app:module-loaded', window.__buscarLiveModuleLoadedHandler);
+
+    if (!window.__buscarLiveSearchBooted) {
+        window.__buscarLiveSearchBooted = true;
+        document.addEventListener('DOMContentLoaded', initBuscarLiveSearch);
+    }
     initBuscarLiveSearch();
 })();
 </script>
