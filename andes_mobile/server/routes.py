@@ -790,7 +790,7 @@ def ajustes():
     return render_template(
         "mobile/ajustes.html",
         usuario_email=email,
-        pwa_version="v2026.07.21-v31",
+        pwa_version="v2026.07.21-v32",
         **_nav_ctx("mas"),
     )
 

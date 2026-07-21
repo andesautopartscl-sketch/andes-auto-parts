@@ -1,9 +1,8 @@
 (function () {
   "use strict";
 
-  var SPLASH_MIN_MS = 680;
-  var SPLASH_MAX_READY_MS = 1500;
-  var SPLASH_HARD_MAX_MS = 4200;
+  var SPLASH_MIN_MS = 480;
+  var SPLASH_HARD_MAX_MS = 2200;
 
   function setProgress(splash, value) {
     var bar = document.getElementById("mobile-splash-progress");
@@ -13,17 +12,30 @@
     if (progress) progress.setAttribute("aria-valuenow", String(pct));
   }
 
+  function forceUnlockUi(splash) {
+    document.body.classList.remove("mobile-app--splash");
+    if (!splash) return;
+    splash.classList.add("mobile-splash--hide");
+    splash.classList.add("mobile-splash--gone");
+    splash.setAttribute("aria-hidden", "true");
+    splash.style.pointerEvents = "none";
+    try {
+      if (splash.parentNode) splash.parentNode.removeChild(splash);
+    } catch (_e) {}
+  }
+
   function hideSplash(splash) {
-    if (!splash || splash.classList.contains("mobile-splash--hide")) return;
+    if (!splash || splash.dataset.andesSplashDone === "1") return;
+    splash.dataset.andesSplashDone = "1";
     setProgress(splash, 100);
     splash.classList.add("mobile-splash--ready");
+    /* Liberar taps de inmediato: el fade puede seguir visualmente */
+    splash.style.pointerEvents = "none";
+    document.body.classList.remove("mobile-app--splash");
+    splash.classList.add("mobile-splash--hide");
     window.setTimeout(function () {
-      splash.classList.add("mobile-splash--hide");
-      document.body.classList.remove("mobile-app--splash");
-      window.setTimeout(function () {
-        splash.remove();
-      }, 380);
-    }, 120);
+      forceUnlockUi(splash);
+    }, 280);
   }
 
   document.addEventListener("DOMContentLoaded", function () {
@@ -41,7 +53,7 @@
       setProgress(splash, current);
     }
 
-    bumpProgress(18);
+    bumpProgress(22);
 
     document.addEventListener(
       "andes:catalog-sync-progress",
@@ -72,9 +84,6 @@
       bumpProgress(100);
       var elapsed = Date.now() - started;
       var wait = Math.max(0, SPLASH_MIN_MS - elapsed);
-      if (elapsed < SPLASH_MAX_READY_MS) {
-        wait = Math.min(wait, SPLASH_MAX_READY_MS - elapsed);
-      }
       window.setTimeout(function () {
         hideSplash(splash);
       }, wait);
@@ -94,8 +103,18 @@
       );
     }
 
+    /* Failsafe duro: nunca dejar el splash bloqueando la UI */
     window.setTimeout(function () {
       if (!finished) finish();
+      forceUnlockUi(document.getElementById("mobile-splash"));
     }, SPLASH_HARD_MAX_MS);
+
+    document.addEventListener(
+      "pointerdown",
+      function () {
+        forceUnlockUi(document.getElementById("mobile-splash"));
+      },
+      { once: true, capture: true, passive: true }
+    );
   });
 })();

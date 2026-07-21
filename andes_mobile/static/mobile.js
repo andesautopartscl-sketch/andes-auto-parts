@@ -587,7 +587,8 @@
       if (!navigator.serviceWorker.controller) return;
       if (!registration.waiting) return;
       logUpdate("Nueva versión detectada");
-      applyUpdate(registration, true);
+      /* No forzar reload silencioso en cada visita: mostrar banner y dejar elegir */
+      showUpdateBanner(registration);
       scheduleBannerFallback(registration);
     }
 

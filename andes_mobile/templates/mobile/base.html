@@ -13,8 +13,8 @@
   <link rel="manifest" href="{{ url_for('static', filename='mobile/manifest.json') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='mobile/icons/apple-touch-icon.png') }}">
   <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='mobile/icons/icon-192.png') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/fonts/inter.css') }}?v=31">
-  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/mobile.min.css') }}?v=31">
+  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/fonts/inter.css') }}?v=32">
+  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/mobile.min.css') }}?v=32">
   <script>
   (function () {
     try {
@@ -26,6 +26,19 @@
       }
       document.cookie = "andes_mobile_pwa=1; path=/; max-age=31536000; SameSite=Lax";
     } catch (_e) {}
+    /* Failsafe: si el splash queda pegado, liberar UI sí o sí */
+    window.setTimeout(function () {
+      try {
+        var s = document.getElementById("mobile-splash");
+        document.body.classList.remove("mobile-app--splash");
+        if (s) {
+          s.classList.add("mobile-splash--hide");
+          s.classList.add("mobile-splash--gone");
+          s.style.pointerEvents = "none";
+          if (s.parentNode) s.parentNode.removeChild(s);
+        }
+      } catch (_e2) {}
+    }, 2500);
   })();
   </script>
   {% block head_extra %}{% endblock %}
@@ -35,7 +48,7 @@
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
   data-sw-url="{{ url_for('mobile.service_worker') }}"
-  data-pwa-version="v2026.07.21-v31"
+  data-pwa-version="v2026.07.21-v32"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
     <div class="mobile-splash__bg" aria-hidden="true">
@@ -58,7 +71,7 @@
         <div class="mobile-splash__progress-fill" id="mobile-splash-progress"></div>
       </div>
     </div>
-    <span class="mobile-splash__version">v2026.07.21-v31</span>
+    <span class="mobile-splash__version">v2026.07.21-v32</span>
   </div>
 
   <div id="catalog-sync-skeleton" class="catalog-sync-skeleton" hidden aria-hidden="true">
@@ -284,10 +297,10 @@
     </button>
   </nav>
 
-  <script src="{{ url_for('static', filename='mobile/offline-db.min.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='mobile/offline-ui.min.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='mobile/splash.min.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='mobile/mobile.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='mobile/offline-db.min.js') }}?v=32" defer></script>
+  <script src="{{ url_for('static', filename='mobile/offline-ui.min.js') }}?v=32" defer></script>
+  <script src="{{ url_for('static', filename='mobile/splash.min.js') }}?v=32" defer></script>
+  <script src="{{ url_for('static', filename='mobile/mobile.min.js') }}?v=32" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

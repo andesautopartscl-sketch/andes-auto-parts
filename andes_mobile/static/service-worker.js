@@ -1,5 +1,5 @@
-/* Andes Mobile PWA — service worker v31 */
-const SW_VERSION = "andes-mobile-v31";
+/* Andes Mobile PWA — service worker v32 */
+const SW_VERSION = "andes-mobile-v32";
 const CACHE_PREFIX = `${SW_VERSION}-`;
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
@@ -26,16 +26,16 @@ const PRECACHE_URLS = [
   "/m/reportes",
   "/m/venta-rapida",
   "/m/service-worker.js",
-  "/static/mobile/mobile.min.css?v=31",
-  "/static/mobile/fonts/inter.css?v=31",
+  "/static/mobile/mobile.min.css?v=32",
+  "/static/mobile/fonts/inter.css?v=32",
   "/static/mobile/fonts/inter-400.woff2",
   "/static/mobile/fonts/inter-500.woff2",
   "/static/mobile/fonts/inter-600.woff2",
   "/static/mobile/fonts/inter-700.woff2",
-  "/static/mobile/mobile.min.js",
+  "/static/mobile/mobile.min.js?v=32",
   "/static/mobile/offline-db.min.js",
-  "/static/mobile/offline-ui.min.js",
-  "/static/mobile/splash.min.js",
+  "/static/mobile/offline-ui.min.js?v=32",
+  "/static/mobile/splash.min.js?v=32",
   "/static/mobile/producto_gallery.js",
   "/static/mobile/producto_accordion.js",
   "/static/mobile/home.js",

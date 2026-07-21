@@ -329,6 +329,15 @@
       }
     });
     scheduleAutoSync();
+
+    /* Si el usuario toca la UI, pausar sync para no congelar taps */
+    document.addEventListener(
+      "pointerdown",
+      function () {
+        pauseCatalogSyncForUser();
+      },
+      { once: true, capture: true, passive: true }
+    );
   }
 
   function recordRecentFromPage() {
