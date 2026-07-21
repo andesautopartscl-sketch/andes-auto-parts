@@ -3,6 +3,9 @@
 {% block title %}Ingreso #{{ doc.id }} | Andes Auto Parts{% endblock %}
 
 {% block content %}
+{% if _partial %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+{% endif %}
 {% macro money2(v) -%}
 {%- if v is not none -%}
 ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}
@@ -15,7 +18,7 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     --ing-line: #e2e8f0;
     --ing-soft: #f8fafc;
     --ing-accent: #0f766e;
-    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     color: var(--ing-ink);
     font-size: 12px;
     line-height: 1.35;
@@ -405,6 +408,15 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     var btn = document.getElementById('ingresoVerBackBtn');
     if (!btn) return;
     btn.addEventListener('click', function () {
+        try {
+            if (window.parent && window.parent !== window) {
+                var modal = window.parent.document.getElementById('relmapPreviewModal');
+                if (modal && typeof modal._closePreview === 'function') {
+                    modal._closePreview();
+                    return;
+                }
+            }
+        } catch (e) { /* ignore */ }
         if (window.history.length > 1) {
             window.history.back();
             return;

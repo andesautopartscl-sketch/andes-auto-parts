@@ -24,8 +24,8 @@
                     <label for="doc_number">Número</label>
                     <div class="doc-number-wrap">
                         <input id="doc_number" name="doc_number" value="{{ doc_number }}" class="doc-num-input" autocomplete="off" spellcheck="false" required>
-                        {% if can_traceability %}
-                        <button class="btn sm outline no-print" type="button" id="btnTraceDoc" title="Ver trazabilidad">Ver trazabilidad</button>
+                        {% if can_traceability and not embed_modal|default(false) %}
+                        <button class="btn sm outline no-print" type="button" id="btnTraceDoc" title="Mapa de relaciones">Mapa de relaciones</button>
                         {% endif %}
                     </div>
                 </div>

@@ -2880,6 +2880,8 @@ def historial_producto(codigo):
         if not puede_ver_finanzas:
             compras = [redact_compra_historial_row(c) for c in compras]
 
+        from app.utils.relmap_auth import is_superadmin_session
+
         return render_template(
             "productos/historial_producto.html",
             producto=producto,
@@ -2893,9 +2895,47 @@ def historial_producto(codigo):
             active_page="productos_buscar",
             _partial=_wants_modal_fragment(),
             embed_modal=embed_modal,
+            relmap_direct_access=is_superadmin_session(),
         )
     finally:
         sess.close()
+
+
+@productos_bp.route("/productos/api/relmap/authorize", methods=["POST"])
+@login_required
+def api_relmap_authorize():
+    """Autoriza mapa de relaciones (usable sin mod_ventas)."""
+    from app.utils.relmap_auth import authorize_relmap_credentials
+
+    data = request.get_json(silent=True) or {}
+    ok, message = authorize_relmap_credentials(data.get("usuario") or "", data.get("password") or "")
+    if not ok:
+        return jsonify({"success": False, "message": message}), 403
+    return jsonify({"success": True, "message": message})
+
+
+@productos_bp.route("/productos/api/producto/<codigo>/relationship-map", methods=["GET"])
+@login_required
+def api_producto_relationship_map(codigo: str):
+    """Mapa adicional por producto (no reemplaza el historial tabular)."""
+    from app.utils.relmap_auth import can_access_relmap
+    from app.ventas.routes import _build_product_relationship_map
+
+    if not can_access_relmap():
+        return jsonify(
+            {
+                "success": False,
+                "auth_required": True,
+                "message": "Se requiere autorización (usuario y clave) para ver el mapa de relaciones.",
+            }
+        ), 403
+
+    code = (codigo or "").strip().upper()
+    if not code:
+        return jsonify({"success": False, "message": "Código vacío"}), 400
+
+    rel_map = _build_product_relationship_map(code)
+    return jsonify({"success": True, "codigo": code, "map": rel_map})
 
 
 @productos_bp.route("/producto/<codigo>/homologados")

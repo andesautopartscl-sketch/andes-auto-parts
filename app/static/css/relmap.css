@@ -1,0 +1,600 @@
+/* ═══════════════════════════════════════════════════════════
+   Mapa de relaciones — look tipo SAP (compartido Ventas/Productos)
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+    --rm-ink: #1a2332;
+    --rm-muted: #5b6b7c;
+    --rm-line: #9eb0c3;
+    --rm-panel: #f0f3f7;
+    --rm-stage: #dfe6ee;
+    --rm-card: #ffffff;
+    --rm-head: #c5d8ef;
+    --rm-head-border: #8eabcd;
+    --rm-accent: #2b579a;
+    --rm-current: #f5c518;
+    --rm-current-bar: #c62828;
+    --rm-ok: #2e7d32;
+    --rm-warn: #e65100;
+    --rm-font: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.relmap-box {
+    width: min(100%, 1180px);
+    max-height: 94vh;
+}
+
+/* —— Lienzo (workspace SAP) —— */
+.relmap-stage {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 420px;
+    max-height: min(72vh, 680px);
+    overflow: auto;
+    border: 1px solid #8fa3b8;
+    border-radius: 2px;
+    background-color: var(--rm-stage);
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.55) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.55) 1px, transparent 1px),
+        linear-gradient(180deg, #e8eef5 0%, #d8e0ea 100%);
+    background-size: 18px 18px, 18px 18px, 100% 100%;
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+        inset 0 2px 8px rgba(15, 40, 70, 0.08);
+}
+
+.relmap-canvas {
+    position: relative;
+    margin: 0 auto;
+    min-width: 100%;
+}
+
+.relmap-svg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: visible;
+}
+
+.relmap-edge {
+    fill: none;
+    stroke: #4a6078;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+}
+
+.relmap-nodes { position: absolute; inset: 0; }
+.relmap-node-wrap { position: absolute; }
+
+/* —— Cards documento —— */
+.relmap-card {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #6d849c;
+    border-radius: 1px;
+    background: var(--rm-card);
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.8) inset,
+        1px 2px 4px rgba(20, 40, 70, 0.18);
+    text-align: left;
+    font-family: var(--rm-font);
+    color: var(--rm-ink);
+    cursor: default;
+    overflow: hidden;
+    position: relative;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.relmap-card.is-clickable { cursor: pointer; }
+
+.relmap-card.is-clickable:hover {
+    border-color: var(--rm-accent);
+    transform: translateY(-1px);
+    box-shadow:
+        0 0 0 2px rgba(43, 87, 154, 0.28),
+        2px 6px 14px rgba(20, 40, 70, 0.2);
+    z-index: 2;
+}
+
+.relmap-card.is-current {
+    border-color: #b8860b;
+    box-shadow:
+        0 0 0 2px rgba(245, 197, 24, 0.55),
+        2px 5px 12px rgba(20, 40, 70, 0.22);
+}
+
+.relmap-card.is-current::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #c62828 0%, #e53935 50%, #c62828 100%);
+}
+
+/* Producto: sin franja inferior (el candado/stock ya indica el estado) */
+.relmap-card.is-product.is-current::after {
+    display: none;
+}
+
+.relmap-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 3px;
+    padding: 2px 5px;
+    min-height: 18px;
+    background: linear-gradient(180deg, #dceaf8 0%, #b7d0ea 100%);
+    border-bottom: 1px solid var(--rm-head-border);
+}
+
+.relmap-card.is-current .relmap-card-head {
+    background: linear-gradient(180deg, #ffe9a8 0%, #f5c518 100%);
+    border-bottom-color: #c9a012;
+}
+
+.relmap-card.is-partner .relmap-card-head,
+.relmap-card.tone-slate .relmap-card-head {
+    background: linear-gradient(180deg, #e8edf2 0%, #cfd8e3 100%);
+    border-bottom-color: #9aa8b8;
+}
+
+.relmap-card.tone-green .relmap-card-head {
+    background: linear-gradient(180deg, #d8f0dc 0%, #b5dfbd 100%);
+    border-bottom-color: #7cb887;
+}
+
+.relmap-card.tone-orange .relmap-card-head {
+    background: linear-gradient(180deg, #ffe4c8 0%, #f5c896 100%);
+    border-bottom-color: #d4a06a;
+}
+
+.relmap-card.tone-blue .relmap-card-head {
+    background: linear-gradient(180deg, #d6e8fb 0%, #b3d0f0 100%);
+    border-bottom-color: #7fa8d4;
+}
+
+.relmap-card-title {
+    font-size: 8.5px;
+    font-weight: 700;
+    color: #152033;
+    letter-spacing: 0;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.relmap-lock {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    margin: 0;
+    border: none;
+    border-radius: 2px;
+    color: #8a6a10;
+    background: linear-gradient(180deg, #ffe082 0%, #f6c343 100%);
+    box-shadow: 0 0 0 1px #c9a227, inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    line-height: 0;
+}
+.relmap-lock.is-open {
+    color: #166534;
+    background: linear-gradient(180deg, #bbf7d0 0%, #4ade80 100%);
+    box-shadow: 0 0 0 1px #16a34a, inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.relmap-lock.is-out {
+    color: #991b1b;
+    background: linear-gradient(180deg, #fecaca 0%, #f87171 100%);
+    box-shadow: 0 0 0 1px #dc2626, inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.relmap-lock::before {
+    display: none;
+}
+.relmap-lock svg {
+    display: block;
+    width: 9px;
+    height: 9px;
+}
+.relmap-card-meta dd.is-stock-ok {
+    color: #15803d;
+    font-weight: 800;
+}
+.relmap-card-meta dd.is-stock-out {
+    color: #b91c1c;
+    font-weight: 800;
+}
+
+.relmap-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 3px 6px 4px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    background: linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%);
+}
+
+.relmap-card-num {
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--rm-ink);
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+}
+.relmap-card-line {
+    font-size: 8.5px;
+    color: #334155;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.15;
+}
+.relmap-card-line.muted {
+    color: var(--rm-muted);
+    font-size: 8px;
+}
+.relmap-card-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0 4px;
+    margin-top: 0;
+    font-size: 8.5px;
+    line-height: 1.15;
+}
+.relmap-card-meta dt {
+    margin: 0;
+    color: #7a8b9c;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    font-size: 7px;
+}
+.relmap-card-meta dd {
+    margin: 0;
+    color: #243447;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 8.5px;
+}
+.relmap-card-total {
+    margin-top: 1px;
+    font-size: 10px;
+    font-weight: 800;
+    color: #0f2744;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    flex-shrink: 0;
+}
+.relmap-card-pay {
+    font-size: 8px;
+    font-weight: 700;
+    color: var(--rm-accent);
+    flex-shrink: 0;
+}
+.relmap-card-status {
+    margin-top: auto;
+    padding-top: 1px;
+    font-size: 8px;
+    font-weight: 700;
+    color: var(--rm-muted);
+    text-transform: capitalize;
+    border-top: 1px dashed #d5dde6;
+    flex-shrink: 0;
+    line-height: 1.2;
+}
+.relmap-card-status.is-ok { color: #15803d; }
+.relmap-card-status.is-out { color: #b91c1c; }
+.relmap-card-status.is-warn { color: var(--rm-warn); }
+
+/* —— Modal producto / overlay —— */
+.relmap-psmodal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(12, 24, 40, 0.58);
+    backdrop-filter: blur(2px);
+    /* Por encima del dock del chat (#apchat-root ~1400) y del sidebar */
+    z-index: 1600;
+    animation: relmapFadeIn 0.16s ease;
+}
+
+.relmap-psmodal.open { display: flex; }
+
+@keyframes relmapFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.relmap-psbox {
+    background: linear-gradient(180deg, #fbfcfe 0%, #f3f6fa 100%);
+    border-radius: 10px;
+    border: 1px solid #b7c5d4;
+    padding: 0;
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.5) inset,
+        0 28px 70px rgba(8, 20, 40, 0.38);
+    width: min(100%, 1180px);
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: var(--rm-font);
+    animation: relmapPop 0.18s ease;
+}
+
+@keyframes relmapPop {
+    from { transform: translateY(8px) scale(0.985); opacity: 0.85; }
+    to { transform: none; opacity: 1; }
+}
+
+.relmap-pshead {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 18px 12px;
+    background: linear-gradient(180deg, #ffffff 0%, #eef3f8 100%);
+    border-bottom: 1px solid #c5d0dc;
+}
+
+.relmap-pshead-text { min-width: 0; }
+
+.relmap-pshead h3 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 750;
+    color: #142033;
+    letter-spacing: -0.01em;
+    font-family: var(--rm-font);
+}
+
+.relmap-pshead-sub {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: var(--rm-muted);
+    line-height: 1.35;
+}
+
+.relmap-psclosex {
+    border: 1px solid #c5d0dc;
+    background: #fff;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    color: #64748b;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+
+.relmap-psclosex:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+.relmap-psbody {
+    padding: 12px 14px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 0;
+    flex: 1;
+}
+
+.relmap-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+    padding: 0 2px;
+}
+
+.relmap-legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 11px;
+    color: var(--rm-muted);
+}
+
+.relmap-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.relmap-legend-swatch {
+    width: 14px;
+    height: 10px;
+    border: 1px solid #7a90a8;
+    border-radius: 1px;
+    background: linear-gradient(180deg, #dceaf8 0%, #b7d0ea 100%);
+}
+
+.relmap-legend-swatch.is-current {
+    background: linear-gradient(180deg, #ffe9a8 0%, #f5c518 100%);
+    border-color: #b8860b;
+}
+
+.relmap-legend-swatch.is-ingreso {
+    background: linear-gradient(180deg, #ffe4c8 0%, #f5c896 100%);
+}
+
+.relmap-psfoot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 16px 14px;
+    background: #eef2f6;
+    border-top: 1px solid #c5d0dc;
+}
+
+.relmap-hint {
+    font-size: 12px;
+    color: var(--rm-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.relmap-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 7px;
+    border: 1px solid #9eb0c3;
+    background: linear-gradient(180deg, #ffffff 0%, #e8eef5 100%);
+    font-size: 12px;
+    font-weight: 650;
+    color: #1a2332;
+    cursor: pointer;
+    font-family: var(--rm-font);
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.relmap-btn:hover {
+    background: linear-gradient(180deg, #ffffff 0%, #dce6f0 100%);
+    border-color: #7a90a8;
+}
+
+.relmap-btn.is-primary {
+    border-color: #6b8eb5;
+    background: linear-gradient(180deg, #e8f1fb 0%, #c9dcf0 100%);
+    color: #1e3a5f;
+}
+
+.relmap-btn.is-primary:hover {
+    background: linear-gradient(180deg, #f0f6fc 0%, #bdd4ec 100%);
+}
+
+/* Botón en toolbar del historial */
+.hist-relmap-btn {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid #b7c5d4;
+    background: linear-gradient(180deg, #ffffff 0%, #eef3f8 100%);
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--rm-font);
+    color: #1a2332;
+    cursor: pointer;
+}
+
+.hist-relmap-btn:hover {
+    background: linear-gradient(180deg, #ffffff 0%, #e2eaf3 100%);
+}
+
+/* Preview anidado (documento sobre el mapa) */
+.relmap-preview-modal {
+    z-index: 1700;
+}
+.relmap-preview-box {
+    width: min(100%, 1040px);
+    max-height: 92vh;
+}
+.relmap-preview-frame-wrap {
+    flex: 1 1 auto;
+    min-height: 420px;
+    max-height: min(70vh, 640px);
+    margin: 0 14px;
+    border: 1px solid #c5d0dc;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #fff;
+}
+.relmap-preview-frame {
+    display: block;
+    width: 100%;
+    height: min(70vh, 640px);
+    min-height: 420px;
+    border: 0;
+    background: #fff;
+}
+a.relmap-btn {
+    text-decoration: none;
+    box-sizing: border-box;
+}
+
+/* Loading state */
+.relmap-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 280px;
+    color: var(--rm-muted);
+    font-size: 13px;
+}
+
+.relmap-loading-spinner {
+    width: 28px;
+    height: 28px;
+    border: 2.5px solid #c5d0dc;
+    border-top-color: var(--rm-accent);
+    border-radius: 50%;
+    animation: relmapSpin 0.7s linear infinite;
+}
+
+@keyframes relmapSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* Ventas: modal docTrace usa .psbox — alinear con el look nuevo */
+.psbox.relmap-box {
+    padding: 0;
+    overflow: hidden;
+    border-radius: 10px;
+    border-color: #b7c5d4;
+    background: linear-gradient(180deg, #fbfcfe 0%, #f3f6fa 100%);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.5) inset,
+        0 28px 70px rgba(8, 20, 40, 0.38);
+}
+
+.psbox.relmap-box > .pshead {
+    padding: 14px 18px 12px;
+    margin: 0;
+    background: linear-gradient(180deg, #ffffff 0%, #eef3f8 100%);
+    border-bottom: 1px solid #c5d0dc;
+}
+
+.psbox.relmap-box > .relmap-stage {
+    margin: 12px 14px 4px;
+}
+
+.psbox.relmap-box > .psfoot {
+    margin: 0;
+    padding: 10px 16px 14px;
+    background: #eef2f6;
+    border-top: 1px solid #c5d0dc;
+}

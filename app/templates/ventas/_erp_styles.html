@@ -977,6 +977,11 @@ button.code-hist-btn {
     background: rgba(15, 23, 42, .55);
     z-index: 60;
 }
+/* Mapa / auth: por encima del sidebar, chat y contenido con overflow */
+#docTraceModal.psmodal,
+#relmapAuthModal.psmodal {
+    z-index: 1600;
+}
 .psmodal.open { display: flex; }
 .psbox {
     background: #fff;
@@ -1212,6 +1217,9 @@ button.code-hist-btn {
     border-top: 1px dashed #e2e8f0;
     color: #334155;
 }
+
+/* Mapa de relaciones: estilos en static/css/relmap.css */
+
 @media (max-width: 520px) {
     .doc-number-wrap {
         flex-direction: column;

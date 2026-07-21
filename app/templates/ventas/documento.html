@@ -4,6 +4,7 @@
 
 {% block extra_head %}
 {% include 'ventas/_erp_styles.html' %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/relmap.css') }}">
 {% endblock %}
 
 {% block ventas_inner %}
@@ -44,6 +45,7 @@
 
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='stock_control.js') }}"></script>
+<script src="{{ url_for('static', filename='relmap.js') }}"></script>
 {% include 'ventas/_sii_contribuyente_assets.html' %}
 {% include 'ventas/_erp_scripts.html' %}
 {% endblock %}

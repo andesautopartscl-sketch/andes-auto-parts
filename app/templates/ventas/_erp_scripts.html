@@ -19,6 +19,8 @@
     const URL_OV_AUTH_MARGEN = {{ url_for('ventas.api_orden_venta_autorizar_margen')|tojson }};
     const URL_PRODUCT_SEARCH = {{ url_for('ventas.api_productos_search')|tojson }};
     const URL_API_TRACE = {{ url_for('ventas.api_traceability', numero='NUMERO_PLACEHOLDER')|tojson }};
+    const URL_RELMAP_AUTH = {{ url_for('ventas.api_relmap_authorize')|tojson }};
+    const RELMAP_DIRECT = {{ (relmap_direct_access|default(false))|tojson }};
     const URL_CONV_CO_OV = {{ url_for('ventas.api_convert_cotizacion_orden_venta', numero='NUMERO_PLACEHOLDER')|tojson }};
     const URL_CONV_OV_FA = {{ url_for('ventas.api_convert_orden_venta_factura', numero='NUMERO_PLACEHOLDER')|tojson }};
     const URL_OV_PICKING = {{ url_for('ventas.api_orden_venta_solicitar_picking', numero='NUMERO_PLACEHOLDER')|tojson }};
@@ -212,13 +214,17 @@
     }
     function labelDocType(kind) {
         const map = {
-            cotizacion: 'Cotizacion',
-            orden_venta: 'Orden de Venta',
-            orden_compra: 'Orden de Compra',
-            factura: 'Factura',
+            cotizacion: 'Cotización',
+            orden_venta: 'Orden de venta',
+            orden_compra: 'Orden de compra',
+            factura: 'Factura de deudores',
             boleta: 'Boleta',
             factura_proveedor: 'Factura proveedor',
-            nota_credito: 'Nota de Credito'
+            nota_credito: 'Nota de crédito',
+            picking: 'Picking bodega',
+            socio_negocio: 'Socios de negocios',
+            producto: 'Producto',
+            ingreso: 'Ingreso de stock'
         };
         return map[String(kind || '').toLowerCase()] || String(kind || '').replace(/_/g, ' ');
     }
@@ -242,13 +248,240 @@
         }
         return '<div class="meta trace-pay-line">Pago: <span class="meta-strong">Pendiente de cobro en caja</span></div>';
     }
+    function fmtMapMoney(value, type) {
+        const t = String(type || '').toLowerCase();
+        if (t === 'socio_negocio' || t === 'picking' || t === 'producto') return '';
+        const n = Number(value || 0);
+        if (!Number.isFinite(n)) return '';
+        return '$' + Math.round(n).toLocaleString('es-CL');
+    }
+    function layoutRelationshipMap(nodes, edges) {
+        const CARD_W = 156;
+        const CARD_H = 104;
+        const GAP_X = 46;
+        const GAP_Y = 12;
+        const PAD = 20;
+        const list = Array.isArray(nodes) ? nodes.slice() : [];
+        const links = Array.isArray(edges) ? edges.slice() : [];
+        const byKey = {};
+        list.forEach(function (n) { byKey[n.key] = n; });
+
+        const children = {};
+        const parents = {};
+        links.forEach(function (e) {
+            if (!byKey[e.from] || !byKey[e.to]) return;
+            (children[e.from] = children[e.from] || []).push(e.to);
+            (parents[e.to] = parents[e.to] || []).push(e.from);
+        });
+
+        const depth = {};
+        const roots = list.filter(function (n) {
+            return !(parents[n.key] && parents[n.key].length);
+        });
+        if (!roots.length && list.length) roots.push(list[0]);
+
+        const queue = [];
+        roots.forEach(function (n) {
+            depth[n.key] = 0;
+            queue.push(n.key);
+        });
+        while (queue.length) {
+            const k = queue.shift();
+            const d = depth[k] || 0;
+            (children[k] || []).forEach(function (ck) {
+                const nd = d + 1;
+                if (depth[ck] == null || nd > depth[ck]) {
+                    depth[ck] = nd;
+                    queue.push(ck);
+                }
+            });
+        }
+        list.forEach(function (n) {
+            if (depth[n.key] == null) depth[n.key] = 0;
+        });
+
+        const columns = {};
+        list.forEach(function (n) {
+            const col = depth[n.key] || 0;
+            (columns[col] = columns[col] || []).push(n);
+        });
+        const colKeys = Object.keys(columns).map(Number).sort(function (a, b) { return a - b; });
+        let maxRows = 1;
+        colKeys.forEach(function (c) {
+            columns[c].sort(function (a, b) {
+                const ta = String(a.created_at || a.fecha || '');
+                const tb = String(b.created_at || b.fecha || '');
+                if (ta !== tb) return ta < tb ? -1 : 1;
+                return (a.id || 0) - (b.id || 0);
+            });
+            maxRows = Math.max(maxRows, columns[c].length);
+        });
+
+        const positions = {};
+        const totalH = maxRows * CARD_H + Math.max(0, maxRows - 1) * GAP_Y;
+        colKeys.forEach(function (c, ci) {
+            const colNodes = columns[c];
+            const colH = colNodes.length * CARD_H + Math.max(0, colNodes.length - 1) * GAP_Y;
+            const startY = PAD + Math.max(0, (totalH - colH) / 2);
+            colNodes.forEach(function (n, ri) {
+                positions[n.key] = {
+                    x: PAD + ci * (CARD_W + GAP_X),
+                    y: startY + ri * (CARD_H + GAP_Y),
+                    w: CARD_W,
+                    h: CARD_H
+                };
+            });
+        });
+
+        const width = PAD * 2 + Math.max(1, colKeys.length) * CARD_W + Math.max(0, colKeys.length - 1) * GAP_X;
+        const height = PAD * 2 + totalH;
+        return { positions: positions, width: width, height: height, cardW: CARD_W, cardH: CARD_H };
+    }
+    function buildMapCardHtml(node) {
+        const t = String(node.type || '').toLowerCase();
+        const isPartner = t === 'socio_negocio';
+        const isProduct = t === 'producto';
+        const title = node.label || labelDocType(t);
+        const num = isPartner
+            ? (node.number || '—')
+            : (node.number || ('#' + (node.id || '')));
+        const fecha = String(node.fecha || '').trim();
+        const ref = String(node.ref_externa || node.cliente_nombre || '').trim();
+        const money = isPartner || t === 'picking' || isProduct ? '' : fmtMapMoney(node.total, t);
+        let status = String(node.status || '').trim();
+        if (isProduct || status === 'activo') status = '';
+        let statusClass = '';
+        if (/pagado|registrado|entregado|aprobada|procesada/i.test(status)) statusClass = ' is-ok';
+        else if (/pendiente|anulad/i.test(status)) statusClass = ' is-warn';
+        const pay = (t === 'factura' || t === 'boleta')
+            ? (String(node.estado_pago || '').toLowerCase() === 'pagado' ? 'Pagado' : 'Pendiente cobro')
+            : '';
+        const classes = [
+            'relmap-card',
+            'tone-' + (node.badge_tone || 'slate'),
+            node.is_current ? 'is-current' : '',
+            node.locked ? 'is-locked' : '',
+            isPartner ? 'is-partner' : '',
+            isProduct ? 'is-product' : '',
+            node.view_url ? 'is-clickable' : ''
+        ].filter(Boolean).join(' ');
+
+        let metaHtml = '';
+        let stockLockOpen = null;
+        if (isProduct) {
+            const desc = String(node.descripcion || node.ref_externa || '').trim();
+            const marca = String(node.marca || '').trim();
+            let stockNum = Number(node.stock);
+            if (!Number.isFinite(stockNum)) stockNum = 0;
+            const hasStock = stockNum > 0;
+            stockLockOpen = hasStock;
+            if (desc && desc !== num) {
+                metaHtml += '<div class="relmap-card-line" title="' + esc(desc) + '">' + esc(desc) + '</div>';
+            }
+            metaHtml += '<dl class="relmap-card-meta">';
+            if (marca) metaHtml += '<dt>Marca</dt><dd>' + esc(marca) + '</dd>';
+            metaHtml += '<dt>Stock</dt><dd class="' + (hasStock ? 'is-stock-ok' : 'is-stock-out') + '">' + esc(String(stockNum)) + '</dd>';
+            metaHtml += '</dl>';
+            status = hasStock ? 'Con stock' : 'Sin stock';
+            statusClass = hasStock ? ' is-ok' : ' is-out';
+        } else if (!isPartner) {
+            metaHtml = '<dl class="relmap-card-meta">';
+            if (fecha) metaHtml += '<dt>Fecha</dt><dd>' + esc(fecha) + '</dd>';
+            if (ref) metaHtml += '<dt>Ref.</dt><dd title="' + esc(ref) + '">' + esc(ref) + '</dd>';
+            metaHtml += '</dl>';
+        } else if (isPartner && (node.cliente_nombre || ref)) {
+            metaHtml = '<div class="relmap-card-line">' + esc(node.cliente_nombre || ref) + '</div>';
+        }
+
+        const lockSvgClosed =
+            '<svg viewBox="0 0 16 16" width="11" height="11" focusable="false">' +
+              '<path fill="currentColor" d="M8 1.5A3.5 3.5 0 0 0 4.5 5v2H3.2c-.66 0-1.2.54-1.2 1.2v5.1c0 .66.54 1.2 1.2 1.2h9.6c.66 0 1.2-.54 1.2-1.2V8.2c0-.66-.54-1.2-1.2-1.2H11.5V5A3.5 3.5 0 0 0 8 1.5zm0 1.6c1.05 0 1.9.85 1.9 1.9v2H6.1V5c0-1.05.85-1.9 1.9-1.9z"/>' +
+            '</svg>';
+        const lockSvgOpen =
+            '<svg viewBox="0 0 16 16" width="11" height="11" focusable="false">' +
+              '<path fill="currentColor" d="M11.2 7.2V4.8a3.2 3.2 0 0 0-6.4-.15h1.35a1.85 1.85 0 0 1 3.7.15v2.4H11.2z"/>' +
+              '<path fill="currentColor" d="M2.9 7.2h10.2c.72 0 1.3.58 1.3 1.3v5.2c0 .72-.58 1.3-1.3 1.3H2.9c-.72 0-1.3-.58-1.3-1.3V8.5c0-.72.58-1.3 1.3-1.3z"/>' +
+            '</svg>';
+
+        let lockHtml = '';
+        if (isProduct && stockLockOpen === true) {
+            lockHtml = '<span class="relmap-lock is-open" aria-hidden="true" title="Con stock">' + lockSvgOpen + '</span>';
+        } else if (isProduct && stockLockOpen === false) {
+            lockHtml = '<span class="relmap-lock is-out" aria-hidden="true" title="Sin stock">' + lockSvgClosed + '</span>';
+        } else if (node.locked) {
+            lockHtml = '<span class="relmap-lock" aria-hidden="true" title="Documento cerrado">' + lockSvgClosed + '</span>';
+        }
+
+        return '' +
+            '<button type="button" class="' + classes + '" data-node-key="' + esc(node.key) + '"' +
+                (node.view_url ? ' data-view-url="' + esc(node.view_url) + '"' : '') +
+                (node.is_current ? ' data-current="1"' : '') +
+                ' title="' + esc(title + ' ' + num) + '">' +
+                '<div class="relmap-card-head">' +
+                    '<span class="relmap-card-title">' + esc(title) + '</span>' +
+                    lockHtml +
+                '</div>' +
+                '<div class="relmap-card-body">' +
+                    '<div class="relmap-card-num">' + esc(num) + '</div>' +
+                    metaHtml +
+                    (money ? '<div class="relmap-card-total">' + esc(money) + '</div>' : '') +
+                    (pay ? '<div class="relmap-card-pay">' + esc(pay) + '</div>' : '') +
+                    (status && !isPartner ? '<div class="relmap-card-status' + statusClass + '">' + esc(status) + '</div>' : '') +
+                '</div>' +
+            '</button>';
+    }
+    function edgePath(fromPos, toPos) {
+        const x1 = fromPos.x + fromPos.w;
+        const y1 = fromPos.y + fromPos.h / 2;
+        const x2 = toPos.x;
+        const y2 = toPos.y + toPos.h / 2;
+        const dx = Math.max(40, (x2 - x1) * 0.45);
+        return 'M ' + x1 + ' ' + y1 + ' C ' + (x1 + dx) + ' ' + y1 + ', ' + (x2 - dx) + ' ' + y2 + ', ' + x2 + ' ' + y2;
+    }
+    function renderRelationshipMap(mapData) {
+        if (!traceList) return;
+        const nodes = (mapData && mapData.nodes) || [];
+        const edges = (mapData && mapData.edges) || [];
+        if (!nodes.length) {
+            traceList.innerHTML = '<div class="trace-node"><div class="meta">Sin relaciones documentales disponibles.</div></div>';
+            return;
+        }
+        const layout = layoutRelationshipMap(nodes, edges);
+        const cards = nodes.map(function (node) {
+            const pos = layout.positions[node.key];
+            if (!pos) return '';
+            return '<div class="relmap-node-wrap" style="left:' + pos.x + 'px;top:' + pos.y + 'px;width:' + pos.w + 'px;height:' + pos.h + 'px;">' +
+                buildMapCardHtml(node) +
+                '</div>';
+        }).join('');
+
+        const paths = edges.map(function (e) {
+            const a = layout.positions[e.from];
+            const b = layout.positions[e.to];
+            if (!a || !b) return '';
+            return '<path class="relmap-edge" d="' + edgePath(a, b) + '" />';
+        }).join('');
+
+        traceList.innerHTML =
+            '<div class="relmap-canvas" style="width:' + layout.width + 'px;height:' + layout.height + 'px;">' +
+                '<svg class="relmap-svg" width="' + layout.width + '" height="' + layout.height + '" aria-hidden="true">' +
+                    '<defs>' +
+                        '<marker id="relmapArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
+                            '<path d="M 0 0 L 10 5 L 0 10 z" fill="#4a6078"></path>' +
+                        '</marker>' +
+                    '</defs>' +
+                    paths.replace(/class="relmap-edge"/g, 'class="relmap-edge" marker-end="url(#relmapArrow)"') +
+                '</svg>' +
+                '<div class="relmap-nodes">' + cards + '</div>' +
+            '</div>';
+    }
     function renderTrace(chain) {
         if (!traceList) return;
         if (!Array.isArray(chain) || !chain.length) {
             traceList.innerHTML = '<div class="trace-node"><div class="meta">Sin trazabilidad disponible.</div></div>';
             return;
         }
-        const html = chain.map(function (node, index) {
+        const html = chain.map(function (node) {
             const total = Number(node.total || 0).toLocaleString('es-CL');
             return '' +
                 '<div class="trace-step">' +
@@ -264,36 +497,161 @@
                         '<div class="meta">Estado documento: <span class="meta-strong">' + esc(node.status || 'pendiente') + '</span> · Total: <span class="meta-strong">$' + total + '</span></div>' +
                         tracePaymentLine(node) +
                     '</div>' +
-                '</div>' +
-                '';
+                '</div>';
         }).join('');
-        traceList.innerHTML = html;
+        traceList.innerHTML = '<div class="trace-list">' + html + '</div>';
     }
     function openTrace() {
         const numero = currentDocumentNumber();
         if (!numero) {
-            window.alert('Carga un documento guardado antes de ver trazabilidad.');
+            window.alert('Carga un documento guardado antes de ver el mapa de relaciones.');
             return;
         }
         if (!traceModal) return;
+        if (traceModal.parentNode !== document.body) {
+            document.body.appendChild(traceModal);
+        }
         traceModal.classList.add('open');
-        if (traceList) traceList.innerHTML = '<div class="trace-node"><div class="meta">Cargando trazabilidad...</div></div>';
-        fetch(endpointWithNumber(URL_API_TRACE, numero), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        if (traceList) {
+            traceList.innerHTML = '<div class="relmap-loading"><span class="relmap-loading-spinner"></span>Cargando mapa de relaciones…</div>';
+        }
+        loadDocRelationshipMap(numero);
+    }
+    function loadDocRelationshipMap(numero) {
+        return fetch(endpointWithNumber(URL_API_TRACE, numero), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function (response) {
                 return response.json().then(function (data) {
+                    if (response.status === 403 && data && data.auth_required) {
+                        const err = new Error((data && data.message) || 'Autorización requerida');
+                        err.authRequired = true;
+                        throw err;
+                    }
                     if (!response.ok || !data.success) {
-                        throw new Error((data && data.message) || 'No se pudo cargar trazabilidad');
+                        throw new Error((data && data.message) || 'No se pudo cargar el mapa');
                     }
                     return data;
                 });
             })
             .then(function (data) {
-                renderTrace(data.chain || []);
-                if (traceHint) traceHint.textContent = 'Cadena desde documento raiz';
+                if (data.map && Array.isArray(data.map.nodes) && data.map.nodes.length) {
+                    renderRelationshipMap(data.map);
+                    const nCount = data.map.nodes.length;
+                    const eCount = (data.map.edges || []).length;
+                    if (traceHint) {
+                        traceHint.textContent = 'Documento de marketing · ' + nCount + ' nodos · ' + eCount + ' vínculos';
+                    }
+                } else {
+                    renderTrace(data.chain || []);
+                    if (traceHint) traceHint.textContent = 'Cadena desde documento raíz';
+                }
             })
             .catch(function (error) {
-                if (traceList) traceList.innerHTML = '<div class="trace-node"><div class="meta">' + esc(error.message) + '</div></div>';
+                if (error && error.authRequired) {
+                    return promptRelmapAuth().then(function (ok) {
+                        if (ok) return loadDocRelationshipMap(numero);
+                        closeTrace();
+                        return null;
+                    });
+                }
+                if (traceList) {
+                    traceList.innerHTML = '<div class="trace-node"><div class="meta">' + esc(error.message) + '</div></div>';
+                }
             });
+    }
+    function promptRelmapAuth() {
+        return new Promise(function (resolve) {
+            const modal = document.getElementById('relmapAuthModal');
+            const userInput = document.getElementById('relmapAuthUser');
+            const passInput = document.getElementById('relmapAuthPass');
+            const errEl = document.getElementById('relmapAuthError');
+            const btnOk = document.getElementById('relmapAuthConfirm');
+            const btnCancel = document.getElementById('relmapAuthCancel');
+            const btnClose = document.getElementById('relmapAuthClose');
+            if (!modal || !userInput || !passInput || !btnOk) {
+                window.alert('No se pudo abrir la autorización del mapa.');
+                resolve(false);
+                return;
+            }
+            if (modal.parentNode !== document.body) {
+                document.body.appendChild(modal);
+            }
+            let settled = false;
+            function finish(ok) {
+                if (settled) return;
+                settled = true;
+                modal.classList.remove('open');
+                cleanup();
+                resolve(!!ok);
+            }
+            function cleanup() {
+                btnOk.removeEventListener('click', onConfirm);
+                if (btnCancel) btnCancel.removeEventListener('click', onCancel);
+                if (btnClose) btnClose.removeEventListener('click', onCancel);
+                modal.removeEventListener('click', onBackdrop);
+                passInput.removeEventListener('keydown', onPassKey);
+            }
+            function onCancel() { finish(false); }
+            function onBackdrop(ev) { if (ev.target === modal) finish(false); }
+            function onPassKey(ev) {
+                if (ev.key === 'Enter') onConfirm();
+            }
+            function onConfirm() {
+                const usuario = String(userInput.value || '').trim();
+                const password = String(passInput.value || '');
+                if (!usuario || !password) {
+                    if (errEl) {
+                        errEl.style.display = 'block';
+                        errEl.textContent = 'Debes ingresar usuario y clave.';
+                    }
+                    return;
+                }
+                btnOk.disabled = true;
+                btnOk.textContent = 'Validando…';
+                if (errEl) errEl.style.display = 'none';
+                fetch(URL_RELMAP_AUTH, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ usuario: usuario, password: password })
+                })
+                    .then(function (response) {
+                        return response.json().then(function (data) {
+                            if (!response.ok || !data.success) {
+                                throw new Error((data && data.message) || 'No se pudo autorizar');
+                            }
+                            return data;
+                        });
+                    })
+                    .then(function () {
+                        finish(true);
+                    })
+                    .catch(function (error) {
+                        if (errEl) {
+                            errEl.style.display = 'block';
+                            errEl.textContent = error.message || 'No se pudo autorizar';
+                        }
+                        btnOk.disabled = false;
+                        btnOk.textContent = 'Autorizar y ver mapa';
+                    });
+            }
+            if (errEl) {
+                errEl.style.display = 'none';
+                errEl.textContent = '';
+            }
+            userInput.value = '';
+            passInput.value = '';
+            btnOk.disabled = false;
+            btnOk.textContent = 'Autorizar y ver mapa';
+            modal.classList.add('open');
+            btnOk.addEventListener('click', onConfirm);
+            if (btnCancel) btnCancel.addEventListener('click', onCancel);
+            if (btnClose) btnClose.addEventListener('click', onCancel);
+            modal.addEventListener('click', onBackdrop);
+            passInput.addEventListener('keydown', onPassKey);
+            window.setTimeout(function () { userInput.focus(); }, 10);
+        });
     }
     function closeTrace() {
         if (traceModal) traceModal.classList.remove('open');
@@ -1746,12 +2104,36 @@
         });
     }
 
-    if (btnTraceDoc) btnTraceDoc.addEventListener('click', openTrace);
+    if (btnTraceDoc) {
+        btnTraceDoc.addEventListener('click', function () {
+            if (RELMAP_DIRECT) {
+                openTrace();
+                return;
+            }
+            // No-superadmin: pide auth primero (si ya hay unlock en sesión, el fetch pasa).
+            openTrace();
+        });
+    }
     if (traceClose) traceClose.addEventListener('click', closeTrace);
     if (traceClose2) traceClose2.addEventListener('click', closeTrace);
     if (traceModal) {
         traceModal.addEventListener('click', function (event) {
             if (event.target === traceModal) closeTrace();
+        });
+    }
+    if (traceList) {
+        traceList.addEventListener('click', function (event) {
+            const card = event.target.closest('.relmap-card');
+            if (!card || !traceList.contains(card)) return;
+            if (card.getAttribute('data-current') === '1') return;
+            const url = card.getAttribute('data-view-url');
+            if (!url) return;
+            const title = card.getAttribute('title') || 'Documento';
+            if (window.AndesRelMap && typeof window.AndesRelMap.openPreview === 'function') {
+                window.AndesRelMap.openPreview(url, title);
+                return;
+            }
+            window.location.href = url;
         });
     }
     if (margenAuthClose) margenAuthClose.addEventListener('click', function () { closeMargenAuthModal(false); });

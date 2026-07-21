@@ -553,9 +553,11 @@ textarea.sf-input {
 
 {% block ventas_inner %}
 <div class="history-shell">
+    {% if not embed_modal|default(false) %}
     <div class="history-back-bar">
         <a class="history-back-link" href="{{ url_for('ventas.clientes') }}">← Volver a clientes</a>
     </div>
+    {% endif %}
     <section class="history-hero">
         <div>
             <h2>{{ cliente.nombre }}</h2>

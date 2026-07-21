@@ -338,6 +338,30 @@ body.search-lite-app .content {
 	}
 }
 
+/* Embed (iframe mapa / preview): solo contenido, sin sidebar */
+body.is-embed-modal {
+	background: #f1f5f9;
+}
+body.is-embed-modal .layout.layout--embed {
+	display: block;
+	padding: 0;
+	min-height: 100%;
+	height: auto;
+	max-height: none;
+	overflow: visible;
+}
+body.is-embed-modal .layout.layout--embed .content,
+body.is-embed-modal #appMainContent {
+	border: none;
+	border-radius: 0;
+	box-shadow: none;
+	min-height: 100%;
+	height: auto;
+	overflow: visible;
+	padding: 12px 14px 20px;
+	padding-bottom: 20px;
+}
+
 /* Escritorio: layout a todo el ancho; scroll solo en el contenido — sidebar fijo a la vista */
 @media (min-width: 961px) {
 	html {
@@ -379,15 +403,35 @@ body.search-lite-app .content {
 		/* Espacio para la franja del chat (esquina inferior derecha) y totales al pie */
 		padding-bottom: max(88px, calc(72px + env(safe-area-inset-bottom, 0px)));
 	}
+	/* Vista embebida en iframe: scroll natural, sin chrome de app */
+	html:has(body.is-embed-modal),
+	body.is-embed-modal {
+		height: auto !important;
+		overflow: auto !important;
+		background: #f1f5f9;
+	}
+	body.is-embed-modal .layout.layout--embed {
+		display: block !important;
+		height: auto !important;
+		max-height: none !important;
+		overflow: visible !important;
+	}
+	body.is-embed-modal .layout.layout--embed .content,
+	body.is-embed-modal #appMainContent {
+		height: auto !important;
+		overflow: visible !important;
+		border-left: none !important;
+		padding-bottom: 20px !important;
+	}
 }
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/erp_module.css') }}">
 <meta name="csrf-token" content="{{ csrf_token }}">
 {% block extra_head %}{% endblock %}
 </head>
-<body class="{% if search_lite|default(false) %}search-lite-app {% endif %}{% block body_class %}{% endblock %}">
-<div class="layout">
-	{% if not search_lite|default(false) %}
+<body class="{% if search_lite|default(false) %}search-lite-app {% endif %}{% if embed_modal|default(false) %}is-embed-modal {% endif %}{% block body_class %}{% endblock %}">
+<div class="layout{% if embed_modal|default(false) %} layout--embed{% endif %}">
+	{% if not search_lite|default(false) and not embed_modal|default(false) %}
 	{% include 'partials/global_sidebar.html' %}
 	{% endif %}
 	<main class="content" id="appMainContent">
@@ -395,14 +439,16 @@ body.search-lite-app .content {
 	</main>
 </div>
 
+{% if not embed_modal|default(false) %}
 <div id="appModal" class="app-modal" aria-hidden="true">
 	<div class="app-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
 		<button type="button" class="app-modal-close" id="appModalClose" aria-label="Cerrar modal">&times;</button>
 		<div id="appModalBody"></div>
 	</div>
 </div>
+{% endif %}
 
-{% if not search_lite|default(false) %}
+{% if not search_lite|default(false) and not embed_modal|default(false) %}
 {% include 'partials/admin_center_workspace.html' %}
 {% endif %}
 
@@ -1165,7 +1211,9 @@ function toggleMenu(id) {
 	} catch (eSidebarInit) {}
 })();
 </script>
+{% if not embed_modal|default(false) %}
 {% include 'partials/idle_session_warning.html' %}
+{% endif %}
 <script src="{{ url_for('static', filename='usuarios_ui.js') }}"></script>
 {% block extra_scripts %}{% endblock %}
 </body>

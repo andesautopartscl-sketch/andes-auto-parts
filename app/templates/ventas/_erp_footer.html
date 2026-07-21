@@ -118,18 +118,60 @@
 </div>
 {% endif %}
 
+{% if not embed_modal|default(false) %}
 <div id="docTraceModal" class="psmodal" aria-hidden="true">
-    <div class="psbox" style="max-width:720px;">
+    <div class="psbox relmap-box">
         <div class="pshead">
-            <h3>Trazabilidad del Documento</h3>
+            <div>
+                <h3 style="margin:0;">Mapa de relaciones</h3>
+                <p class="relmap-pshead-sub" style="margin:4px 0 0;">Árbol de documentos de marketing · navegación documental</p>
+            </div>
             <button class="ps-closex" type="button" id="traceClose">&times;</button>
         </div>
-        <div id="traceList" class="trace-list"></div>
+        <div class="relmap-psbody" style="padding-top:0;">
+            <div class="relmap-toolbar">
+                <div class="relmap-legend" aria-hidden="true">
+                    <span class="relmap-legend-item"><span class="relmap-legend-swatch"></span> Documento</span>
+                    <span class="relmap-legend-item"><span class="relmap-legend-swatch is-ingreso"></span> Operativo</span>
+                    <span class="relmap-legend-item"><span class="relmap-legend-swatch is-current"></span> Actual</span>
+                </div>
+            </div>
+            <div id="traceList" class="relmap-stage" role="region" aria-label="Mapa de relaciones documentales">
+                <div class="relmap-loading"><span class="relmap-loading-spinner"></span>Cargando mapa…</div>
+            </div>
+        </div>
         <div class="psfoot">
-            <span class="ps-selcount" id="traceHint">Cadena documental</span>
+            <span class="ps-selcount relmap-hint" id="traceHint">Árbol de documentos de marketing</span>
             <div class="ps-btns">
                 <button class="btn" type="button" id="traceClose2">Cerrar</button>
             </div>
         </div>
     </div>
 </div>
+
+<div id="relmapAuthModal" class="psmodal" aria-hidden="true">
+    <div class="psbox" style="max-width:520px;">
+        <div class="pshead">
+            <h3>Autorizar mapa de relaciones</h3>
+            <button class="ps-closex" type="button" id="relmapAuthClose">&times;</button>
+        </div>
+        <div style="padding:18px 24px;">
+            <p style="margin:0 0 12px;color:#334155;font-size:14px;line-height:1.45;">
+                Solo SuperAdmin puede abrir el mapa directamente. Ingresa usuario y clave de un autorizador (Admin / Encargado / Subencargado / SuperAdmin).
+            </p>
+            <label for="relmapAuthUser" style="display:block;font-weight:600;margin-bottom:6px;">Usuario autorizador</label>
+            <input id="relmapAuthUser" type="text" autocomplete="username" placeholder="Usuario" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;">
+            <label for="relmapAuthPass" style="display:block;font-weight:600;margin:12px 0 6px;">Clave</label>
+            <input id="relmapAuthPass" type="password" autocomplete="current-password" placeholder="Clave" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;">
+            <p id="relmapAuthError" style="color:var(--danger);margin-top:10px;display:none;"></p>
+        </div>
+        <div class="psfoot">
+            <span></span>
+            <div class="ps-btns">
+                <button class="btn" type="button" id="relmapAuthCancel">Cancelar</button>
+                <button class="btn primary" type="button" id="relmapAuthConfirm">Autorizar y ver mapa</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

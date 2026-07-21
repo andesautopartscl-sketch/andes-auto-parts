@@ -3,11 +3,27 @@
 {% block title %}Historial Producto | Andes Auto Parts{% endblock %}
 
 {% block extra_head %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/relmap.css') }}">
 <style>
 .hist-embed-root {
-    font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-    font-size: 11px;
+    --hist-font: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: var(--hist-font);
+    font-size: 12px;
     color: #0f172a;
+}
+.hist-embed-root,
+.hist-embed-root table,
+.hist-embed-root th,
+.hist-embed-root td,
+.hist-embed-root input,
+.hist-embed-root select,
+.hist-embed-root button,
+.hist-embed-root a,
+.hist-embed-root .badge,
+.hist-embed-root .hist-subtitle,
+.hist-embed-root .hist-embed-code {
+    font-family: var(--hist-font);
 }
 .hist-embed-root .panel {
     background:#fff;
@@ -25,7 +41,8 @@
 .hist-embed-root table.erp-compact th,
 .hist-embed-root table.erp-compact td {
     padding:3px 5px;
-    font-size:11px;
+    font-size:12px;
+    font-family: var(--hist-font);
     border-bottom:1px solid #eef2f7;
     text-align:left;
     white-space:nowrap;
@@ -36,8 +53,8 @@
     background:#f8fafc;
     color:#556b8a;
     text-transform:uppercase;
-    letter-spacing:.09em;
-    font-size:9px;
+    letter-spacing:.04em;
+    font-size:10px;
     font-weight:700;
 }
 .hist-embed-root .badge {
@@ -45,8 +62,9 @@
     align-items:center;
     padding:1px 7px;
     border-radius:999px;
-    font-size:10px;
+    font-size:11px;
     font-weight:700;
+    font-family: inherit;
 }
 .hist-embed-root .badge.in { background:#dcfce7; color:#166534; }
 .hist-embed-root .badge.out { background:#fee2e2; color:#991b1b; }
@@ -64,9 +82,9 @@
 }
 .hist-embed-toolbar .hist-embed-code {
     margin:3px 0 0;
-    font-size:10px;
+    font-size:11px;
     color:#556b8a;
-    letter-spacing:.08em;
+    letter-spacing:.04em;
     text-transform:uppercase;
     font-weight:800;
 }
@@ -82,7 +100,8 @@
     border:1px solid #dbe3ef;
     border-radius:8px;
     padding:4px 8px;
-    font-size:9px;
+    font-size:11px;
+    font-family: var(--hist-font);
     color:#334155;
     background:#fff;
 }
@@ -94,15 +113,17 @@
     border-radius:8px;
     border:1px solid #dbe3ef;
     background:#fff;
-    font-size:9px;
+    font-size:11px;
     font-weight:600;
+    font-family: var(--hist-font);
     color:#1d4ed8;
     text-decoration:none;
 }
 .hist-embed-link:hover { background:#f8fafc; text-decoration:none; }
 .hist-embed-jump {
-    font-size:9px;
+    font-size:11px;
     font-weight:600;
+    font-family: var(--hist-font);
     color:#0f766e;
     text-decoration:none;
 }
@@ -111,7 +132,7 @@
     display:none;
     margin:8px 0 0;
     color:#64748b;
-    font-size:10px;
+    font-size:12px;
 }
 .hist-sections {
     display:grid;
@@ -123,10 +144,11 @@
 }
 .hist-subtitle {
     margin:0 0 6px;
-    font-size:10px;
+    font-size:11px;
     font-weight:800;
+    font-family: var(--hist-font);
     color:#556b8a;
-    letter-spacing:.09em;
+    letter-spacing:.04em;
     text-transform:uppercase;
 }
 .hist-toolbar-2 {
@@ -143,7 +165,8 @@
     border:1px solid #dbe3ef;
     border-radius:8px;
     padding:4px 8px;
-    font-size:9px;
+    font-size:11px;
+    font-family: var(--hist-font);
 }
 @media (max-width: 920px) {
     .hist-sections { grid-template-columns: 1fr; }
@@ -160,6 +183,7 @@
             <p class="page-subtitle">Codigo: {{ codigo }}</p>
         </div>
         <div class="topbar-actions">
+            <button type="button" class="link-btn hist-relmap-btn" id="btnProductoRelMap" title="Mapa de relaciones del producto">Mapa de relaciones</button>
             <a class="link-btn" href="{{ url_for('productos.buscar', q=codigo) }}">↩ Volver a buscar</a>
             <a class="link-btn" href="{{ url_for('productos.ver_producto', codigo=codigo) }}" data-modal-url="{{ url_for('productos.ver_producto', codigo=codigo) }}">Ver detalle</a>
         </div>
@@ -183,6 +207,7 @@
                 <option value="boleta" {% if filtro == 'boleta' %}selected{% endif %}>Solo boletas</option>
             </select>
             <a class="hist-embed-link" href="{{ url_for('productos.ver_producto', codigo=codigo) }}" data-modal-url="{{ url_for('productos.ver_producto', codigo=codigo) }}">Ver ficha del producto</a>
+            <button type="button" class="hist-relmap-btn" id="btnProductoRelMap" title="Mapa de relaciones del producto">Mapa de relaciones</button>
         </div>
     </div>
     {% endif %}
@@ -298,6 +323,211 @@
         </div>
     </section>
 </div>
+
+<div id="productoRelMapModal" class="relmap-psmodal" aria-hidden="true">
+    <div class="relmap-psbox relmap-box">
+        <div class="relmap-pshead">
+            <div class="relmap-pshead-text">
+                <h3>Mapa de relaciones</h3>
+                <p class="relmap-pshead-sub">Producto <strong>{{ codigo }}</strong> · vista documental tipo ERP (adicional al historial)</p>
+            </div>
+            <button type="button" class="relmap-psclosex" id="productoRelMapClose" aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="relmap-psbody">
+            <div class="relmap-toolbar">
+                <div class="relmap-legend" aria-hidden="true">
+                    <span class="relmap-legend-item"><span class="relmap-legend-swatch is-ingreso"></span> Ingreso</span>
+                    <span class="relmap-legend-item"><span class="relmap-legend-swatch"></span> Documento</span>
+                    <span class="relmap-legend-item"><span class="relmap-legend-swatch is-current"></span> Actual</span>
+                </div>
+            </div>
+            <div id="productoRelMapStage" class="relmap-stage" role="region" aria-label="Mapa de relaciones del producto">
+                <div class="relmap-loading"><span class="relmap-loading-spinner"></span>Cargando mapa…</div>
+            </div>
+        </div>
+        <div class="relmap-psfoot">
+            <span class="relmap-hint" id="productoRelMapHint">Vista adicional · no reemplaza el historial tabular</span>
+            <button type="button" class="relmap-btn" id="productoRelMapClose2">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<div id="productoRelMapAuthModal" class="relmap-psmodal" aria-hidden="true">
+    <div class="relmap-psbox" style="width:min(100%,520px);">
+        <div class="relmap-pshead">
+            <div class="relmap-pshead-text">
+                <h3>Autorizar mapa de relaciones</h3>
+                <p class="relmap-pshead-sub">Solo SuperAdmin entra directo. El resto necesita usuario y clave de un autorizador.</p>
+            </div>
+            <button type="button" class="relmap-psclosex" id="productoRelMapAuthClose" aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="relmap-psbody" style="padding-bottom:12px;">
+            <label for="productoRelMapAuthUser" style="display:block;font-weight:600;margin-bottom:6px;font-size:12px;">Usuario autorizador</label>
+            <input id="productoRelMapAuthUser" type="text" autocomplete="username" style="width:100%;padding:9px 10px;border:1px solid #b7c5d4;border-radius:8px;font-size:13px;">
+            <label for="productoRelMapAuthPass" style="display:block;font-weight:600;margin:12px 0 6px;font-size:12px;">Clave</label>
+            <input id="productoRelMapAuthPass" type="password" autocomplete="current-password" style="width:100%;padding:9px 10px;border:1px solid #b7c5d4;border-radius:8px;font-size:13px;">
+            <p id="productoRelMapAuthError" style="color:#b91c1c;margin-top:10px;display:none;font-size:12px;"></p>
+        </div>
+        <div class="relmap-psfoot">
+            <span></span>
+            <div style="display:flex;gap:8px;">
+                <button type="button" class="relmap-btn" id="productoRelMapAuthCancel">Cancelar</button>
+                <button type="button" class="relmap-btn is-primary" id="productoRelMapAuthConfirm">Autorizar y ver mapa</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='relmap.js') }}"></script>
+<script>
+(function () {
+    var CODIGO = {{ codigo|tojson }};
+    var RELMAP_DIRECT = {{ (relmap_direct_access|default(false))|tojson }};
+    var URL_MAP = {{ url_for('productos.api_producto_relationship_map', codigo=codigo)|tojson }};
+    var URL_AUTH = {{ url_for('productos.api_relmap_authorize')|tojson }};
+
+    var btn = document.getElementById('btnProductoRelMap');
+    var modal = document.getElementById('productoRelMapModal');
+    var stage = document.getElementById('productoRelMapStage');
+    var hint = document.getElementById('productoRelMapHint');
+    var btnClose = document.getElementById('productoRelMapClose');
+    var btnClose2 = document.getElementById('productoRelMapClose2');
+
+    function esc(v) {
+        return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function closeMap() {
+        if (modal) modal.classList.remove('open');
+    }
+    function openMapShell() {
+        if (!modal) return;
+        if (modal.parentNode !== document.body) {
+            document.body.appendChild(modal);
+        }
+        modal.classList.add('open');
+        if (stage) stage.innerHTML = '<div class="relmap-loading"><span class="relmap-loading-spinner"></span>Cargando mapa…</div>';
+    }
+    function promptAuth() {
+        return new Promise(function (resolve) {
+            var authModal = document.getElementById('productoRelMapAuthModal');
+            var userInput = document.getElementById('productoRelMapAuthUser');
+            var passInput = document.getElementById('productoRelMapAuthPass');
+            var errEl = document.getElementById('productoRelMapAuthError');
+            var okBtn = document.getElementById('productoRelMapAuthConfirm');
+            var cancelBtn = document.getElementById('productoRelMapAuthCancel');
+            var closeBtn = document.getElementById('productoRelMapAuthClose');
+            if (!authModal || !userInput || !passInput || !okBtn) {
+                resolve(false);
+                return;
+            }
+            if (authModal.parentNode !== document.body) {
+                document.body.appendChild(authModal);
+            }
+            var settled = false;
+            function finish(ok) {
+                if (settled) return;
+                settled = true;
+                authModal.classList.remove('open');
+                cleanup();
+                resolve(!!ok);
+            }
+            function cleanup() {
+                okBtn.removeEventListener('click', onConfirm);
+                if (cancelBtn) cancelBtn.removeEventListener('click', onCancel);
+                if (closeBtn) closeBtn.removeEventListener('click', onCancel);
+                authModal.removeEventListener('click', onBackdrop);
+            }
+            function onCancel() { finish(false); }
+            function onBackdrop(ev) { if (ev.target === authModal) finish(false); }
+            function onConfirm() {
+                var usuario = String(userInput.value || '').trim();
+                var password = String(passInput.value || '');
+                if (!usuario || !password) {
+                    if (errEl) { errEl.style.display = 'block'; errEl.textContent = 'Debes ingresar usuario y clave.'; }
+                    return;
+                }
+                okBtn.disabled = true;
+                okBtn.textContent = 'Validando…';
+                if (errEl) errEl.style.display = 'none';
+                fetch(URL_AUTH, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    body: JSON.stringify({ usuario: usuario, password: password })
+                }).then(function (r) {
+                    return r.json().then(function (data) {
+                        if (!r.ok || !data.success) throw new Error((data && data.message) || 'No se pudo autorizar');
+                        return data;
+                    });
+                }).then(function () {
+                    finish(true);
+                }).catch(function (err) {
+                    if (errEl) { errEl.style.display = 'block'; errEl.textContent = err.message || 'Error'; }
+                    okBtn.disabled = false;
+                    okBtn.textContent = 'Autorizar y ver mapa';
+                });
+            }
+            if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+            userInput.value = '';
+            passInput.value = '';
+            okBtn.disabled = false;
+            okBtn.textContent = 'Autorizar y ver mapa';
+            authModal.classList.add('open');
+            okBtn.addEventListener('click', onConfirm);
+            if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
+            if (closeBtn) closeBtn.addEventListener('click', onCancel);
+            authModal.addEventListener('click', onBackdrop);
+            setTimeout(function () { userInput.focus(); }, 10);
+        });
+    }
+    function loadMap() {
+        return fetch(URL_MAP, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) {
+                return r.json().then(function (data) {
+                    if (r.status === 403 && data && data.auth_required) {
+                        var e = new Error(data.message || 'Auth');
+                        e.authRequired = true;
+                        throw e;
+                    }
+                    if (!r.ok || !data.success) throw new Error((data && data.message) || 'No se pudo cargar el mapa');
+                    return data;
+                });
+            })
+            .then(function (data) {
+                if (!window.AndesRelMap || !stage) {
+                    if (stage) stage.innerHTML = '<div style="padding:16px;color:#b91c1c;">No se pudo cargar el visualizador del mapa.</div>';
+                    return;
+                }
+                AndesRelMap.render(stage, data.map || {});
+                AndesRelMap.bindClicks(stage);
+                var n = ((data.map && data.map.nodes) || []).length;
+                var e = ((data.map && data.map.edges) || []).length;
+                if (hint) hint.textContent = 'Producto ' + CODIGO + ' · ' + n + ' nodos · ' + e + ' vínculos · adicional al historial';
+            })
+            .catch(function (err) {
+                if (err && err.authRequired) {
+                    return promptAuth().then(function (ok) {
+                        if (ok) return loadMap();
+                        closeMap();
+                        return null;
+                    });
+                }
+                if (stage) stage.innerHTML = '<div style="padding:16px;color:#b91c1c;">' + esc(err.message) + '</div>';
+            });
+    }
+    function openProductoRelMap() {
+        openMapShell();
+        loadMap();
+    }
+    if (btn) btn.addEventListener('click', openProductoRelMap);
+    if (btnClose) btnClose.addEventListener('click', closeMap);
+    if (btnClose2) btnClose2.addEventListener('click', closeMap);
+    if (modal) {
+        modal.addEventListener('click', function (ev) {
+            if (ev.target === modal) closeMap();
+        });
+    }
+})();
+</script>
 <script>
 function historialProductoAplicarFiltroLocal(filterValue) {
     var body = document.getElementById('historialRowsBody');

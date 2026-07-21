@@ -981,6 +981,12 @@ def _is_admin_user() -> bool:
     return "admin" in ((session.get("rol") or "").strip().lower())
 
 
+def _is_superadmin_user() -> bool:
+    from app.utils.relmap_auth import is_superadmin_session
+
+    return is_superadmin_session()
+
+
 def _next_credit_note_number() -> str:
     rows = db.session.query(NotaCredito.numero).filter(NotaCredito.numero.ilike("NC-%")).all()
     max_seq = 0
@@ -1204,6 +1210,9 @@ def _history_doc_label(doc_type: str) -> str:
         "factura_proveedor": "Factura proveedor",
         "ingreso": "Ingreso de stock",
         "nota_credito": "Nota de credito",
+        "picking": "Picking bodega",
+        "socio_negocio": "Socio de negocios",
+        "producto": "Producto",
     }
     return labels.get((doc_type or "").strip().lower(), (doc_type or "Documento").replace("_", " ").title())
 
@@ -1218,8 +1227,18 @@ def _history_doc_tone(doc_type: str) -> str:
         "factura_proveedor": "green",
         "ingreso": "orange",
         "nota_credito": "slate",
+        "picking": "orange",
+        "socio_negocio": "slate",
+        "producto": "blue",
     }
     return tones.get((doc_type or "").strip().lower(), "slate")
+
+
+def _safe_url_for(endpoint: str, **kwargs) -> str | None:
+    try:
+        return url_for(endpoint, **kwargs)
+    except Exception:
+        return None
 
 
 def _history_doc_url(doc_type: str, numero: str) -> str | None:
@@ -1233,12 +1252,450 @@ def _history_doc_url(doc_type: str, numero: str) -> str | None:
         "factura": "ventas.facturacion",
         "boleta": "ventas.facturacion",
         "orden_compra": "ventas.orden_compra",
+        "factura_proveedor": "ventas.orden_compra",
         "ingreso": "bodega.movimientos",
     }
     endpoint = endpoint_map.get((doc_type or "").strip().lower())
     if endpoint is None:
         return None
-    return url_for(endpoint, numero=clean_number)
+    kwargs = {"numero": clean_number}
+    if (doc_type or "").strip().lower() == "boleta":
+        kwargs["tipo_documento"] = "boleta"
+    return _safe_url_for(endpoint, **kwargs)
+
+
+def _doc_map_view_url(doc_type: str, *, numero: str = "", entity_id: int | None = None) -> str | None:
+    """URL de apertura para nodos del mapa (docs, NC, picking)."""
+    kind = (doc_type or "").strip().lower()
+    if kind == "nota_credito" and entity_id:
+        return _safe_url_for("ventas.nota_credito_detalle", nid=int(entity_id))
+    if kind == "picking" and entity_id:
+        return _safe_url_for("bodega.picking_venta_detalle", pid=int(entity_id))
+    return _history_doc_url(kind, numero)
+
+
+def _fmt_map_fecha(value) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "strftime"):
+        return value.strftime("%d/%m/%Y")
+    text = str(value).strip()
+    if len(text) >= 10 and text[4] == "-" and text[7] == "-":
+        # ISO → dd/mm/yyyy
+        return f"{text[8:10]}/{text[5:7]}/{text[0:4]}"
+    return text[:10]
+
+
+def _doc_is_locked(status: str | None, *, estado_pago: str | None = None) -> bool:
+    st = (status or "").strip().lower()
+    if st in {"anulada", "anulado", "cerrada", "cerrado", "entregada", "entregado", "aprobada", "facturada", "procesada"}:
+        return True
+    if (estado_pago or "").strip().lower() == "pagado":
+        return True
+    return False
+
+
+def _resolve_trace_root(start: DocumentoVenta) -> DocumentoVenta:
+    if start is None:
+        return start
+    if start.root_id:
+        root_candidate = db.session.get(DocumentoVenta, start.root_id)
+        if root_candidate is not None:
+            return root_candidate
+    seen: set[int] = set()
+    cursor = start
+    while cursor and cursor.source_id and cursor.id not in seen:
+        seen.add(cursor.id)
+        parent = db.session.get(DocumentoVenta, cursor.source_id)
+        if parent is None:
+            break
+        cursor = parent
+    return cursor or start
+
+
+def _collect_related_sale_docs(root: DocumentoVenta) -> list[DocumentoVenta]:
+    """Recorre root_id + source_id para armar el árbol completo (no solo el primer hijo)."""
+    if root is None:
+        return []
+    by_id: dict[int, DocumentoVenta] = {root.id: root}
+    for doc in DocumentoVenta.query.filter(DocumentoVenta.root_id == root.id).all():
+        by_id[doc.id] = doc
+    queue = list(by_id.keys())
+    while queue:
+        parent_id = queue.pop()
+        children = (
+            DocumentoVenta.query.filter_by(source_id=parent_id)
+            .order_by(DocumentoVenta.created_at.asc(), DocumentoVenta.id.asc())
+            .all()
+        )
+        for child in children:
+            if child.id in by_id:
+                continue
+            by_id[child.id] = child
+            queue.append(child.id)
+    return sorted(by_id.values(), key=lambda d: (d.created_at or datetime.min, d.id))
+
+
+def _serialize_map_doc_node(doc: DocumentoVenta, *, current_id: int | None = None) -> dict:
+    node = _serialize_chain_node(doc)
+    tipo = (doc.tipo or "").strip().lower()
+    fecha = doc.fecha_documento or doc.created_at
+    node.update(
+        {
+            "key": f"doc:{doc.id}",
+            "label": _history_doc_label(tipo),
+            "fecha": _fmt_map_fecha(fecha),
+            "view_url": _doc_map_view_url(tipo, numero=node.get("number") or ""),
+            "is_current": bool(current_id and doc.id == current_id),
+            "locked": _doc_is_locked(doc.status, estado_pago=doc.estado_pago),
+            "badge_tone": _history_doc_tone(tipo),
+            "cliente_id": doc.cliente_id,
+            "proveedor_id": doc.proveedor_id,
+            "cliente_rut": (doc.cliente_rut or "").strip(),
+            "cliente_nombre": (doc.cliente_nombre or "").strip(),
+            "ref_externa": (getattr(doc, "numero_oc_cliente", None) or "").strip(),
+        }
+    )
+    return node
+
+
+def _serialize_map_nc_node(nota: NotaCredito) -> dict:
+    fecha = nota.fecha_documento or nota.created_at
+    return {
+        "key": f"nc:{nota.id}",
+        "id": nota.id,
+        "type": "nota_credito",
+        "label": _history_doc_label("nota_credito"),
+        "number": (nota.numero or "").strip(),
+        "status": (nota.status or "pendiente").strip().lower(),
+        "total": round(float(nota.total or 0), 2),
+        "created_at": nota.created_at.isoformat() if nota.created_at else None,
+        "fecha": _fmt_map_fecha(fecha),
+        "source_id": nota.source_id or nota.documento_venta_id,
+        "source_type": (nota.source_type or "").strip().lower(),
+        "root_id": nota.root_id,
+        "view_url": _doc_map_view_url("nota_credito", entity_id=nota.id),
+        "is_current": False,
+        "locked": _doc_is_locked(nota.status),
+        "badge_tone": _history_doc_tone("nota_credito"),
+        "estado_pago": "",
+        "metodo_pago": "",
+        "metodo_pago_label": "",
+        "pago_referencia": "",
+        "ref_externa": (nota.razon or "").strip()[:80],
+    }
+
+
+def _serialize_map_picking_node(picking: PickingVenta) -> dict:
+    return {
+        "key": f"picking:{picking.id}",
+        "id": picking.id,
+        "type": "picking",
+        "label": _history_doc_label("picking"),
+        "number": f"PK-{picking.id}",
+        "status": (picking.status or "pendiente").strip().lower(),
+        "total": 0,
+        "created_at": picking.created_at.isoformat() if picking.created_at else None,
+        "fecha": _fmt_map_fecha(picking.created_at),
+        "source_id": picking.orden_venta_id,
+        "source_type": "orden_venta",
+        "root_id": None,
+        "view_url": _doc_map_view_url("picking", entity_id=picking.id),
+        "is_current": False,
+        "locked": _doc_is_locked(picking.status),
+        "badge_tone": _history_doc_tone("picking"),
+        "estado_pago": "",
+        "metodo_pago": "",
+        "metodo_pago_label": "",
+        "pago_referencia": "",
+        "ref_externa": (picking.nota or "").strip()[:80],
+    }
+
+
+def _build_relationship_map(start: DocumentoVenta) -> dict:
+    """Grafo de relaciones tipo SAP: socio + documentos + picking + NC."""
+    if start is None:
+        return {"partner": None, "nodes": [], "edges": [], "current_key": None}
+
+    root = _resolve_trace_root(start)
+    docs = _collect_related_sale_docs(root)
+    doc_ids = [d.id for d in docs]
+
+    nodes: list[dict] = []
+    edges: list[dict] = []
+    key_by_doc_id: dict[int, str] = {}
+
+    # Socio de negocios (cliente o proveedor del root)
+    partner = None
+    if root.cliente_id or (root.cliente_rut or root.cliente_nombre):
+        partner = {
+            "key": f"partner:c:{root.cliente_id or root.id}",
+            "id": root.cliente_id or 0,
+            "type": "socio_negocio",
+            "label": _history_doc_label("socio_negocio"),
+            "number": (root.cliente_rut or "").strip() or "—",
+            "status": "activo",
+            "total": 0,
+            "fecha": "",
+            "view_url": _safe_url_for("ventas.cliente_historial", cid=root.cliente_id) if root.cliente_id else None,
+            "is_current": False,
+            "locked": False,
+            "badge_tone": "slate",
+            "cliente_nombre": (root.cliente_nombre or "").strip(),
+            "cliente_rut": (root.cliente_rut or "").strip(),
+            "ref_externa": (root.cliente_nombre or "").strip()[:60],
+        }
+    elif root.proveedor_id:
+        prov = db.session.get(Proveedor, root.proveedor_id)
+        partner = {
+            "key": f"partner:p:{root.proveedor_id}",
+            "id": root.proveedor_id,
+            "type": "socio_negocio",
+            "label": _history_doc_label("socio_negocio"),
+            "number": ((prov.rut if prov else None) or root.cliente_rut or "").strip() or "—",
+            "status": "activo",
+            "total": 0,
+            "fecha": "",
+            "view_url": _safe_url_for("ventas.proveedor_historial", pid=root.proveedor_id),
+            "is_current": False,
+            "locked": False,
+            "badge_tone": "slate",
+            "cliente_nombre": ((prov.empresa if prov else None) or (prov.nombre if prov else None) or root.cliente_nombre or "").strip(),
+            "cliente_rut": ((prov.rut if prov else None) or root.cliente_rut or "").strip(),
+            "ref_externa": ((prov.empresa if prov else None) or (prov.nombre if prov else None) or root.cliente_nombre or "").strip()[:60],
+        }
+
+    if partner:
+        nodes.append(partner)
+
+    for doc in docs:
+        node = _serialize_map_doc_node(doc, current_id=start.id)
+        nodes.append(node)
+        key_by_doc_id[doc.id] = node["key"]
+
+    # Aristas documento ← source_id
+    for doc in docs:
+        src = doc.source_id
+        if src and src in key_by_doc_id and doc.id in key_by_doc_id:
+            edges.append({"from": key_by_doc_id[src], "to": key_by_doc_id[doc.id]})
+        elif partner and doc.id == root.id:
+            edges.append({"from": partner["key"], "to": key_by_doc_id[doc.id]})
+
+    # Si el root no tiene source y hay partner, conectar
+    if partner and root.id in key_by_doc_id:
+        has_partner_edge = any(e["from"] == partner["key"] and e["to"] == key_by_doc_id[root.id] for e in edges)
+        if not has_partner_edge and not root.source_id:
+            edges.append({"from": partner["key"], "to": key_by_doc_id[root.id]})
+
+    # Pickings vinculados a OV del árbol
+    ov_ids = [d.id for d in docs if (d.tipo or "").strip().lower() == "orden_venta"]
+    if ov_ids:
+        pickings = PickingVenta.query.filter(PickingVenta.orden_venta_id.in_(ov_ids)).all()
+        for pk in pickings:
+            node = _serialize_map_picking_node(pk)
+            nodes.append(node)
+            parent_key = key_by_doc_id.get(pk.orden_venta_id)
+            if parent_key:
+                edges.append({"from": parent_key, "to": node["key"]})
+
+    # Notas de crédito del árbol
+    if doc_ids:
+        notas = (
+            NotaCredito.query.filter(
+                or_(
+                    NotaCredito.documento_venta_id.in_(doc_ids),
+                    NotaCredito.source_id.in_(doc_ids),
+                )
+            )
+            .order_by(NotaCredito.created_at.asc(), NotaCredito.id.asc())
+            .all()
+        )
+        seen_nc: set[int] = set()
+        for nota in notas:
+            if nota.id in seen_nc:
+                continue
+            seen_nc.add(nota.id)
+            node = _serialize_map_nc_node(nota)
+            nodes.append(node)
+            parent_id = nota.source_id or nota.documento_venta_id
+            parent_key = key_by_doc_id.get(parent_id) if parent_id else None
+            if parent_key:
+                edges.append({"from": parent_key, "to": node["key"]})
+
+    current_key = key_by_doc_id.get(start.id)
+    return {
+        "partner": partner,
+        "nodes": nodes,
+        "edges": edges,
+        "current_key": current_key,
+        "root_key": key_by_doc_id.get(root.id),
+    }
+
+
+def _build_product_relationship_map(codigo: str, *, limit: int = 20) -> dict:
+    """Mapa adicional por SKU: ingresos → producto → docs de venta → NC (no reemplaza historial)."""
+    code = (codigo or "").strip().upper()
+    if not code:
+        return {"partner": None, "nodes": [], "edges": [], "current_key": None, "codigo": ""}
+
+    product_key = f"product:{code}"
+
+    descripcion = ""
+    marca = ""
+    stock_total = 0
+    try:
+        row = db.session.execute(
+            text(
+                "SELECT DESCRIPCION, MARCA FROM productos WHERE UPPER(CODIGO) = :codigo LIMIT 1"
+            ),
+            {"codigo": code},
+        ).mappings().first()
+        if row:
+            descripcion = (row.get("DESCRIPCION") or "").strip()
+            marca = (row.get("MARCA") or "").strip()
+    except Exception:
+        pass
+    try:
+        stock_total = int(
+            db.session.query(func.coalesce(func.sum(ProductoVarianteStock.stock), 0))
+            .filter(func.upper(ProductoVarianteStock.codigo_producto) == code)
+            .scalar()
+            or 0
+        )
+    except Exception:
+        stock_total = 0
+
+    product_node = {
+        "key": product_key,
+        "id": 0,
+        "type": "producto",
+        "label": _history_doc_label("producto"),
+        "number": code,
+        "status": "activo",
+        "total": 0,
+        "fecha": "",
+        "view_url": _safe_url_for("productos.ver_producto", codigo=code),
+        "is_current": True,
+        "locked": False,
+        "badge_tone": _history_doc_tone("producto"),
+        "cliente_nombre": "",
+        "cliente_rut": "",
+        "ref_externa": (descripcion[:70] if descripcion else code),
+        "descripcion": descripcion[:90],
+        "marca": marca[:40],
+        "stock": stock_total,
+        "estado_pago": "",
+        "metodo_pago": "",
+        "metodo_pago_label": "",
+        "pago_referencia": "",
+    }
+
+    nodes: list[dict] = [product_node]
+    edges: list[dict] = []
+
+    # Ingresos (izquierda → producto)
+    ingreso_rows = (
+        db.session.query(IngresoDocumentoItem, IngresoDocumento)
+        .join(IngresoDocumento, IngresoDocumentoItem.ingreso_documento_id == IngresoDocumento.id)
+        .filter(func.upper(IngresoDocumentoItem.codigo_producto) == code)
+        .order_by(IngresoDocumento.fecha_documento.desc(), IngresoDocumento.id.desc())
+        .limit(limit)
+        .all()
+    )
+    seen_ingreso: set[int] = set()
+    for item, doc in ingreso_rows:
+        if doc.id in seen_ingreso:
+            continue
+        seen_ingreso.add(doc.id)
+        key = f"ingreso:{doc.id}"
+        fecha = doc.fecha_documento or doc.created_at
+        nodes.append(
+            {
+                "key": key,
+                "id": doc.id,
+                "type": "ingreso",
+                "label": _history_doc_label("ingreso"),
+                "number": (doc.numero_documento or f"#{doc.id}").strip(),
+                "status": "registrado",
+                "total": round(float(item.valor_neto or 0) * float(item.cantidad or 0), 2),
+                "fecha": _fmt_map_fecha(fecha),
+                "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                "view_url": _safe_url_for("bodega.ingreso_ver", doc_id=doc.id),
+                "is_current": False,
+                "locked": True,
+                "badge_tone": _history_doc_tone("ingreso"),
+                "ref_externa": (doc.proveedor_nombre or "").strip()[:80],
+                "estado_pago": "",
+                "metodo_pago": "",
+                "metodo_pago_label": "",
+                "pago_referencia": "",
+            }
+        )
+        edges.append({"from": key, "to": product_key})
+
+    # Documentos de venta que incluyen el código
+    sale_rows = (
+        db.session.query(DocumentoVentaItem, DocumentoVenta)
+        .join(DocumentoVenta, DocumentoVentaItem.documento_id == DocumentoVenta.id)
+        .filter(func.upper(DocumentoVentaItem.codigo_producto) == code)
+        .order_by(DocumentoVenta.fecha_documento.desc(), DocumentoVenta.id.desc())
+        .limit(limit)
+        .all()
+    )
+    key_by_doc_id: dict[int, str] = {}
+    seen_doc: set[int] = set()
+    for _item, doc in sale_rows:
+        if doc.id in seen_doc:
+            continue
+        seen_doc.add(doc.id)
+        node = _serialize_map_doc_node(doc, current_id=None)
+        node["is_current"] = False
+        nodes.append(node)
+        key_by_doc_id[doc.id] = node["key"]
+        edges.append({"from": product_key, "to": node["key"]})
+
+    # Vínculos source_id entre docs del producto (si ambos están en el mapa)
+    for doc_id, key in list(key_by_doc_id.items()):
+        doc = db.session.get(DocumentoVenta, doc_id)
+        if doc is None or not doc.source_id:
+            continue
+        parent_key = key_by_doc_id.get(doc.source_id)
+        if parent_key:
+            edge = {"from": parent_key, "to": key}
+            if edge not in edges:
+                edges.append(edge)
+
+    # Notas de crédito del código
+    nc_rows = (
+        db.session.query(NotaCreditoItem, NotaCredito)
+        .join(NotaCredito, NotaCreditoItem.nota_credito_id == NotaCredito.id)
+        .filter(func.upper(NotaCreditoItem.codigo_producto) == code)
+        .order_by(NotaCredito.fecha_documento.desc(), NotaCredito.id.desc())
+        .limit(limit)
+        .all()
+    )
+    seen_nc: set[int] = set()
+    for _item, nota in nc_rows:
+        if nota.id in seen_nc:
+            continue
+        seen_nc.add(nota.id)
+        node = _serialize_map_nc_node(nota)
+        nodes.append(node)
+        parent_id = nota.source_id or nota.documento_venta_id
+        parent_key = key_by_doc_id.get(parent_id) if parent_id else None
+        if parent_key:
+            edges.append({"from": parent_key, "to": node["key"]})
+        else:
+            edges.append({"from": product_key, "to": node["key"]})
+
+    return {
+        "partner": None,
+        "nodes": nodes,
+        "edges": edges,
+        "current_key": product_key,
+        "root_key": product_key,
+        "codigo": code,
+    }
 
 
 def _history_row_from_node(node: dict) -> dict:
@@ -2924,7 +3381,8 @@ def _build_doc_context(doc_type: str, title: str, party_label: str,
         "generated": saved_successfully,
         "saved_number": saved_number,
         "save_error": save_error,
-        "can_traceability": _is_admin_user(),
+        "can_traceability": True,
+        "relmap_direct_access": _is_superadmin_user(),
         "validation_errors": validation_errors,
         "document_summary": _document_summary(doc_type, tipo_documento),
         "chile_geo": chile_geo,
@@ -3918,8 +4376,16 @@ def api_convert_factura_nota_credito(documento_id: int):
 @ventas_bp.route("/api/trace/<string:numero>", methods=["GET"])
 @login_required
 def api_traceability(numero: str):
-    if not _is_admin_user():
-        return jsonify({"success": False, "message": "Acceso denegado"}), 403
+    from app.utils.relmap_auth import can_access_relmap
+
+    if not can_access_relmap():
+        return jsonify(
+            {
+                "success": False,
+                "auth_required": True,
+                "message": "Se requiere autorización (usuario y clave) para ver el mapa de relaciones.",
+            }
+        ), 403
 
     safe_numero = (numero or "").strip().upper()
     start = DocumentoVenta.query.filter(func.upper(DocumentoVenta.numero) == safe_numero).order_by(DocumentoVenta.id.desc()).first()
@@ -3928,20 +4394,51 @@ def api_traceability(numero: str):
     if start is None:
         return jsonify({"success": False, "message": "Documento no encontrado"}), 404
 
-    root = start
-    if start.root_id:
-        root_candidate = db.session.get(DocumentoVenta, start.root_id)
-        if root_candidate is not None:
-            root = root_candidate
-
+    root = _resolve_trace_root(start)
     chain = _trace_chain_from_document(root)
+    rel_map = _build_relationship_map(start)
     return jsonify(
         {
             "success": True,
             "root": _serialize_chain_node(root),
             "chain": chain,
+            "map": rel_map,
         }
     )
+
+
+@ventas_bp.route("/api/relmap/authorize", methods=["POST"])
+@login_required
+def api_relmap_authorize():
+    from app.utils.relmap_auth import authorize_relmap_credentials
+
+    data = request.get_json(silent=True) or {}
+    ok, message = authorize_relmap_credentials(data.get("usuario") or "", data.get("password") or "")
+    if not ok:
+        return jsonify({"success": False, "message": message}), 403
+    return jsonify({"success": True, "message": message})
+
+
+@ventas_bp.route("/api/product/<codigo>/relationship-map", methods=["GET"])
+@login_required
+def api_product_relationship_map(codigo: str):
+    """Mapa de relaciones por producto (misma auth que el mapa documental)."""
+    from app.utils.relmap_auth import can_access_relmap
+
+    if not can_access_relmap():
+        return jsonify(
+            {
+                "success": False,
+                "auth_required": True,
+                "message": "Se requiere autorización (usuario y clave) para ver el mapa de relaciones.",
+            }
+        ), 403
+
+    code = (codigo or "").strip().upper()
+    if not code:
+        return jsonify({"success": False, "message": "Código vacío"}), 400
+    rel_map = _build_product_relationship_map(code)
+    return jsonify({"success": True, "codigo": code, "map": rel_map})
 
 
 @ventas_bp.route("/api/client/<int:client_id>/history", methods=["GET"])

@@ -1261,12 +1261,20 @@ def create_app():
         m = (app.config.get("ANDES_APP_MODE") or "").strip().lower()
         return {"search_lite": m == "search_lite"}
 
+    @app.context_processor
+    def inject_embed_modal():
+        """Vista embebida (iframe del mapa / modales): sin sidebar ni chrome de app."""
+        return {"embed_modal": (request.args.get("embed") or "").strip() == "1"}
+
     @app.after_request
     def inject_chat_widget(response):
         # Inject chat globally for authenticated users in HTML responses.
         if (app.config.get("ANDES_APP_MODE") or "").strip().lower() == "search_lite":
             return response
         if (request.path or "").startswith("/m/"):
+            return response
+        # Iframes del mapa de relaciones / previews: no inyectar el dock del chat
+        if (request.args.get("embed") or "").strip() == "1":
             return response
         if request.endpoint in {"auth.login", "auth.inicio_seguro"}:
             return response
