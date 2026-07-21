@@ -13,8 +13,8 @@
   <link rel="manifest" href="{{ url_for('static', filename='mobile/manifest.json') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='mobile/icons/apple-touch-icon.png') }}">
   <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='mobile/icons/icon-192.png') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/fonts/inter.css') }}?v=30">
-  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/mobile.min.css') }}?v=30">
+  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/fonts/inter.css') }}?v=31">
+  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/mobile.min.css') }}?v=31">
   <script>
   (function () {
     try {
@@ -35,7 +35,7 @@
   data-active-nav="{{ active_nav or '' }}"
   data-catalog-api="{{ url_for('mobile.api_catalogo') }}"
   data-sw-url="{{ url_for('mobile.service_worker') }}"
-  data-pwa-version="v2026.07.15-v30"
+  data-pwa-version="v2026.07.21-v31"
 >
   <div id="mobile-splash" class="mobile-splash" aria-hidden="true">
     <div class="mobile-splash__bg" aria-hidden="true">
@@ -58,7 +58,7 @@
         <div class="mobile-splash__progress-fill" id="mobile-splash-progress"></div>
       </div>
     </div>
-    <span class="mobile-splash__version">v2026.07.15-v30</span>
+    <span class="mobile-splash__version">v2026.07.21-v31</span>
   </div>
 
   <div id="catalog-sync-skeleton" class="catalog-sync-skeleton" hidden aria-hidden="true">
@@ -160,6 +160,7 @@
           <span class="m-mas-item__arrow" aria-hidden="true">›</span>
         </a>
         <div class="m-mas-menu__divider" role="separator"></div>
+        {% if puede_importar_imagenes %}
         <a href="{{ url_for('mobile.importar_imagenes') }}" class="m-mas-item" data-requires-online>
           <span class="m-mas-item__icon m-mas-item__icon--images" aria-hidden="true">📷</span>
           <span class="m-mas-item__body">
@@ -168,6 +169,8 @@
           </span>
           <span class="m-mas-item__arrow" aria-hidden="true">›</span>
         </a>
+        {% endif %}
+        {% if puede_etiquetas %}
         <a href="{{ url_for('mobile.etiquetas') }}" class="m-mas-item">
           <span class="m-mas-item__icon m-mas-item__icon--etiquetas" aria-hidden="true">🏷️</span>
           <span class="m-mas-item__body">
@@ -176,6 +179,7 @@
           </span>
           <span class="m-mas-item__arrow" aria-hidden="true">›</span>
         </a>
+        {% endif %}
         <a href="{{ url_for('mobile.proveedores') }}" class="m-mas-item">
           <span class="m-mas-item__icon m-mas-item__icon--proveedores" aria-hidden="true">🚚</span>
           <span class="m-mas-item__body">
@@ -184,6 +188,7 @@
           </span>
           <span class="m-mas-item__arrow" aria-hidden="true">›</span>
         </a>
+        {% if puede_ingreso_rapido %}
         <a href="{{ url_for('mobile.ingreso_rapido') }}" class="m-mas-item" data-requires-online>
           <span class="m-mas-item__icon m-mas-item__icon--ingreso" aria-hidden="true">📦</span>
           <span class="m-mas-item__body">
@@ -192,6 +197,17 @@
           </span>
           <span class="m-mas-item__arrow" aria-hidden="true">›</span>
         </a>
+        {% endif %}
+        {% if puede_venta_rapida %}
+        <a href="{{ url_for('mobile.venta_rapida') }}" class="m-mas-item" data-requires-online>
+          <span class="m-mas-item__icon m-mas-item__icon--venta" aria-hidden="true">🧾</span>
+          <span class="m-mas-item__body">
+            <span class="m-mas-item__title">Venta rápida</span>
+            <span class="m-mas-item__desc">Boleta o factura</span>
+          </span>
+          <span class="m-mas-item__arrow" aria-hidden="true">›</span>
+        </a>
+        {% endif %}
         <a href="{{ url_for('mobile.clientes') }}" class="m-mas-item">
           <span class="m-mas-item__icon m-mas-item__icon--clientes" aria-hidden="true">👥</span>
           <span class="m-mas-item__body">
@@ -264,7 +280,7 @@
       <span class="mobile-nav__icon" aria-hidden="true">
         <svg class="mobile-nav__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg>
       </span>
-      <span class="mobile-nav__label">Menú</span>
+      <span class="mobile-nav__label">Más</span>
     </button>
   </nav>
 

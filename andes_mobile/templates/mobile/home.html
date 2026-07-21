@@ -86,6 +86,7 @@
         <span class="m-home-card__title">Stock crítico</span>
         <span class="m-home-card__desc">Bajo mínimo</span>
       </a>
+      {% if puede_venta_rapida %}
       <a href="{{ url_for('mobile.venta_rapida') }}" class="m-home-card m-home-animate" style="--delay: 280ms" data-requires-online>
         <span class="m-home-card__icon m-home-card__icon--red" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M7 15h.01"/><path d="M11 15h2"/></svg>
@@ -93,6 +94,8 @@
         <span class="m-home-card__title">Venta rápida</span>
         <span class="m-home-card__desc">Boleta o factura</span>
       </a>
+      {% endif %}
+      {% if puede_ingreso_rapido %}
       <a href="{{ url_for('mobile.ingreso_rapido') }}" class="m-home-card m-home-animate" style="--delay: 310ms" data-requires-online>
         <span class="m-home-card__icon m-home-card__icon--indigo" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg>
@@ -100,6 +103,8 @@
         <span class="m-home-card__title">Ingreso rápido</span>
         <span class="m-home-card__desc">Compra en 3 pasos</span>
       </a>
+      {% endif %}
+      {% if puede_etiquetas %}
       <a href="{{ url_for('mobile.etiquetas') }}" class="m-home-card m-home-animate" style="--delay: 340ms">
         <span class="m-home-card__icon m-home-card__icon--orange" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.41 0l6.59-6.59a1 1 0 0 0 0-1.41L12 2Z"/><path d="M7 7h.01"/></svg>
@@ -107,6 +112,7 @@
         <span class="m-home-card__title">Etiquetas</span>
         <span class="m-home-card__desc">Imprimir QR/barras</span>
       </a>
+      {% endif %}
       <a href="{{ url_for('mobile.clientes') }}" class="m-home-card m-home-animate" style="--delay: 370ms">
         <span class="m-home-card__icon m-home-card__icon--sky" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>

@@ -32,6 +32,10 @@ def _mobile_permissions_ctx():
     return {
         "puede_ver_oc_clientes": mobile_oc_clientes.puede_ver(user, rol),
         "puede_mod_oc_clientes": mobile_oc_clientes.puede_modificar(user, rol),
+        "puede_etiquetas": mobile_etiquetas.puede_imprimir_etiquetas(user, rol),
+        "puede_importar_imagenes": mobile_importar_imagenes.puede_importar_imagenes(user, rol),
+        "puede_ingreso_rapido": mobile_ingreso_rapido.puede_registrar_ingreso(user, rol),
+        "puede_venta_rapida": mobile_venta_rapida.puede_registrar_venta(user, rol),
     }
 
 
@@ -786,7 +790,7 @@ def ajustes():
     return render_template(
         "mobile/ajustes.html",
         usuario_email=email,
-        pwa_version="v2026.07.07-v19",
+        pwa_version="v2026.07.21-v31",
         **_nav_ctx("mas"),
     )
 
