@@ -10,6 +10,7 @@ from markupsafe import Markup, escape
 from sqlalchemy import and_, case, func, literal, or_, text
 from sqlalchemy.orm import joinedload, noload
 from werkzeug.utils import secure_filename
+from app.extensions import limiter
 from ..models import (
     SessionDB,
     Producto,
@@ -2914,6 +2915,29 @@ def api_relmap_authorize():
     return jsonify({"success": True, "message": message})
 
 
+@productos_bp.route("/productos/api/menu/authorize", methods=["POST"])
+@login_required
+@limiter.limit("10 per minute")
+def api_product_menu_authorize():
+    """Reautentica accesos sensibles del menú sin alterar la sesión conectada."""
+    from app.utils.product_menu_auth import (
+        authorize_product_menu_credentials,
+        is_product_menu_exempt_session,
+    )
+
+    if is_product_menu_exempt_session():
+        return jsonify({"success": True, "message": "Acceso directo SuperAdmin."})
+
+    data = request.get_json(silent=True) or {}
+    ok, message = authorize_product_menu_credentials(
+        data.get("usuario") or "",
+        data.get("password") or "",
+    )
+    if not ok:
+        return jsonify({"success": False, "message": message}), 403
+    return jsonify({"success": True, "message": message})
+
+
 @productos_bp.route("/productos/api/producto/<codigo>/relationship-map", methods=["GET"])
 @login_required
 def api_producto_relationship_map(codigo: str):
@@ -3834,11 +3858,31 @@ def productos_sin_categoria_autoasignar():
         sess.close()
 
 
+_STOCK_TOTAL_SQL = (
+    "(COALESCE(STOCK_10JUL,0)+COALESCE(STOCK_BRASIL,0)+COALESCE(STOCK_G_AVENIDA,0)+"
+    "COALESCE(STOCK_ORIENTALES,0)+COALESCE(STOCK_B20_OUTLET,0)+COALESCE(STOCK_TRANSITO,0))"
+)
+
+
+def _panel_rows_to_lista(rows, *, with_stock: bool = False):
+    out = []
+    for r in rows:
+        item = {
+            "codigo": (r[0] or "").strip().upper(),
+            "descripcion": (r[1] or "")[:120],
+        }
+        if with_stock:
+            item["stock"] = float(r[2] or 0)
+        out.append(item)
+    return out
+
+
 @productos_bp.route("/productos/panel-calidad")
 @admin_required
 def panel_calidad_stock():
     """
     Panel de calidad de datos y alertas de stock (solo lectura + enlaces a editar/buscar).
+    Consultas agregadas en SQL (evita cargar ~28k ORM con joins).
     """
     limite = request.args.get("limite", 40, type=int) or 40
     limite = max(10, min(limite, 100))
@@ -3848,10 +3892,28 @@ def panel_calidad_stock():
     stock_critico = max(0, min(int(stock_critico), 500))
     dias_sin_mov = request.args.get("dias_sin_movimiento", 180, type=int) or 180
     dias_sin_mov = max(30, min(dias_sin_mov, 730))
+    lim_alertas = min(limite, 50)
 
     sess = SessionDB()
     try:
-        total_activos = sess.query(Producto).filter(Producto.activo.is_(True)).count()
+        kpi_row = sess.execute(
+            text(
+                f"""
+                SELECT
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN categoria_id IS NULL THEN 1 ELSE 0 END) AS sin_categoria,
+                  SUM(CASE WHEN TRIM(COALESCE([CODIGO OEM], '')) = '' THEN 1 ELSE 0 END) AS sin_oem,
+                  SUM(CASE WHEN TRIM(COALESCE(HOMOLOGADOS, '')) = '' THEN 1 ELSE 0 END) AS sin_homologados,
+                  SUM(CASE WHEN {_STOCK_TOTAL_SQL} <= 0 THEN 1 ELSE 0 END) AS stock_cero,
+                  SUM(CASE WHEN {_STOCK_TOTAL_SQL} > 0 AND {_STOCK_TOTAL_SQL} <= :stock_critico THEN 1 ELSE 0 END) AS stock_bajo
+                FROM productos
+                WHERE ACTIVO = 1
+                """
+            ),
+            {"stock_critico": stock_critico},
+        ).fetchone()
+
+        total_activos = int(kpi_row[0] or 0) if kpi_row else 0
         if total_activos == 0:
             return render_template(
                 "productos/panel_calidad.html",
@@ -3864,81 +3926,27 @@ def panel_calidad_stock():
                 params={"limite": limite, "stock_critico": stock_critico, "dias_sin_movimiento": dias_sin_mov},
             )
 
-        productos = (
-            sess.query(Producto)
-            .filter(Producto.activo.is_(True))
-            .options(joinedload(Producto.categoria_rel), joinedload(Producto.subcategoria_rel))
-            .all()
-        )
+        sin_categoria = int(kpi_row[1] or 0)
+        sin_oem = int(kpi_row[2] or 0)
+        sin_homologados = int(kpi_row[3] or 0)
+        stock_total_cero = int(kpi_row[4] or 0)
+        stock_bajo = int(kpi_row[5] or 0)
 
         rows_img = sess.query(ProductoImagen.producto_codigo).distinct().all()
         codigos_con_img_db = {(r[0] or "").strip().upper() for r in rows_img if r[0]}
         static_names = _static_producto_img_names()
 
         sin_imagen = 0
-        sin_categoria = 0
-        sin_oem = 0
-        sin_homologados = 0
-        stock_total_cero = 0
-        stock_bajo = 0
-
         lista_sin_imagen = []
-        lista_sin_cat = []
-        lista_sin_oem = []
-        lista_sin_homo = []
-        lista_stock_cero = []
-        lista_stock_bajo = []
-
-        for p in productos:
-            cod = (p.codigo or "").strip().upper()
-            if not _producto_tiene_imagen_visual(cod, codigos_con_img_db, static_names):
-                sin_imagen += 1
-                if len(lista_sin_imagen) < limite:
-                    lista_sin_imagen.append(
-                        {"codigo": cod, "descripcion": (p.descripcion or "")[:120]}
-                    )
-            if p.categoria_id is None:
-                sin_categoria += 1
-                if len(lista_sin_cat) < limite:
-                    lista_sin_cat.append(
-                        {"codigo": cod, "descripcion": (p.descripcion or "")[:120]}
-                    )
-            oem_txt = (p.codigo_oem or "").strip()
-            if not oem_txt:
-                sin_oem += 1
-                if len(lista_sin_oem) < limite:
-                    lista_sin_oem.append(
-                        {"codigo": cod, "descripcion": (p.descripcion or "")[:120]}
-                    )
-            homo_txt = (p.homologados or "").strip()
-            if not homo_txt:
-                sin_homologados += 1
-                if len(lista_sin_homo) < limite:
-                    lista_sin_homo.append(
-                        {"codigo": cod, "descripcion": (p.descripcion or "")[:120]}
-                    )
-
-            st = _stock_total_producto_row(p)
-            if st <= 0:
-                stock_total_cero += 1
-                if len(lista_stock_cero) < limite:
-                    lista_stock_cero.append(
-                        {
-                            "codigo": cod,
-                            "descripcion": (p.descripcion or "")[:120],
-                            "stock": st,
-                        }
-                    )
-            elif 0 < st <= stock_critico:
-                stock_bajo += 1
-                if len(lista_stock_bajo) < limite:
-                    lista_stock_bajo.append(
-                        {
-                            "codigo": cod,
-                            "descripcion": (p.descripcion or "")[:120],
-                            "stock": st,
-                        }
-                    )
+        for cod, desc in sess.execute(
+            text("SELECT CODIGO, DESCRIPCION FROM productos WHERE ACTIVO = 1 ORDER BY CODIGO")
+        ):
+            c = (cod or "").strip().upper()
+            if _producto_tiene_imagen_visual(c, codigos_con_img_db, static_names):
+                continue
+            sin_imagen += 1
+            if len(lista_sin_imagen) < limite:
+                lista_sin_imagen.append({"codigo": c, "descripcion": (desc or "")[:120]})
 
         def pct(n: int) -> float:
             return round(100.0 * n / total_activos, 1) if total_activos else 0.0
@@ -3951,6 +3959,73 @@ def panel_calidad_stock():
             "stock_cero": {"count": stock_total_cero, "pct": pct(stock_total_cero)},
             "stock_bajo": {"count": stock_bajo, "pct": pct(stock_bajo)},
         }
+
+        lista_sin_cat = _panel_rows_to_lista(
+            sess.execute(
+                text(
+                    """
+                    SELECT CODIGO, DESCRIPCION FROM productos
+                    WHERE ACTIVO = 1 AND categoria_id IS NULL
+                    ORDER BY CODIGO LIMIT :lim
+                    """
+                ),
+                {"lim": limite},
+            ).fetchall()
+        )
+        lista_sin_oem = _panel_rows_to_lista(
+            sess.execute(
+                text(
+                    """
+                    SELECT CODIGO, DESCRIPCION FROM productos
+                    WHERE ACTIVO = 1 AND TRIM(COALESCE([CODIGO OEM], '')) = ''
+                    ORDER BY CODIGO LIMIT :lim
+                    """
+                ),
+                {"lim": limite},
+            ).fetchall()
+        )
+        lista_sin_homo = _panel_rows_to_lista(
+            sess.execute(
+                text(
+                    """
+                    SELECT CODIGO, DESCRIPCION FROM productos
+                    WHERE ACTIVO = 1 AND TRIM(COALESCE(HOMOLOGADOS, '')) = ''
+                    ORDER BY CODIGO LIMIT :lim
+                    """
+                ),
+                {"lim": limite},
+            ).fetchall()
+        )
+        lista_stock_cero = _panel_rows_to_lista(
+            sess.execute(
+                text(
+                    f"""
+                    SELECT CODIGO, DESCRIPCION, {_STOCK_TOTAL_SQL} AS st
+                    FROM productos
+                    WHERE ACTIVO = 1 AND {_STOCK_TOTAL_SQL} <= 0
+                    ORDER BY CODIGO LIMIT :lim
+                    """
+                ),
+                {"lim": limite},
+            ).fetchall(),
+            with_stock=True,
+        )
+        lista_stock_bajo = _panel_rows_to_lista(
+            sess.execute(
+                text(
+                    f"""
+                    SELECT CODIGO, DESCRIPCION, {_STOCK_TOTAL_SQL} AS st
+                    FROM productos
+                    WHERE ACTIVO = 1
+                      AND {_STOCK_TOTAL_SQL} > 0
+                      AND {_STOCK_TOTAL_SQL} <= :stock_critico
+                    ORDER BY st ASC, CODIGO LIMIT :lim
+                    """
+                ),
+                {"lim": limite, "stock_critico": stock_critico},
+            ).fetchall(),
+            with_stock=True,
+        )
 
         duplicados_oem = []
         try:
@@ -3967,80 +4042,117 @@ def panel_calidad_stock():
                     """
                 )
             ).fetchall()
+            oem_list = [r[0] for r in dup_rows if r[0]]
+            codigos_por_oem: dict[str, list[str]] = {oem: [] for oem in oem_list}
+            if oem_list:
+                placeholders = ", ".join(f":o{i}" for i in range(len(oem_list)))
+                params = {f"o{i}": oem for i, oem in enumerate(oem_list)}
+                for oem_norm, codigo in sess.execute(
+                    text(
+                        f"""
+                        SELECT UPPER(TRIM([CODIGO OEM])) AS oem_norm, CODIGO
+                        FROM productos
+                        WHERE ACTIVO = 1
+                          AND UPPER(TRIM([CODIGO OEM])) IN ({placeholders})
+                        ORDER BY oem_norm, CODIGO
+                        """
+                    ),
+                    params,
+                ):
+                    bucket = codigos_por_oem.get(oem_norm)
+                    if bucket is not None and len(bucket) < 8:
+                        bucket.append(codigo)
             for oem_norm, cnt in dup_rows:
-                codigos = [
-                    r[0]
-                    for r in sess.execute(
-                        text(
-                            """
-                            SELECT CODIGO FROM productos
-                            WHERE ACTIVO = 1 AND UPPER(TRIM([CODIGO OEM])) = :oem
-                            ORDER BY CODIGO ASC
-                            LIMIT 8
-                            """
-                        ),
-                        {"oem": oem_norm},
-                    ).fetchall()
-                ]
-                duplicados_oem.append({"oem": oem_norm, "count": int(cnt), "codigos": codigos})
+                duplicados_oem.append(
+                    {
+                        "oem": oem_norm,
+                        "count": int(cnt),
+                        "codigos": codigos_por_oem.get(oem_norm, []),
+                    }
+                )
         except Exception:
             duplicados_oem = []
 
         sin_movimiento = []
         try:
+            # Primero códigos con movimiento (tabla chica); luego productos con stock sin historial.
+            mov_codes = {
+                (r[0] or "").strip().upper()
+                for r in sess.execute(
+                    text("SELECT DISTINCT UPPER(TRIM(codigo_producto)) FROM movimientos_stock")
+                )
+                if r[0]
+            }
             sm = sess.execute(
                 text(
+                    f"""
+                    SELECT CODIGO, DESCRIPCION
+                    FROM productos
+                    WHERE ACTIVO = 1 AND {_STOCK_TOTAL_SQL} > 0
+                    ORDER BY CODIGO
+                    LIMIT 5000
                     """
-                    SELECT p.CODIGO, p.DESCRIPCION
-                    FROM productos p
-                    WHERE p.ACTIVO = 1
-                    AND (
-                        COALESCE(p.STOCK_10JUL,0)+COALESCE(p.STOCK_BRASIL,0)+COALESCE(p.STOCK_G_AVENIDA,0)+
-                        COALESCE(p.STOCK_ORIENTALES,0)+COALESCE(p.STOCK_B20_OUTLET,0)+COALESCE(p.STOCK_TRANSITO,0)
-                    ) > 0
-                    AND NOT EXISTS (
-                        SELECT 1 FROM movimientos_stock m
-                        WHERE UPPER(TRIM(m.codigo_producto)) = UPPER(TRIM(p.CODIGO))
-                    )
-                    ORDER BY p.CODIGO ASC
-                    LIMIT :lim
-                    """
-                ),
-                {"lim": min(limite, 50)},
+                )
             ).fetchall()
-            sin_movimiento = [
-                {"codigo": (r[0] or "").strip().upper(), "descripcion": (r[1] or "")[:120]}
-                for r in sm
-            ]
+            for cod, desc in sm:
+                c = (cod or "").strip().upper()
+                if c in mov_codes:
+                    continue
+                sin_movimiento.append({"codigo": c, "descripcion": (desc or "")[:120]})
+                if len(sin_movimiento) >= lim_alertas:
+                    break
         except Exception:
             sin_movimiento = []
 
         movimiento_antiguo = []
         try:
+            # Agregar solo movimientos (rápido) y luego enriquecer con productos activos.
+            # Evita JOIN 28k×movimientos con UPPER(TRIM()) que tarda ~45s.
             neg = f"-{int(dias_sin_mov)} days"
-            ma = sess.execute(
+            ultimos = sess.execute(
                 text(
                     """
-                    SELECT p.CODIGO, p.DESCRIPCION, MAX(m.fecha) AS ultima
-                    FROM productos p
-                    JOIN movimientos_stock m ON UPPER(TRIM(m.codigo_producto)) = UPPER(TRIM(p.CODIGO))
-                    WHERE p.ACTIVO = 1
-                    GROUP BY p.CODIGO
-                    HAVING MAX(m.fecha) < datetime('now', :neg_days)
-                    ORDER BY MAX(m.fecha) ASC
-                    LIMIT :lim
+                    SELECT UPPER(TRIM(codigo_producto)) AS codigo_norm, MAX(fecha) AS ultima
+                    FROM movimientos_stock
+                    GROUP BY UPPER(TRIM(codigo_producto))
+                    HAVING MAX(fecha) < datetime('now', :neg_days)
+                    ORDER BY ultima ASC
+                    LIMIT :lim_scan
                     """
                 ),
-                {"neg_days": neg, "lim": min(limite, 50)},
+                {"neg_days": neg, "lim_scan": max(lim_alertas * 20, 200)},
             ).fetchall()
-            movimiento_antiguo = [
-                {
-                    "codigo": (r[0] or "").strip().upper(),
-                    "descripcion": (r[1] or "")[:120],
-                    "ultima": str(r[2])[:19] if r[2] else "",
+            if ultimos:
+                codigos = [(r[0] or "").strip().upper() for r in ultimos if r[0]]
+                ultima_por = {
+                    (r[0] or "").strip().upper(): r[1] for r in ultimos if r[0]
                 }
-                for r in ma
-            ]
+                placeholders = ", ".join(f":c{i}" for i in range(len(codigos)))
+                params = {f"c{i}": c for i, c in enumerate(codigos)}
+                activos = {
+                    (r[0] or "").strip().upper(): (r[1] or "")[:120]
+                    for r in sess.execute(
+                        text(
+                            f"""
+                            SELECT CODIGO, DESCRIPCION FROM productos
+                            WHERE ACTIVO = 1 AND UPPER(TRIM(CODIGO)) IN ({placeholders})
+                            """
+                        ),
+                        params,
+                    )
+                }
+                for c in codigos:
+                    if c not in activos:
+                        continue
+                    movimiento_antiguo.append(
+                        {
+                            "codigo": c,
+                            "descripcion": activos[c],
+                            "ultima": str(ultima_por.get(c) or "")[:19],
+                        }
+                    )
+                    if len(movimiento_antiguo) >= lim_alertas:
+                        break
         except Exception:
             movimiento_antiguo = []
 

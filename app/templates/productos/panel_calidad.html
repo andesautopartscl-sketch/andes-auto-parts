@@ -4,228 +4,763 @@
 
 {% block extra_head %}
 <style>
-.panel-calidad-compact .topbar { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px; }
-.panel-calidad-compact .page-title { font-size:20px; margin:0; line-height:1.2; letter-spacing:-0.02em; }
-.panel-calidad-compact .page-subtitle { margin:3px 0 0; font-size:12px; line-height:1.35; }
-.panel-calidad-compact .topbar-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-.panel-calidad-compact .topbar-actions .btn { padding:6px 10px; font-size:12px; }
-.panel-calidad-compact .kpi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:8px; margin-bottom:10px; }
-.panel-calidad-compact .kpi {
-  background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:8px 10px;
-  box-shadow:0 4px 12px rgba(15,23,42,.05);
-  display:flex; flex-direction:column; gap:2px;
+.panel-calidad {
+  --pc-navy: #1e3a8a;
+  --pc-text: #0f172a;
+  --pc-muted: #64748b;
+  --pc-line: #e8edf3;
+  --pc-warn: #a16207;
+  --pc-danger: #b91c1c;
+  --pc-ok: #047857;
+  color: var(--pc-text);
+  font-size: 12.5px;
 }
-.panel-calidad-compact .kpi strong { display:block; font-size:1.1rem; color:#0f172a; line-height:1.15; }
-.panel-calidad-compact .kpi span.muted { font-size:11px; color:#64748b; }
-.panel-calidad-compact .card {
-  background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:10px 12px;
-  margin-bottom:10px; box-shadow:0 6px 16px rgba(0,0,0,.04);
+
+.panel-calidad .pc-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
 }
-.panel-calidad-compact .card h2 { margin:0 0 6px; font-size:13px; color:#1e3a8a; }
-.panel-calidad-compact .filters { display:flex; flex-wrap:wrap; gap:8px; align-items:end; margin-bottom:0; }
-.panel-calidad-compact .filters label { display:block; font-size:11px; font-weight:600; color:#475569; margin-bottom:3px; }
-.panel-calidad-compact .filters input { padding:5px 8px; border:1px solid #cbd5e1; border-radius:6px; width:88px; font-size:13px; }
-.panel-calidad-compact .filters .btn { padding:6px 12px; font-size:12px; }
-.panel-calidad-compact .table-wrap { overflow:auto; max-height:min(300px,46vh); border:1px solid #e2e8f0; border-radius:8px; }
-.panel-calidad-compact table { width:100%; border-collapse:collapse; font-size:11px; }
-.panel-calidad-compact th, .panel-calidad-compact td { padding:5px 6px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:top; }
-.panel-calidad-compact th { background:#1e3a8a; color:#fff; font-size:10px; position:sticky; top:0; }
-.panel-calidad-compact .actions-inline a { margin-right:6px; white-space:nowrap; font-size:11px; }
-.panel-calidad-compact .dup-block { margin-bottom:6px; padding:6px 8px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; font-size:12px; }
-.panel-calidad-compact .dup-block .actions-inline { margin-top:4px; line-height:1.5; }
-.panel-calidad-compact .note { font-size:11px; color:#64748b; margin-top:4px; line-height:1.35; }
-.panel-calidad-compact .note-line { margin:0 0 8px; }
-.panel-calidad-compact .panel-subhead { margin:8px 0 4px; font-size:12px; color:#334155; font-weight:600; }
-.panel-calidad-compact .panel-subhead-tight { margin:10px 0 4px; font-size:12px; color:#334155; font-weight:600; }
-.panel-calidad-compact .panel-prio-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
-.panel-calidad-compact .panel-prio-grid h3 { margin:0 0 6px; font-size:12px; }
-body.dark .panel-calidad-compact .card, body.dark .panel-calidad-compact .kpi { background:#1f2937; border-color:#374151; color:#e5e7eb; }
-body.dark .panel-calidad-compact .kpi strong { color:#f8fafc; }
-body.dark .panel-calidad-compact th { background:#1e3a8a; }
+.panel-calidad .pc-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--pc-text);
+}
+.panel-calidad .pc-title::before {
+  content: "";
+  width: 3px;
+  height: 0.95em;
+  border-radius: 999px;
+  background: var(--pc-navy);
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+.panel-calidad .pc-subtitle {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--pc-muted);
+  max-width: 58ch;
+}
+.panel-calidad .pc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.panel-calidad .pc-actions .btn {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+.panel-calidad .pc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 7px 10px;
+  background: #f8fafc;
+  border: 1px solid var(--pc-line);
+  border-radius: 9px;
+}
+.panel-calidad .pc-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+.panel-calidad .pc-filters label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+.panel-calidad .pc-filters input {
+  padding: 4px 7px;
+  border: 1px solid #dbe2ea;
+  border-radius: 6px;
+  width: 78px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  background: #fff;
+  color: var(--pc-text);
+}
+.panel-calidad .pc-filters input:focus {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+.panel-calidad .pc-filters .btn {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+.panel-calidad .pc-catalog {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1px solid var(--pc-line);
+  font-size: 11px;
+  color: #475569;
+  white-space: nowrap;
+}
+.panel-calidad .pc-catalog strong {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--pc-navy);
+}
+
+.panel-calidad .pc-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.panel-calidad .pc-kpi {
+  position: relative;
+  background: #fff;
+  border: 1px solid var(--pc-line);
+  border-radius: 8px;
+  padding: 6px 8px 6px 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.panel-calidad .pc-kpi::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #cbd5e1;
+}
+.panel-calidad .pc-kpi.is-high::before { background: #f87171; }
+.panel-calidad .pc-kpi.is-mid::before { background: #fbbf24; }
+.panel-calidad .pc-kpi.is-low::before { background: #34d399; }
+.panel-calidad .pc-kpi .pc-kpi-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--pc-muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.panel-calidad .pc-kpi .pc-kpi-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--pc-text);
+  line-height: 1.15;
+}
+.panel-calidad .pc-kpi .pc-kpi-pct {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 2px;
+  padding: 0 5px;
+  width: fit-content;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: #f8fafc;
+  color: #64748b;
+}
+.panel-calidad .pc-kpi.is-high .pc-kpi-pct { background: #fef2f2; color: var(--pc-danger); }
+.panel-calidad .pc-kpi.is-mid .pc-kpi-pct { background: #fffbeb; color: var(--pc-warn); }
+.panel-calidad .pc-kpi.is-low .pc-kpi-pct { background: #ecfdf5; color: var(--pc-ok); }
+
+.panel-calidad .pc-card {
+  background: #fff;
+  border: 1px solid var(--pc-line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.panel-calidad .pc-fold {
+  background: #fff;
+  border: 1px solid var(--pc-line);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+.panel-calidad .pc-fold > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  user-select: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--pc-navy);
+  background: #fafbfc;
+}
+.panel-calidad .pc-fold > summary::-webkit-details-marker { display: none; }
+.panel-calidad .pc-fold > summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 4px solid #94a3b8;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  flex-shrink: 0;
+  transition: transform .12s ease;
+}
+.panel-calidad .pc-fold[open] > summary::before {
+  transform: rotate(90deg);
+}
+.panel-calidad .pc-fold > summary:hover {
+  background: #f1f5f9;
+}
+.panel-calidad .pc-fold-title {
+  flex: 1;
+  min-width: 0;
+}
+.panel-calidad .pc-fold-hint {
+  display: none;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--pc-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 42ch;
+}
+.panel-calidad .pc-fold:not([open]) .pc-fold-hint { display: inline; }
+.panel-calidad .pc-fold-body {
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--pc-line);
+}
+.panel-calidad .pc-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.panel-calidad .pc-card h2 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--pc-navy);
+}
+.panel-calidad .pc-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--pc-muted);
+  line-height: 1.35;
+}
+.panel-calidad .pc-card-head + .pc-note,
+.panel-calidad .pc-note + .pc-dup-list,
+.panel-calidad .pc-note + .pc-subhead,
+.panel-calidad .pc-fold-body > .pc-note {
+  margin-top: 0;
+}
+.panel-calidad .pc-fold-body > .pc-note + .pc-dup-list,
+.panel-calidad .pc-fold-body > .pc-note + .pc-subhead {
+  margin-top: 4px;
+}
+
+.panel-calidad .pc-dup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.panel-calidad .pc-dup {
+  padding: 5px 8px;
+  background: #fafbfc;
+  border: 1px solid var(--pc-line);
+  border-radius: 7px;
+}
+.panel-calidad .pc-dup-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.panel-calidad .pc-dup-oem {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--pc-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.panel-calidad .pc-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid var(--pc-line);
+}
+.panel-calidad .pc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.panel-calidad .pc-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-decoration: none;
+  color: #1e40af;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+}
+.panel-calidad .pc-chip:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.panel-calidad .pc-subhead {
+  margin: 8px 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.panel-calidad .pc-subhead:first-of-type { margin-top: 4px; }
+
+.panel-calidad .pc-table-wrap {
+  overflow: auto;
+  max-height: min(220px, 34vh);
+  border: 1px solid var(--pc-line);
+  border-radius: 7px;
+  background: #fff;
+}
+.panel-calidad table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.panel-calidad th,
+.panel-calidad td {
+  padding: 4px 7px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+  vertical-align: middle;
+}
+.panel-calidad th {
+  background: #1e3a8a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.panel-calidad tbody tr:hover td { background: #f8fafc; }
+.panel-calidad td.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 600;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.panel-calidad .pc-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.panel-calidad .pc-link {
+  font-size: 10px;
+  font-weight: 600;
+  color: #334155;
+  text-decoration: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f8fafc;
+  border: 1px solid var(--pc-line);
+}
+.panel-calidad .pc-link:hover {
+  background: #f1f5f9;
+  color: var(--pc-navy);
+}
+.panel-calidad .pc-empty {
+  color: var(--pc-muted);
+  font-size: 11px;
+  padding: 8px !important;
+}
+
+.panel-calidad .pc-prio-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+.panel-calidad .pc-prio {
+  background: #fafbfc;
+  border: 1px solid var(--pc-line);
+  border-radius: 7px;
+  padding: 6px;
+}
+.panel-calidad .pc-prio h3 {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #334155;
+}
+.panel-calidad .pc-prio .pc-note { margin-bottom: 4px; }
+.panel-calidad .pc-prio .pc-table-wrap { max-height: min(180px, 28vh); }
+
+@media (max-width: 720px) {
+  .panel-calidad .pc-title { font-size: 15px; }
+  .panel-calidad .pc-toolbar { align-items: stretch; }
+  .panel-calidad .pc-catalog { width: 100%; justify-content: center; }
+}
+
+body.dark .panel-calidad { --pc-text: #e5e7eb; --pc-muted: #9ca3af; --pc-line: #374151; }
+body.dark .panel-calidad .pc-toolbar,
+body.dark .panel-calidad .pc-card,
+body.dark .panel-calidad .pc-fold,
+body.dark .panel-calidad .pc-kpi,
+body.dark .panel-calidad .pc-table-wrap,
+body.dark .panel-calidad .pc-chip,
+body.dark .panel-calidad .pc-dup {
+  background: #1f2937;
+  border-color: #374151;
+  color: #e5e7eb;
+}
+body.dark .panel-calidad .pc-fold > summary,
+body.dark .panel-calidad .pc-toolbar,
+body.dark .panel-calidad .pc-dup,
+body.dark .panel-calidad .pc-prio { background: #111827; }
+body.dark .panel-calidad .pc-fold > summary:hover { background: #0f172a; }
+body.dark .panel-calidad .pc-kpi .pc-kpi-value,
+body.dark .panel-calidad .pc-dup-oem,
+body.dark .panel-calidad .pc-prio h3 { color: #f8fafc; }
+body.dark .panel-calidad .pc-filters input { background: #111827; border-color: #4b5563; color: #e5e7eb; }
+body.dark .panel-calidad tbody tr:hover td { background: #111827; }
+body.dark .panel-calidad .pc-catalog {
+  background: #111827;
+  border-color: #374151;
+  color: #9ca3af;
+}
+body.dark .panel-calidad .pc-catalog strong { color: #93c5fd; }
+body.dark .panel-calidad .pc-link {
+  background: #111827;
+  border-color: #374151;
+  color: #cbd5e1;
+}
+body.dark .panel-calidad .pc-badge {
+  background: #111827;
+  border-color: #374151;
+  color: #9ca3af;
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="panel-calidad-compact">
-<div class="topbar">
-  <div>
-    <h1 class="page-title">Calidad de datos y alertas de stock</h1>
-    <p class="page-subtitle">Solo lectura: priorizá correcciones desde Editar o Buscar. No cambia datos automáticamente.</p>
+{% macro kpi_tone(pct) -%}
+{%- if pct >= 50 -%}is-high{%- elif pct >= 15 -%}is-mid{%- else -%}is-low{%- endif -%}
+{%- endmacro %}
+
+<div class="panel-calidad">
+  <div class="pc-topbar">
+    <div>
+      <h1 class="pc-title">Calidad de datos y alertas de stock</h1>
+      <p class="pc-subtitle">Solo lectura: priorizá correcciones desde Editar o Buscar. No cambia datos automáticamente.</p>
+    </div>
+    <div class="pc-actions">
+      <a class="btn" href="{{ url_for('productos.buscar') }}" data-module-url="{{ url_for('productos.buscar') }}">Buscar</a>
+      <a class="btn btn-primary" href="{{ url_for('productos.editar_productos_view') }}" data-module-url="{{ url_for('productos.editar_productos_view') }}">Editar</a>
+    </div>
   </div>
-  <div class="topbar-actions">
-    <a class="btn" href="{{ url_for('productos.buscar') }}" data-module-url="{{ url_for('productos.buscar') }}">🔍 Buscar</a>
-    <a class="btn btn-primary" href="{{ url_for('productos.editar_productos_view') }}" data-module-url="{{ url_for('productos.editar_productos_view') }}">✏ Editar</a>
-  </div>
-</div>
 
 {% if total_activos == 0 %}
-<section class="card"><p class="note">No hay productos activos en el catálogo.</p></section>
+  <section class="pc-card"><p class="pc-note">No hay productos activos en el catálogo.</p></section>
 {% else %}
 
-<form class="card filters" method="get" action="{{ url_for('productos.panel_calidad_stock') }}">
-  <div>
-    <label for="limite">Filas por lista</label>
-    <input id="limite" name="limite" type="number" min="10" max="100" value="{{ params.limite }}">
+  <div class="pc-toolbar">
+    <form class="pc-filters" method="get" action="{{ url_for('productos.panel_calidad_stock') }}">
+      <div>
+        <label for="limite">Filas por lista</label>
+        <input id="limite" name="limite" type="number" min="10" max="100" value="{{ params.limite }}">
+      </div>
+      <div>
+        <label for="stock_critico">Stock “bajo” (máx.)</label>
+        <input id="stock_critico" name="stock_critico" type="number" min="0" max="500" value="{{ params.stock_critico }}">
+      </div>
+      <div>
+        <label for="dias_sin_movimiento">Días sin movimiento</label>
+        <input id="dias_sin_movimiento" name="dias_sin_movimiento" type="number" min="30" max="730" value="{{ params.dias_sin_movimiento }}">
+      </div>
+      <div><button type="submit" class="btn btn-primary">Actualizar panel</button></div>
+    </form>
+    <div class="pc-catalog">
+      Activos en catálogo
+      <strong>{{ '{:,}'.format(total_activos) }}</strong>
+    </div>
   </div>
-  <div>
-    <label for="stock_critico">Stock “bajo” (máx.)</label>
-    <input id="stock_critico" name="stock_critico" type="number" min="0" max="500" value="{{ params.stock_critico }}">
+
+  <div class="pc-kpi-grid">
+    <div class="pc-kpi {{ kpi_tone(kpis.sin_imagen.pct) }}">
+      <span class="pc-kpi-label">Sin imagen</span>
+      <span class="pc-kpi-value">{{ '{:,}'.format(kpis.sin_imagen.count) }}</span>
+      <span class="pc-kpi-pct">{{ kpis.sin_imagen.pct }}%</span>
+    </div>
+    <div class="pc-kpi {{ kpi_tone(kpis.sin_categoria.pct) }}">
+      <span class="pc-kpi-label">Sin categoría</span>
+      <span class="pc-kpi-value">{{ '{:,}'.format(kpis.sin_categoria.count) }}</span>
+      <span class="pc-kpi-pct">{{ kpis.sin_categoria.pct }}%</span>
+    </div>
+    <div class="pc-kpi {{ kpi_tone(kpis.sin_oem.pct) }}">
+      <span class="pc-kpi-label">Sin OEM</span>
+      <span class="pc-kpi-value">{{ '{:,}'.format(kpis.sin_oem.count) }}</span>
+      <span class="pc-kpi-pct">{{ kpis.sin_oem.pct }}%</span>
+    </div>
+    <div class="pc-kpi {{ kpi_tone(kpis.sin_homologados.pct) }}">
+      <span class="pc-kpi-label">Sin homologados</span>
+      <span class="pc-kpi-value">{{ '{:,}'.format(kpis.sin_homologados.count) }}</span>
+      <span class="pc-kpi-pct">{{ kpis.sin_homologados.pct }}%</span>
+    </div>
+    <div class="pc-kpi {{ kpi_tone(kpis.stock_cero.pct) }}">
+      <span class="pc-kpi-label">Stock total 0</span>
+      <span class="pc-kpi-value">{{ '{:,}'.format(kpis.stock_cero.count) }}</span>
+      <span class="pc-kpi-pct">{{ kpis.stock_cero.pct }}%</span>
+    </div>
+    <div class="pc-kpi {{ kpi_tone(kpis.stock_bajo.pct) }}">
+      <span class="pc-kpi-label">Stock bajo (≤{{ params.stock_critico }})</span>
+      <span class="pc-kpi-value">{{ '{:,}'.format(kpis.stock_bajo.count) }}</span>
+      <span class="pc-kpi-pct">{{ kpis.stock_bajo.pct }}%</span>
+    </div>
   </div>
-  <div>
-    <label for="dias_sin_movimiento">Días sin movimiento</label>
-    <input id="dias_sin_movimiento" name="dias_sin_movimiento" type="number" min="30" max="730" value="{{ params.dias_sin_movimiento }}">
-  </div>
-  <div><button type="submit" class="btn btn-primary">Actualizar panel</button></div>
-</form>
 
-<p class="note note-line">Productos activos en catálogo: <strong>{{ total_activos }}</strong></p>
-
-<div class="kpi-grid">
-  <div class="kpi"><span class="muted">Sin imagen</span><strong>{{ kpis.sin_imagen.count }}</strong><span class="muted">{{ kpis.sin_imagen.pct }}%</span></div>
-  <div class="kpi"><span class="muted">Sin categoría</span><strong>{{ kpis.sin_categoria.count }}</strong><span class="muted">{{ kpis.sin_categoria.pct }}%</span></div>
-  <div class="kpi"><span class="muted">Sin OEM</span><strong>{{ kpis.sin_oem.count }}</strong><span class="muted">{{ kpis.sin_oem.pct }}%</span></div>
-  <div class="kpi"><span class="muted">Sin homologados</span><strong>{{ kpis.sin_homologados.count }}</strong><span class="muted">{{ kpis.sin_homologados.pct }}%</span></div>
-  <div class="kpi"><span class="muted">Stock total 0</span><strong>{{ kpis.stock_cero.count }}</strong><span class="muted">{{ kpis.stock_cero.pct }}%</span></div>
-  <div class="kpi"><span class="muted">Stock bajo (≤{{ params.stock_critico }})</span><strong>{{ kpis.stock_bajo.count }}</strong><span class="muted">{{ kpis.stock_bajo.pct }}%</span></div>
-</div>
-
-<section class="card">
-  <h2>OEM duplicado (mismo texto en varios códigos)</h2>
-  <p class="note">Revisá en edición cuál corresponde a cada vehículo o unificá referencias.</p>
-  {% if duplicados_oem %}
-    {% for d in duplicados_oem %}
-    <div class="dup-block">
-      <strong>{{ d.oem }}</strong> — {{ d.count }} productos
-      <div class="actions-inline">
-        {% for c in d.codigos %}
-        <a href="{{ url_for('productos.editar_productos_view') }}?codigo={{ c|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ c|urlencode }}">{{ c }}</a>
+  <details class="pc-fold">
+    <summary>
+      <span class="pc-fold-title">OEM duplicado</span>
+      <span class="pc-badge">{{ duplicados_oem|length }} grupos</span>
+      <span class="pc-fold-hint">Mismo texto OEM en varios códigos</span>
+    </summary>
+    <div class="pc-fold-body">
+      <p class="pc-note">Mismo texto OEM en varios códigos. Revisá en edición cuál corresponde a cada vehículo o unificá referencias.</p>
+      {% if duplicados_oem %}
+      <div class="pc-dup-list">
+        {% for d in duplicados_oem %}
+        <div class="pc-dup">
+          <div class="pc-dup-meta">
+            <span class="pc-dup-oem">{{ d.oem }}</span>
+            <span class="pc-badge">{{ d.count }} productos</span>
+          </div>
+          <div class="pc-chips">
+            {% for c in d.codigos %}
+            <a class="pc-chip" href="{{ url_for('productos.editar_productos_view') }}?codigo={{ c|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ c|urlencode }}">{{ c }}</a>
+            {% endfor %}
+          </div>
+        </div>
         {% endfor %}
       </div>
+      {% else %}
+      <p class="pc-note" style="margin-top:6px;">No se detectaron OEM repetidos entre activos.</p>
+      {% endif %}
     </div>
-    {% endfor %}
-  {% else %}
-    <p class="note">No se detectaron OEM repetidos entre activos.</p>
-  {% endif %}
-</section>
+  </details>
 
-<section class="card">
-  <h2>Alertas de movimiento (bodega)</h2>
-  <p class="note">Con stock &gt; 0 pero sin ningún movimiento en historial, o con último movimiento anterior a {{ params.dias_sin_movimiento }} días.</p>
-  <h3 class="panel-subhead">Sin movimientos registrados</h3>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Código</th><th>Descripción</th><th>Acciones</th></tr></thead>
-      <tbody>
-        {% for r in listas.sin_movimiento %}
-        <tr>
-          <td>{{ r.codigo }}</td>
-          <td>{{ r.descripcion }}</td>
-          <td class="actions-inline">
-            <a href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a>
-            <a href="{{ url_for('productos.buscar') }}?q={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.buscar') }}?q={{ r.codigo|urlencode }}">Buscar</a>
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="3" class="note">Ninguno en los primeros resultados.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <h3 class="panel-subhead-tight">Último movimiento antiguo</h3>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Código</th><th>Descripción</th><th>Última fecha</th><th>Acciones</th></tr></thead>
-      <tbody>
-        {% for r in listas.movimiento_antiguo %}
-        <tr>
-          <td>{{ r.codigo }}</td>
-          <td>{{ r.descripcion }}</td>
-          <td>{{ r.ultima or '—' }}</td>
-          <td class="actions-inline">
-            <a href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a>
-            <a href="{{ url_for('bodega.movimientos') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('bodega.movimientos') }}?codigo={{ r.codigo|urlencode }}">Movimientos</a>
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="4" class="note">Ninguno en los primeros resultados.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
+  <details class="pc-fold">
+    <summary>
+      <span class="pc-fold-title">Alertas de movimiento</span>
+      <span class="pc-fold-hint">Stock &gt; 0 sin historial o movimiento antiguo</span>
+    </summary>
+    <div class="pc-fold-body">
+    <p class="pc-note">Con stock &gt; 0 pero sin historial, o con último movimiento anterior a {{ params.dias_sin_movimiento }} días.</p>
 
-<section class="card">
-  <h2>Priorizá corrección (primeras {{ params.limite }} por categoría)</h2>
-  <div class="panel-prio-grid">
-    <div>
-      <h3>Sin imagen</h3>
-      <div class="table-wrap">
-        <table><thead><tr><th>Código</th><th></th></tr></thead>
+    <h3 class="pc-subhead">Sin movimientos registrados</h3>
+    <div class="pc-table-wrap">
+      <table>
+        <thead><tr><th>Código</th><th>Descripción</th><th>Acciones</th></tr></thead>
         <tbody>
-          {% for r in listas.sin_imagen %}
-          <tr><td>{{ r.codigo }}</td><td><a href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a></td></tr>
-          {% else %}<tr><td colspan="2" class="note">—</td></tr>{% endfor %}
-        </tbody></table>
+          {% for r in listas.sin_movimiento %}
+          <tr>
+            <td class="code">{{ r.codigo }}</td>
+            <td>{{ r.descripcion }}</td>
+            <td>
+              <div class="pc-row-actions">
+                <a class="pc-link" href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a>
+                <a class="pc-link" href="{{ url_for('productos.buscar') }}?q={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.buscar') }}?q={{ r.codigo|urlencode }}">Buscar</a>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" class="pc-empty">Ninguno en los primeros resultados.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="pc-subhead">Último movimiento antiguo</h3>
+    <div class="pc-table-wrap">
+      <table>
+        <thead><tr><th>Código</th><th>Descripción</th><th>Última fecha</th><th>Acciones</th></tr></thead>
+        <tbody>
+          {% for r in listas.movimiento_antiguo %}
+          <tr>
+            <td class="code">{{ r.codigo }}</td>
+            <td>{{ r.descripcion }}</td>
+            <td>{{ r.ultima or '—' }}</td>
+            <td>
+              <div class="pc-row-actions">
+                <a class="pc-link" href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a>
+                <a class="pc-link" href="{{ url_for('bodega.movimientos') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('bodega.movimientos') }}?codigo={{ r.codigo|urlencode }}">Movimientos</a>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="pc-empty">Ninguno en los primeros resultados.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    </div>
+  </details>
+
+  <details class="pc-fold">
+    <summary>
+      <span class="pc-fold-title">Priorizá corrección</span>
+      <span class="pc-badge">{{ params.limite }} por categoría</span>
+      <span class="pc-fold-hint">Listas rápidas para editar</span>
+    </summary>
+    <div class="pc-fold-body">
+    <div class="pc-prio-grid">
+      <div class="pc-prio">
+        <h3>Sin imagen</h3>
+        <div class="pc-table-wrap">
+          <table>
+            <thead><tr><th>Código</th><th></th></tr></thead>
+            <tbody>
+              {% for r in listas.sin_imagen %}
+              <tr>
+                <td class="code">{{ r.codigo }}</td>
+                <td><a class="pc-link" href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a></td>
+              </tr>
+              {% else %}<tr><td colspan="2" class="pc-empty">—</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="pc-prio">
+        <h3>Sin categoría</h3>
+        <p class="pc-note"><a class="pc-link" href="{{ url_for('productos.productos_sin_categoria') }}" data-module-url="{{ url_for('productos.productos_sin_categoria') }}">Listado completo →</a></p>
+        <div class="pc-table-wrap">
+          <table>
+            <thead><tr><th>Código</th><th></th></tr></thead>
+            <tbody>
+              {% for r in listas.sin_categoria %}
+              <tr>
+                <td class="code">{{ r.codigo }}</td>
+                <td><a class="pc-link" href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a></td>
+              </tr>
+              {% else %}<tr><td colspan="2" class="pc-empty">—</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="pc-prio">
+        <h3>Sin OEM</h3>
+        <div class="pc-table-wrap">
+          <table>
+            <thead><tr><th>Código</th><th></th></tr></thead>
+            <tbody>
+              {% for r in listas.sin_oem %}
+              <tr>
+                <td class="code">{{ r.codigo }}</td>
+                <td><a class="pc-link" href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a></td>
+              </tr>
+              {% else %}<tr><td colspan="2" class="pc-empty">—</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="pc-prio">
+        <h3>Sin homologados</h3>
+        <div class="pc-table-wrap">
+          <table>
+            <thead><tr><th>Código</th><th></th></tr></thead>
+            <tbody>
+              {% for r in listas.sin_homologados %}
+              <tr>
+                <td class="code">{{ r.codigo }}</td>
+                <td><a class="pc-link" href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a></td>
+              </tr>
+              {% else %}<tr><td colspan="2" class="pc-empty">—</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="pc-prio">
+        <h3>Stock total 0</h3>
+        <div class="pc-table-wrap">
+          <table>
+            <thead><tr><th>Código</th><th>Stock</th><th></th></tr></thead>
+            <tbody>
+              {% for r in listas.stock_cero %}
+              <tr>
+                <td class="code">{{ r.codigo }}</td>
+                <td>{{ r.stock }}</td>
+                <td><a class="pc-link" href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a></td>
+              </tr>
+              {% else %}<tr><td colspan="3" class="pc-empty">—</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="pc-prio">
+        <h3>Stock bajo (≤{{ params.stock_critico }})</h3>
+        <div class="pc-table-wrap">
+          <table>
+            <thead><tr><th>Código</th><th>Stock</th><th></th></tr></thead>
+            <tbody>
+              {% for r in listas.stock_bajo %}
+              <tr>
+                <td class="code">{{ r.codigo }}</td>
+                <td>{{ r.stock }}</td>
+                <td><a class="pc-link" href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a></td>
+              </tr>
+              {% else %}<tr><td colspan="3" class="pc-empty">—</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
-    <div>
-      <h3>Sin categoría</h3>
-      <p class="note" style="margin:0 0 6px;"><a href="{{ url_for('productos.productos_sin_categoria') }}" data-module-url="{{ url_for('productos.productos_sin_categoria') }}">Listado completo y autoasignar en lote →</a></p>
-      <div class="table-wrap">
-        <table><thead><tr><th>Código</th><th></th></tr></thead>
-        <tbody>
-          {% for r in listas.sin_categoria %}
-          <tr><td>{{ r.codigo }}</td><td><a href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a></td></tr>
-          {% else %}<tr><td colspan="2" class="note">—</td></tr>{% endfor %}
-        </tbody></table>
-      </div>
     </div>
-    <div>
-      <h3>Sin OEM</h3>
-      <div class="table-wrap">
-        <table><thead><tr><th>Código</th><th></th></tr></thead>
-        <tbody>
-          {% for r in listas.sin_oem %}
-          <tr><td>{{ r.codigo }}</td><td><a href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a></td></tr>
-          {% else %}<tr><td colspan="2" class="note">—</td></tr>{% endfor %}
-        </tbody></table>
-      </div>
-    </div>
-    <div>
-      <h3>Sin homologados</h3>
-      <div class="table-wrap">
-        <table><thead><tr><th>Código</th><th></th></tr></thead>
-        <tbody>
-          {% for r in listas.sin_homologados %}
-          <tr><td>{{ r.codigo }}</td><td><a href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a></td></tr>
-          {% else %}<tr><td colspan="2" class="note">—</td></tr>{% endfor %}
-        </tbody></table>
-      </div>
-    </div>
-    <div>
-      <h3>Stock total 0</h3>
-      <div class="table-wrap">
-        <table><thead><tr><th>Código</th><th>Stock</th><th></th></tr></thead>
-        <tbody>
-          {% for r in listas.stock_cero %}
-          <tr><td>{{ r.codigo }}</td><td>{{ r.stock }}</td><td><a href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a></td></tr>
-          {% else %}<tr><td colspan="3" class="note">—</td></tr>{% endfor %}
-        </tbody></table>
-      </div>
-    </div>
-    <div>
-      <h3>Stock bajo (≤ {{ params.stock_critico }})</h3>
-      <div class="table-wrap">
-        <table><thead><tr><th>Código</th><th>Stock</th><th></th></tr></thead>
-        <tbody>
-          {% for r in listas.stock_bajo %}
-          <tr><td>{{ r.codigo }}</td><td>{{ r.stock }}</td><td><a href="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}" data-module-url="{{ url_for('productos.editar_productos_view') }}?codigo={{ r.codigo|urlencode }}">Editar</a></td></tr>
-          {% else %}<tr><td colspan="3" class="note">—</td></tr>{% endfor %}
-        </tbody></table>
-      </div>
-    </div>
-  </div>
-</section>
+  </details>
 
 {% endif %}
 </div>

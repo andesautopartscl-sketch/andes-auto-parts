@@ -33,6 +33,41 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     gap: 12px;
     margin-bottom: 12px;
 }
+.ing-ver-toolbar-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+}
+.ing-ver-pdf {
+    display: inline-flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 11px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #0f172a;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+}
+.ing-ver-pdf:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+}
+.ing-ver-pdf.is-primary {
+    background: #0f766e;
+    border-color: #0f766e;
+    color: #fff;
+}
+.ing-ver-pdf.is-primary:hover {
+    background: #0d9488;
+    border-color: #0d9488;
+}
 .ing-ver-title-row {
     display: flex;
     align-items: center;
@@ -286,7 +321,17 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
             </div>
             <p class="ing-ver-kicker">Documento de ingreso · solo lectura</p>
         </div>
-        <div>
+        <div class="ing-ver-toolbar-actions">
+            <button type="button" class="ing-ver-pdf" id="ingresoVerPdfBodega"
+                    data-preview-url="{{ url_for('bodega.ingreso_pdf', doc_id=doc.id, modo='bodega', preview=1) }}"
+                    data-download-url="{{ url_for('bodega.ingreso_pdf', doc_id=doc.id, modo='bodega') }}"
+                    title="Vista previa PDF sin valores de costo">PDF bodega</button>
+            {% if puede_ver_finanzas %}
+            <button type="button" class="ing-ver-pdf is-primary" id="ingresoVerPdfCompleto"
+                    data-preview-url="{{ url_for('bodega.ingreso_pdf', doc_id=doc.id, modo='completo', preview=1) }}"
+                    data-download-url="{{ url_for('bodega.ingreso_pdf', doc_id=doc.id, modo='completo') }}"
+                    title="Vista previa PDF completo con V. neto">PDF completo</button>
+            {% endif %}
             {% if embed_modal %}
             <button type="button" class="ing-ver-back" id="ingresoVerBackBtn">← Volver</button>
             {% else %}
@@ -401,6 +446,36 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
         </div>
     </section>
 </div>
+
+{% include 'partials/ingreso_pdf_preview_modal.html' %}
+
+<script>
+(function () {
+    function bindPdfBtn(id, title, sub) {
+        var btn = document.getElementById(id);
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+            if (typeof window.openIngresoPdfPreview !== 'function') return;
+            window.openIngresoPdfPreview({
+                previewUrl: btn.getAttribute('data-preview-url') || '',
+                downloadUrl: btn.getAttribute('data-download-url') || '',
+                title: title,
+                sub: sub
+            });
+        });
+    }
+    bindPdfBtn(
+        'ingresoVerPdfBodega',
+        'Vista previa · PDF bodega',
+        'Documento {{ doc.numero_documento or doc.id }} · sin valores de costo. Revisa y descarga si corresponde.'
+    );
+    bindPdfBtn(
+        'ingresoVerPdfCompleto',
+        'Vista previa · PDF completo',
+        'Documento {{ doc.numero_documento or doc.id }} · incluye V. neto. Revisa y descarga si corresponde.'
+    );
+})();
+</script>
 
 {% if embed_modal %}
 <script>

@@ -69,6 +69,46 @@ body.search-lite-app .content {
 	overflow-x:auto;
 }
 
+.module-loading {
+	display:flex;
+	flex-direction:column;
+	align-items:center;
+	justify-content:center;
+	min-height:min(52vh, 420px);
+	padding:48px 24px;
+	text-align:center;
+	color:#64748b;
+}
+.module-loading-spinner {
+	width:36px;
+	height:36px;
+	border:3px solid #e2e8f0;
+	border-top-color:#1e3a8a;
+	border-radius:50%;
+	animation:module-loading-spin .7s linear infinite;
+	margin-bottom:16px;
+}
+.module-loading-title {
+	margin:0;
+	font-size:15px;
+	font-weight:600;
+	color:#334155;
+	letter-spacing:-0.01em;
+}
+.module-loading-sub {
+	margin:6px 0 0;
+	font-size:13px;
+	color:#94a3b8;
+}
+@keyframes module-loading-spin {
+	to { transform: rotate(360deg); }
+}
+body.dark .module-loading-title { color:#e5e7eb; }
+body.dark .module-loading-spinner {
+	border-color:#374151;
+	border-top-color:#60a5fa;
+}
+
 .topbar {
 	display:flex;
 	align-items:flex-start;
@@ -449,6 +489,10 @@ body.is-embed-modal #appMainContent {
 {% endif %}
 
 {% if not search_lite|default(false) and not embed_modal|default(false) %}
+{% include 'partials/product_menu_auth_modal.html' %}
+{% endif %}
+
+{% if not search_lite|default(false) and not embed_modal|default(false) %}
 {% include 'partials/admin_center_workspace.html' %}
 {% endif %}
 
@@ -723,7 +767,12 @@ function toggleMenu(id) {
 	}
 
 	function showLoading(container) {
-		container.innerHTML = '<div style="padding:60px 24px;text-align:center;color:#64748b;font-size:15px;">⏳ Cargando módulo...</div>';
+		container.innerHTML =
+			'<div class="module-loading" role="status" aria-live="polite">' +
+			'<div class="module-loading-spinner" aria-hidden="true"></div>' +
+			'<p class="module-loading-title">Cargando módulo</p>' +
+			'<p class="module-loading-sub">Un momento…</p>' +
+			'</div>';
 	}
 
 	function currentPath() {
@@ -1165,6 +1214,15 @@ function toggleMenu(id) {
 	document.addEventListener('click', function (event) {
 		// Permitir abrir links en nueva pestaña / ventana sin interceptar.
 		if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+			return;
+		}
+
+		var protectedProductTrigger = event.target.closest('[data-product-auth]');
+		if (protectedProductTrigger && protectedProductTrigger.getAttribute('data-product-auth-approved') !== '1') {
+			event.preventDefault();
+			if (typeof window.openProductMenuAuthorization === 'function') {
+				window.openProductMenuAuthorization(protectedProductTrigger);
+			}
 			return;
 		}
 

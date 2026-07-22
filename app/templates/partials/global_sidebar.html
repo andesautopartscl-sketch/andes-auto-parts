@@ -1,6 +1,7 @@
 {% set nombre_usuario = usuario_nombre if usuario_nombre else session.get('user', 'Invitado') %}
 {% set inicial_usuario = (nombre_usuario[:1] | upper) if nombre_usuario else 'I' %}
 {% set rol_actual = (session.get('rol', '') | lower) %}
+{% set acceso_productos_directo = ('superadmin' in rol_actual) %}
 {% set puede_gestionar_excel = (user_permissions.productos_importar_exportar if user_permissions is defined else ('admin' in rol_actual)) %}
 {% set puede_editar_productos = (user_permissions.productos_crear_editar if user_permissions is defined else ('admin' in rol_actual)) %}
 {% set puede_mod_seguridad = (user_permissions.mod_seguridad if user_permissions is defined else ('admin' in rol_actual)) %}
@@ -527,31 +528,40 @@ html {
 				   href="{{ url_for('productos.buscar') }}"
 				   data-module-url="{{ url_for('productos.buscar') }}">🔍 Buscar</a>
 				<a href="{{ url_for('productos.modal_crear_producto') }}"
+				   {% if not acceso_productos_directo %}data-product-auth="Crear producto"{% endif %}
 				   data-modal-url="{{ url_for('productos.modal_crear_producto') }}">➕ Crear</a>
 				<a class="{% if active_page == 'productos_editar' %}nav-active{% endif %}"
 				   href="{{ url_for('productos.editar_productos_view') }}"
+				   {% if not acceso_productos_directo %}data-product-auth="Editar productos"{% endif %}
 				   data-module-url="{{ url_for('productos.editar_productos_view') }}">✏ Editar</a>
 				<a class="{% if active_page == 'productos_desactivados' %}nav-active{% endif %}"
 				   href="{{ url_for('productos.ver_desactivados') }}"
+				   {% if not acceso_productos_directo %}data-product-auth="Productos desactivados"{% endif %}
 				   data-module-url="{{ url_for('productos.ver_desactivados') }}">📦 Desactivados</a>
 				<a class="{% if active_page == 'productos_auditoria' %}nav-active{% endif %}"
 				   href="{{ url_for('productos.productos_auditoria') }}"
+				   {% if not acceso_productos_directo %}data-product-auth="Auditoría de productos"{% endif %}
 				   data-module-url="{{ url_for('productos.productos_auditoria') }}">🧾 Auditoría</a>
 				<a class="{% if active_page == 'productos_panel_calidad' %}nav-active{% endif %}"
 				   href="{{ url_for('productos.panel_calidad_stock') }}"
+				   {% if not acceso_productos_directo %}data-product-auth="Calidad y stock"{% endif %}
 				   data-module-url="{{ url_for('productos.panel_calidad_stock') }}">📊 Calidad y stock</a>
 				<a class="{% if active_page == 'productos_sin_categoria' %}nav-active{% endif %}"
 				   href="{{ url_for('productos.productos_sin_categoria') }}"
+				   {% if not acceso_productos_directo %}data-product-auth="Productos sin categoría"{% endif %}
 				   data-module-url="{{ url_for('productos.productos_sin_categoria') }}">🏷 Sin categoría</a>
 				{% if puede_editar_productos %}
 				<a class="{% if active_page == 'productos_importar_imagenes' %}nav-active{% endif %}"
 				   href="{{ url_for('productos.importar_imagenes_cloudinary_view') }}"
+				   {% if not acceso_productos_directo %}data-product-auth="Importar imágenes"{% endif %}
 				   data-module-url="{{ url_for('productos.importar_imagenes_cloudinary_view') }}">🖼 Importar imágenes</a>
 				{% endif %}
 				{% if puede_gestionar_excel %}
 				<a href="{{ url_for('productos.buscar') }}#exportar-excel"
+				   {% if not acceso_productos_directo %}data-product-auth="Exportar Excel"{% endif %}
 				   data-module-url="{{ url_for('productos.buscar') }}#exportar-excel">📥 Exportar Excel</a>
 				<a href="{{ url_for('productos.buscar') }}#importar-excel"
+				   {% if not acceso_productos_directo %}data-product-auth="Importar Excel"{% endif %}
 				   data-module-url="{{ url_for('productos.buscar') }}#importar-excel">📤 Importar Excel</a>
 				{% endif %}
 			</div>

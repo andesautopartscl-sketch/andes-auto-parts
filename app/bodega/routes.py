@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from sqlalchemy import bindparam, func, or_, select, text
 import barcode
 import qrcode
@@ -39,6 +39,7 @@ from .models import (
 )
 from . import catalogo as bodega_catalogo
 from . import variantes_ops
+from .ingreso_pdf import build_ingreso_detalle_pdf
 from .marcas_ref_cl import MARCAS_REF_AUTOMOTRIZ_CL
 from app.inventario.models import LabelPrintHistory, TransferenciaStock
 
@@ -3173,6 +3174,13 @@ def ingreso_historial():
         for r in rows
     }
 
+    puede_ver_finanzas = user_can_view_finanzas(session.get("user"), session.get("rol"))
+    if not puede_ver_finanzas:
+        # No filtrar costos al cliente (modal detalle / JSON embebido).
+        for _doc_id, items_list in detalles_items_por_doc.items():
+            for it in items_list:
+                it.pop("valor_neto", None)
+
     return render_template(
         "bodega/ingreso_historial.html",
         **_base_context(
@@ -3190,6 +3198,7 @@ def ingreso_historial():
             detalles_items_por_doc=detalles_items_por_doc,
             codigos_internos_por_doc=codigos_internos_por_doc,
             numero_documento_por_doc=numero_documento_por_doc,
+            puede_ver_finanzas=puede_ver_finanzas,
         ),
     )
 
@@ -3286,6 +3295,68 @@ def ingreso_ver(doc_id: int):
             _partial=_ingreso_wants_embed_partial(),
             **detalle,
         ),
+    )
+
+
+@bodega_bp.route("/ingreso/pdf/<int:doc_id>", methods=["GET"])
+@admin_required
+def ingreso_pdf(doc_id: int):
+    """PDF del detalle de ingreso.
+
+    modo=bodega (default): sin V. neto — lista para etiquetar.
+    modo=completo: incluye costos; requiere permiso de finanzas.
+    """
+    if not has_permission(session.get("user"), session.get("rol"), "bodega_ingreso"):
+        return _deny_bodega_perm("No tienes permiso para ver ingresos de stock.")
+
+    modo = (request.args.get("modo") or "bodega").strip().lower()
+    if modo not in {"bodega", "completo"}:
+        modo = "bodega"
+
+    puede_ver_finanzas = user_can_view_finanzas(session.get("user"), session.get("rol"))
+    include_valores = modo == "completo"
+    if include_valores and not puede_ver_finanzas:
+        flash("No tienes permiso para descargar el PDF con valores de costo.", "error")
+        return redirect(url_for("bodega.ingreso_historial"))
+
+    doc = db.session.get(IngresoDocumento, doc_id)
+    if doc is None:
+        flash("Ingreso no encontrado.", "error")
+        return redirect(url_for("bodega.ingreso_historial"))
+
+    items = (
+        IngresoDocumentoItem.query
+        .filter_by(ingreso_documento_id=doc.id)
+        .order_by(IngresoDocumentoItem.id.asc())
+        .all()
+    )
+    detalle = _ingreso_detalle_contexto(doc, items)
+    rut_fmt = format_rut(doc.proveedor_rut or "") if (doc.proveedor_rut or "").strip() else ""
+
+    try:
+        pdf_bytes = build_ingreso_detalle_pdf(
+            doc=doc,
+            items=items,
+            proveedor_codes=detalle.get("proveedor_codes") or {},
+            include_valores=include_valores,
+            proveedor_rut_fmt=rut_fmt or (doc.proveedor_rut or ""),
+        )
+    except Exception as exc:
+        current_app.logger.exception("Error generando PDF de ingreso #%s: %s", doc_id, exc)
+        flash("No se pudo generar el PDF del ingreso.", "error")
+        return redirect(url_for("bodega.ingreso_ver", doc_id=doc_id))
+
+    doc_num = (doc.numero_documento or "").strip() or f"ING-{doc.id}"
+    safe_num = re.sub(r"[^\w.\-]+", "_", doc_num)[:80] or str(doc.id)
+    suffix = "completo" if include_valores else "bodega"
+    filename = f"ingreso_{safe_num}_{suffix}.pdf"
+    # preview=1 → vista en navegador (iframe); sin preview → descarga.
+    preview = (request.args.get("preview") or "").strip().lower() in {"1", "true", "yes"}
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=not preview,
+        download_name=filename,
     )
 
 

@@ -1,0 +1,173 @@
+{# Modal reutilizable: vista previa PDF de ingreso antes de descargar. #}
+<style>
+.ingreso-pdf-preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1300;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.55);
+}
+.ingreso-pdf-preview-modal.open {
+    display: flex;
+}
+.ingreso-pdf-preview-card {
+    width: min(1120px, 96vw);
+    height: min(88vh, 900px);
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.32);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.ingreso-pdf-preview-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+.ingreso-pdf-preview-head h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.ingreso-pdf-preview-head p {
+    margin: 3px 0 0;
+    font-size: 12px;
+    color: #64748b;
+}
+.ingreso-pdf-preview-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+}
+.ingreso-pdf-preview-actions .btn,
+.ingreso-pdf-preview-actions a {
+    font-size: 12px;
+    padding: 6px 12px;
+    min-height: 32px;
+    border-radius: 8px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+}
+.ingreso-pdf-preview-actions .btn-primary,
+.ingreso-pdf-preview-actions a.btn-primary {
+    background: #0f766e;
+    border: 1px solid #0f766e;
+    color: #fff;
+}
+.ingreso-pdf-preview-actions .btn-primary:hover,
+.ingreso-pdf-preview-actions a.btn-primary:hover {
+    background: #0d9488;
+    border-color: #0d9488;
+    color: #fff;
+}
+.ingreso-pdf-preview-body {
+    flex: 1;
+    min-height: 0;
+    background: #e2e8f0;
+    position: relative;
+}
+.ingreso-pdf-preview-body iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #fff;
+}
+.ingreso-pdf-preview-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: #475569;
+    background: #f1f5f9;
+    pointer-events: none;
+}
+.ingreso-pdf-preview-loading[hidden] {
+    display: none !important;
+}
+</style>
+
+<div id="ingresoPdfPreviewModal" class="ingreso-pdf-preview-modal" aria-hidden="true">
+    <div class="ingreso-pdf-preview-card" role="dialog" aria-modal="true" aria-labelledby="ingresoPdfPreviewTitle">
+        <div class="ingreso-pdf-preview-head">
+            <div>
+                <h3 id="ingresoPdfPreviewTitle">Vista previa PDF</h3>
+                <p id="ingresoPdfPreviewSub">Revisa el documento antes de descargarlo.</p>
+            </div>
+            <div class="ingreso-pdf-preview-actions">
+                <a class="btn btn-primary" id="ingresoPdfPreviewDownload" href="#" download>Descargar PDF</a>
+                <button type="button" class="btn" id="ingresoPdfPreviewClose">Cerrar</button>
+            </div>
+        </div>
+        <div class="ingreso-pdf-preview-body">
+            <div class="ingreso-pdf-preview-loading" id="ingresoPdfPreviewLoading">Cargando vista previa…</div>
+            <iframe id="ingresoPdfPreviewFrame" title="Vista previa del PDF de ingreso"></iframe>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var modal = document.getElementById('ingresoPdfPreviewModal');
+    var titleEl = document.getElementById('ingresoPdfPreviewTitle');
+    var subEl = document.getElementById('ingresoPdfPreviewSub');
+    var frame = document.getElementById('ingresoPdfPreviewFrame');
+    var loading = document.getElementById('ingresoPdfPreviewLoading');
+    var dl = document.getElementById('ingresoPdfPreviewDownload');
+    var closeBtn = document.getElementById('ingresoPdfPreviewClose');
+    if (!modal || !titleEl || !subEl || !frame || !loading || !dl || !closeBtn) return;
+
+    function closePreview() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+        try { frame.removeAttribute('src'); } catch (_) {}
+        loading.hidden = false;
+    }
+
+    function openPreview(opts) {
+        opts = opts || {};
+        var previewUrl = opts.previewUrl || '';
+        var downloadUrl = opts.downloadUrl || previewUrl;
+        var title = opts.title || 'Vista previa PDF';
+        var sub = opts.sub || 'Revisa el documento antes de descargarlo.';
+        if (!previewUrl) return;
+
+        titleEl.textContent = title;
+        subEl.textContent = sub;
+        dl.setAttribute('href', downloadUrl);
+        loading.hidden = false;
+        frame.onload = function () { loading.hidden = true; };
+        frame.src = previewUrl;
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    closeBtn.addEventListener('click', closePreview);
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) closePreview();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) {
+            e.stopPropagation();
+            closePreview();
+        }
+    }, true);
+
+    window.openIngresoPdfPreview = openPreview;
+    window.closeIngresoPdfPreview = closePreview;
+})();
+</script>

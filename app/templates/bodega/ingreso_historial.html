@@ -93,6 +93,7 @@
     border-bottom: 1px solid #f1f5f9;
     line-height: 1.35;
     font-size: 11px;
+    font-weight: 400;
 }
 .table.ingreso-historial-table tbody td.ingreso-historial-acciones {
     vertical-align: middle;
@@ -100,7 +101,7 @@
     padding-bottom: 4px;
 }
 .table.ingreso-historial-table tbody td strong {
-    font-weight: 600;
+    font-weight: 400;
     font-size: 11px;
 }
 .table.ingreso-historial-table tbody tr:hover td {
@@ -113,18 +114,42 @@
     color: #94a3b8;
     font-weight: 400;
 }
+.table.ingreso-historial-table .ingreso-hist-hora-reg {
+    font-size: 10px;
+    margin-top: 1px;
+    line-height: 1.25;
+    color: #64748b;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+}
 .table.ingreso-historial-table .status-badge {
-    font-size: 9px;
-    padding: 2px 5px;
+    font-size: 11px !important;
+    font-weight: 400;
+    padding: 1px 5px;
+    letter-spacing: 0;
+    line-height: 1.35;
+}
+.table.ingreso-historial-table tbody td.ingreso-hist-usuario {
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: #334155;
 }
 .ingreso-historial-acciones {
     white-space: normal;
     min-width: 72px;
     max-width: 92px;
 }
-.btn-ingreso-opciones-open {
+.table.ingreso-historial-table .btn-ingreso-opciones-open {
     width: 100%;
     justify-content: center;
+    font-size: 11px !important;
+    font-weight: 400;
+    font-family: inherit;
+    min-height: 22px;
+    padding: 2px 6px;
+    letter-spacing: 0;
+    line-height: 1.35;
 }
 .ingreso-opciones-modal {
     position: fixed;
@@ -133,41 +158,55 @@
     align-items: center;
     justify-content: center;
     padding: 18px;
-    background: rgba(15, 23, 42, 0.48);
+    background: rgba(15, 23, 42, 0.52);
     z-index: 1195;
+    backdrop-filter: blur(2px);
 }
 .ingreso-opciones-modal.open {
     display: flex;
 }
 .ingreso-opciones-card {
-    width: min(380px, 100%);
+    width: min(400px, 100%);
     background: #fff;
-    border: 1px solid #dbe3ef;
+    border: 1px solid #e2e8f0;
     border-radius: 12px;
-    box-shadow: 0 20px 55px rgba(15, 23, 42, 0.28);
-    padding: 14px 14px 12px;
+    box-shadow: 0 12px 36px rgba(15, 23, 42, 0.16);
+    padding: 0;
+    overflow: hidden;
+}
+.ingreso-opciones-card-head {
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    background: #fff;
 }
 .ingreso-opciones-title {
     margin: 0 0 4px;
-    font-size: 16px;
+    font-size: 12px;
     font-weight: 600;
-    color: #0f172a;
+    color: #334155;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
 }
 .ingreso-opciones-sub {
-    margin: 0 0 12px;
-    font-size: 12px;
-    color: #64748b;
-    line-height: 1.35;
+    margin: 0;
+    font-size: 10px;
+    color: #94a3b8;
+    line-height: 1.4;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+.ingreso-opciones-body {
+    padding: 14px 16px 12px;
 }
 .ingreso-opciones-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
 }
 .ingreso-opciones-vigente {
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 .ingreso-opciones-danger-inner {
     margin: 0 !important;
@@ -175,9 +214,81 @@
 .ingreso-opciones-footer {
     display: flex;
     justify-content: flex-end;
-    padding-top: 4px;
+    padding: 10px 16px 12px;
     border-top: 1px solid #f1f5f9;
-    margin-top: 4px;
+    background: #fff;
+}
+.ingreso-opciones-modal .ing-acc-btn {
+    min-height: 28px;
+    padding: 0 11px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: inherit;
+    border-radius: 7px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.ingreso-opciones-modal .ing-acc-btn-primary {
+    background: #334155;
+    border-color: #334155;
+    box-shadow: none;
+}
+.ingreso-opciones-modal .ing-acc-btn-primary:hover {
+    background: #1e293b;
+    border-color: #1e293b;
+    filter: none;
+}
+.ingreso-opciones-modal .ing-acc-btn-outline {
+    background: #fff;
+    color: #475569;
+    border-color: #e2e8f0;
+}
+.ingreso-opciones-modal .ing-acc-btn-outline:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+.ingreso-opciones-modal .ing-acc-actions-danger-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px;
+    background: #fafafa;
+    border: 1px solid #f1f5f9;
+    border-radius: 8px;
+}
+.ingreso-opciones-modal .input-motivo {
+    flex: 1 1 auto;
+    min-width: 120px;
+    min-height: 28px;
+    padding: 0 10px;
+    font-size: 10px;
+    font-family: inherit;
+    border-radius: 7px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #334155;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    box-sizing: border-box;
+}
+.ingreso-opciones-modal .input-motivo::placeholder {
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.ingreso-opciones-modal .ing-acc-btn-danger {
+    flex: 0 0 auto;
+    background: #fff;
+    color: #be123c;
+    border-color: #fecdd3;
+    box-shadow: none;
+}
+.ingreso-opciones-modal .ing-acc-btn-danger:hover {
+    background: #fff1f2;
+    border-color: #fda4af;
+    color: #9f1239;
+    filter: none;
 }
 .ing-acc-actions-primary {
     display: flex;
@@ -366,6 +477,21 @@
     font-size: 15px;
     color: #0f172a;
 }
+.ingreso-detalle-head-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+}
+.ingreso-detalle-head-actions .ing-acc-btn,
+.ingreso-detalle-head-actions .btn {
+    font-size: 11px;
+    padding: 5px 9px;
+    min-height: 28px;
+    border-radius: 8px;
+    text-decoration: none;
+}
 .ingreso-detalle-body {
     padding: 10px 12px;
     overflow: auto;
@@ -529,7 +655,12 @@ body.ingreso-hist-etiq-bar-pad {
             <tr>
                 <td>#{{ row.id }}</td>
                 <td><strong>{{ row.numero_documento or ('ING-' ~ row.id) }}</strong></td>
-                <td>{{ row.fecha_documento.strftime('%d-%m-%Y') if row.fecha_documento else '-' }}</td>
+                <td>
+                    {{ row.fecha_documento.strftime('%d-%m-%Y') if row.fecha_documento else '-' }}
+                    {% if row.created_at %}
+                    <div class="ingreso-hist-hora-reg" title="Registrado: {{ row.created_at|chile_datetime }}">{{ (row.created_at|chile_datetime).split(' ')[-1] }}</div>
+                    {% endif %}
+                </td>
                 <td>
                     {{ row.proveedor_nombre }}
                     <div class="muted">{{ row.proveedor_rut|format_rut if row.proveedor_rut else '' }}</div>
@@ -558,13 +689,13 @@ body.ingreso-hist-etiq-bar-pad {
                 <td>${{ '{:,.0f}'.format(total_con_iva).replace(',', '.') }}</td>
                 <td>
                     {% if row.anulado %}
-                    <span class="status-badge bad">Anulado</span>
-                    <div class="muted">{{ row.anulado_at|chile_datetime if row.anulado_at else '' }}{% if row.anulado_por %} · {{ row.anulado_por }}{% endif %}</div>
+                    <span class="status-badge bad">ANULADO</span>
+                    <div class="muted">{{ row.anulado_at|chile_datetime if row.anulado_at else '' }}{% if row.anulado_por %} · {{ row.anulado_por|upper }}{% endif %}</div>
                     {% else %}
-                    <span class="status-badge ok">Vigente</span>
+                    <span class="status-badge ok">VIGENTE</span>
                     {% endif %}
                 </td>
-                <td>{{ row.usuario or 'sistema' }}</td>
+                <td class="ingreso-hist-usuario">{{ (row.usuario or 'sistema')|upper }}</td>
                 <td class="ingreso-historial-acciones">
                     <button type="button"
                             class="ing-acc-btn ing-acc-btn-outline btn-ingreso-opciones-open"
@@ -575,7 +706,7 @@ body.ingreso-hist-etiq-bar-pad {
                             data-edit-url="{% if not row.anulado %}{{ url_for('bodega.ingreso_editar', doc_id=row.id) }}{% endif %}"
                             aria-haspopup="dialog"
                             aria-expanded="false"
-                            aria-controls="ingresoOpcionesModal">Opciones</button>
+                            aria-controls="ingresoOpcionesModal">OPCIONES</button>
                 </td>
             </tr>
             {% else %}
@@ -645,19 +776,23 @@ body.ingreso-hist-etiq-bar-pad {
 
 <div id="ingresoOpcionesModal" class="ingreso-opciones-modal" aria-hidden="true">
     <div class="ingreso-opciones-card" role="dialog" aria-modal="true" aria-labelledby="ingresoOpcionesTitle">
-        <h3 id="ingresoOpcionesTitle" class="ingreso-opciones-title">Opciones del ingreso</h3>
-        <p id="ingresoOpcionesSub" class="ingreso-opciones-sub"></p>
-        <div class="ingreso-opciones-grid">
-            <button type="button" class="ing-acc-btn ing-acc-btn-primary btn-ver-detalle" id="ingresoOpcionesVerDetalle"
-                    data-doc-id="" data-doc-num="">Ver detalle</button>
-            <a class="ing-acc-btn ing-acc-btn-outline" id="ingresoOpcionesMov" href="#">Movimientos</a>
-            <a class="ing-acc-btn ing-acc-btn-outline" id="ingresoOpcionesEditar" href="#" style="display:none;">Editar</a>
+        <div class="ingreso-opciones-card-head">
+            <h3 id="ingresoOpcionesTitle" class="ingreso-opciones-title">Opciones del ingreso</h3>
+            <p id="ingresoOpcionesSub" class="ingreso-opciones-sub"></p>
         </div>
-        <div id="ingresoOpcionesVigenteWrap" class="ingreso-opciones-vigente">
-            <div class="ing-acc-actions-danger-row ingreso-opciones-danger-inner">
-                <input type="text" id="ingresoOpcionesMotivo" class="input-motivo" placeholder="Motivo (opc.)" autocomplete="off" aria-label="Motivo opcional al anular ingreso">
-                <button type="button" class="ing-acc-btn ing-acc-btn-danger btn-anular-open" id="ingresoOpcionesAnular"
-                        data-doc-id="" data-doc-num="">Anular</button>
+        <div class="ingreso-opciones-body">
+            <div class="ingreso-opciones-grid">
+                <button type="button" class="ing-acc-btn ing-acc-btn-primary btn-ver-detalle" id="ingresoOpcionesVerDetalle"
+                        data-doc-id="" data-doc-num="">Ver detalle</button>
+                <a class="ing-acc-btn ing-acc-btn-outline" id="ingresoOpcionesMov" href="#">Movimientos</a>
+                <a class="ing-acc-btn ing-acc-btn-outline" id="ingresoOpcionesEditar" href="#" style="display:none;">Editar</a>
+            </div>
+            <div id="ingresoOpcionesVigenteWrap" class="ingreso-opciones-vigente">
+                <div class="ing-acc-actions-danger-row ingreso-opciones-danger-inner">
+                    <input type="text" id="ingresoOpcionesMotivo" class="input-motivo" placeholder="Motivo (opc.)" autocomplete="off" aria-label="Motivo opcional al anular ingreso">
+                    <button type="button" class="ing-acc-btn ing-acc-btn-danger btn-anular-open" id="ingresoOpcionesAnular"
+                            data-doc-id="" data-doc-num="">Anular</button>
+                </div>
             </div>
         </div>
         <div class="ingreso-opciones-footer">
@@ -666,11 +801,21 @@ body.ingreso-hist-etiq-bar-pad {
     </div>
 </div>
 
-<div id="ingresoDetalleModal" class="ingreso-detalle-modal" aria-hidden="true">
+<div id="ingresoDetalleModal" class="ingreso-detalle-modal" aria-hidden="true"
+     data-puede-ver-finanzas="{{ 1 if puede_ver_finanzas else 0 }}"
+     data-pdf-url-template="{{ url_for('bodega.ingreso_pdf', doc_id=0) }}">
     <div class="ingreso-detalle-card" role="dialog" aria-modal="true" aria-labelledby="ingresoDetalleTitle">
         <div class="ingreso-detalle-head">
             <h3 id="ingresoDetalleTitle">Detalle de ingreso</h3>
-            <button type="button" class="btn" id="ingresoDetalleClose">Cerrar</button>
+            <div class="ingreso-detalle-head-actions">
+                <button type="button" class="ing-acc-btn ing-acc-btn-outline" id="ingresoDetallePdfBodega"
+                        title="Vista previa PDF sin valores de costo">PDF bodega</button>
+                {% if puede_ver_finanzas %}
+                <button type="button" class="ing-acc-btn ing-acc-btn-primary" id="ingresoDetallePdfCompleto"
+                        title="Vista previa PDF completo con V. neto">PDF completo</button>
+                {% endif %}
+                <button type="button" class="btn" id="ingresoDetalleClose">Cerrar</button>
+            </div>
         </div>
         <div class="ingreso-detalle-body">
             <div class="muted" id="ingresoDetalleSub" style="margin-bottom:8px;">Items del documento.</div>
@@ -685,7 +830,9 @@ body.ingreso-hist-etiq-bar-pad {
                             <th>Bodega</th>
                             <th>Origen</th>
                             <th>Cant.</th>
+                            {% if puede_ver_finanzas %}
                             <th>V. neto</th>
+                            {% endif %}
                             <th>Nota</th>
                         </tr>
                     </thead>
@@ -695,6 +842,8 @@ body.ingreso-hist-etiq-bar-pad {
         </div>
     </div>
 </div>
+
+{% include 'partials/ingreso_pdf_preview_modal.html' %}
 
 <script>
 (function () {
@@ -725,7 +874,7 @@ body.ingreso-hist-etiq-bar-pad {
         var movUrl = trigger.getAttribute('data-mov-url') || '#';
         var editUrl = (trigger.getAttribute('data-edit-url') || '').trim();
 
-        subEl.textContent = 'Documento ' + docNum + ' · ID #' + docId + (anulado ? ' · Estado: anulado' : '') + '.';
+        subEl.textContent = ('Documento ' + docNum + ' · ID #' + docId + (anulado ? ' · Estado: anulado' : '') + '.').toUpperCase();
 
         vdBtn.setAttribute('data-doc-id', docId);
         vdBtn.setAttribute('data-doc-num', docNum);
@@ -823,7 +972,13 @@ body.ingreso-hist-etiq-bar-pad {
     var body = document.getElementById('ingresoDetalleBody');
     var sub = document.getElementById('ingresoDetalleSub');
     var dataEl = document.getElementById('ingresoHistorialDetalleData');
+    var pdfBodega = document.getElementById('ingresoDetallePdfBodega');
+    var pdfCompleto = document.getElementById('ingresoDetallePdfCompleto');
     if (!modal || !closeBtn || !body || !sub || !dataEl) return;
+
+    var puedeVerFinanzas = modal.getAttribute('data-puede-ver-finanzas') === '1';
+    var colCount = puedeVerFinanzas ? 9 : 8;
+    var pdfUrlTemplate = modal.getAttribute('data-pdf-url-template') || '';
 
     var data = {};
     try {
@@ -839,6 +994,38 @@ body.ingreso-hist-etiq-bar-pad {
         return '$' + num.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    var currentDocId = '';
+    var currentDocNum = '';
+
+    function buildPdfUrl(docId, modo, preview) {
+        if (!pdfUrlTemplate) return '#';
+        var base = String(pdfUrlTemplate).replace(/\/0(\/?$)/, '/' + encodeURIComponent(String(docId)) + '$1');
+        var sep = base.indexOf('?') >= 0 ? '&' : '?';
+        var url = base + sep + 'modo=' + encodeURIComponent(modo);
+        if (preview) url += '&preview=1';
+        return url;
+    }
+
+    function openPdfPreview(modo) {
+        if (!currentDocId || typeof window.openIngresoPdfPreview !== 'function') return;
+        var isCompleto = modo === 'completo';
+        window.openIngresoPdfPreview({
+            previewUrl: buildPdfUrl(currentDocId, modo, true),
+            downloadUrl: buildPdfUrl(currentDocId, modo, false),
+            title: isCompleto ? 'Vista previa · PDF completo' : 'Vista previa · PDF bodega',
+            sub: 'Documento ' + (currentDocNum || ('#' + currentDocId))
+                + (isCompleto ? ' · incluye V. neto' : ' · sin valores de costo')
+                + '. Revisa y descarga si corresponde.'
+        });
+    }
+
+    if (pdfBodega) {
+        pdfBodega.addEventListener('click', function () { openPdfPreview('bodega'); });
+    }
+    if (pdfCompleto) {
+        pdfCompleto.addEventListener('click', function () { openPdfPreview('completo'); });
+    }
+
     function closeModal() {
         modal.classList.remove('open');
         modal.setAttribute('aria-hidden', 'true');
@@ -847,7 +1034,7 @@ body.ingreso-hist-etiq-bar-pad {
     function renderRows(items) {
         body.innerHTML = '';
         if (!Array.isArray(items) || items.length === 0) {
-            body.innerHTML = '<tr><td colspan="9" class="ingreso-detalle-empty">No hay items para mostrar.</td></tr>';
+            body.innerHTML = '<tr><td colspan="' + colCount + '" class="ingreso-detalle-empty">No hay items para mostrar.</td></tr>';
             return;
         }
         function appendCell(tr, value) {
@@ -864,7 +1051,9 @@ body.ingreso-hist-etiq-bar-pad {
             appendCell(tr, it.bodega || '—');
             appendCell(tr, it.origen_compra || '—');
             appendCell(tr, String(it.cantidad || 0));
-            appendCell(tr, formatNeto(it.valor_neto));
+            if (puedeVerFinanzas) {
+                appendCell(tr, formatNeto(it.valor_neto));
+            }
             appendCell(tr, it.nota || '—');
             body.appendChild(tr);
         });
@@ -878,6 +1067,8 @@ body.ingreso-hist-etiq-bar-pad {
         if (typeof window.closeIngresoOpcionesModal === 'function') {
             window.closeIngresoOpcionesModal();
         }
+        currentDocId = docId;
+        currentDocNum = docNum;
         sub.textContent = 'Documento ' + docNum + ' (ID #' + docId + ').';
         renderRows(data[docId] || []);
         modal.classList.add('open');

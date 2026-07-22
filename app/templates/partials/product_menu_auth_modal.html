@@ -1,0 +1,255 @@
+<style>
+.product-auth-modal {
+	display:none;
+	position:fixed;
+	inset:0;
+	z-index:10000;
+	align-items:center;
+	justify-content:center;
+	padding:20px;
+	background:rgba(2, 6, 23, 0.76);
+	backdrop-filter:blur(10px);
+	-webkit-backdrop-filter:blur(10px);
+}
+.product-auth-modal.is-open { display:flex; }
+.product-auth-card {
+	width:min(430px, 96vw);
+	overflow:hidden;
+	border:1px solid rgba(147, 197, 253, 0.42);
+	border-radius:24px;
+	background:#fff;
+	box-shadow:0 30px 90px rgba(2, 6, 23, 0.55), 0 0 0 1px rgba(255,255,255,.12) inset;
+	animation:productAuthIn .2s ease-out;
+}
+@keyframes productAuthIn {
+	from { opacity:0; transform:translateY(12px) scale(.98); }
+	to { opacity:1; transform:translateY(0) scale(1); }
+}
+.product-auth-head {
+	position:relative;
+	padding:28px 30px 24px;
+	color:#fff;
+	text-align:center;
+	background:
+		radial-gradient(circle at 20% 0%, rgba(96,165,250,.5), transparent 42%),
+		linear-gradient(145deg, #0f172a, #1e3a8a);
+}
+.product-auth-icon {
+	display:grid;
+	place-items:center;
+	width:62px;
+	height:62px;
+	margin:0 auto 14px;
+	border:1px solid rgba(255,255,255,.32);
+	border-radius:19px;
+	font-size:29px;
+	background:rgba(255,255,255,.13);
+	box-shadow:0 12px 28px rgba(0,0,0,.24);
+}
+.product-auth-head h2 { margin:0; font-size:21px; }
+.product-auth-head p { margin:7px 0 0; color:#bfdbfe; font-size:13px; }
+.product-auth-close {
+	position:absolute;
+	top:13px;
+	right:14px;
+	width:34px;
+	height:34px;
+	border:0;
+	border-radius:50%;
+	color:#fff;
+	font-size:21px;
+	cursor:pointer;
+	background:rgba(255,255,255,.12);
+}
+.product-auth-close:hover { background:rgba(255,255,255,.22); }
+.product-auth-body { padding:25px 30px 28px; }
+.product-auth-action {
+	margin:0 0 18px;
+	padding:10px 12px;
+	border:1px solid #dbeafe;
+	border-radius:11px;
+	color:#1e3a8a;
+	font-size:13px;
+	font-weight:700;
+	text-align:center;
+	background:#eff6ff;
+}
+.product-auth-field { display:block; margin-bottom:15px; }
+.product-auth-field span {
+	display:block;
+	margin-bottom:7px;
+	color:#334155;
+	font-size:13px;
+	font-weight:700;
+}
+.product-auth-field input {
+	width:100%;
+	height:46px;
+	padding:0 13px;
+	border:1px solid #cbd5e1;
+	border-radius:11px;
+	outline:none;
+	color:#0f172a;
+	font:500 14px Inter, system-ui, sans-serif;
+	background:#f8fafc;
+	transition:border-color .18s, box-shadow .18s, background .18s;
+}
+.product-auth-field input:focus {
+	border-color:#3b82f6;
+	background:#fff;
+	box-shadow:0 0 0 4px rgba(59,130,246,.14);
+}
+.product-auth-error {
+	display:none;
+	margin:-2px 0 15px;
+	padding:10px 12px;
+	border:1px solid #fecaca;
+	border-radius:10px;
+	color:#b91c1c;
+	font-size:13px;
+	background:#fef2f2;
+}
+.product-auth-error.is-visible { display:block; }
+.product-auth-actions { display:flex; gap:10px; margin-top:5px; }
+.product-auth-btn {
+	flex:1;
+	height:44px;
+	border:0;
+	border-radius:11px;
+	font-size:14px;
+	font-weight:700;
+	cursor:pointer;
+}
+.product-auth-btn--cancel { color:#475569; background:#e2e8f0; }
+.product-auth-btn--submit {
+	color:#fff;
+	background:linear-gradient(135deg, #1d4ed8, #2563eb);
+	box-shadow:0 10px 22px rgba(37,99,235,.25);
+}
+.product-auth-btn--submit:hover { background:linear-gradient(135deg, #1e40af, #1d4ed8); }
+.product-auth-btn:disabled { cursor:wait; opacity:.68; }
+body.dark .product-auth-card { border-color:#334155; background:#111827; }
+body.dark .product-auth-body { color:#e5e7eb; }
+body.dark .product-auth-field span { color:#cbd5e1; }
+body.dark .product-auth-field input { border-color:#475569; color:#f8fafc; background:#1f2937; }
+body.dark .product-auth-action { border-color:#1e3a8a; color:#bfdbfe; background:#172554; }
+@media (max-width:520px) {
+	.product-auth-head { padding:24px 22px 20px; }
+	.product-auth-body { padding:22px 20px 24px; }
+}
+</style>
+
+<div id="productMenuAuthModal"
+	 class="product-auth-modal"
+	 aria-hidden="true"
+	 data-authorize-url="{{ url_for('productos.api_product_menu_authorize') }}">
+	<div class="product-auth-card" role="dialog" aria-modal="true" aria-labelledby="productAuthTitle">
+		<div class="product-auth-head">
+			<button type="button" class="product-auth-close" data-product-auth-close aria-label="Cerrar">&times;</button>
+			<div class="product-auth-icon" aria-hidden="true">🔐</div>
+			<h2 id="productAuthTitle">Acceso protegido</h2>
+			<p>Autoriza esta acción con una cuenta Dueño o SuperAdmin</p>
+		</div>
+		<form id="productMenuAuthForm" class="product-auth-body" autocomplete="on">
+			<div id="productAuthAction" class="product-auth-action"></div>
+			<label class="product-auth-field">
+				<span>Usuario autorizador</span>
+				<input id="productAuthUser" name="usuario" type="text" autocomplete="username" required>
+			</label>
+			<label class="product-auth-field">
+				<span>Clave</span>
+				<input id="productAuthPassword" name="password" type="password" autocomplete="current-password" required>
+			</label>
+			<div id="productAuthError" class="product-auth-error" role="alert"></div>
+			<div class="product-auth-actions">
+				<button type="button" class="product-auth-btn product-auth-btn--cancel" data-product-auth-close>Cancelar</button>
+				<button id="productAuthSubmit" type="submit" class="product-auth-btn product-auth-btn--submit">Autorizar acceso</button>
+			</div>
+		</form>
+	</div>
+</div>
+
+<script>
+(function () {
+	'use strict';
+	var modal = document.getElementById('productMenuAuthModal');
+	var form = document.getElementById('productMenuAuthForm');
+	var userInput = document.getElementById('productAuthUser');
+	var passwordInput = document.getElementById('productAuthPassword');
+	var actionLabel = document.getElementById('productAuthAction');
+	var errorBox = document.getElementById('productAuthError');
+	var submitBtn = document.getElementById('productAuthSubmit');
+	var pendingTrigger = null;
+
+	function showError(message) {
+		errorBox.textContent = message || 'No fue posible autorizar el acceso.';
+		errorBox.classList.add('is-visible');
+	}
+
+	function closeModal() {
+		modal.classList.remove('is-open');
+		modal.setAttribute('aria-hidden', 'true');
+		passwordInput.value = '';
+		errorBox.textContent = '';
+		errorBox.classList.remove('is-visible');
+		submitBtn.disabled = false;
+		submitBtn.textContent = 'Autorizar acceso';
+		pendingTrigger = null;
+	}
+
+	window.openProductMenuAuthorization = function (trigger) {
+		pendingTrigger = trigger;
+		actionLabel.textContent = trigger.getAttribute('data-product-auth') || 'Acción de productos';
+		errorBox.classList.remove('is-visible');
+		modal.classList.add('is-open');
+		modal.setAttribute('aria-hidden', 'false');
+		window.setTimeout(function () { userInput.focus(); }, 50);
+	};
+
+	form.addEventListener('submit', function (event) {
+		event.preventDefault();
+		if (!pendingTrigger || submitBtn.disabled) return;
+		errorBox.classList.remove('is-visible');
+		submitBtn.disabled = true;
+		submitBtn.textContent = 'Validando…';
+
+		fetch(modal.getAttribute('data-authorize-url'), {
+			method: 'POST',
+			credentials: 'same-origin',
+			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+			body: JSON.stringify({ usuario: userInput.value.trim(), password: passwordInput.value })
+		})
+		.then(function (response) {
+			return response.json().catch(function () { return {}; }).then(function (data) {
+				if (!response.ok || !data.success) {
+					throw new Error(data.message || 'Credenciales no válidas.');
+				}
+				return data;
+			});
+		})
+		.then(function () {
+			var approvedTrigger = pendingTrigger;
+			closeModal();
+			approvedTrigger.setAttribute('data-product-auth-approved', '1');
+			approvedTrigger.click();
+			approvedTrigger.removeAttribute('data-product-auth-approved');
+		})
+		.catch(function (error) {
+			showError(error.message);
+			passwordInput.value = '';
+			passwordInput.focus();
+			submitBtn.disabled = false;
+			submitBtn.textContent = 'Autorizar acceso';
+		});
+	});
+
+	modal.addEventListener('click', function (event) {
+		if (event.target === modal || event.target.closest('[data-product-auth-close]')) {
+			closeModal();
+		}
+	});
+	document.addEventListener('keydown', function (event) {
+		if (event.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
+	});
+})();
+</script>
