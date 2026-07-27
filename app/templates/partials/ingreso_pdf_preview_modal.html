@@ -1,6 +1,7 @@
 {# Modal reutilizable: vista previa PDF de ingreso antes de descargar. #}
 <style>
 .ingreso-pdf-preview-modal {
+    --ingreso-pdf-font: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
     position: fixed;
     inset: 0;
     z-index: 1300;
@@ -9,9 +10,17 @@
     justify-content: center;
     padding: 16px;
     background: rgba(15, 23, 42, 0.55);
+    font-family: var(--ingreso-pdf-font);
 }
 .ingreso-pdf-preview-modal.open {
     display: flex;
+}
+.ingreso-pdf-preview-modal,
+.ingreso-pdf-preview-modal h3,
+.ingreso-pdf-preview-modal p,
+.ingreso-pdf-preview-modal button,
+.ingreso-pdf-preview-modal a {
+    font-family: var(--ingreso-pdf-font);
 }
 .ingreso-pdf-preview-card {
     width: min(1120px, 96vw);
@@ -53,7 +62,9 @@
 }
 .ingreso-pdf-preview-actions .btn,
 .ingreso-pdf-preview-actions a {
+    font-family: var(--ingreso-pdf-font);
     font-size: 12px;
+    font-weight: 600;
     padding: 6px 12px;
     min-height: 32px;
     border-radius: 8px;
@@ -91,6 +102,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    font-family: var(--ingreso-pdf-font);
     font-size: 13px;
     color: #475569;
     background: #f1f5f9;

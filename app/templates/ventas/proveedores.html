@@ -108,7 +108,7 @@ table {
 }
 th,
 td {
-    padding: 6px 10px;
+    padding: 4px 8px;
     border-bottom: 1px solid #f1f5f9;
     text-align: left;
     vertical-align: middle;
@@ -124,10 +124,12 @@ th {
 td {
     font-size: 11px;
     color: #475569;
-    line-height: 1.35;
+    line-height: 1.3;
 }
 td:last-child {
-    padding: 7px 10px;
+    padding: 3px 6px;
+    width: 1%;
+    white-space: nowrap;
 }
 .supplier-contact-name {
     font-size: 11px;
@@ -136,25 +138,29 @@ td:last-child {
 }
 .contact-lines {
     display: grid;
-    gap: 1px;
+    gap: 0;
     color: #94a3b8;
     font-size: 10px;
 }
 .actions {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
+    display: inline-flex;
+    gap: 1px;
+    flex-wrap: nowrap;
     align-items: center;
 }
 .inline-form {
     margin: 0;
+    display: inline;
 }
-/* Acciones: aspecto ligero (no botón rojo sólido) */
+/* Acciones: links sutiles en una línea */
 .page-stack .actions .btn.sm {
-    padding: 4px 8px;
-    font-size: 11px;
+    padding: 2px 5px;
+    font-size: 10px;
     font-weight: 500;
-    border-radius: 6px;
+    border-radius: 4px;
+    line-height: 1.2;
+    height: auto;
+    min-height: 0;
     transform: none;
     box-shadow: none;
 }
@@ -163,14 +169,14 @@ td:last-child {
     box-shadow: none;
 }
 .page-stack .actions .btn.sm.outline {
-    background: #fff;
-    border-color: #e2e8f0;
+    background: transparent;
+    border-color: transparent;
     color: #64748b;
 }
 .page-stack .actions .btn.sm.outline:hover {
-    border-color: #cbd5e1;
-    color: #334155;
-    background: #f8fafc;
+    border-color: transparent;
+    color: #0f172a;
+    background: #f1f5f9;
 }
 .page-stack .actions a.btn.sm:not(.outline):not(.danger) {
     background: transparent;
@@ -180,18 +186,29 @@ td:last-child {
 .page-stack .actions a.btn.sm:not(.outline):not(.danger):hover {
     color: #1d4ed8;
     background: #eff6ff;
-    border-color: #dbeafe;
+    border-color: transparent;
 }
 .page-stack .actions .btn.sm.danger {
-    background: #fff;
-    color: #b91c1c;
-    border: 1px solid #fecaca;
+    background: transparent;
+    color: #94a3b8;
+    border: 1px solid transparent;
     font-weight: 500;
 }
 .page-stack .actions .btn.sm.danger:hover {
     background: #fef2f2;
-    border-color: #f87171;
-    color: #991b1b;
+    border-color: transparent;
+    color: #b91c1c;
+}
+.saldo-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #15803d;
+    font-size: 10px;
+    font-weight: 600;
 }
 .empty {
     padding: 18px 14px;
@@ -250,6 +267,7 @@ td:last-child {
                         <th>Empresa</th>
                         <th>Nombre de contacto</th>
                         <th>RUT</th>
+                        <th>Saldo a favor</th>
                         <th>Direccion</th>
                         <th>Contacto</th>
                         <th>Acciones</th>
@@ -263,6 +281,14 @@ td:last-child {
                             <strong class="supplier-contact-name">{% if proveedor.empresa and proveedor.nombre != proveedor.empresa %}{{ proveedor.nombre|upper }}{% else %}{{ (proveedor.empresa or proveedor.nombre)|upper }}{% endif %}</strong>
                         </td>
                         <td>{{ proveedor.rut|format_rut if proveedor.rut else 'Sin RUT' }}</td>
+                        <td>
+                            {% set sf = (saldos_proveedor or {}).get(proveedor.id, 0) %}
+                            {% if sf and sf|float > 0 %}
+                            <span class="saldo-pill">${{ '{:,.0f}'.format(sf|float).replace(',', '.') }}</span>
+                            {% else %}
+                            <span style="color:#94a3b8;font-size:10px;">—</span>
+                            {% endif %}
+                        </td>
                         <td>{{ (proveedor.direccion or 'Sin direccion')|upper }}</td>
                         <td>
                             <div class="contact-lines">

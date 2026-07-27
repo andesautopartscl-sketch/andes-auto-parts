@@ -22,42 +22,45 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     color: var(--ing-ink);
     font-size: 12px;
     line-height: 1.35;
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 2px 2px 8px;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 2px 0 8px;
+    box-sizing: border-box;
 }
 .ing-ver-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: 10px;
+    margin-bottom: 8px;
 }
 .ing-ver-toolbar-actions {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 5px;
     justify-content: flex-end;
 }
 .ing-ver-pdf {
     display: inline-flex;
     align-items: center;
-    height: 30px;
-    padding: 0 11px;
-    border-radius: 8px;
-    border: 1px solid #cbd5e1;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 5px;
+    border: 1px solid #e2e8f0;
     background: #fff;
-    color: #0f172a;
+    color: #475569;
     text-decoration: none;
-    font-size: 12px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 500;
     cursor: pointer;
     font-family: inherit;
 }
 .ing-ver-pdf:hover {
     background: #f8fafc;
-    border-color: #94a3b8;
+    border-color: #cbd5e1;
+    color: #0f172a;
 }
 .ing-ver-pdf.is-primary {
     background: #0f766e;
@@ -72,22 +75,22 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
 }
 .ing-ver-toolbar h1 {
     margin: 0;
-    font-size: 17px;
-    font-weight: 750;
+    font-size: 15px;
+    font-weight: 700;
     letter-spacing: -0.01em;
     color: var(--ing-ink);
 }
 .ing-ver-badge {
     display: inline-flex;
     align-items: center;
-    padding: 2px 8px;
+    padding: 1px 6px;
     border-radius: 999px;
-    font-size: 10px;
-    font-weight: 700;
+    font-size: 9px;
+    font-weight: 600;
     letter-spacing: 0.02em;
 }
 .ing-ver-badge.is-ok {
@@ -101,28 +104,29 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     border: 1px solid #fecaca;
 }
 .ing-ver-kicker {
-    margin: 3px 0 0;
-    font-size: 11px;
+    margin: 2px 0 0;
+    font-size: 10px;
     color: var(--ing-muted);
 }
 .ing-ver-back {
     display: inline-flex;
     align-items: center;
-    height: 30px;
-    padding: 0 11px;
-    border-radius: 8px;
-    border: 1px solid #cbd5e1;
-    background: #fff;
-    font-size: 11px;
-    font-weight: 600;
-    color: #1e40af;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    background: transparent;
+    font-size: 10px;
+    font-weight: 500;
+    color: #64748b;
     text-decoration: none;
     cursor: pointer;
-    transition: background 0.12s ease, border-color 0.12s ease;
+    transition: background 0.12s ease, color 0.12s ease;
 }
 .ing-ver-back:hover {
     background: var(--ing-soft);
-    border-color: #94a3b8;
+    color: #1e40af;
+    border-color: transparent;
     text-decoration: none;
 }
 .ing-ver-card {
@@ -139,7 +143,7 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     background: linear-gradient(180deg, #fbfdff 0%, #fff 100%);
 }
 .ing-ver-field {
-    padding: 10px 14px;
+    padding: 6px 10px;
     border-right: 1px solid #eef2f7;
     border-bottom: 1px solid #eef2f7;
     min-width: 0;
@@ -148,21 +152,162 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
 .ing-ver-field:nth-last-child(-n+3) { border-bottom: 0; }
 .ing-ver-field label {
     display: block;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #475569;
-    margin-bottom: 3px;
+    color: #94a3b8;
+    margin-bottom: 1px;
 }
 .ing-ver-field div {
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--ing-ink);
     word-break: break-word;
 }
 .ing-ver-field div.is-muted { font-weight: 500; color: #94a3b8; }
-.ing-ver-body { padding: 12px 14px 14px; }
+.ing-ver-body { padding: 8px 10px 10px; }
+.ing-dev-box {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid #d1fae5;
+    border-radius: 8px;
+    background: #f0fdf4;
+    display: grid;
+    gap: 6px;
+}
+.ing-dev-box__title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #065f46;
+}
+.ing-dev-box__hint {
+    margin: 0;
+    font-size: 10px;
+    color: #64748b;
+    line-height: 1.35;
+    max-width: 720px;
+}
+.ing-dev-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: end;
+}
+.ing-dev-box label {
+    font-size: 10px;
+    font-weight: 600;
+    color: #334155;
+}
+.ing-dev-box input[type="text"] {
+    display: block;
+    margin-top: 2px;
+    padding: 4px 7px;
+    border: 1px solid #a7f3d0;
+    border-radius: 5px;
+    font-size: 11px;
+    background: #fff;
+}
+.ing-dev-box .ing-dev-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: #334155;
+    cursor: pointer;
+    padding-bottom: 4px;
+}
+.ing-dev-box button[type="submit"],
+.ing-dev-box #btnAbrirModalCredito {
+    justify-self: start;
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid #047857;
+    background: #047857;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.ing-credito-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 1300;
+}
+.ing-credito-modal.open {
+    display: flex;
+}
+.ing-credito-modal__card {
+    width: min(420px, 100%);
+    background: #fff;
+    border: 1px solid #dbe3ef;
+    border-radius: 12px;
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.24);
+    padding: 16px 16px 14px;
+}
+.ing-credito-modal__title {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.ing-credito-modal__text {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #475569;
+}
+.ing-credito-modal__note {
+    margin: 10px 0 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    font-size: 11px;
+    color: #166534;
+    line-height: 1.4;
+}
+.ing-credito-modal__actions {
+    margin-top: 14px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+.ing-credito-modal__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+}
+.ing-credito-modal__btn--ghost {
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #475569;
+}
+.ing-credito-modal__btn--ghost:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+.ing-credito-modal__btn--primary {
+    border: 1px solid #047857;
+    background: #047857;
+    color: #fff;
+}
+.ing-credito-modal__btn--primary:hover {
+    background: #065f46;
+    border-color: #065f46;
+}
 .ing-ver-section-head {
     display: flex;
     align-items: baseline;
@@ -191,16 +336,16 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
 }
 .ing-ver-table {
     width: 100%;
-    min-width: 760px;
+    min-width: 0;
     border-collapse: collapse;
-    table-layout: fixed;
+    table-layout: auto;
 }
 .ing-ver-table th,
 .ing-ver-table td {
-    padding: 7px 8px;
+    padding: 4px 6px;
     border-bottom: 1px solid #eef2f7;
     text-align: left;
-    font-size: 11px;
+    font-size: 10.5px;
     vertical-align: top;
 }
 .ing-ver-table th {
@@ -208,11 +353,11 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     top: 0;
     z-index: 1;
     background: #f1f5f9;
-    color: #334155;
+    color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    font-size: 9.5px;
-    font-weight: 750;
+    font-size: 9px;
+    font-weight: 600;
     white-space: nowrap;
     border-bottom: 1px solid #dbe3ef;
 }
@@ -275,7 +420,7 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
 }
 .ing-ver-totals-box .val {
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
     text-align: right;
     color: #334155;
@@ -335,7 +480,10 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
             {% if embed_modal %}
             <button type="button" class="ing-ver-back" id="ingresoVerBackBtn">← Volver</button>
             {% else %}
-            <a class="ing-ver-back" href="{{ url_for('bodega.ingreso_historial') }}">← Volver al historial</a>
+            <a class="ing-ver-back" href="{{ volver_url or url_for('bodega.ingreso_historial') }}">{{ volver_label or '← Volver al historial' }}</a>
+            {% if volver_secundario_url %}
+            <a class="ing-ver-back" href="{{ volver_secundario_url }}" style="opacity:0.85;">{{ volver_secundario_label or 'Historial ingresos' }}</a>
+            {% endif %}
             {% endif %}
         </div>
     </div>
@@ -363,6 +511,13 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
                 <div class="{{ 'is-muted' if not doc.metodo_pago else '' }}">{{ doc.metodo_pago or '—' }}</div>
             </div>
             <div class="ing-ver-field">
+                <label>Saldo a favor aplicado</label>
+                {% set msf = (doc.monto_saldo_favor|default(0))|float %}
+                <div class="{{ 'is-muted' if msf <= 0 else '' }}" style="{% if msf > 0 %}color:#15803d;font-weight:700;{% endif %}">
+                    {% if msf > 0 %}${{ '{:,.0f}'.format(msf).replace(',', '.') }}{% else %}—{% endif %}
+                </div>
+            </div>
+            <div class="ing-ver-field">
                 <label>Observación</label>
                 <div class="{{ 'is-muted' if not doc.observacion else '' }}">{{ doc.observacion or '—' }}</div>
             </div>
@@ -375,23 +530,21 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
             </div>
 
             {% if items %}
+            {% set puede_devolver = puede_ver_finanzas and not doc.anulado %}
+            {% if puede_devolver %}
+            <form method="post" action="{{ url_for('bodega.ingreso_devolucion_credito', doc_id=doc.id) }}" id="formDevolucionCredito">
+                {% if volver_from %}
+                <input type="hidden" name="from" value="{{ volver_from }}">
+                {% endif %}
+                {% if volver_pid %}
+                <input type="hidden" name="pid" value="{{ volver_pid }}">
+                {% endif %}
+            {% endif %}
             <div class="ing-ver-table-wrap">
                 <table class="ing-ver-table">
-                    <colgroup>
-                        <col style="width:9%">
-                        <col style="width:10%">
-                        <col style="width:28%">
-                        <col style="width:10%">
-                        <col style="width:10%">
-                        <col style="width:8%">
-                        <col style="width:6%">
-                        {% if puede_ver_finanzas %}
-                        <col style="width:10%">
-                        <col style="width:9%">
-                        {% endif %}
-                    </colgroup>
                     <thead>
                         <tr>
+                            {% if puede_devolver %}<th style="width:36px;"></th>{% endif %}
                             <th>Código</th>
                             <th>Cód. prov.</th>
                             <th>Descripción</th>
@@ -402,17 +555,29 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
                             {% if puede_ver_finanzas %}
                             <th class="is-num">V. neto</th>
                             <th class="is-num">P. neto</th>
+                            <th class="is-num">Crédito sug.</th>
                             {% endif %}
                         </tr>
                     </thead>
                     <tbody>
                         {% for it in items %}
-                        <tr>
+                        {% set ya_credito = it.id in (credited_item_ids or []) %}
+                        <tr {% if ya_credito %}style="background:#f0fdf4;"{% endif %}>
+                            {% if puede_devolver %}
+                            <td>
+                                {% if ya_credito %}
+                                <span title="Ya tiene crédito" style="color:#15803d;font-weight:700;font-size:11px;">✓</span>
+                                {% else %}
+                                <input type="checkbox" name="item_id" value="{{ it.id }}">
+                                {% endif %}
+                            </td>
+                            {% endif %}
                             <td class="is-code" title="{{ it.codigo_producto or '' }}">{{ it.codigo_producto or '—' }}</td>
                             <td class="is-soft" title="{{ (proveedor_codes.get(it.id) if proveedor_codes else '') or '' }}">{{ (proveedor_codes.get(it.id) if proveedor_codes else '') or '—' }}</td>
                             <td class="is-desc" title="{{ it.descripcion_producto or '' }}{{ (' · ' ~ it.nota) if it.nota else '' }}">
                                 {{ it.descripcion_producto or '—' }}
                                 {% if it.nota %}<div class="is-soft" style="font-weight:500;font-size:10px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ it.nota }}</div>{% endif %}
+                                {% if ya_credito %}<div style="color:#15803d;font-size:10px;font-weight:600;margin-top:2px;">Crédito registrado</div>{% endif %}
                             </td>
                             <td title="{{ it.marca or '' }}">{{ it.marca or '—' }}</td>
                             <td class="is-soft" title="{{ it.bodega or '' }}">{{ it.bodega or '—' }}</td>
@@ -421,12 +586,41 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
                             {% if puede_ver_finanzas %}
                             <td class="is-num">{{ money2(it.valor_neto) }}</td>
                             <td class="is-num">{{ money2(it.precio_venta_neto) }}</td>
+                            <td class="is-num" style="font-weight:600;color:#0f766e;">
+                                {% set sug = (credito_sugerido or {}).get(it.id) %}
+                                {% if sug %}{{ money2(sug) }}{% else %}—{% endif %}
+                            </td>
                             {% endif %}
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
+            {% if puede_devolver %}
+            <div class="ing-dev-box">
+                <div class="ing-dev-box__title">Devolución → saldo a favor del proveedor</div>
+                <p class="ing-dev-box__hint">
+                    Marcá el/los ítems devueltos. Se acredita con IVA prorrateado. El ingreso no se modifica.
+                </p>
+                <div class="ing-dev-row">
+                    <label style="flex:1 1 220px;">
+                        Motivo *
+                        <input type="text" name="razon_devolucion" required maxlength="500"
+                               placeholder="Ej: CAPOT abollado — devolución" style="width:100%;">
+                    </label>
+                    <label style="flex:0 1 160px;">
+                        N° NC proveedor
+                        <input type="text" name="ref_nota_credito" maxlength="100" placeholder="Opcional" style="width:100%;">
+                    </label>
+                    <label class="ing-dev-check">
+                        <input type="checkbox" name="descontar_stock" value="1" checked>
+                        Descontar stock
+                    </label>
+                    <button type="button" id="btnAbrirModalCredito">Registrar crédito</button>
+                </div>
+            </div>
+            </form>
+            {% endif %}
             {% else %}
             <p class="ing-ver-empty">Este ingreso no tiene ítems.</p>
             {% endif %}
@@ -448,6 +642,23 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
 </div>
 
 {% include 'partials/ingreso_pdf_preview_modal.html' %}
+
+<div id="ingresoCreditoConfirmModal" class="ing-credito-modal" aria-hidden="true">
+    <div class="ing-credito-modal__card" role="dialog" aria-modal="true" aria-labelledby="ingresoCreditoConfirmTitle">
+        <h3 id="ingresoCreditoConfirmTitle" class="ing-credito-modal__title">Registrar crédito con proveedor</h3>
+        <p class="ing-credito-modal__text">
+            ¿Confirmás el crédito por los ítems seleccionados?
+        </p>
+        <p class="ing-credito-modal__note">
+            El ingreso (factura) <strong>no se modifica</strong>. Solo se registra el saldo a favor
+            y, si corresponde, se descuenta el stock.
+        </p>
+        <div class="ing-credito-modal__actions">
+            <button type="button" class="ing-credito-modal__btn ing-credito-modal__btn--ghost" id="ingresoCreditoConfirmCancel">Cancelar</button>
+            <button type="button" class="ing-credito-modal__btn ing-credito-modal__btn--primary" id="ingresoCreditoConfirmOk">Confirmar crédito</button>
+        </div>
+    </div>
+</div>
 
 <script>
 (function () {
@@ -474,6 +685,48 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
         'Vista previa · PDF completo',
         'Documento {{ doc.numero_documento or doc.id }} · incluye V. neto. Revisa y descarga si corresponde.'
     );
+
+    var form = document.getElementById('formDevolucionCredito');
+    var openBtn = document.getElementById('btnAbrirModalCredito');
+    var modal = document.getElementById('ingresoCreditoConfirmModal');
+    var cancelBtn = document.getElementById('ingresoCreditoConfirmCancel');
+    var okBtn = document.getElementById('ingresoCreditoConfirmOk');
+    if (form && openBtn && modal && cancelBtn && okBtn) {
+        function openModal() {
+            modal.classList.add('open');
+            modal.setAttribute('aria-hidden', 'false');
+            setTimeout(function () { okBtn.focus(); }, 20);
+        }
+        function closeModal() {
+            modal.classList.remove('open');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+        openBtn.addEventListener('click', function () {
+            var checked = form.querySelectorAll('input[name="item_id"]:checked');
+            if (!checked.length) {
+                window.alert('Seleccioná al menos un ítem para registrar el crédito.');
+                return;
+            }
+            var motivo = form.querySelector('input[name="razon_devolucion"]');
+            if (motivo && !(motivo.value || '').trim()) {
+                motivo.focus();
+                window.alert('Indicá el motivo de la devolución / crédito.');
+                return;
+            }
+            openModal();
+        });
+        cancelBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal) closeModal();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+        });
+        okBtn.addEventListener('click', function () {
+            closeModal();
+            form.submit();
+        });
+    }
 })();
 </script>
 

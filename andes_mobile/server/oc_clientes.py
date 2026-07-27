@@ -21,6 +21,13 @@ from app.oc_clientes.services import (
     descontar_stock_oc,
     resolver_nombre_vendedor_oc,
     timeline_eventos,
+    registrar_pago_oc,
+    oc_estado_display,
+    item_esta_pagado,
+    item_total_con_iva,
+    oc_monto_pendiente,
+    oc_monto_cobrado,
+    oc_tiene_pago_parcial,
 )
 from app.seguridad.models import Usuario
 from app.utils.permissions import has_permission
@@ -68,6 +75,31 @@ def _parse_date(value: str | None, default: datetime | None = None) -> datetime 
         return datetime.strptime(raw[:10], "%Y-%m-%d")
     except ValueError:
         return default
+
+
+def _parse_date_with_time_from_default(
+    value: str | None,
+    default: datetime | None = None,
+) -> datetime | None:
+    """
+    Parsea una fecha (YYYY-MM-DD) y le inyecta la hora/min/seg del `default`.
+    Misma lógica que en web: inputs type="date" sin hora, pero el evento
+    se registra con la hora real del momento.
+    """
+    base = _parse_date(value, None)
+    if base is None:
+        return default
+    if default is None:
+        return base
+    try:
+        return base.replace(
+            hour=default.hour,
+            minute=default.minute,
+            second=default.second,
+            microsecond=default.microsecond,
+        )
+    except Exception:
+        return base
 
 
 def _as_date(value) -> date | None:
@@ -165,6 +197,7 @@ def listar_oc(*, estado: str = "", q: str = "", limit: int = 300) -> list[dict]:
     filas = []
     for oc in ordenes:
         cl = clientes_map.get(oc.cliente_id)
+        est_label, est_badge = oc_estado_display(oc)
         filas.append(
             {
                 "id": oc.id,
@@ -173,8 +206,9 @@ def listar_oc(*, estado: str = "", q: str = "", limit: int = 300) -> list[dict]:
                 "fecha_oc_fmt": _fmt_fecha(oc.fecha_oc),
                 "total_fmt": _fmt_monto(oc.total),
                 "estado": oc.estado or "",
-                "estado_label": oc_estado_label(oc.estado),
-                "badge": _estado_badge(oc.estado),
+                "estado_label": est_label,
+                "badge": est_badge,
+                "pago_parcial": oc_tiene_pago_parcial(oc),
                 "dias_desde_entrega": _dias_desde_entrega(oc),
             }
         )
@@ -202,18 +236,26 @@ def detalle_oc(oid: int) -> dict | None:
                 "precio_fmt": _fmt_monto(it.precio_unitario),
                 "subtotal": it.subtotal or 0,
                 "subtotal_fmt": _fmt_monto(it.subtotal),
+                "total_iva": item_total_con_iva(it, oc),
+                "total_iva_fmt": _fmt_monto(item_total_con_iva(it, oc)),
                 "en_inventario": bool(it.en_inventario),
                 "stock_descontado": bool(it.stock_descontado),
+                "pagado": item_esta_pagado(it, oc),
+                "numero_factura": (it.numero_factura or "").strip(),
             }
         )
 
     metodo = (oc.metodo_pago or "").strip()
+    est_label, est_badge = oc_estado_display(oc)
     return {
         "id": oc.id,
         "numero_oc": oc.numero_oc or "",
         "estado": oc.estado or "",
-        "estado_label": oc_estado_label(oc.estado),
-        "badge": _estado_badge(oc.estado),
+        "estado_label": est_label,
+        "badge": est_badge,
+        "pago_parcial": oc_tiene_pago_parcial(oc),
+        "monto_cobrado_fmt": _fmt_monto(oc_monto_cobrado(oc)),
+        "monto_pendiente_fmt": _fmt_monto(oc_monto_pendiente(oc)),
         "fecha_oc_fmt": _fmt_fecha(oc.fecha_oc),
         "fecha_entrega_comprometida_fmt": _fmt_fecha(oc.fecha_entrega_comprometida),
         "fecha_entrega_real_fmt": _fmt_fecha(oc.fecha_entrega_real),
@@ -325,7 +367,8 @@ def marcar_entregada(
     if (oc.estado or "") != "recibida":
         return False, "Solo se puede marcar entregada una OC en estado recibida."
 
-    fecha_entrega = _parse_date(fecha_entrega_real, datetime.now()) or datetime.now()
+    now = datetime.now()
+    fecha_entrega = _parse_date_with_time_from_default(fecha_entrega_real, now) or now
     guia = (numero_guia_despacho or "").strip()[:60]
 
     try:
@@ -352,6 +395,9 @@ def registrar_pago(
     numero_factura: str,
     fecha_pago: str | None,
     metodo_pago: str,
+    usuario: str | None = None,
+    item_ids: list[int] | None = None,
+    referencia_pago: str | None = None,
 ) -> tuple[bool, str]:
     oc = db.session.get(OrdenCompraCliente, oid)
     if oc is None:
@@ -367,13 +413,25 @@ def registrar_pago(
         return False, "Método de pago inválido."
 
     try:
-        oc.estado = "pagada"
-        oc.numero_factura = factura[:60]
-        oc.fecha_pago = _parse_date(fecha_pago, datetime.now()) or datetime.now()
-        oc.metodo_pago = metodo
-        oc.updated_at = datetime.utcnow()
+        now = datetime.now()
+        pago, errors = registrar_pago_oc(
+            oc,
+            numero_factura=factura,
+            fecha_pago=_parse_date_with_time_from_default(fecha_pago, now) or now,
+            metodo_pago=metodo,
+            item_ids=item_ids,
+            usuario=usuario,
+            referencia_pago=referencia_pago,
+        )
+        if errors or pago is None:
+            return False, errors[0] if errors else "No se pudo registrar el pago."
         db.session.commit()
-        return True, "Pago registrado correctamente."
+        if (oc.estado or "") == "pagada":
+            return True, "Pago registrado correctamente."
+        return True, (
+            f"Abono registrado (factura {pago.numero_factura}). "
+            "Quedan ítems pendientes de cobro."
+        )
     except Exception as exc:
         db.session.rollback()
         return False, f"No se pudo registrar el pago: {exc}"

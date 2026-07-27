@@ -157,56 +157,60 @@
     display: none;
     align-items: center;
     justify-content: center;
-    padding: 18px;
-    background: rgba(15, 23, 42, 0.52);
+    padding: 14px;
+    background: rgba(15, 23, 42, 0.45);
     z-index: 1195;
-    backdrop-filter: blur(2px);
+    backdrop-filter: blur(1px);
 }
 .ingreso-opciones-modal.open {
     display: flex;
 }
 .ingreso-opciones-card {
-    width: min(400px, 100%);
+    width: min(340px, 100%);
     background: #fff;
     border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    box-shadow: 0 12px 36px rgba(15, 23, 42, 0.16);
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
     padding: 0;
     overflow: hidden;
 }
 .ingreso-opciones-card-head {
-    padding: 14px 16px 12px;
+    padding: 10px 12px 8px;
     border-bottom: 1px solid #f1f5f9;
     background: #fff;
 }
 .ingreso-opciones-title {
-    margin: 0 0 4px;
-    font-size: 12px;
-    font-weight: 600;
+    margin: 0 0 2px;
+    font-size: 11px;
+    font-weight: 650;
     color: #334155;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
 }
 .ingreso-opciones-sub {
     margin: 0;
-    font-size: 10px;
+    font-size: 9px;
     color: #94a3b8;
-    line-height: 1.4;
-    letter-spacing: 0.03em;
+    line-height: 1.3;
+    letter-spacing: 0.02em;
     text-transform: uppercase;
 }
 .ingreso-opciones-body {
-    padding: 14px 16px 12px;
+    padding: 10px 12px;
 }
 .ingreso-opciones-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    margin-bottom: 8px;
+}
+.ingreso-opciones-grid .ing-acc-btn {
+    width: 100%;
+    justify-content: center;
+    white-space: nowrap;
 }
 .ingreso-opciones-vigente {
-    margin-bottom: 4px;
+    margin-bottom: 0;
 }
 .ingreso-opciones-danger-inner {
     margin: 0 !important;
@@ -214,18 +218,18 @@
 .ingreso-opciones-footer {
     display: flex;
     justify-content: flex-end;
-    padding: 10px 16px 12px;
+    padding: 7px 12px 9px;
     border-top: 1px solid #f1f5f9;
-    background: #fff;
+    background: #fafafa;
 }
 .ingreso-opciones-modal .ing-acc-btn {
-    min-height: 28px;
-    padding: 0 11px;
-    font-size: 10px;
+    min-height: 24px;
+    padding: 0 8px;
+    font-size: 9px;
     font-weight: 600;
     font-family: inherit;
-    border-radius: 7px;
-    letter-spacing: 0.04em;
+    border-radius: 5px;
+    letter-spacing: 0.03em;
     text-transform: uppercase;
 }
 .ingreso-opciones-modal .ing-acc-btn-primary {
@@ -249,22 +253,22 @@
 }
 .ingreso-opciones-modal .ing-acc-actions-danger-row {
     display: flex;
-    flex-wrap: wrap;
-    align-items: stretch;
-    gap: 8px;
-    padding: 8px;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px;
     background: #fafafa;
     border: 1px solid #f1f5f9;
-    border-radius: 8px;
+    border-radius: 6px;
 }
 .ingreso-opciones-modal .input-motivo {
     flex: 1 1 auto;
-    min-width: 120px;
-    min-height: 28px;
-    padding: 0 10px;
-    font-size: 10px;
+    min-width: 0;
+    min-height: 24px;
+    padding: 0 8px;
+    font-size: 9px;
     font-family: inherit;
-    border-radius: 7px;
+    border-radius: 5px;
     border: 1px solid #e2e8f0;
     background: #fff;
     color: #334155;
@@ -703,6 +707,7 @@ body.ingreso-hist-etiq-bar-pad {
                             data-doc-num="{{ row.numero_documento or ('ING-' ~ row.id) }}"
                             data-anulado="{{ '1' if row.anulado else '0' }}"
                             data-mov-url="{{ url_for('bodega.movimientos', ingreso_documento_id=row.id) }}"
+                            data-ver-url="{{ url_for('bodega.ingreso_ver', doc_id=row.id) }}"
                             data-edit-url="{% if not row.anulado %}{{ url_for('bodega.ingreso_editar', doc_id=row.id) }}{% endif %}"
                             aria-haspopup="dialog"
                             aria-expanded="false"
@@ -783,7 +788,8 @@ body.ingreso-hist-etiq-bar-pad {
         <div class="ingreso-opciones-body">
             <div class="ingreso-opciones-grid">
                 <button type="button" class="ing-acc-btn ing-acc-btn-primary btn-ver-detalle" id="ingresoOpcionesVerDetalle"
-                        data-doc-id="" data-doc-num="">Ver detalle</button>
+                        data-doc-id="" data-doc-num="">Detalle</button>
+                <a class="ing-acc-btn ing-acc-btn-primary" id="ingresoOpcionesAbrir" href="#" title="Abrir ingreso / crédito">Abrir / crédito</a>
                 <a class="ing-acc-btn ing-acc-btn-outline" id="ingresoOpcionesMov" href="#">Movimientos</a>
                 <a class="ing-acc-btn ing-acc-btn-outline" id="ingresoOpcionesEditar" href="#" style="display:none;">Editar</a>
             </div>
@@ -850,6 +856,7 @@ body.ingreso-hist-etiq-bar-pad {
     var opcionesModal = document.getElementById('ingresoOpcionesModal');
     var subEl = document.getElementById('ingresoOpcionesSub');
     var vdBtn = document.getElementById('ingresoOpcionesVerDetalle');
+    var abrirA = document.getElementById('ingresoOpcionesAbrir');
     var movA = document.getElementById('ingresoOpcionesMov');
     var editA = document.getElementById('ingresoOpcionesEditar');
     var vigWrap = document.getElementById('ingresoOpcionesVigenteWrap');
@@ -872,6 +879,7 @@ body.ingreso-hist-etiq-bar-pad {
         var docNum = trigger.getAttribute('data-doc-num') || ('#' + docId);
         var anulado = trigger.getAttribute('data-anulado') === '1';
         var movUrl = trigger.getAttribute('data-mov-url') || '#';
+        var verUrl = trigger.getAttribute('data-ver-url') || '';
         var editUrl = (trigger.getAttribute('data-edit-url') || '').trim();
 
         subEl.textContent = ('Documento ' + docNum + ' · ID #' + docId + (anulado ? ' · Estado: anulado' : '') + '.').toUpperCase();
@@ -880,6 +888,9 @@ body.ingreso-hist-etiq-bar-pad {
         vdBtn.setAttribute('data-doc-num', docNum);
 
         movA.setAttribute('href', movUrl);
+        if (abrirA) {
+            abrirA.setAttribute('href', verUrl || ('/bodega/ingreso/ver/' + encodeURIComponent(docId)));
+        }
 
         if (!anulado && editUrl) {
             editA.setAttribute('href', editUrl);
@@ -906,6 +917,7 @@ body.ingreso-hist-etiq-bar-pad {
     });
 
     closeBtn.addEventListener('click', closeOpcionesModal);
+    if (abrirA) abrirA.addEventListener('click', closeOpcionesModal);
     movA.addEventListener('click', closeOpcionesModal);
     editA.addEventListener('click', closeOpcionesModal);
     opcionesModal.addEventListener('click', function (e) {

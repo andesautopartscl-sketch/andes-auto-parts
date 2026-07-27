@@ -33,6 +33,7 @@ from .models import (
     Cliente,
     ClienteSaldoFavorMovimiento,
     Proveedor,
+    ProveedorSaldoFavorMovimiento,
     DocumentoVenta,
     DocumentoVentaItem,
     NotaCredito,
@@ -151,6 +152,120 @@ def _cliente_saldo_favor_ledger(cliente_id: int) -> float:
         .scalar()
     )
     return float(q or 0)
+
+
+def _proveedor_saldo_favor_ledger(proveedor_id: int) -> float:
+    if not proveedor_id:
+        return 0.0
+    q = (
+        db.session.query(func.coalesce(func.sum(ProveedorSaldoFavorMovimiento.monto), 0.0))
+        .filter(ProveedorSaldoFavorMovimiento.proveedor_id == int(proveedor_id))
+        .scalar()
+    )
+    return float(q or 0)
+
+
+def _proveedor_saldos_map(proveedor_ids: list[int]) -> dict[int, float]:
+    ids = [int(i) for i in proveedor_ids if i]
+    if not ids:
+        return {}
+    rows = (
+        db.session.query(
+            ProveedorSaldoFavorMovimiento.proveedor_id,
+            func.coalesce(func.sum(ProveedorSaldoFavorMovimiento.monto), 0.0),
+        )
+        .filter(ProveedorSaldoFavorMovimiento.proveedor_id.in_(ids))
+        .group_by(ProveedorSaldoFavorMovimiento.proveedor_id)
+        .all()
+    )
+    return {int(pid): _round_money_cl(monto) for pid, monto in rows}
+
+
+def _credito_item_ingreso_con_iva(
+    item: IngresoDocumentoItem,
+    doc: IngresoDocumento,
+    items: list[IngresoDocumentoItem] | None = None,
+    cantidad: int | None = None,
+) -> float:
+    """
+    Monto del crédito (con IVA) por ítem/cantidad devuelta.
+    Prorratea el total_factura del ingreso cuando existe; si no, aplica 19% al neto.
+    """
+    qty_line = max(int(item.cantidad or 0), 0)
+    qty = qty_line if cantidad is None else max(int(cantidad), 0)
+    if qty <= 0 or qty_line <= 0:
+        return 0.0
+    neto_line = float(item.valor_neto or 0)
+    if neto_line <= 0:
+        return 0.0
+    neto_parte = neto_line * (qty / qty_line)
+    hermanos = items
+    if hermanos is None:
+        hermanos = (
+            IngresoDocumentoItem.query.filter_by(ingreso_documento_id=doc.id).all()
+        )
+    sum_neto = sum(float(i.valor_neto or 0) for i in hermanos)
+    total_fac = float(doc.total_factura or 0)
+    if total_fac > 0 and sum_neto > 0:
+        return _round_money_cl(neto_parte / sum_neto * total_fac)
+    return _round_money_cl(neto_parte * 1.19)
+
+
+def _aplicar_consumo_saldo_favor_en_ingreso(
+    *,
+    proveedor_id: int,
+    ingreso_doc: IngresoDocumento,
+    prev_monto: float,
+    new_monto: float,
+    total_doc: float,
+    numero_factura: str | None = None,
+    usuario: str | None = None,
+) -> str | None:
+    """
+    Ajusta el consumo de saldo a favor del proveedor en un ingreso.
+    Escribe movimiento ledger (delta) y deja ingreso_doc.monto_saldo_favor = new_monto.
+    None = ok; str = error.
+    """
+    new_monto = _round_money_cl(new_monto)
+    prev_monto = _round_money_cl(prev_monto)
+    total_doc = _round_money_cl(total_doc)
+    if new_monto < 0:
+        return "El monto de saldo a favor no puede ser negativo."
+    if new_monto > total_doc + 0.02 and total_doc > 0:
+        return "No puedes aplicar un saldo mayor al total de la factura."
+    if not proveedor_id:
+        if new_monto > 0.001:
+            return "Se requiere proveedor del maestro para usar saldo a favor."
+        ingreso_doc.monto_saldo_favor = 0.0
+        return None
+
+    disponible = _round_money_cl(_proveedor_saldo_favor_ledger(int(proveedor_id)))
+    # Al editar, el prev_monto ya está “reservado” en el doc; se suma de vuelta al tope usable.
+    usable = _round_money_cl(disponible + prev_monto)
+    if new_monto > usable + 0.02:
+        return (
+            f"Saldo a favor insuficiente. Disponible: ${usable:,.0f}".replace(",", ".")
+        )
+
+    delta = _round_money_cl(float(prev_monto) - float(new_monto))
+    if abs(delta) > 0.001:
+        db.session.add(
+            ProveedorSaldoFavorMovimiento(
+                proveedor_id=int(proveedor_id),
+                monto=delta,
+                tipo="ajuste_ingreso",
+                ref_factura_numero=(numero_factura or ingreso_doc.numero_documento or "")[:100]
+                or None,
+                razon=(
+                    f"Uso de saldo a favor en ingreso #{ingreso_doc.id} "
+                    f"(${prev_monto:,.0f} → ${new_monto:,.0f})".replace(",", ".")
+                )[:2000],
+                ingreso_documento_id=ingreso_doc.id,
+                usuario=(usuario or "sistema")[:100],
+            )
+        )
+    ingreso_doc.monto_saldo_favor = new_monto
+    return None
 
 
 def _max_monto_saldo_usable_por_cliente(
@@ -1934,7 +2049,11 @@ def _build_supplier_history_payload(supplier_id: int) -> tuple[Proveedor | None,
                 "total": round(float(total_neto or 0), 2),
                 "created_at": created_iso,
                 "fecha": created_iso[:10] if created_iso else "-",
-                "view_url": url_for("bodega.movimientos"),
+                "view_url": url_for(
+                    "bodega.ingreso_ver",
+                    doc_id=ing.id,
+                    **{"from": "proveedor", "pid": supplier_id},
+                ),
                 "source_id": None,
                 "root_id": None,
             }
@@ -1964,6 +2083,29 @@ def _build_supplier_history_payload(supplier_id: int) -> tuple[Proveedor | None,
                 }
             )
 
+    saldo_actual = _round_money_cl(_proveedor_saldo_favor_ledger(int(proveedor.id)))
+    movimientos_saldo = (
+        ProveedorSaldoFavorMovimiento.query.filter_by(proveedor_id=proveedor.id)
+        .order_by(ProveedorSaldoFavorMovimiento.created_at.desc(), ProveedorSaldoFavorMovimiento.id.desc())
+        .limit(80)
+        .all()
+    )
+    saldo_movimientos = [
+        {
+            "id": m.id,
+            "monto": m.monto,
+            "tipo": m.tipo or "",
+            "ref_factura": m.ref_factura_numero or "",
+            "ref_nc": m.ref_nota_credito_numero or "",
+            "razon": (m.razon or "")[:500],
+            "ingreso_documento_id": m.ingreso_documento_id,
+            "ingreso_item_id": m.ingreso_item_id,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+            "usuario": m.usuario or "",
+        }
+        for m in movimientos_saldo
+    ]
+
     payload = {
         "supplier": proveedor.to_dict(),
         "ordenes_compra": ordenes_compra,
@@ -1974,6 +2116,8 @@ def _build_supplier_history_payload(supplier_id: int) -> tuple[Proveedor | None,
         "documentos": sorted(documentos, key=lambda item: item.get("created_at") or "", reverse=True),
         "timeline": sorted(documentos, key=lambda item: item.get("created_at") or "", reverse=False),
         "homologaciones": homologaciones,
+        "saldo_favor": saldo_actual,
+        "saldo_movimientos": saldo_movimientos,
     }
     return proveedor, payload
 
@@ -3690,9 +3834,11 @@ def proveedores():
             | (_normalized_rut_sql(Proveedor.rut).ilike(f"%{normalized_term}%") if normalized_term else False)
         )
     lista = query.order_by(Proveedor.empresa, Proveedor.nombre).all()
+    saldos_map = _proveedor_saldos_map([p.id for p in lista])
     return render_template(
         "ventas/proveedores.html",
         proveedores=lista,
+        saldos_proveedor=saldos_map,
         search_term=search_term,
         active_page="proveedores",
         **_base_ctx(),
@@ -3798,6 +3944,78 @@ def proveedor_historial(pid: int):
         active_page="proveedores",
         **_base_ctx(),
     )
+
+
+@ventas_bp.route("/proveedores/<int:pid>/saldo_favor", methods=["POST"])
+@login_required
+def proveedor_saldo_favor_manual(pid: int):
+    """Acredita (+) o consume (-) saldo a favor con un proveedor (auditoría manual)."""
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        flash("Sin permiso para registrar saldo a favor de proveedor.", "error")
+        return redirect(url_for("ventas.proveedor_historial", pid=pid))
+    p = db.session.get(Proveedor, pid)
+    if p is None or not p.activo:
+        flash("Proveedor no encontrado.", "error")
+        return redirect(url_for("ventas.proveedores"))
+
+    accion = (request.form.get("accion_saldo") or "acreditar").strip().lower()
+    monto = _round_money_cl(_safe_float((request.form.get("monto_saldo") or "0").strip()))
+    nfac = (request.form.get("ref_numero_factura") or "").strip()[:100]
+    nnc = (request.form.get("ref_numero_nota_credito") or "").strip()[:100]
+    razon = (request.form.get("ref_razon_saldo") or "").strip()
+
+    if monto <= 0:
+        flash("El monto debe ser mayor a 0.", "error")
+        return redirect(url_for("ventas.proveedor_historial", pid=pid))
+    if not razon:
+        flash("Indicá la razón del movimiento de saldo.", "error")
+        return redirect(url_for("ventas.proveedor_historial", pid=pid))
+
+    if accion == "consumir":
+        disponible = _round_money_cl(_proveedor_saldo_favor_ledger(p.id))
+        if monto > disponible + 0.02:
+            flash(
+                f"No hay saldo suficiente para consumir. Disponible: ${disponible:,.0f}".replace(",", "."),
+                "error",
+            )
+            return redirect(url_for("ventas.proveedor_historial", pid=pid))
+        signed = -monto
+        tipo = "manual_consumo"
+        ok_msg = "Consumo de saldo a favor registrado."
+    else:
+        signed = monto
+        tipo = "manual_ingreso"
+        ok_msg = "Saldo a favor del proveedor acreditado."
+
+    try:
+        db.session.add(
+            ProveedorSaldoFavorMovimiento(
+                proveedor_id=p.id,
+                monto=signed,
+                tipo=tipo,
+                ref_factura_numero=nfac or None,
+                ref_nota_credito_numero=nnc or None,
+                razon=razon[:2000],
+                usuario=session.get("user") or "sistema",
+            )
+        )
+        db.session.commit()
+        flash(ok_msg, "success")
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("proveedor_saldo_favor manual")
+        flash(f"No se pudo registrar el saldo: {exc}", "error")
+    return redirect(url_for("ventas.proveedor_historial", pid=pid))
+
+
+@ventas_bp.route("/api/proveedor/<int:pid>/saldo_favor", methods=["GET"])
+@login_required
+def api_proveedor_saldo_favor(pid: int):
+    p = db.session.get(Proveedor, pid)
+    if p is None or not p.activo:
+        return jsonify({"success": False, "message": "Proveedor no encontrado"}), 404
+    sal = _round_money_cl(_proveedor_saldo_favor_ledger(p.id))
+    return jsonify({"success": True, "proveedor_id": p.id, "saldo_favor": sal})
 
 
 @ventas_bp.route("/notas_credito")

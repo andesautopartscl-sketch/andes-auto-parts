@@ -82,6 +82,7 @@ def proveedor_detalle(pid: int) -> dict | None:
     ingresos = [d for d in (payload.get("documentos") or []) if d.get("type") == "ingreso"][:10]
     data["ingresos"] = ingresos
     data["productos"] = payload.get("homologaciones") or []
+    data["saldo_favor"] = float(payload.get("saldo_favor") or 0)
     return data
 
 

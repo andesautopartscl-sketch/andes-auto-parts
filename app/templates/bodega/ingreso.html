@@ -1190,6 +1190,28 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
                     {% endfor %}
                 </select>
             </div>
+            <div class="field ingreso-saldo-favor-field" id="ingresoSaldoFavorPanel"
+                 data-saldo="{{ proveedor_saldo_favor|default(0) }}"
+                 style="{% if (proveedor_saldo_favor|default(0)|float) <= 0 %}display:none;{% endif %}">
+                <label for="monto_saldo_favor" title="Descontar crédito que el proveedor te debe">
+                    Saldo a favor
+                    <span id="ingresoSaldoDisponibleHint" style="font-weight:500;color:#15803d;">
+                        (disp. ${{ '{:,.0f}'.format((proveedor_saldo_favor|default(0))|float).replace(',', '.') }})
+                    </span>
+                </label>
+                <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                    <input id="monto_saldo_favor" name="monto_saldo_favor" type="text" inputmode="decimal"
+                           value="{{ form_data.monto_saldo_favor or '0' }}"
+                           placeholder="0" autocomplete="off"
+                           style="flex:1 1 100px;min-width:90px;">
+                    <button type="button" class="btn" id="ingresoSaldoUsarMax" style="padding:4px 8px;font-size:10px;">Usar máx.</button>
+                    <label style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#475569;white-space:nowrap;cursor:pointer;">
+                        <input type="checkbox" id="ingresoSaldoAuto" value="1">
+                        Auto
+                    </label>
+                </div>
+                <small id="ingresoSaldoRestoHint" style="display:block;margin-top:3px;font-size:10px;color:#64748b;"></small>
+            </div>
             <div class="field">
                 <label for="observacion" title="Observación general del ingreso">Observación</label>
                 <input id="observacion" name="observacion" value="{{ form_data.observacion }}" placeholder="Nota u observación">
@@ -1516,4 +1538,5 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
 })();
 </script>
 {% endif %}
+{% include 'partials/ingreso_saldo_favor_script.html' %}
 {% endblock %}

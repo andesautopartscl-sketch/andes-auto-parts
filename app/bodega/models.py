@@ -110,6 +110,8 @@ class IngresoDocumento(db.Model):
     # Total con IVA según factura física (opcional); iva_factura = total - suma netos líneas al guardar.
     total_factura = db.Column(db.Float, nullable=True)
     iva_factura = db.Column(db.Float, nullable=True)
+    # Monto del saldo a favor del proveedor aplicado a este ingreso (ellos nos debían).
+    monto_saldo_favor = db.Column(db.Float, nullable=False, default=0.0)
     anulado = db.Column(db.Boolean, nullable=False, default=False, index=True)
     anulado_at = db.Column(db.DateTime, nullable=True)
     anulado_por = db.Column(db.String(100), nullable=True)

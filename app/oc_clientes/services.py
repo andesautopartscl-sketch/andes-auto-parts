@@ -9,7 +9,13 @@ from sqlalchemy import text
 from app.extensions import db
 from app.utils.stock_control import get_available_stock
 from app.ventas.models import Cliente
-from .models import OrdenCompraCliente, OrdenCompraClienteItem, oc_estado_label
+from .models import (
+    OrdenCompraCliente,
+    OrdenCompraClienteItem,
+    OrdenCompraClientePago,
+    OrdenCompraClientePagoItem,
+    oc_estado_label,
+)
 
 
 def normalizar_nombre_vendedor(nombre: str | None) -> str:
@@ -175,6 +181,195 @@ def descontar_stock_oc(
     return descontados, omitidos, []
 
 
+def restaurar_stock_oc(
+    oc: OrdenCompraCliente,
+    usuario: str,
+) -> tuple[int, list[str]]:
+    """
+    Restaura stock de ítems que se descontaron al entregar. Todo-o-nada.
+    Retorna (restaurados, errores).
+    """
+    from app.ventas.routes import _adjust_product_stock, _normalize_origen_compra
+
+    items = [i for i in oc.items if i.stock_descontado]
+    if not items:
+        oc.stock_deducted = False
+        return 0, []
+
+    restaurados = 0
+    reason = f"Reverso entrega OC cliente {oc.numero_oc or oc.id}"
+    for item in items:
+        qty = int(item.cantidad or 0)
+        if qty <= 0:
+            item.stock_descontado = False
+            continue
+        err = _adjust_product_stock(
+            codigo=(item.codigo_producto or "").strip().upper(),
+            marca=(item.marca or "").strip().upper(),
+            bodega=(item.bodega or "").strip() or "Bodega 1",
+            origen_compra=_normalize_origen_compra(""),
+            delta=qty,
+            reason=reason,
+        )
+        if err:
+            return 0, [err]
+        item.stock_descontado = False
+        restaurados += 1
+
+    oc.stock_deducted = False
+    return restaurados, []
+
+
+def item_neto(item: OrdenCompraClienteItem) -> float:
+    return round(float(item.subtotal or 0), 2)
+
+
+def item_total_con_iva(item: OrdenCompraClienteItem, oc: OrdenCompraCliente) -> float:
+    """Prorratea IVA del header de la OC; si no hay neto, aplica 19%."""
+    neto = item_neto(item)
+    oc_neto = float(oc.neto or 0)
+    oc_iva = float(oc.iva or 0)
+    if oc_neto > 0 and oc_iva >= 0:
+        return round(neto + (neto / oc_neto) * oc_iva, 2)
+    return round(neto * 1.19, 2)
+
+
+def oc_tiene_marcas_pago_item(oc: OrdenCompraCliente) -> bool:
+    return any(bool(getattr(i, "pagado", False)) for i in (oc.items or []))
+
+
+def item_esta_pagado(item: OrdenCompraClienteItem, oc: OrdenCompraCliente) -> bool:
+    """Compat: OC ya pagada sin marcas por ítem ⇒ todos los ítems se consideran pagados."""
+    if (oc.estado or "").strip().lower() == "pagada" and not oc_tiene_marcas_pago_item(oc):
+        return True
+    return bool(getattr(item, "pagado", False))
+
+
+def oc_items_pendientes(oc: OrdenCompraCliente) -> list[OrdenCompraClienteItem]:
+    return [i for i in (oc.items or []) if not item_esta_pagado(i, oc)]
+
+
+def oc_monto_pendiente(oc: OrdenCompraCliente) -> float:
+    return round(sum(item_total_con_iva(i, oc) for i in oc_items_pendientes(oc)), 2)
+
+
+def oc_monto_cobrado(oc: OrdenCompraCliente) -> float:
+    return round(
+        sum(item_total_con_iva(i, oc) for i in (oc.items or []) if item_esta_pagado(i, oc)),
+        2,
+    )
+
+
+def oc_tiene_pago_parcial(oc: OrdenCompraCliente) -> bool:
+    if (oc.estado or "").strip().lower() != "entregada":
+        return False
+    items = list(oc.items or [])
+    if not items:
+        return False
+    n_pag = sum(1 for i in items if item_esta_pagado(i, oc))
+    return 0 < n_pag < len(items)
+
+
+def oc_estado_display(oc: OrdenCompraCliente) -> tuple[str, str]:
+    """(label, badge_color) para lista/detalle."""
+    est = (oc.estado or "").strip().lower()
+    if oc_tiene_pago_parcial(oc):
+        return ("Parcialmente cobrada", "amber")
+    return (oc_estado_label(est), {
+        "recibida": "blue",
+        "entregada": "orange",
+        "pagada": "green",
+        "anulada": "slate",
+    }.get(est, "slate"))
+
+
+def registrar_pago_oc(
+    oc: OrdenCompraCliente,
+    *,
+    numero_factura: str,
+    fecha_pago: datetime,
+    metodo_pago: str,
+    item_ids: list[int] | None = None,
+    usuario: str | None = None,
+    referencia_pago: str | None = None,
+) -> tuple[OrdenCompraClientePago | None, list[str]]:
+    """
+    Registra un abono sobre ítems pendientes.
+    Sin item_ids (o vacíos) ⇒ cobra todos los pendientes (pago total restante).
+    """
+    errors: list[str] = []
+    if (oc.estado or "") != "entregada":
+        return None, ["Solo se puede registrar pago desde estado entregada."]
+
+    factura = (numero_factura or "").strip()
+    if not factura:
+        return None, ["El número de factura es obligatorio para registrar el pago."]
+
+    pendientes = {i.id: i for i in oc_items_pendientes(oc)}
+    if not pendientes:
+        return None, ["No quedan ítems pendientes de cobro en esta OC."]
+
+    if item_ids:
+        ids = sorted({int(x) for x in item_ids if int(x) > 0})
+        seleccion = []
+        for iid in ids:
+            it = pendientes.get(iid)
+            if it is None:
+                errors.append(f"Ítem #{iid} no está pendiente de cobro o no pertenece a la OC.")
+            else:
+                seleccion.append(it)
+        if errors:
+            return None, errors
+        if not seleccion:
+            return None, ["Seleccione al menos un ítem para facturar."]
+    else:
+        seleccion = list(pendientes.values())
+
+    ref = (referencia_pago or "").strip()[:120] or None
+    monto = round(sum(item_total_con_iva(i, oc) for i in seleccion), 2)
+    now = datetime.utcnow()
+    pago = OrdenCompraClientePago(
+        oc_id=oc.id,
+        numero_factura=factura[:60],
+        fecha_pago=fecha_pago,
+        metodo_pago=metodo_pago,
+        monto=monto,
+        referencia_pago=ref,
+        usuario=(usuario or "").strip()[:100] or None,
+        created_at=now,
+    )
+    db.session.add(pago)
+    db.session.flush()
+
+    for it in seleccion:
+        neto = item_neto(it)
+        con_iva = item_total_con_iva(it, oc)
+        db.session.add(
+            OrdenCompraClientePagoItem(
+                pago_id=pago.id,
+                item_id=it.id,
+                subtotal_neto=neto,
+                monto_con_iva=con_iva,
+            )
+        )
+        it.pagado = True
+        it.numero_factura = factura[:60]
+        it.fecha_pago = fecha_pago
+        it.metodo_pago = metodo_pago
+
+    oc.numero_factura = factura[:60]
+    oc.fecha_pago = fecha_pago
+    oc.metodo_pago = metodo_pago
+    if ref:
+        oc.referencia_pago = ref
+    oc.updated_at = now
+
+    if not oc_items_pendientes(oc):
+        oc.estado = "pagada"
+
+    return pago, []
+
+
 def timeline_eventos(oc: OrdenCompraCliente) -> list[dict]:
     events: list[dict] = []
     if oc.created_at:
@@ -201,7 +396,45 @@ def timeline_eventos(oc: OrdenCompraCliente) -> list[dict]:
                 "detalle": det,
             }
         )
-    if oc.fecha_pago and (oc.estado or "") == "pagada":
+
+    pagos = (
+        OrdenCompraClientePago.query.filter_by(oc_id=oc.id)
+        .order_by(OrdenCompraClientePago.fecha_pago.asc(), OrdenCompraClientePago.id.asc())
+        .all()
+    )
+    if pagos:
+        for p in pagos:
+            nf = (p.numero_factura or "").strip()
+            mp = (p.metodo_pago or "").strip()
+            n_items = len(p.items or [])
+            det = f"Factura {nf}" if nf else "Abono registrado"
+            det += f" · ${float(p.monto or 0):,.0f}".replace(",", ".")
+            if n_items:
+                det += f" · {n_items} ítem(s)"
+            if mp:
+                det += f" · {mp.replace('_', ' ')}"
+            if (p.referencia_pago or "").strip():
+                det += f" · Ref. {(p.referencia_pago or '').strip()}"
+            if p.usuario:
+                det += f" · {p.usuario}"
+            events.append(
+                {
+                    "estado": "pagada" if (oc.estado or "") == "pagada" else "entregada",
+                    "label": "Abono / factura" if (oc.estado or "") != "pagada" or len(pagos) > 1 else "Pagada",
+                    "fecha": p.fecha_pago,
+                    "detalle": det,
+                }
+            )
+        if (oc.estado or "") == "pagada" and len(pagos) > 1:
+            events.append(
+                {
+                    "estado": "pagada",
+                    "label": "OC cobrada completa",
+                    "fecha": oc.fecha_pago or pagos[-1].fecha_pago,
+                    "detalle": "Todos los ítems facturados",
+                }
+            )
+    elif oc.fecha_pago and (oc.estado or "") == "pagada":
         nf = (oc.numero_factura or "").strip()
         mp = (oc.metodo_pago or "").strip()
         det = f"Factura {nf}" if nf else "Pago registrado"
@@ -260,7 +493,10 @@ def listar_oc_por_cliente(cliente_id: int) -> list[dict]:
     }
     out = []
     for oc in rows:
-        lab, badge = labels.get((oc.estado or "").strip().lower(), (oc.estado, "slate"))
+        if oc_tiene_pago_parcial(oc):
+            lab, badge = ("Parcialmente cobrada", "amber")
+        else:
+            lab, badge = labels.get((oc.estado or "").strip().lower(), (oc.estado, "slate"))
         out.append(
             {
                 "id": oc.id,
@@ -283,6 +519,7 @@ def registrar_pagos_conjuntos(
     metodo_pago: str,
     monto_recibido: float | None = None,
     referencia_pago: str | None = None,
+    usuario: str | None = None,
 ) -> tuple[list[OrdenCompraCliente], list[str]]:
     """Marca varias OC como pagadas con un mismo abono (factura distinta por OC)."""
     errors: list[str] = []
@@ -301,6 +538,10 @@ def registrar_pagos_conjuntos(
     for oc in ocs:
         if (oc.estado or "") != "entregada":
             errors.append(f"OC {oc.numero_oc}: no está pendiente de pago.")
+        elif oc_tiene_pago_parcial(oc):
+            errors.append(
+                f"OC {oc.numero_oc}: tiene cobro parcial; complete el pago desde el detalle de la OC."
+            )
         nf = (facturas.get(oc.id) or "").strip()
         if not nf:
             errors.append(f"OC {oc.numero_oc}: ingrese el número de factura.")
@@ -321,16 +562,28 @@ def registrar_pagos_conjuntos(
     ref = (referencia_pago or "").strip()[:120] or None
     monto_grupo = round(float(monto_recibido), 2) if monto_recibido and monto_recibido > 0 else suma
     now = datetime.utcnow()
+    user = (usuario or "").strip()[:100] or None
 
     for oc in ocs:
-        oc.estado = "pagada"
-        oc.numero_factura = facturas[oc.id][:60]
-        oc.fecha_pago = fecha_pago
-        oc.metodo_pago = metodo_pago
+        pago, errs = registrar_pago_oc(
+            oc,
+            numero_factura=facturas[oc.id],
+            fecha_pago=fecha_pago,
+            metodo_pago=metodo_pago,
+            item_ids=None,
+            usuario=user,
+            referencia_pago=ref,
+        )
+        if errs or pago is None:
+            errors.extend(errs or [f"OC {oc.numero_oc}: no se pudo registrar el pago."])
+            continue
         oc.pago_grupo_id = grupo_id if len(ocs) > 1 else None
         oc.referencia_pago = ref
         oc.monto_pago_grupo = monto_grupo if len(ocs) > 1 else None
         oc.updated_at = now
+
+    if errors:
+        return [], errors
 
     return ocs, []
 
@@ -356,7 +609,7 @@ def historial_cobros_mes(
     year: int | None = None,
     month: int | None = None,
 ) -> dict:
-    """Agrupa cobros del mes por abono (pago conjunto o individual)."""
+    """Agrupa cobros del mes por abono (pago conjunto, parcial o individual legacy)."""
     from flask import url_for
 
     today = date.today()
@@ -366,7 +619,22 @@ def historial_cobros_mes(
     _, last_day = monthrange(y, m)
     mes_fin = datetime(y, m, last_day, 23, 59, 59)
 
-    ocs = (
+    pagos = (
+        OrdenCompraClientePago.query.filter(
+            OrdenCompraClientePago.fecha_pago >= mes_inicio,
+            OrdenCompraClientePago.fecha_pago <= mes_fin,
+        )
+        .order_by(OrdenCompraClientePago.fecha_pago.desc(), OrdenCompraClientePago.id.desc())
+        .all()
+    )
+    oc_ids_pagos = {p.oc_id for p in pagos}
+    ocs_map: dict[int, OrdenCompraCliente] = {}
+    if oc_ids_pagos:
+        for o in OrdenCompraCliente.query.filter(OrdenCompraCliente.id.in_(oc_ids_pagos)).all():
+            ocs_map[o.id] = o
+
+    # Legacy: OC pagada en el mes sin filas en oc_clientes_pagos
+    ocs_legacy = (
         OrdenCompraCliente.query.filter(
             OrdenCompraCliente.estado == "pagada",
             OrdenCompraCliente.fecha_pago >= mes_inicio,
@@ -375,20 +643,62 @@ def historial_cobros_mes(
         .order_by(OrdenCompraCliente.fecha_pago.desc(), OrdenCompraCliente.id.desc())
         .all()
     )
+    legacy_with_pagos = set()
+    if ocs_legacy:
+        lids = [o.id for o in ocs_legacy]
+        for row in (
+            db.session.query(OrdenCompraClientePago.oc_id)
+            .filter(OrdenCompraClientePago.oc_id.in_(lids))
+            .distinct()
+            .all()
+        ):
+            legacy_with_pagos.add(row[0])
+    ocs_legacy = [o for o in ocs_legacy if o.id not in legacy_with_pagos]
 
     clientes_map: dict[int, str] = {}
-    cids = {o.cliente_id for o in ocs if o.cliente_id}
+    cids = {o.cliente_id for o in list(ocs_map.values()) + ocs_legacy if o.cliente_id}
     if cids:
         for cl in Cliente.query.filter(Cliente.id.in_(cids)).all():
             clientes_map[cl.id] = cl.nombre
 
+    items: list[dict] = []
+
+    # Abonos nuevos (parciales o totales vía tabla pagos)
+    for p in pagos:
+        oc = ocs_map.get(p.oc_id)
+        if oc is None:
+            continue
+        fp = p.fecha_pago
+        items.append(
+            {
+                "pago_key": f"pago_{p.id}",
+                "es_conjunto": False,
+                "fecha_pago": fp.strftime("%d/%m/%Y") if fp else "—",
+                "fecha_pago_sort": fp.isoformat() if fp else "",
+                "metodo_pago": p.metodo_pago or "",
+                "referencia_pago": (p.referencia_pago or "").strip(),
+                "monto_abono": float(p.monto or 0),
+                "cliente_nombre": clientes_map.get(oc.cliente_id, "—"),
+                "total_ordenes": float(oc.total or 0),
+                "ordenes": [
+                    {
+                        "id": oc.id,
+                        "numero_oc": oc.numero_oc,
+                        "numero_factura": (p.numero_factura or "").strip() or "—",
+                        "total": float(p.monto or 0),
+                        "detalle_url": url_for("oc_clientes.detalle", oid=oc.id),
+                    }
+                ],
+            }
+        )
+
+    # Legacy / pago conjunto antiguo
     grupos: dict[str, list[OrdenCompraCliente]] = {}
-    for oc in ocs:
+    for oc in ocs_legacy:
         gid = (oc.pago_grupo_id or "").strip()
         key = gid if gid else f"single_{oc.id}"
         grupos.setdefault(key, []).append(oc)
 
-    items: list[dict] = []
     for key, rows in grupos.items():
         rows.sort(key=lambda o: (o.numero_oc or ""))
         first = rows[0]
@@ -423,12 +733,13 @@ def historial_cobros_mes(
 
     items.sort(key=lambda x: x.get("fecha_pago_sort") or "", reverse=True)
     total_cobrado = round(sum(float(it["monto_abono"] or 0) for it in items), 2)
+    oc_count = len({o["id"] for it in items for o in it.get("ordenes") or []})
 
     mes_label = f"{_MESES_ES[m]} {y}" if 1 <= m <= 12 else f"{m:02d}/{y}"
     return {
         "mes_label": mes_label,
         "total_cobrado": total_cobrado,
         "cantidad_abonos": len(items),
-        "cantidad_oc": len(ocs),
+        "cantidad_oc": oc_count,
         "items": items,
     }

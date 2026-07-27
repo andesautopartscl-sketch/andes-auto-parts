@@ -12,6 +12,7 @@
       {% if p.giro %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Giro</dt><dd class="m-kv-list__val">{{ p.giro }}</dd></div>{% endif %}
       {% if p.telefono %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Teléfono</dt><dd class="m-kv-list__val">{{ p.telefono }}</dd></div>{% endif %}
       {% if p.email %}<div class="m-kv-list__row"><dt class="m-kv-list__key">Email</dt><dd class="m-kv-list__val">{{ p.email }}</dd></div>{% endif %}
+      <div class="m-kv-list__row"><dt class="m-kv-list__key">Saldo a favor</dt><dd class="m-kv-list__val">${{ "{:,.0f}".format(p.saldo_favor or 0).replace(",", ".") }}</dd></div>
     </dl>
   </section>
   <section class="m-section">

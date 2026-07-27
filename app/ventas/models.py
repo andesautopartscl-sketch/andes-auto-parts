@@ -181,6 +181,24 @@ class ClienteSaldoFavorMovimiento(db.Model):
     usuario = db.Column(db.String(100))
 
 
+class ProveedorSaldoFavorMovimiento(db.Model):
+    """Crédito a favor de Andes con un proveedor (ellos nos deben / saldo a favor nuestro)."""
+
+    __tablename__ = "ventas_proveedores_saldo_movimientos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    proveedor_id = db.Column(db.Integer, db.ForeignKey("ventas_proveedores.id"), index=True, nullable=False)
+    monto = db.Column(db.Float, nullable=False)  # + acredita, - consume
+    tipo = db.Column(db.String(32), nullable=False)  # manual_ingreso | manual_consumo | devolucion_ingreso | ajuste_ingreso
+    ref_factura_numero = db.Column(db.String(100))
+    ref_nota_credito_numero = db.Column(db.String(100))
+    razon = db.Column(db.String(2000))
+    ingreso_documento_id = db.Column(db.Integer, index=True)
+    ingreso_item_id = db.Column(db.Integer, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    usuario = db.Column(db.String(100))
+
+
 class Cliente(db.Model):
     __tablename__ = "ventas_clientes"
 

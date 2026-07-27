@@ -645,6 +645,12 @@ def create_app():
                 conn.execute(text("ALTER TABLE ingresos_documentos ADD COLUMN total_factura REAL"))
             if ing_docs_cols and "iva_factura" not in ing_docs_col_names:
                 conn.execute(text("ALTER TABLE ingresos_documentos ADD COLUMN iva_factura REAL"))
+            if ing_docs_cols and "monto_saldo_favor" not in ing_docs_col_names:
+                conn.execute(
+                    text(
+                        "ALTER TABLE ingresos_documentos ADD COLUMN monto_saldo_favor REAL NOT NULL DEFAULT 0"
+                    )
+                )
 
             conn.execute(
                 text(
@@ -814,6 +820,45 @@ def create_app():
                 text(
                     "CREATE INDEX IF NOT EXISTS idx_vc_saldo_doc ON "
                     "ventas_clientes_saldo_movimientos (documento_venta_id)"
+                )
+            )
+
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS ventas_proveedores_saldo_movimientos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        proveedor_id INTEGER NOT NULL,
+                        monto REAL NOT NULL,
+                        tipo VARCHAR(32) NOT NULL,
+                        ref_factura_numero VARCHAR(100),
+                        ref_nota_credito_numero VARCHAR(100),
+                        razon TEXT,
+                        ingreso_documento_id INTEGER,
+                        ingreso_item_id INTEGER,
+                        created_at DATETIME NOT NULL,
+                        usuario VARCHAR(100),
+                        FOREIGN KEY (proveedor_id) REFERENCES ventas_proveedores (id)
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_vp_saldo_proveedor ON "
+                    "ventas_proveedores_saldo_movimientos (proveedor_id)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_vp_saldo_ingreso ON "
+                    "ventas_proveedores_saldo_movimientos (ingreso_documento_id)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_vp_saldo_item ON "
+                    "ventas_proveedores_saldo_movimientos (ingreso_item_id)"
                 )
             )
 
@@ -995,6 +1040,77 @@ def create_app():
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_fecha_oc ON oc_clientes(fecha_oc)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_items_oc_id ON oc_clientes_items(oc_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_items_codigo ON oc_clientes_items(codigo_producto)"))
+
+            oc_item_cols = conn.execute(text("PRAGMA table_info(oc_clientes_items)")).fetchall()
+            oc_item_names = {c[1] for c in oc_item_cols} if oc_item_cols else set()
+            if oc_item_cols and "pagado" not in oc_item_names:
+                conn.execute(
+                    text("ALTER TABLE oc_clientes_items ADD COLUMN pagado BOOLEAN NOT NULL DEFAULT 0")
+                )
+            if oc_item_cols and "numero_factura" not in oc_item_names:
+                conn.execute(text("ALTER TABLE oc_clientes_items ADD COLUMN numero_factura VARCHAR(60)"))
+            if oc_item_cols and "fecha_pago" not in oc_item_names:
+                conn.execute(text("ALTER TABLE oc_clientes_items ADD COLUMN fecha_pago DATETIME"))
+            if oc_item_cols and "metodo_pago" not in oc_item_names:
+                conn.execute(text("ALTER TABLE oc_clientes_items ADD COLUMN metodo_pago VARCHAR(50)"))
+
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS oc_clientes_pagos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        oc_id INTEGER NOT NULL,
+                        numero_factura VARCHAR(60) NOT NULL,
+                        fecha_pago DATETIME NOT NULL,
+                        metodo_pago VARCHAR(50),
+                        monto REAL NOT NULL DEFAULT 0,
+                        referencia_pago VARCHAR(120),
+                        usuario VARCHAR(100),
+                        created_at DATETIME NOT NULL,
+                        FOREIGN KEY (oc_id) REFERENCES oc_clientes(id)
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_pagos_oc_id ON oc_clientes_pagos(oc_id)")
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_oc_clientes_pagos_fecha ON oc_clientes_pagos(fecha_pago)"
+                )
+            )
+            pago_cols = conn.execute(text("PRAGMA table_info(oc_clientes_pagos)")).fetchall()
+            pago_names = {c[1] for c in pago_cols} if pago_cols else set()
+            if pago_cols and "referencia_pago" not in pago_names:
+                conn.execute(
+                    text("ALTER TABLE oc_clientes_pagos ADD COLUMN referencia_pago VARCHAR(120)")
+                )
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS oc_clientes_pago_items (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        pago_id INTEGER NOT NULL,
+                        item_id INTEGER NOT NULL,
+                        subtotal_neto REAL DEFAULT 0,
+                        monto_con_iva REAL DEFAULT 0,
+                        FOREIGN KEY (pago_id) REFERENCES oc_clientes_pagos(id),
+                        FOREIGN KEY (item_id) REFERENCES oc_clientes_items(id)
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_oc_clientes_pago_items_pago ON oc_clientes_pago_items(pago_id)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_oc_clientes_pago_items_item ON oc_clientes_pago_items(item_id)"
+                )
+            )
 
             oc_cols = conn.execute(text("PRAGMA table_info(oc_clientes)")).fetchall()
             oc_names = {c[1] for c in oc_cols} if oc_cols else set()

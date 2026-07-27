@@ -2199,6 +2199,9 @@
                         rutInput.disabled = false;
                         rutStatus.textContent = "Proveedor encontrado y autocompletado.";
                         rutStatus.style.color = "#166534";
+                        if (typeof window.setIngresoProveedorSaldo === "function") {
+                            window.setIngresoProveedorSaldo(data.proveedor.saldo_favor || 0);
+                        }
                         setTimeout(function () {
                             var firstCodeInput = form.querySelector("input[name='codigo_producto[]']");
                             if (firstCodeInput) firstCodeInput.focus();
@@ -2216,6 +2219,9 @@
                             ciudad: "",
                             country: "Chile"
                         });
+                        if (typeof window.setIngresoProveedorSaldo === "function") {
+                            window.setIngresoProveedorSaldo(0);
+                        }
                         expandSupplierSection();
                         rutInput.readOnly = false;
                         rutInput.disabled = false;

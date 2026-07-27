@@ -22,12 +22,20 @@ from .services import (
     calcular_totales_items,
     codigo_en_inventario,
     descontar_stock_oc,
+    restaurar_stock_oc,
     listar_oc_por_cliente,
     listar_vendedores_catalogo,
     registrar_pagos_conjuntos,
+    registrar_pago_oc,
     historial_cobros_mes,
     resolver_nombre_vendedor_oc,
     timeline_eventos,
+    oc_estado_display,
+    oc_monto_pendiente,
+    oc_monto_cobrado,
+    oc_tiene_pago_parcial,
+    item_esta_pagado,
+    item_total_con_iva,
 )
 from .ocr import escanear_oc
 
@@ -284,6 +292,7 @@ def _estado_badge(estado: str) -> str:
         "entregada": "orange",
         "pagada": "green",
         "anulada": "slate",
+        "parcial": "amber",
     }.get((estado or "").strip().lower(), "slate")
 
 
@@ -314,28 +323,14 @@ def _dias_entrega_oc(oc: OrdenCompraCliente) -> int | None:
 
 def _build_list_summary() -> dict:
     pendientes = OrdenCompraCliente.query.filter_by(estado="recibida").count()
-    por_cobrar = (
-        db.session.query(func.coalesce(func.sum(OrdenCompraCliente.total), 0.0))
-        .filter(OrdenCompraCliente.estado == "entregada")
-        .scalar()
-    )
+    entregadas = OrdenCompraCliente.query.filter_by(estado="entregada").all()
+    por_cobrar = round(sum(oc_monto_pendiente(oc) for oc in entregadas), 2)
     today = date.today()
-    mes_inicio = datetime(today.year, today.month, 1)
-    _, last_day = monthrange(today.year, today.month)
-    mes_fin = datetime(today.year, today.month, last_day, 23, 59, 59)
-    cobrado_mes = (
-        db.session.query(func.coalesce(func.sum(OrdenCompraCliente.total), 0.0))
-        .filter(
-            OrdenCompraCliente.estado == "pagada",
-            OrdenCompraCliente.fecha_pago >= mes_inicio,
-            OrdenCompraCliente.fecha_pago <= mes_fin,
-        )
-        .scalar()
-    )
+    data_mes = historial_cobros_mes(today.year, today.month)
     return {
         "pendientes_entrega": int(pendientes or 0),
         "total_por_cobrar": float(por_cobrar or 0),
-        "cobrado_mes": float(cobrado_mes or 0),
+        "cobrado_mes": float(data_mes.get("total_cobrado") or 0),
         "mes_label": f"{_mes_nombre_es(today.month)} {today.year}",
     }
 
@@ -396,13 +391,16 @@ def lista():
     for oc in ordenes:
         dias_entrega = _dias_entrega_oc(oc)
         cl = clientes_map.get(oc.cliente_id)
+        est_label, est_badge = oc_estado_display(oc)
         filas.append(
             {
                 "oc": oc,
                 "cliente_nombre": cl.nombre if cl else "—",
-                "estado_label": _estado_label(oc.estado),
-                "badge": _estado_badge(oc.estado),
+                "estado_label": est_label,
+                "badge": est_badge,
                 "dias_entrega": dias_entrega,
+                "pago_parcial": oc_tiene_pago_parcial(oc),
+                "monto_pendiente": oc_monto_pendiente(oc) if (oc.estado or "") == "entregada" else None,
             }
         )
 
@@ -674,6 +672,27 @@ def detalle(oid: int):
             .order_by(OrdenCompraCliente.numero_oc.asc())
             .all()
         )
+    est_label, est_badge = oc_estado_display(oc)
+    items_pago = []
+    for it in oc.items or []:
+        items_pago.append(
+            {
+                "id": it.id,
+                "codigo": it.codigo_producto or "",
+                "descripcion": it.descripcion or "",
+                "marca": it.marca or "",
+                "cantidad": int(it.cantidad or 0),
+                "precio_unitario": float(it.precio_unitario or 0),
+                "subtotal": float(it.subtotal or 0),
+                "total_iva": item_total_con_iva(it, oc),
+                "en_inventario": bool(it.en_inventario),
+                "stock_descontado": bool(it.stock_descontado),
+                "pagado": item_esta_pagado(it, oc),
+                "numero_factura": (it.numero_factura or "").strip(),
+                "fecha_pago": it.fecha_pago,
+                "metodo_pago": it.metodo_pago or "",
+            }
+        )
     _partial = request.headers.get("X-Requested-With") == "XMLHttpRequest"
     return render_template(
         "oc_clientes/detalle.html",
@@ -681,8 +700,12 @@ def detalle(oid: int):
         cliente=cliente,
         timeline=timeline,
         pago_hermanas=pago_hermanas,
-        estado_label=_estado_label(oc.estado),
-        badge=_estado_badge(oc.estado),
+        estado_label=est_label,
+        badge=est_badge,
+        items_pago=items_pago,
+        monto_cobrado=oc_monto_cobrado(oc),
+        monto_pendiente=oc_monto_pendiente(oc),
+        pago_parcial=oc_tiene_pago_parcial(oc),
         metodo_labels=METODO_PAGO_LABELS,
         metodo_pago_options=[(k, METODO_PAGO_LABELS.get(k, k)) for k in METODO_PAGO_OPTIONS if k != "saldo_favor"],
         vendedores_opciones=[v.nombre for v in listar_vendedores_catalogo()],
@@ -768,6 +791,51 @@ def marcar_entregada(oid: int):
     return redirect(url_for("oc_clientes.detalle", oid=oid))
 
 
+@oc_clientes_bp.route("/<int:oid>/revertir-entrega", methods=["POST"])
+@login_required
+@permission_required("mod_oc_clientes")
+def revertir_entrega(oid: int):
+    """Vuelve una OC de entregada a recibida (p. ej. para editar o anular)."""
+    oc = db.session.get(OrdenCompraCliente, oid)
+    if oc is None:
+        flash("Orden no encontrada.", "error")
+        return redirect(url_for("oc_clientes.lista"))
+    if (oc.estado or "") != "entregada":
+        flash("Solo se puede revertir la entrega de una OC en estado entregada.", "error")
+        return redirect(url_for("oc_clientes.detalle", oid=oid))
+    if oc_tiene_pago_parcial(oc) or any(bool(getattr(i, "pagado", False)) for i in (oc.items or [])):
+        flash(
+            "No se puede revertir la entrega: esta OC ya tiene ítems cobrados/facturados. "
+            "Complete el cobro desde Registrar pago.",
+            "error",
+        )
+        return redirect(url_for("oc_clientes.detalle", oid=oid))
+
+    try:
+        n_rest, errors = restaurar_stock_oc(oc, _current_user())
+        if errors:
+            raise ValueError("; ".join(errors))
+
+        oc.estado = "recibida"
+        oc.fecha_entrega_real = None
+        oc.numero_guia_despacho = None
+        oc.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        if n_rest:
+            flash(
+                f"Entrega revertida. La OC volvió a recibida y se restauró stock en {n_rest} ítem(s).",
+                "success",
+            )
+        else:
+            flash("Entrega revertida. La OC volvió a estado recibida.", "success")
+    except Exception as exc:
+        db.session.rollback()
+        flash(f"No se pudo revertir la entrega: {exc}", "error")
+
+    return redirect(url_for("oc_clientes.detalle", oid=oid))
+
+
 @oc_clientes_bp.route("/<int:oid>/pago", methods=["POST"])
 @login_required
 @permission_required("mod_oc_clientes")
@@ -787,21 +855,44 @@ def registrar_pago(oid: int):
         now,
     ) or now
     metodo = (request.form.get("metodo_pago") or "").strip().lower()
+    referencia = (request.form.get("referencia_pago") or "").strip()
+    item_ids_raw = request.form.getlist("item_id")
+    item_ids = [_safe_int(x) for x in item_ids_raw]
+    item_ids = [i for i in item_ids if i > 0] or None
 
-    if not numero_factura:
-        flash("El número de factura es obligatorio para registrar el pago.", "error")
-        return redirect(url_for("oc_clientes.detalle", oid=oid))
     if metodo not in METODO_PAGO_OPTIONS:
         flash("Método de pago inválido.", "error")
         return redirect(url_for("oc_clientes.detalle", oid=oid))
 
-    oc.estado = "pagada"
-    oc.numero_factura = numero_factura[:60]
-    oc.fecha_pago = fecha_pago
-    oc.metodo_pago = metodo
-    oc.updated_at = datetime.utcnow()
-    db.session.commit()
-    flash("Pago registrado correctamente.", "success")
+    pago, errors = registrar_pago_oc(
+        oc,
+        numero_factura=numero_factura,
+        fecha_pago=fecha_pago,
+        metodo_pago=metodo,
+        item_ids=item_ids,
+        usuario=_current_user(),
+        referencia_pago=referencia,
+    )
+    for err in errors:
+        flash(err, "error")
+    if errors or pago is None:
+        return redirect(url_for("oc_clientes.detalle", oid=oid))
+
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        flash(f"No se pudo registrar el pago: {exc}", "error")
+        return redirect(url_for("oc_clientes.detalle", oid=oid))
+
+    if (oc.estado or "") == "pagada":
+        flash("Pago registrado. OC marcada como pagada.", "success")
+    else:
+        flash(
+            f"Abono registrado (factura {pago.numero_factura}) por "
+            f"${pago.monto:,.0f}. Quedan ítems pendientes de cobro.".replace(",", "."),
+            "success",
+        )
     return redirect(url_for("oc_clientes.detalle", oid=oid))
 
 
@@ -836,10 +927,12 @@ def registrar_pago_multiple():
         metodo,
         monto_recibido=monto_recibido,
         referencia_pago=referencia,
+        usuario=_current_user(),
     )
     for err in errors:
         flash(err, "error")
     if errors:
+        db.session.rollback()
         return redirect(url_for("oc_clientes.lista"))
 
     try:

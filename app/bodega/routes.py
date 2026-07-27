@@ -15,7 +15,7 @@ from werkzeug.security import check_password_hash
 
 from app.extensions import db
 from app.seguridad.models import Usuario
-from app.ventas.models import DocumentoVenta, Proveedor
+from app.ventas.models import DocumentoVenta, Proveedor, ProveedorSaldoFavorMovimiento
 from app.utils.party_fields import normalize_party_email, party_text_upper
 from app.utils.decorators import admin_required, login_required
 from app.utils.invoice_vision import analizar_factura, garantizar_producto_factura, reconcile_factura_totals_con_lineas
@@ -116,7 +116,15 @@ def _proveedor_json_ingreso(proveedor: Proveedor) -> dict:
     if emp and nom and nom.lower() != emp.lower():
         contact = nom
     name = emp or nom or ""
+    saldo = 0.0
+    try:
+        from app.ventas.routes import _proveedor_saldo_favor_ledger, _round_money_cl
+
+        saldo = _round_money_cl(_proveedor_saldo_favor_ledger(int(proveedor.id)))
+    except Exception:
+        saldo = 0.0
     return {
+        "id": int(proveedor.id),
         "rut": format_rut(proveedor.rut or ""),
         "name": name,
         "contact": contact,
@@ -128,6 +136,7 @@ def _proveedor_json_ingreso(proveedor: Proveedor) -> dict:
         "region": (proveedor.region or "").strip(),
         "ciudad": (proveedor.ciudad or "").strip(),
         "country": (proveedor.pais or DEFAULT_COUNTRY).strip() or DEFAULT_COUNTRY,
+        "saldo_favor": saldo,
     }
 
 # Métodos de pago habituales hacia proveedores (ingreso de stock); el usuario puede elegir "Otro".
@@ -140,6 +149,7 @@ INGRESO_METODOS_PAGO_OPCIONES = [
     "Cheque al día",
     "Efectivo",
     "Pago en sucursal",
+    "Saldo a favor",
     "Crédito proveedor",
     "Convenio / pago a plazo",
     "Documento de pago",
@@ -585,6 +595,44 @@ def _observacion_con_incorporacion(
 
 def _parse_metodo_pago_ingreso() -> str:
     return (request.form.get("metodo_pago") or "").strip()[:120]
+
+
+def _parse_monto_saldo_favor_ingreso() -> float:
+    raw = (request.form.get("monto_saldo_favor") or "").strip()
+    if not raw:
+        return 0.0
+    parsed = _parse_valor_neto_chile(raw)
+    if parsed is None:
+        # fallback: dígitos simples / punto decimal
+        try:
+            return max(0.0, float(raw.replace(".", "").replace(",", ".") if "," in raw else raw))
+        except (TypeError, ValueError):
+            return 0.0
+    return max(0.0, float(parsed))
+
+
+def _aplicar_saldo_favor_ingreso_guardado(
+    documento: IngresoDocumento,
+    *,
+    proveedor_id: int | None,
+    prev_monto: float,
+    new_monto: float,
+    total_doc: float,
+) -> None:
+    """Aplica consumo de saldo; lanza ValueError si no es válido."""
+    from app.ventas.routes import _aplicar_consumo_saldo_favor_en_ingreso, _round_money_cl
+
+    err = _aplicar_consumo_saldo_favor_en_ingreso(
+        proveedor_id=int(proveedor_id or 0),
+        ingreso_doc=documento,
+        prev_monto=_round_money_cl(prev_monto),
+        new_monto=_round_money_cl(new_monto),
+        total_doc=_round_money_cl(total_doc),
+        numero_factura=(documento.numero_documento or "").strip() or None,
+        usuario=session.get("user") or "sistema",
+    )
+    if err:
+        raise ValueError(err)
 
 
 def _online_users() -> list[Usuario]:
@@ -2370,6 +2418,9 @@ def ingreso():
         "total_factura": (request.form.get("total_factura") or "").strip()
         if request.method == "POST"
         else "",
+        "monto_saldo_favor": (request.form.get("monto_saldo_favor") or "").strip()
+        if request.method == "POST"
+        else "",
     }
 
     default_rows = [
@@ -2604,6 +2655,33 @@ def ingreso():
                             codigo,
                         )
 
+                    # Consumo de saldo a favor del proveedor (opcional).
+                    total_para_saldo = float(
+                        total_factura_val
+                        if total_factura_val is not None
+                        else round(float(sum_neto_lines) * 1.19, 2)
+                    )
+                    monto_sf = _parse_monto_saldo_favor_ingreso()
+                    # Si eligió método "Saldo a favor" y no escribió monto, usar el máximo.
+                    if (
+                        monto_sf <= 0
+                        and (form_data.get("metodo_pago") or "").strip().lower() == "saldo a favor"
+                    ):
+                        from app.ventas.routes import _proveedor_saldo_favor_ledger, _round_money_cl
+
+                        disponible = _round_money_cl(_proveedor_saldo_favor_ledger(int(proveedor.id)))
+                        monto_sf = min(disponible, total_para_saldo)
+                    if monto_sf > 0:
+                        _aplicar_saldo_favor_ingreso_guardado(
+                            documento,
+                            proveedor_id=proveedor.id,
+                            prev_monto=0.0,
+                            new_monto=monto_sf,
+                            total_doc=total_para_saldo,
+                        )
+                        if monto_sf + 0.02 >= total_para_saldo:
+                            documento.metodo_pago = "Saldo a favor"
+
                     db.session.commit()
                     document_created = documento.id
                     n_items_guardados = len(rows)
@@ -2633,6 +2711,7 @@ def ingreso():
                         "observacion": "",
                         "metodo_pago": "",
                         "total_factura": "",
+                        "monto_saldo_favor": "",
                     }
                     supplier_found = False
                     created_supplier_inline = False
@@ -2652,11 +2731,18 @@ def ingreso():
 
     ingreso_mostrar_resumen_proveedor = False
     ingreso_mostrar_tarjeta_proveedor = False
+    proveedor_saldo_favor = 0.0
     rut_ui = (form_data.get("supplier_rut") or "").strip()
     if rut_ui and _is_valid_rut(rut_ui):
         prov_ui = _buscar_proveedor_por_rut(rut_ui)
         if prov_ui is not None:
             ingreso_mostrar_resumen_proveedor = True
+            try:
+                from app.ventas.routes import _proveedor_saldo_favor_ledger, _round_money_cl
+
+                proveedor_saldo_favor = _round_money_cl(_proveedor_saldo_favor_ledger(int(prov_ui.id)))
+            except Exception:
+                proveedor_saldo_favor = 0.0
         else:
             ingreso_mostrar_tarjeta_proveedor = True
 
@@ -2678,6 +2764,7 @@ def ingreso():
             metodos_pago_opciones=INGRESO_METODOS_PAGO_OPCIONES,
             ingreso_mostrar_resumen_proveedor=ingreso_mostrar_resumen_proveedor,
             ingreso_mostrar_tarjeta_proveedor=ingreso_mostrar_tarjeta_proveedor,
+            proveedor_saldo_favor=proveedor_saldo_favor,
             chile_geo_ingreso=_geo_ingreso,
             chile_regions_ingreso=_chile_region_names(_geo_ingreso),
         ),
@@ -3209,6 +3296,66 @@ def _ingreso_wants_embed_partial() -> bool:
     return (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
 
 
+def _ingreso_ver_nav_ctx(doc: IngresoDocumento | None = None) -> dict:
+    """
+    Contexto de navegación 'volver' para ingreso_ver.
+    from=proveedor&pid=… → historial del proveedor.
+    Si viene from=proveedor sin pid, intenta resolver por proveedor_id del doc.
+    """
+    origen = (request.values.get("from") or request.args.get("from") or "").strip().lower()
+    pid_raw = (request.values.get("pid") or request.args.get("pid") or "").strip()
+    pid = 0
+    try:
+        pid = int(pid_raw) if pid_raw else 0
+    except (TypeError, ValueError):
+        pid = 0
+
+    doc_pid = 0
+    if doc is not None and getattr(doc, "proveedor_id", None):
+        try:
+            doc_pid = int(doc.proveedor_id)
+        except (TypeError, ValueError):
+            doc_pid = 0
+
+    if origen == "proveedor":
+        if pid <= 0:
+            pid = doc_pid
+        if pid > 0:
+            return {
+                "volver_from": "proveedor",
+                "volver_pid": pid,
+                "volver_url": url_for("ventas.proveedor_historial", pid=pid),
+                "volver_label": "← Volver al historial del proveedor",
+                "volver_secundario_url": url_for("bodega.ingreso_historial"),
+                "volver_secundario_label": "Historial ingresos",
+            }
+
+    # Desde historial de ingresos: volver ahí, y ofrecer acceso al proveedor si aplica.
+    out = {
+        "volver_from": "",
+        "volver_pid": doc_pid,
+        "volver_url": url_for("bodega.ingreso_historial"),
+        "volver_label": "← Volver al historial",
+        "volver_secundario_url": None,
+        "volver_secundario_label": None,
+    }
+    if doc_pid > 0:
+        out["volver_secundario_url"] = url_for("ventas.proveedor_historial", pid=doc_pid)
+        out["volver_secundario_label"] = "Historial proveedor"
+    return out
+
+
+def _ingreso_ver_redirect(doc_id: int, **extra):
+    """Redirect a ingreso_ver preservando from/pid de navegación."""
+    nav = _ingreso_ver_nav_ctx()
+    kwargs = {"doc_id": doc_id}
+    if nav.get("volver_from") == "proveedor" and nav.get("volver_pid"):
+        kwargs["from"] = "proveedor"
+        kwargs["pid"] = nav["volver_pid"]
+    kwargs.update(extra)
+    return redirect(url_for("bodega.ingreso_ver", **kwargs))
+
+
 def _ingreso_detalle_contexto(doc: IngresoDocumento, items: list[IngresoDocumentoItem]) -> dict:
     total_neto = (
         db.session.query(
@@ -3258,6 +3405,7 @@ def _ingreso_detalle_contexto(doc: IngresoDocumento, items: list[IngresoDocument
         "total_factura_referencia": (
             float(doc.total_factura) if getattr(doc, "total_factura", None) is not None else None
         ),
+        "monto_saldo_favor": float(getattr(doc, "monto_saldo_favor", 0) or 0),
         "proveedor_codes": proveedor_codes,
     }
 
@@ -3283,6 +3431,36 @@ def ingreso_ver(doc_id: int):
     detalle = _ingreso_detalle_contexto(doc, items)
     embed_modal = (request.args.get("embed") or "").strip() == "1"
     rut_fmt = format_rut(doc.proveedor_rut or "") if (doc.proveedor_rut or "").strip() else ""
+
+    # Ítems ya acreditados como devolución/crédito (no se modifica el ingreso fiscal).
+    credited_item_ids: set[int] = set()
+    try:
+        credited_rows = (
+            db.session.query(ProveedorSaldoFavorMovimiento.ingreso_item_id)
+            .filter(
+                ProveedorSaldoFavorMovimiento.ingreso_documento_id == doc.id,
+                ProveedorSaldoFavorMovimiento.ingreso_item_id.isnot(None),
+                ProveedorSaldoFavorMovimiento.monto > 0,
+            )
+            .all()
+        )
+        credited_item_ids = {int(r[0]) for r in credited_rows if r[0]}
+    except Exception:
+        credited_item_ids = set()
+
+    credito_sugerido: dict[int, float] = {}
+    try:
+        from app.ventas.routes import _credito_item_ingreso_con_iva, _round_money_cl
+
+        for it in items:
+            credito_sugerido[int(it.id)] = _round_money_cl(
+                _credito_item_ingreso_con_iva(it, doc, items)
+            )
+    except Exception:
+        credito_sugerido = {}
+
+    nav = _ingreso_ver_nav_ctx(doc)
+
     return render_template(
         "bodega/ingreso_ver.html",
         **_base_context(
@@ -3292,10 +3470,200 @@ def ingreso_ver(doc_id: int):
             proveedor_rut_fmt=rut_fmt or (doc.proveedor_rut or ""),
             puede_ver_finanzas=user_can_view_finanzas(session.get("user"), session.get("rol")),
             embed_modal=embed_modal,
+            credited_item_ids=credited_item_ids,
+            credito_sugerido=credito_sugerido,
             _partial=_ingreso_wants_embed_partial(),
+            **nav,
             **detalle,
         ),
     )
+
+
+@bodega_bp.route("/ingreso/<int:doc_id>/devolucion-credito", methods=["POST"])
+@admin_required
+def ingreso_devolucion_credito(doc_id: int):
+    """
+    Registra crédito a favor con el proveedor por ítem(s) devueltos.
+    No altera líneas ni totales del ingreso (historial fiscal intacto).
+    Opcionalmente descuenta stock del/los ítem(s).
+    """
+    if not has_permission(session.get("user"), session.get("rol"), "bodega_ingreso"):
+        return _deny_bodega_perm("No tienes permiso para registrar devoluciones de ingreso.")
+    if not user_can_view_finanzas(session.get("user"), session.get("rol")):
+        flash("Se requiere permiso de finanzas para registrar crédito con proveedor.", "error")
+        return _ingreso_ver_redirect(doc_id)
+
+    doc = db.session.get(IngresoDocumento, doc_id)
+    if doc is None:
+        flash("Ingreso no encontrado.", "error")
+        return redirect(url_for("bodega.ingreso_historial"))
+    if getattr(doc, "anulado", False):
+        flash("No se puede registrar devolución sobre un ingreso anulado.", "error")
+        return _ingreso_ver_redirect(doc_id)
+
+    from app.ventas.routes import _credito_item_ingreso_con_iva, _round_money_cl
+
+    item_ids = []
+    for raw in request.form.getlist("item_id"):
+        try:
+            item_ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    item_ids = list(dict.fromkeys(item_ids))
+    if not item_ids:
+        flash("Seleccioná al menos un ítem a devolver.", "error")
+        return _ingreso_ver_redirect(doc_id)
+
+    razon = (request.form.get("razon_devolucion") or "").strip()
+    if not razon:
+        flash("Indicá el motivo de la devolución / crédito.", "error")
+        return _ingreso_ver_redirect(doc_id)
+    descontar_stock = (request.form.get("descontar_stock") or "").strip().lower() in {
+        "1",
+        "on",
+        "true",
+        "yes",
+    }
+    ref_nc = (request.form.get("ref_nota_credito") or "").strip()[:100]
+
+    items = (
+        IngresoDocumentoItem.query.filter_by(ingreso_documento_id=doc.id)
+        .order_by(IngresoDocumentoItem.id.asc())
+        .all()
+    )
+    by_id = {int(it.id): it for it in items}
+    selected = [by_id[i] for i in item_ids if i in by_id]
+    if not selected:
+        flash("Los ítems seleccionados no pertenecen a este ingreso.", "error")
+        return _ingreso_ver_redirect(doc_id)
+
+    ya = {
+        int(r[0])
+        for r in db.session.query(ProveedorSaldoFavorMovimiento.ingreso_item_id)
+        .filter(
+            ProveedorSaldoFavorMovimiento.ingreso_documento_id == doc.id,
+            ProveedorSaldoFavorMovimiento.ingreso_item_id.in_([it.id for it in selected]),
+            ProveedorSaldoFavorMovimiento.monto > 0,
+        )
+        .all()
+        if r[0]
+    }
+    selected = [it for it in selected if int(it.id) not in ya]
+    if not selected:
+        flash("Esos ítems ya tienen crédito registrado para este ingreso.", "error")
+        return _ingreso_ver_redirect(doc_id)
+
+    # Resolver proveedor
+    proveedor = None
+    if doc.proveedor_id:
+        proveedor = db.session.get(Proveedor, int(doc.proveedor_id))
+    if proveedor is None and (doc.proveedor_rut or "").strip():
+        rut_norm = clean_rut(doc.proveedor_rut or "")
+        if rut_norm:
+            proveedor = Proveedor.query.filter(
+                Proveedor.activo.is_(True),
+                or_(Proveedor.rut == rut_norm, Proveedor.rut == doc.proveedor_rut),
+            ).first()
+    if proveedor is None:
+        flash(
+            "Este ingreso no está vinculado a un proveedor del maestro. "
+            "Asociá el proveedor antes de registrar el crédito.",
+            "error",
+        )
+        return _ingreso_ver_redirect(doc_id)
+
+    try:
+        total_credito = 0.0
+        codigos_stock = []
+        for it in selected:
+            monto = _round_money_cl(_credito_item_ingreso_con_iva(it, doc, items))
+            if monto <= 0:
+                raise ValueError(
+                    f"No se pudo calcular crédito para {it.codigo_producto or it.id} "
+                    "(sin valor neto)."
+                )
+            qty = max(int(it.cantidad or 0), 0)
+            if qty <= 0:
+                raise ValueError(f"La línea {it.codigo_producto} no tiene cantidad.")
+
+            if descontar_stock:
+                codigo = (it.codigo_producto or "").strip().upper()
+                marca = _normalize_brand(it.marca or "")
+                bodega = _normalize_bodega(it.bodega or "")
+                origen_compra = _normalize_origen_compra(getattr(it, "origen_compra", None))
+                if _requiere_variante(codigo, marca):
+                    variante = (
+                        ProductoVarianteStock.query.filter_by(
+                            codigo_producto=codigo,
+                            marca=marca,
+                            bodega=bodega,
+                            origen_compra=origen_compra,
+                        ).first()
+                    )
+                    actual = int(variante.stock or 0) if variante else 0
+                    if actual < qty:
+                        raise ValueError(
+                            f"Stock insuficiente para devolver {codigo}: actual {actual}, requiere {qty}."
+                        )
+                    variante.stock = actual - qty
+                    _sincronizar_stock_base_desde_variantes(codigo)
+                else:
+                    actual = _stock_actual_catalogo(codigo)
+                    if actual < qty:
+                        raise ValueError(
+                            f"Stock insuficiente para devolver {codigo}: actual {actual}, requiere {qty}."
+                        )
+                    _actualizar_stock(codigo, actual - qty)
+
+                _registrar_movimiento(
+                    codigo,
+                    "salida",
+                    qty,
+                    f"Devolución a proveedor / crédito. Doc {doc.id} fac {(doc.numero_documento or '').strip()}. {razon}"[
+                        :255
+                    ],
+                    proveedor=doc.proveedor_nombre,
+                    marca=marca or None,
+                    bodega=bodega,
+                    origen_compra=origen_compra,
+                    ingreso_documento_id=doc.id,
+                )
+                codigos_stock.append(codigo)
+
+            db.session.add(
+                ProveedorSaldoFavorMovimiento(
+                    proveedor_id=proveedor.id,
+                    monto=monto,
+                    tipo="devolucion_ingreso",
+                    ref_factura_numero=(doc.numero_documento or "").strip()[:100] or None,
+                    ref_nota_credito_numero=ref_nc or None,
+                    razon=(
+                        f"{razon} | Ítem {it.codigo_producto or '—'} "
+                        f"{(it.descripcion_producto or '')[:80]} x{qty}"
+                    )[:2000],
+                    ingreso_documento_id=doc.id,
+                    ingreso_item_id=it.id,
+                    usuario=session.get("user") or "sistema",
+                )
+            )
+            total_credito = _round_money_cl(total_credito + monto)
+
+        db.session.commit()
+        msg = (
+            f"Crédito con proveedor registrado: ${total_credito:,.0f}".replace(",", ".")
+            + f" ({len(selected)} ítem(s))."
+        )
+        if descontar_stock and codigos_stock:
+            msg += " Stock descontado."
+        elif not descontar_stock:
+            msg += " Stock no modificado."
+        flash(msg, "success")
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("ingreso_devolucion_credito")
+        flash(f"No se pudo registrar la devolución/crédito: {exc}", "error")
+
+    return _ingreso_ver_redirect(doc_id)
 
 
 @bodega_bp.route("/ingreso/pdf/<int:doc_id>", methods=["GET"])
@@ -3700,6 +4068,32 @@ def ingreso_editar(doc_id: int):
                 doc.total_factura = None
                 doc.iva_factura = None
 
+            total_para_saldo = float(
+                doc.total_factura
+                if doc.total_factura is not None
+                else round(float(total_neto_actual or 0) * 1.19, 2)
+            )
+            prev_sf = float(getattr(doc, "monto_saldo_favor", 0) or 0)
+            new_sf = _parse_monto_saldo_favor_ingreso()
+            if (
+                new_sf <= 0
+                and (_parse_metodo_pago_ingreso() or "").strip().lower() == "saldo a favor"
+            ):
+                from app.ventas.routes import _proveedor_saldo_favor_ledger, _round_money_cl
+
+                pid = int(doc.proveedor_id or 0)
+                disponible = _round_money_cl(_proveedor_saldo_favor_ledger(pid) + prev_sf)
+                new_sf = min(disponible, total_para_saldo)
+            _aplicar_saldo_favor_ingreso_guardado(
+                doc,
+                proveedor_id=int(doc.proveedor_id or 0),
+                prev_monto=prev_sf,
+                new_monto=new_sf,
+                total_doc=total_para_saldo,
+            )
+            if new_sf > 0 and new_sf + 0.02 >= total_para_saldo:
+                doc.metodo_pago = "Saldo a favor"
+
             if old_fecha != nueva_fecha:
                 # Si cambian la fecha del documento, reflejarla también en los movimientos
                 # ligados al ingreso, usando la hora actual de Chile.
@@ -3720,6 +4114,17 @@ def ingreso_editar(doc_id: int):
             return redirect(url_for("bodega.ingreso_editar", doc_id=doc.id))
 
     detalle = _ingreso_detalle_contexto(doc, items)
+    proveedor_saldo_favor = 0.0
+    if doc.proveedor_id:
+        try:
+            from app.ventas.routes import _proveedor_saldo_favor_ledger, _round_money_cl
+
+            proveedor_saldo_favor = _round_money_cl(
+                _proveedor_saldo_favor_ledger(int(doc.proveedor_id))
+                + float(getattr(doc, "monto_saldo_favor", 0) or 0)
+            )
+        except Exception:
+            proveedor_saldo_favor = 0.0
     return render_template(
         "bodega/ingreso_editar.html",
         **_base_context(
@@ -3727,6 +4132,7 @@ def ingreso_editar(doc_id: int):
             doc=doc,
             items=items,
             metodos_pago_opciones=INGRESO_METODOS_PAGO_OPCIONES,
+            proveedor_saldo_favor=proveedor_saldo_favor,
             **detalle,
         ),
     )
@@ -3836,6 +4242,21 @@ def ingreso_anular(doc_id: int):
         doc.anulado_at = datetime.utcnow()
         doc.anulado_por = (auth_actor.usuario if auth_actor else (session.get("user") or "sistema"))[:100]
         doc.anulacion_motivo = motivo
+        # Devolver saldo a favor si este ingreso lo había consumido.
+        prev_sf = float(getattr(doc, "monto_saldo_favor", 0) or 0)
+        if prev_sf > 0.001 and doc.proveedor_id:
+            total_para_saldo = float(
+                doc.total_factura
+                if doc.total_factura is not None
+                else prev_sf
+            )
+            _aplicar_saldo_favor_ingreso_guardado(
+                doc,
+                proveedor_id=int(doc.proveedor_id),
+                prev_monto=prev_sf,
+                new_monto=0.0,
+                total_doc=total_para_saldo,
+            )
         db.session.commit()
         flash(f"Ingreso #{doc.id} anulado correctamente. Stock revertido.", "success")
     except Exception as exc:

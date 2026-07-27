@@ -1,0 +1,91 @@
+<script>
+(function () {
+    var panel = document.getElementById('ingresoSaldoFavorPanel');
+    var inp = document.getElementById('monto_saldo_favor');
+    var hint = document.getElementById('ingresoSaldoDisponibleHint');
+    var resto = document.getElementById('ingresoSaldoRestoHint');
+    var btnMax = document.getElementById('ingresoSaldoUsarMax');
+    var autoCb = document.getElementById('ingresoSaldoAuto');
+    var met = document.getElementById('ingresoMetodoPago') || document.getElementById('metodo_pago');
+    var totalEl = document.getElementById('ingresoTotalFactura') || document.getElementById('ingEditTotalFactura');
+    if (!panel || !inp) return;
+
+    var maxSaldo = parseFloat(panel.getAttribute('data-saldo') || '0') || 0;
+
+    function parseChile(s) {
+        s = (s || '').toString().trim().replace(/\s/g, '');
+        if (!s) return 0;
+        if (s.indexOf(',') !== -1) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+        return parseFloat(s.replace(/\./g, '')) || 0;
+    }
+    function fmt(n) {
+        return Math.round(n || 0).toLocaleString('es-CL', { maximumFractionDigits: 0 });
+    }
+    function totalDoc() {
+        if (totalEl) return Math.max(0, parseChile(totalEl.value));
+        return 0;
+    }
+    function syncHint() {
+        if (!resto) return;
+        var use = Math.max(0, parseChile(inp.value));
+        var tot = totalDoc();
+        var cap = Math.min(maxSaldo, tot > 0 ? tot : maxSaldo);
+        if (use > cap + 0.01) use = cap;
+        var r = tot > 0 ? Math.max(0, tot - use) : 0;
+        if (use <= 0) {
+            resto.textContent = maxSaldo > 0
+                ? 'Podés descontar hasta $' + fmt(cap) + ' de este crédito.'
+                : '';
+        } else if (r > 0.01) {
+            resto.textContent = 'Resta por pagar con otro medio: $' + fmt(r);
+        } else {
+            resto.textContent = 'Factura cubierta con saldo a favor (sin resto).';
+            if (met && !(met.value || '').trim()) met.value = 'Saldo a favor';
+        }
+    }
+    function applyMax(forceMetodo) {
+        var tot = totalDoc();
+        var use = tot > 0 ? Math.min(maxSaldo, tot) : maxSaldo;
+        inp.value = use > 0 ? String(Math.round(use)) : '0';
+        if (forceMetodo && use > 0 && met && tot > 0 && use + 0.01 >= tot) {
+            met.value = 'Saldo a favor';
+        }
+        syncHint();
+    }
+    function setSaldo(n) {
+        maxSaldo = Math.max(0, parseFloat(n) || 0);
+        panel.setAttribute('data-saldo', String(maxSaldo));
+        panel.style.display = maxSaldo > 0.001 || parseChile(inp.value) > 0 ? '' : 'none';
+        if (hint) {
+            hint.textContent = '(disp. $' + fmt(maxSaldo) + ')';
+        }
+        if (autoCb && autoCb.checked && maxSaldo > 0) applyMax(true);
+        else syncHint();
+    }
+
+    window.setIngresoProveedorSaldo = setSaldo;
+
+    if (btnMax) btnMax.addEventListener('click', function () { applyMax(true); });
+    if (autoCb) autoCb.addEventListener('change', function () {
+        if (autoCb.checked) applyMax(true);
+    });
+    inp.addEventListener('input', syncHint);
+    inp.addEventListener('change', syncHint);
+    if (totalEl) {
+        totalEl.addEventListener('input', function () {
+            if (autoCb && autoCb.checked) applyMax(false);
+            else syncHint();
+        });
+        totalEl.addEventListener('change', function () {
+            if (autoCb && autoCb.checked) applyMax(false);
+            else syncHint();
+        });
+    }
+    if (met) {
+        met.addEventListener('change', function () {
+            if ((met.value || '').trim().toLowerCase() === 'saldo a favor') applyMax(false);
+        });
+    }
+    syncHint();
+})();
+</script>

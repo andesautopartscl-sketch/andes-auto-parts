@@ -897,6 +897,9 @@ def api_oc_clientes_pago(oid: int):
         numero_factura=payload.get("numero_factura") or "",
         fecha_pago=payload.get("fecha_pago"),
         metodo_pago=payload.get("metodo_pago") or "",
+        usuario=session.get("user"),
+        item_ids=payload.get("item_ids"),
+        referencia_pago=payload.get("referencia_pago") or "",
     )
     if not ok:
         return jsonify(ok=False, error=msg), 400

@@ -20,6 +20,7 @@
 .badge-oc.blue { background: #dbeafe; color: #1d4ed8; }
 .badge-oc.orange { background: #ffedd5; color: #c2410c; }
 .badge-oc.green { background: #dcfce7; color: #15803d; }
+.badge-oc.amber { background: #fef3c7; color: #b45309; }
 .badge-oc.slate { background: #f1f5f9; color: #64748b; }
 .oc-detail-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; flex-shrink: 0; }
 .oc-detail-card {
@@ -84,7 +85,7 @@
 }
 .oc-modal.open { display: flex; }
 .oc-modal-box {
-    background: #fff; border-radius: 10px; width: 100%; max-width: 420px; padding: 14px 16px;
+    background: #fff; border-radius: 10px; width: 100%; max-width: 520px; padding: 14px 16px;
     box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
 }
 .oc-modal-box h3 { margin: 0 0 10px; font-size: 14px; font-weight: 700; color: #0f172a; }
@@ -163,7 +164,10 @@
                         data-oc-num="{{ oc.numero_oc }}"
                         data-anular-url="{{ url_for('oc_clientes.anular', oid=oc.id) }}">Anular</button>
                 {% elif oc.estado == 'entregada' %}
-                <button type="button" class="btn sm primary" id="btnPago">Registrar pago</button>
+                {% if not pago_parcial %}
+                <button type="button" class="btn sm outline" id="btnRevertirEntrega">Revertir entrega</button>
+                {% endif %}
+                <button type="button" class="btn sm primary" id="btnPago">{% if pago_parcial %}Completar cobro{% else %}Registrar pago{% endif %}</button>
                 {% elif oc.estado == 'anulada' %}
                 <form method="post" action="{{ url_for('oc_clientes.reactivar', oid=oc.id) }}" onsubmit="return confirm('¿Reactivar esta OC?');">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -215,22 +219,32 @@
                     <dt>Guía despacho</dt>
                     <dd>{{ oc.numero_guia_despacho or '—' }}</dd>
                 </div>
-                {% if oc.estado == 'pagada' %}
+                {% if oc.estado == 'pagada' or pago_parcial %}
                 <div class="oc-meta-item">
-                    <dt>N° factura</dt>
+                    <dt>N° factura{% if pago_parcial %} (último){% endif %}</dt>
                     <dd>{{ oc.numero_factura or '—' }}</dd>
                 </div>
                 <div class="oc-meta-item">
-                    <dt>Fecha pago</dt>
+                    <dt>Fecha pago{% if pago_parcial %} (último){% endif %}</dt>
                     <dd>{{ oc.fecha_pago.strftime('%d/%m/%Y') if oc.fecha_pago else '—' }}</dd>
                 </div>
                 <div class="oc-meta-item">
                     <dt>Método pago</dt>
                     <dd>{{ metodo_labels.get(oc.metodo_pago, oc.metodo_pago) if oc.metodo_pago else '—' }}</dd>
                 </div>
+                {% if pago_parcial or (oc.estado == 'entregada' and monto_cobrado and monto_cobrado > 0) %}
+                <div class="oc-meta-item">
+                    <dt>Cobrado</dt>
+                    <dd><strong>${{ '{:,.0f}'.format(monto_cobrado or 0).replace(',', '.') }}</strong></dd>
+                </div>
+                <div class="oc-meta-item">
+                    <dt>Pendiente</dt>
+                    <dd><strong style="color:#c2410c;">${{ '{:,.0f}'.format(monto_pendiente or 0).replace(',', '.') }}</strong></dd>
+                </div>
+                {% endif %}
                 {% if oc.referencia_pago %}
                 <div class="oc-meta-item">
-                    <dt>Referencia pago</dt>
+                    <dt>N° comprobante</dt>
                     <dd>{{ oc.referencia_pago }}</dd>
                 </div>
                 {% endif %}
@@ -274,12 +288,13 @@
                             <th style="text-align:right;">Subtotal</th>
                             <th>Inventario</th>
                             <th style="text-align:center;">Stock desc.</th>
+                            <th>Cobro</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for it in oc.items %}
+                        {% for it in items_pago %}
                         <tr>
-                            <td class="code">{{ it.codigo_producto or '—' }}</td>
+                            <td class="code">{{ it.codigo or '—' }}</td>
                             <td>{{ it.descripcion or '—' }}</td>
                             <td>{{ it.marca or '—' }}</td>
                             <td class="num" style="text-align:center;">{{ it.cantidad }}</td>
@@ -287,9 +302,16 @@
                             <td class="num">${{ '{:,.0f}'.format(it.subtotal or 0).replace(',', '.') }}</td>
                             <td><span class="{% if it.en_inventario %}oc-inv-yes{% else %}oc-inv-no{% endif %}">{% if it.en_inventario %}✓ inv.{% else %}— libre{% endif %}</span></td>
                             <td class="num" style="text-align:center;">{% if it.stock_descontado %}Sí{% elif it.en_inventario %}No{% else %}N/A{% endif %}</td>
+                            <td>
+                                {% if it.pagado %}
+                                <span class="oc-inv-yes" title="{{ it.numero_factura }}">Fact. {{ it.numero_factura or '✓' }}</span>
+                                {% else %}
+                                <span class="oc-inv-no">Pendiente</span>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="8" class="empty">Sin ítems.</td></tr>
+                        <tr><td colspan="9" class="empty">Sin ítems.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -369,13 +391,71 @@
 {% endif %}
 
 {% if puede_modificar and oc.estado == 'entregada' %}
+<div class="oc-modal" id="modalRevertirEntrega">
+    <div class="oc-modal-box">
+        <h3>Revertir entrega</h3>
+        <form method="post" action="{{ url_for('oc_clientes.revertir_entrega', oid=oc.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <p style="margin:0 0 12px;font-size:13px;color:#475569;line-height:1.45;">
+                La OC volverá a estado <strong>Recibida</strong>. Se limpiará la fecha y guía de entrega
+                {% if oc.stock_deducted %}y se restaurará el stock descontado{% else %}(no hay stock descontado que restaurar){% endif %}.
+                Después podrá editarla o anularla.
+            </p>
+            <div style="display:flex;gap:6px;justify-content:flex-end;">
+                <button type="button" class="btn sm modal-cancel">Cancelar</button>
+                <button type="submit" class="btn sm danger">Confirmar reverso</button>
+            </div>
+        </form>
+    </div>
+</div>
 <div class="oc-modal" id="modalPago">
     <div class="oc-modal-box">
-        <h3>Registrar pago</h3>
+        <h3>Registrar pago / factura</h3>
         <form method="post" id="formPago" action="{{ url_for('oc_clientes.registrar_pago', oid=oc.id) }}" novalidate>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <p style="margin:0 0 8px;font-size:12px;color:#64748b;line-height:1.4;">
+                Seleccione los ítems a facturar. Si deja todos marcados, se cobra el saldo pendiente completo.
+            </p>
+            <div id="pagoItemsBox" style="max-height:180px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:10px;">
+                <table style="width:100%;border-collapse:collapse;min-width:0;">
+                    <thead>
+                        <tr>
+                            <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b;background:#f8fafc;border-bottom:1px solid #e2e8f0;width:28px;">
+                                <input type="checkbox" id="pagoCheckAll" title="Todos" checked>
+                            </th>
+                            <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b;background:#f8fafc;border-bottom:1px solid #e2e8f0;">Ítem</th>
+                            <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b;background:#f8fafc;border-bottom:1px solid #e2e8f0;">Total c/IVA</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for it in items_pago if not it.pagado %}
+                        <tr>
+                            <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle;">
+                                <input type="checkbox" class="pago-item-cb" name="item_id" value="{{ it.id }}"
+                                       data-monto="{{ '%.2f'|format(it.total_iva) }}" checked>
+                            </td>
+                            <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#334155;">
+                                <strong style="color:#0f172a;">{{ it.codigo }}</strong>
+                                <span style="display:block;font-size:11px;color:#64748b;">{{ it.descripcion }}</span>
+                            </td>
+                            <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;">
+                                ${{ '{:,.0f}'.format(it.total_iva).replace(',', '.') }}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="3" style="padding:12px;text-align:center;color:#94a3b8;font-size:12px;">Sin ítems pendientes.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 10px;font-size:12px;color:#475569;">
+                <span>Total a facturar</span>
+                <strong id="pagoTotalSel" style="color:#1d4ed8;font-size:14px;">$0</strong>
+            </div>
             <label for="numero_factura">N° factura *</label>
             <input id="numero_factura" name="numero_factura" required maxlength="60" autocomplete="off" placeholder="Ej. 12345">
+            <label for="referencia_pago">N° comprobante de pago</label>
+            <input id="referencia_pago" name="referencia_pago" maxlength="120" autocomplete="off" placeholder="Ej. transferencia, voucher, operación">
             <label for="fecha_pago">Fecha pago</label>
             <input id="fecha_pago" name="fecha_pago" type="date" required>
             <label for="metodo_pago">Método de pago</label>
@@ -414,6 +494,7 @@
     function closeModals() { document.querySelectorAll('.oc-modal').forEach(function (m) { m.classList.remove('open'); }); }
 
     document.getElementById('btnEntregar')?.addEventListener('click', function () { openModal('modalEntregar'); });
+    document.getElementById('btnRevertirEntrega')?.addEventListener('click', function () { openModal('modalRevertirEntrega'); });
     document.getElementById('btnVendedor')?.addEventListener('click', function () { openModal('modalVendedor'); });
     document.getElementById('btnPago')?.addEventListener('click', function () { openModal('modalPago'); });
     document.getElementById('btnImprimir')?.addEventListener('click', function () { openModal('modalImprimir'); });
@@ -428,12 +509,45 @@
     });
 
     var formPago = document.getElementById('formPago');
+    function fmtClp(n) {
+        return '$' + Math.round(n || 0).toLocaleString('es-CL');
+    }
+    function updatePagoTotal() {
+        var total = 0;
+        document.querySelectorAll('.pago-item-cb:checked').forEach(function (cb) {
+            total += parseFloat(cb.getAttribute('data-monto') || '0') || 0;
+        });
+        var el = document.getElementById('pagoTotalSel');
+        if (el) el.textContent = fmtClp(total);
+    }
+    document.getElementById('pagoCheckAll')?.addEventListener('change', function () {
+        var on = !!this.checked;
+        document.querySelectorAll('.pago-item-cb').forEach(function (cb) { cb.checked = on; });
+        updatePagoTotal();
+    });
+    document.querySelectorAll('.pago-item-cb').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var all = document.querySelectorAll('.pago-item-cb');
+            var checked = document.querySelectorAll('.pago-item-cb:checked');
+            var master = document.getElementById('pagoCheckAll');
+            if (master) master.checked = all.length > 0 && checked.length === all.length;
+            updatePagoTotal();
+        });
+    });
+    updatePagoTotal();
+
     formPago?.addEventListener('submit', function (e) {
         var nf = (document.getElementById('numero_factura')?.value || '').trim();
         if (!nf) {
             e.preventDefault();
             alert('Debe ingresar el número de factura para registrar el pago.');
             document.getElementById('numero_factura')?.focus();
+            return;
+        }
+        var cbs = document.querySelectorAll('.pago-item-cb');
+        if (cbs.length && !document.querySelectorAll('.pago-item-cb:checked').length) {
+            e.preventDefault();
+            alert('Seleccione al menos un ítem para facturar.');
         }
     });
 })();

@@ -180,6 +180,26 @@
                 {% endfor %}
             </select>
         </div>
+        <div class="field" id="ingresoSaldoFavorPanel" data-saldo="{{ proveedor_saldo_favor|default(0) }}"
+             style="grid-column:1 / -1;{% if (proveedor_saldo_favor|default(0)|float) <= 0 and (monto_saldo_favor|default(0)|float) <= 0 %}display:none;{% endif %}">
+            <label for="monto_saldo_favor">
+                Saldo a favor del proveedor
+                <span id="ingresoSaldoDisponibleHint" style="font-weight:500;color:#15803d;">
+                    (usable ${{ '{:,.0f}'.format((proveedor_saldo_favor|default(0))|float).replace(',', '.') }})
+                </span>
+            </label>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                <input id="monto_saldo_favor" name="monto_saldo_favor" type="text" inputmode="decimal"
+                       value="{% if monto_saldo_favor is not none %}{{ '{:,.0f}'.format(monto_saldo_favor|float).replace(',', '.') }}{% else %}0{% endif %}"
+                       placeholder="0" autocomplete="off" style="flex:1 1 140px;max-width:200px;">
+                <button type="button" class="btn" id="ingresoSaldoUsarMax" style="padding:4px 8px;font-size:11px;">Usar máximo</button>
+                <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#475569;cursor:pointer;">
+                    <input type="checkbox" id="ingresoSaldoAuto" value="1">
+                    Aplicar automático
+                </label>
+            </div>
+            <small id="ingresoSaldoRestoHint" style="display:block;margin-top:4px;font-size:11px;color:#64748b;"></small>
+        </div>
         <div class="field" style="grid-column:1 / -1;">
             <label for="observacion">Observación</label>
             <input id="observacion" name="observacion" maxlength="255" value="{{ doc.observacion or '' }}" placeholder="Nota u observación del ingreso">
@@ -465,5 +485,6 @@
     });
 })();
 </script>
+{% include 'partials/ingreso_saldo_favor_script.html' %}
 {% endblock %}
 

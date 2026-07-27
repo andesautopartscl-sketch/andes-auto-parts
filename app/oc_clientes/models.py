@@ -82,5 +82,46 @@ class OrdenCompraClienteItem(db.Model):
     subtotal = db.Column(db.Float, default=0.0)
     en_inventario = db.Column(db.Boolean, default=False, nullable=False)
     stock_descontado = db.Column(db.Boolean, default=False, nullable=False)
+    # Pago parcial por ítem (factura externa).
+    pagado = db.Column(db.Boolean, default=False, nullable=False)
+    numero_factura = db.Column(db.String(60))
+    fecha_pago = db.Column(db.DateTime)
+    metodo_pago = db.Column(db.String(50))
 
     orden = db.relationship("OrdenCompraCliente", back_populates="items")
+
+
+class OrdenCompraClientePago(db.Model):
+    """Abono / factura externa asociada a una o más líneas de la OC."""
+
+    __tablename__ = "oc_clientes_pagos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    oc_id = db.Column(db.Integer, db.ForeignKey("oc_clientes.id"), nullable=False, index=True)
+    numero_factura = db.Column(db.String(60), nullable=False)
+    fecha_pago = db.Column(db.DateTime, nullable=False, index=True)
+    metodo_pago = db.Column(db.String(50))
+    monto = db.Column(db.Float, nullable=False, default=0.0)  # total c/IVA del abono
+    referencia_pago = db.Column(db.String(120))
+    usuario = db.Column(db.String(100))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    orden = db.relationship("OrdenCompraCliente", backref=db.backref("pagos", lazy="dynamic"))
+    items = db.relationship(
+        "OrdenCompraClientePagoItem",
+        back_populates="pago",
+        cascade="all, delete-orphan",
+    )
+
+
+class OrdenCompraClientePagoItem(db.Model):
+    __tablename__ = "oc_clientes_pago_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    pago_id = db.Column(db.Integer, db.ForeignKey("oc_clientes_pagos.id"), nullable=False, index=True)
+    item_id = db.Column(db.Integer, db.ForeignKey("oc_clientes_items.id"), nullable=False, index=True)
+    subtotal_neto = db.Column(db.Float, default=0.0)
+    monto_con_iva = db.Column(db.Float, default=0.0)
+
+    pago = db.relationship("OrdenCompraClientePago", back_populates="items")
+    item = db.relationship("OrdenCompraClienteItem")

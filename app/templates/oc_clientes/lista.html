@@ -82,6 +82,7 @@
 .badge-oc.blue { background: #dbeafe; color: #1d4ed8; }
 .badge-oc.orange { background: #ffedd5; color: #c2410c; }
 .badge-oc.green { background: #dcfce7; color: #15803d; }
+.badge-oc.amber { background: #fef3c7; color: #b45309; }
 .badge-oc.slate { background: #f1f5f9; color: #64748b; }
 .oc-list-page .btn.sm { padding: 3px 8px; font-size: 10px; border-radius: 5px; line-height: 1.3; }
 .oc-list-actions { display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; align-items: center; }
@@ -168,7 +169,8 @@
                         <th>Vendedor</th>
                         <th style="text-align:right;">Total</th>
                         <th>Estado</th>
-                        <th style="text-align:center;" title="Días desde la fecha de la OC hasta la entrega real">Días</th>
+                        <th style="text-align:center;" title="Días desde la fecha de la OC hasta la entrega real">Días de entrega</th>
+                        <th title="Fecha y hora de la entrega real">Fecha y hora de entrega</th>
                         <th style="width:168px;text-align:right;">Acciones</th>
                     </tr>
                 </thead>
@@ -176,12 +178,12 @@
                     {% for f in filas %}
                     <tr data-oc-id="{{ f.oc.id }}"
                         data-oc-num="{{ f.oc.numero_oc }}"
-                        data-oc-total="{{ f.oc.total or 0 }}"
+                        data-oc-total="{{ f.monto_pendiente if f.monto_pendiente is not none else (f.oc.total or 0) }}"
                         data-cliente-id="{{ f.oc.cliente_id }}"
-                        data-oc-pendiente="{% if f.oc.estado == 'entregada' %}1{% else %}0{% endif %}">
+                        data-oc-pendiente="{% if f.oc.estado == 'entregada' and not f.pago_parcial %}1{% else %}0{% endif %}">
                         {% if puede_modificar %}
                         <td class="check">
-                            {% if f.oc.estado == 'entregada' %}
+                            {% if f.oc.estado == 'entregada' and not f.pago_parcial %}
                             <input type="checkbox" class="oc-row-check" aria-label="Seleccionar OC {{ f.oc.numero_oc }}">
                             {% endif %}
                         </td>
@@ -193,6 +195,7 @@
                         <td class="num">${{ '{:,.0f}'.format(f.oc.total or 0).replace(',', '.') }}</td>
                         <td><span class="badge-oc {{ f.badge }}" title="{{ f.estado_label }}">{{ f.estado_label }}</span></td>
                         <td class="num" style="text-align:center;">{% if f.dias_entrega is not none %}{{ f.dias_entrega }}{% else %}—{% endif %}</td>
+                        <td>{{ f.oc.fecha_entrega_real.strftime('%d/%m/%y %H:%M') if f.oc.fecha_entrega_real else '—' }}</td>
                         <td>
                             <div class="oc-list-actions">
                                 <a class="btn sm outline" href="{{ url_for('oc_clientes.detalle', oid=f.oc.id) }}">Ver</a>
@@ -202,6 +205,8 @@
                                     <button type="button" class="btn sm danger btn-oc-anular"
                                             data-oc-num="{{ f.oc.numero_oc }}"
                                             data-anular-url="{{ url_for('oc_clientes.anular', oid=f.oc.id) }}">Anular</button>
+                                    {% elif f.oc.estado == 'entregada' and f.pago_parcial %}
+                                    <a class="btn sm primary" href="{{ url_for('oc_clientes.detalle', oid=f.oc.id) }}">Completar cobro</a>
                                     {% elif f.oc.estado == 'entregada' %}
                                     <button type="button" class="btn sm primary btn-oc-pago-uno">Pago</button>
                                     {% elif f.oc.estado == 'anulada' %}
