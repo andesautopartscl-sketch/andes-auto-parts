@@ -283,6 +283,136 @@
     .audit-filters-grid { grid-template-columns: 1fr 1fr; }
     .audit-filters-grid .field:first-child { grid-column: 1 / -1; }
   }
+
+  /* Modal bloqueo IP */
+  .ip-block-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(3px);
+    z-index: 1400;
+  }
+  .ip-block-modal.open { display: flex; }
+  .ip-block-card {
+    width: min(420px, 100%);
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.32);
+    overflow: hidden;
+    animation: ipBlockIn .18s ease-out;
+  }
+  @keyframes ipBlockIn {
+    from { opacity: 0; transform: translateY(8px) scale(.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .ip-block-card-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px 18px 12px;
+    background: linear-gradient(180deg, #fef2f2 0%, #fff 100%);
+    border-bottom: 1px solid #fee2e2;
+  }
+  .ip-block-icon {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: #fee2e2;
+    color: #dc2626;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 800;
+  }
+  .ip-block-card-head h3 {
+    margin: 0 0 2px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  .ip-block-card-head p {
+    margin: 0;
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.4;
+  }
+  .ip-block-ip {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 1px 7px;
+    border-radius: 5px;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: .02em;
+  }
+  .ip-block-body { padding: 14px 18px 16px; }
+  .ip-block-body label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 3px;
+  }
+  .ip-block-body input {
+    width: 100%;
+    height: 34px;
+    box-sizing: border-box;
+    padding: 0 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    font-size: 12.5px;
+    color: #334155;
+    margin-bottom: 10px;
+    outline: none;
+    background: #fff;
+  }
+  .ip-block-body input:focus { border-color: #fca5a5; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1); }
+  .ip-block-hint {
+    margin: 0 0 12px;
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.35;
+  }
+  .ip-block-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .ip-block-actions .btn-cancel {
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    background: #fff;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .ip-block-actions .btn-cancel:hover { background: #f8fafc; }
+  .ip-block-actions .btn-block {
+    height: 32px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 7px;
+    background: #dc2626;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .ip-block-actions .btn-block:hover { background: #b91c1c; }
 </style>
 
 <section class="audit-card">
@@ -398,15 +528,12 @@
                   <button type="submit" class="ok">OK</button>
                 </form>
                 {% else %}
-                <form method="post" action="{{ url_for('seguridad.auditoria_ip_accion') }}" onsubmit="return confirm('¿Bloquear {{ ipr.ip }}?');">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                  <input type="hidden" name="ip" value="{{ ipr.ip }}">
-                  <input type="hidden" name="accion_ip" value="bloquear">
-                  <input type="hidden" name="q" value="{{ q }}">
-                  <input type="hidden" name="usuario" value="{{ usuario }}">
-                  <input type="hidden" name="filtro_accion" value="{{ accion }}">
-                  <button type="submit" class="danger">BLOQ</button>
-                </form>
+                <button type="button" class="danger js-ip-block"
+                        data-ip="{{ ipr.ip }}"
+                        data-q="{{ q }}"
+                        data-usuario="{{ usuario }}"
+                        data-filtro-accion="{{ accion }}"
+                        title="Bloquear IP">BLOQ</button>
                 {% endif %}
               </div>
             </td>
@@ -512,15 +639,12 @@
                 <button type="submit" class="ok">OK</button>
               </form>
               {% else %}
-              <form method="post" action="{{ url_for('seguridad.auditoria_ip_accion') }}" onsubmit="return confirm('¿Bloquear {{ row.ip }}?');">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <input type="hidden" name="ip" value="{{ row.ip }}">
-                <input type="hidden" name="accion_ip" value="bloquear">
-                <input type="hidden" name="q" value="{{ q }}">
-                <input type="hidden" name="usuario" value="{{ usuario }}">
-                <input type="hidden" name="filtro_accion" value="{{ accion }}">
-                <button type="submit" class="danger">BLOQ</button>
-              </form>
+              <button type="button" class="danger js-ip-block"
+                      data-ip="{{ row.ip }}"
+                      data-q="{{ q }}"
+                      data-usuario="{{ usuario }}"
+                      data-filtro-accion="{{ accion }}"
+                      title="Bloquear IP">BLOQ</button>
               {% endif %}
             </div>
             {% endif %}
@@ -544,4 +668,95 @@
     <span>SuperAdmin entra aunque la IP esté bloqueada</span>
   </div>
 </section>
+
+<div id="ipBlockModal" class="ip-block-modal" aria-hidden="true">
+  <div class="ip-block-card" role="dialog" aria-modal="true" aria-labelledby="ipBlockTitle">
+    <div class="ip-block-card-head">
+      <div class="ip-block-icon" aria-hidden="true">!</div>
+      <div>
+        <h3 id="ipBlockTitle">Bloquear IP</h3>
+        <p>Esta IP no podrá iniciar sesión (salvo SuperAdmin).</p>
+        <span class="ip-block-ip" id="ipBlockIpLabel">—</span>
+      </div>
+    </div>
+    <div class="ip-block-body">
+      <form id="ipBlockForm" method="post" action="{{ url_for('seguridad.auditoria_ip_accion') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="ip" id="ipBlockIp" value="">
+        <input type="hidden" name="accion_ip" value="bloquear">
+        <input type="hidden" name="q" id="ipBlockQ" value="">
+        <input type="hidden" name="usuario" id="ipBlockUsuario" value="">
+        <input type="hidden" name="filtro_accion" id="ipBlockFiltroAccion" value="">
+
+        <p class="ip-block-hint">Confirma con tu usuario y contraseña para continuar.</p>
+
+        <label for="ipBlockAuthUser">Usuario</label>
+        <input id="ipBlockAuthUser" name="auth_user" required autocomplete="username"
+               placeholder="Tu usuario" value="{{ session.get('user') or '' }}">
+
+        <label for="ipBlockAuthPass">Contraseña</label>
+        <input id="ipBlockAuthPass" name="auth_password" type="password" required
+               autocomplete="current-password" placeholder="Tu contraseña">
+
+        <div class="ip-block-actions">
+          <button type="button" class="btn-cancel" id="ipBlockCancel">Cancelar</button>
+          <button type="submit" class="btn-block">Validar y bloquear</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var modal = document.getElementById('ipBlockModal');
+  var form = document.getElementById('ipBlockForm');
+  var ipInput = document.getElementById('ipBlockIp');
+  var ipLabel = document.getElementById('ipBlockIpLabel');
+  var qInput = document.getElementById('ipBlockQ');
+  var usuarioInput = document.getElementById('ipBlockUsuario');
+  var filtroInput = document.getElementById('ipBlockFiltroAccion');
+  var authUser = document.getElementById('ipBlockAuthUser');
+  var authPass = document.getElementById('ipBlockAuthPass');
+  var cancelBtn = document.getElementById('ipBlockCancel');
+  if (!modal || !form || !ipInput || !authPass) return;
+
+  function openModal(btn) {
+    var ip = btn.getAttribute('data-ip') || '';
+    ipInput.value = ip;
+    ipLabel.textContent = ip || '—';
+    qInput.value = btn.getAttribute('data-q') || '';
+    usuarioInput.value = btn.getAttribute('data-usuario') || '';
+    filtroInput.value = btn.getAttribute('data-filtro-accion') || '';
+    authPass.value = '';
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    setTimeout(function () {
+      if (authUser && !authUser.value) authUser.focus();
+      else authPass.focus();
+    }, 30);
+  }
+
+  function closeModal() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    authPass.value = '';
+  }
+
+  document.body.addEventListener('click', function (e) {
+    var btn = e.target.closest('.js-ip-block');
+    if (!btn) return;
+    e.preventDefault();
+    openModal(btn);
+  });
+
+  if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) closeModal();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+  });
+})();
+</script>
 {% endblock %}

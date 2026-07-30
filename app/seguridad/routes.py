@@ -445,6 +445,44 @@ def auditoria_sesion():
     )
 
 
+def _redirect_auditoria_ip():
+    return redirect(
+        url_for(
+            "seguridad.auditoria_sesion",
+            q=request.form.get("q") or None,
+            usuario=request.form.get("usuario") or None,
+            accion=request.form.get("filtro_accion") or None,
+        )
+    )
+
+
+def _validar_credenciales_propias_bloqueo(auth_user: str, auth_password: str) -> tuple[bool, str]:
+    """Exige usuario/clave del SuperAdmin actualmente logueado para bloquear una IP."""
+    session_user = (session.get("user") or "").strip()
+    user_name = (auth_user or "").strip()
+    raw_pass = auth_password or ""
+    if not user_name or not raw_pass:
+        return False, "Debe ingresar su usuario y contraseña para bloquear la IP."
+    if not session_user or user_name.casefold() != session_user.casefold():
+        return False, "El usuario debe coincidir con la sesión actual."
+
+    u = Usuario.query.filter_by(usuario=session_user).first()
+    if u is None:
+        return False, "Usuario de sesión no válido."
+    if not bool(u.activo):
+        return False, "Su usuario está inactivo."
+    if bool(getattr(u, "bloqueado_seguridad", False)):
+        return False, "Su usuario está bloqueado por seguridad."
+
+    try:
+        ok = check_password_hash(u.password_hash or "", raw_pass)
+    except Exception:
+        ok = False
+    if not ok:
+        return False, "Contraseña incorrecta. No se bloqueó la IP."
+    return True, ""
+
+
 @seguridad_bp.route("/auditoria-sesion/ip", methods=["POST"])
 @login_required
 def auditoria_ip_accion():
@@ -465,6 +503,13 @@ def auditoria_ip_accion():
     elif accion == "externa":
         clasificacion = CLASIF_EXTERNA
     elif accion == "bloquear":
+        auth_ok, auth_err = _validar_credenciales_propias_bloqueo(
+            request.form.get("auth_user") or "",
+            request.form.get("auth_password") or "",
+        )
+        if not auth_ok:
+            flash(auth_err, "error")
+            return _redirect_auditoria_ip()
         bloqueada = True
         audit_accion = "ip_bloqueada"
         if clasificacion is None and get_ip_regla(ip) is None:
@@ -511,15 +556,7 @@ def auditoria_ip_accion():
     else:
         flash(f"IP {row.ip} marcada como {row.clasificacion}.", "success")
 
-    # Mantener foco en el usuario/filtro si venía de la auditoría.
-    return redirect(
-        url_for(
-            "seguridad.auditoria_sesion",
-            q=request.form.get("q") or None,
-            usuario=request.form.get("usuario") or None,
-            accion=request.form.get("filtro_accion") or None,
-        )
-    )
+    return _redirect_auditoria_ip()
 
 
 # -----------------------------
