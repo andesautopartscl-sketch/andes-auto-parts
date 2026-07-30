@@ -19,6 +19,7 @@ PERMISSION_CATALOG: list[dict] = [
             {"key": "mod_postventa", "label": "Ver modulo Postventa / Garantías"},
             {"key": "mod_rrhh", "label": "Ver modulo RRHH / Nómina"},
             {"key": "mod_sii_sync", "label": "Ver modulo SII Sync (DTE emitidos)"},
+            {"key": "mod_vehiculos_vin", "label": "Ver modulo VIN / Chasis"},
         ],
     },
     {

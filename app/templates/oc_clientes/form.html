@@ -200,11 +200,11 @@
             <div class="oc-section">
                 <div id="scanZone" class="oc-scan-zone">
                     <h3>📷 Escanear OC (foto o PDF)</h3>
-                    <p>Suba una imagen o PDF de la orden de compra del cliente. Los datos se autocompletan para revisión; nada se guarda hasta presionar Guardar OC.</p>
+                    <p>Suba una imagen o PDF de la orden de compra del cliente (archivo, arrastre o Ctrl+V). Los datos se autocompletan para revisión; nada se guarda hasta presionar Guardar OC.</p>
                     <div class="oc-scan-actions">
                         <input type="file" id="scanFileInput" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" style="display:none;">
                         <button type="button" class="btn sm primary" id="btnPickScan">Seleccionar archivo</button>
-                        <span style="font-size:11px;color:#94a3b8;">o arrastre aquí</span>
+                        <span style="font-size:11px;color:#94a3b8;">o arrastre aquí · Ctrl+V para pegar</span>
                     </div>
                     <div id="scanSpinner" class="oc-scan-spinner">
                         <span class="spin"></span>
@@ -839,7 +839,10 @@
     function processScanFile(file) {
         if (!file || !URL_ESCANEAR) return;
         var name = (file.name || '').toLowerCase();
-        if (!/\.(jpe?g|png|pdf)$/.test(name)) {
+        var mime = (file.type || '').toLowerCase();
+        var okExt = /\.(jpe?g|png|pdf)$/.test(name);
+        var okMime = /^(image\/jpeg|image\/png|application\/pdf)$/.test(mime);
+        if (!okExt && !okMime) {
             showScanWarnings(['Formato no soportado. Use JPG, PNG o PDF.']);
             return;
         }
@@ -896,6 +899,41 @@
         zone.addEventListener('drop', function (e) {
             var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
             if (f) processScanFile(f);
+        });
+
+        function fileFromClipboard(e) {
+            var items = e.clipboardData && e.clipboardData.items;
+            if (!items) return null;
+            for (var i = 0; i < items.length; i++) {
+                var it = items[i];
+                if (!it || it.kind !== 'file') continue;
+                var type = (it.type || '').toLowerCase();
+                if (type !== 'image/png' && type !== 'image/jpeg' && type !== 'application/pdf') continue;
+                var blob = it.getAsFile();
+                if (!blob) continue;
+                var ext = type === 'image/jpeg' ? 'jpg' : (type === 'application/pdf' ? 'pdf' : 'png');
+                var fname = (blob.name && /\.(jpe?g|png|pdf)$/i.test(blob.name))
+                    ? blob.name
+                    : ('oc_pegada_' + Date.now() + '.' + ext);
+                return new File([blob], fname, { type: type || blob.type || 'image/png' });
+            }
+            return null;
+        }
+
+        document.addEventListener('paste', function (e) {
+            var spinner = document.getElementById('scanSpinner');
+            if (spinner && spinner.classList.contains('active')) return;
+            var tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+            var typing = tag === 'input' || tag === 'textarea' || tag === 'select' ||
+                (e.target && e.target.isContentEditable);
+            // Si está escribiendo en un campo, no interceptar Ctrl+V (salvo foco en la zona de escaneo).
+            if (typing && !zone.contains(e.target)) return;
+            var file = fileFromClipboard(e);
+            if (!file) return;
+            e.preventDefault();
+            zone.classList.add('dragover');
+            setTimeout(function () { zone.classList.remove('dragover'); }, 350);
+            processScanFile(file);
         });
     })();
 

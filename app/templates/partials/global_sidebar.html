@@ -13,6 +13,7 @@
 {% set puede_mod_informes = (user_permissions.mod_informes if user_permissions is defined else True) %}
 {% set puede_mod_rrhh = (user_permissions.mod_rrhh if user_permissions is defined else False) %}
 {% set puede_mod_sii_sync = (user_permissions.mod_sii_sync if user_permissions is defined else False) %}
+{% set puede_mod_vehiculos_vin = (user_permissions.mod_vehiculos_vin if user_permissions is defined else False) %}
 {% set puede_ver_oc_clientes = (user_permissions.ver_oc_clientes if user_permissions is defined else False) %}
 {% set show_verify_badge = ('admin' in rol_actual) or ('super' in rol_actual) %}
 {% set n_online = (online_users|length) if (online_users is defined and online_users) else 0 %}
@@ -527,9 +528,11 @@ html {
 				<a class="{% if active_page == 'productos_buscar' %}nav-active{% endif %}"
 				   href="{{ url_for('productos.buscar') }}"
 				   data-module-url="{{ url_for('productos.buscar') }}">🔍 Buscar</a>
+				{% if puede_mod_vehiculos_vin %}
 				<a class="{% if active_page == 'vehiculos_vin' %}nav-active{% endif %}"
 				   href="{{ url_for('vehiculos_vin.index') }}"
 				   data-module-url="{{ url_for('vehiculos_vin.index') }}">🚗 VIN / Chasis</a>
+				{% endif %}
 				<a href="{{ url_for('productos.modal_crear_producto') }}"
 				   {% if not acceso_productos_directo %}data-product-auth="Crear producto"{% endif %}
 				   data-modal-url="{{ url_for('productos.modal_crear_producto') }}">➕ Crear</a>

@@ -823,11 +823,11 @@ textarea.sf-input {
                                 {% for sm in data.saldo_movimientos %}
                                 <tr>
                                     <td style="white-space: nowrap;">{{ sm.created_at|chile_datetime if sm.created_at else '—' }}</td>
-                                    <td>{{ sm.tipo|replace('_', ' ') }}</td>
+                                    <td style="text-transform: uppercase;">{{ sm.tipo|replace('_', ' ') }}</td>
                                     <td style="font-weight: 600; color: {% if sm.monto|float < 0 %}#b91c1c{% else %}#15803d{% endif %};">
                                         {% if sm.monto|float >= 0 %}+{% endif %}${{ '{:,.0f}'.format(sm.monto|float).replace(',', '.') }}
                                     </td>
-                                    <td style="line-height: 1.2;">
+                                    <td style="line-height: 1.2; text-transform: uppercase;">
                                         {% if sm.ref_factura %}F: {{ sm.ref_factura }}{% endif %}
                                         {% if sm.ref_nc %}<br>NC: {{ sm.ref_nc }}{% endif %}
                                         {% if sm.razon %}<br><span style="color:#64748b;">{{ (sm.razon or '')[:120] }}{% if (sm.razon or '')|length > 120 %}…{% endif %}</span>{% endif %}

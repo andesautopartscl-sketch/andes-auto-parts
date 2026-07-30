@@ -54,7 +54,7 @@ _IMG_THUMB = (640, 480)
 def _vehiculos_vin_module_guard():
     if "user" not in session:
         return None
-    if has_permission(session.get("user"), session.get("rol"), "mod_productos"):
+    if has_permission(session.get("user"), session.get("rol"), "mod_vehiculos_vin"):
         return None
     flash("No tienes permisos para acceder al registro VIN / Chasis.", "error")
     return redirect(url_for("productos.buscar"))
