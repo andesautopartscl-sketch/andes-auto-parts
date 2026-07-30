@@ -1,7 +1,7 @@
-from flask import render_template, request, redirect, session, jsonify, current_app, url_for, send_file
+from flask import render_template, request, redirect, session, jsonify, current_app, url_for, send_file, flash
 from sqlalchemy import func, or_
 from . import seguridad_bp
-from .models import AuditEvent, Usuario, Rol, UsuarioPermiso, UsuarioPermisoDetalle
+from .models import AuditEvent, IpAcceso, Usuario, Rol, UsuarioPermiso, UsuarioPermisoDetalle
 from werkzeug.security import check_password_hash, generate_password_hash
 from app.extensions import db, limiter
 from app.utils.decorators import admin_required, login_required
@@ -12,6 +12,15 @@ from app.utils.permissions import ALL_PERMISSION_KEYS, LEGACY_KEY_MAP, PERMISSIO
 from app.utils.permissions import has_permission
 from app.utils.rut_utils import clean_rut, format_rut, is_valid_rut
 from app.utils.audit_log import record_audit_event
+from app.utils.mobile_login import clear_mobile_pwa_cookie
+from app.seguridad.ip_acceso import (
+    CLASIF_EMPRESA,
+    CLASIF_EXTERNA,
+    format_audit_detalle,
+    get_ip_regla,
+    login_audit_detalle,
+    upsert_ip_acceso,
+)
 from app.utils.user_photo import (
     delete_user_photo_file,
     photo_file_path,
@@ -296,25 +305,34 @@ def logout():
         db.session.commit()
 
     actor = username or session.get("usuario_nombre")
-    record_audit_event("logout", actor_usuario=actor)
+    record_audit_event("logout", login_audit_detalle(), actor_usuario=actor)
     session.clear()
-    return redirect(url_for("auth.login"))
-
+    resp = redirect(url_for("auth.login"))
+    clear_mobile_pwa_cookie(resp)
+    return resp
 
 # -----------------------------
-# AUDITORÍA (solo SuperAdmin, lectura)
+# AUDITORÍA (solo SuperAdmin)
 # -----------------------------
+def _require_superadmin():
+    if (session.get("rol") or "").strip() != "SuperAdmin":
+        return redirect(url_for("productos.buscar"))
+    return None
+
+
 @seguridad_bp.route("/auditoria-sesion")
 @login_required
 def auditoria_sesion():
-    if (session.get("rol") or "").strip() != "SuperAdmin":
-        return redirect(url_for("productos.buscar"))
+    denied = _require_superadmin()
+    if denied:
+        return denied
 
     # Filtros (solo UI): búsqueda por texto + filtros por usuario/acción.
     q = (request.args.get("q") or "").strip()
     usuario = (request.args.get("usuario") or "").strip()
     accion = (request.args.get("accion") or "").strip()
     solo_logout = (request.args.get("solo_logout") or "").strip() == "1"
+    solo_login = (request.args.get("solo_login") or "").strip() == "1"
 
     query = AuditEvent.query
     if q:
@@ -334,32 +352,173 @@ def auditoria_sesion():
         query = query.filter(AuditEvent.accion.ilike(f"%{accion}%"))
     if solo_logout:
         query = query.filter(AuditEvent.accion.ilike("%logout%"))
+    if solo_login:
+        query = query.filter(
+            or_(
+                AuditEvent.accion == "login",
+                AuditEvent.accion.ilike("login_%"),
+            )
+        )
 
     total_eventos = query.count()
-    eventos = query.order_by(AuditEvent.created_at.desc()).limit(300).all()
+    eventos = query.order_by(AuditEvent.created_at.desc()).limit(500).all()
 
-    # Listas para los <select> usando los eventos efectivamente mostrados.
-    available_users = sorted({(e.actor_usuario or "").strip() for e in eventos if (e.actor_usuario or "").strip()})
-    available_acciones = sorted({(e.accion or "").strip() for e in eventos if (e.accion or "").strip()})
+    # Listas para <select>: todo el historial + usuarios del sistema (incluye los tuyos).
+    users_from_audit = {
+        (r[0] or "").strip()
+        for r in db.session.query(AuditEvent.actor_usuario).distinct().all()
+        if (r[0] or "").strip()
+    }
+    users_from_sistema = {
+        (u.usuario or "").strip()
+        for u in Usuario.query.order_by(Usuario.usuario.asc()).all()
+        if (u.usuario or "").strip()
+    }
+    available_users = sorted(users_from_audit | users_from_sistema)
+    acciones_db = {
+        (r[0] or "").strip()
+        for r in db.session.query(AuditEvent.accion).distinct().all()
+        if (r[0] or "").strip()
+    }
+    # Asegurar opciones conocidas aunque aún no haya eventos.
+    for known in (
+        "login",
+        "login_fallido",
+        "login_bloqueado_ip",
+        "logout",
+        "navegacion",
+        "ip_clasificada",
+        "ip_bloqueada",
+        "ip_desbloqueada",
+    ):
+        acciones_db.add(known)
+    available_acciones = sorted(acciones_db)
 
-    # Resumen rápido (chips) basado en los eventos que se están mostrando.
     top_usuarios = Counter([(e.actor_usuario or "").strip() for e in eventos if (e.actor_usuario or "").strip()])
     top_acciones = Counter([(e.accion or "").strip() for e in eventos if (e.accion or "").strip()])
-    top_usuarios_list = [(u, c) for u, c in top_usuarios.most_common(6)]
-    top_acciones_list = [(a, c) for a, c in top_acciones.most_common(6)]
+    top_usuarios_list = [(u, c) for u, c in top_usuarios.most_common(8)]
+    top_acciones_list = [(a, c) for a, c in top_acciones.most_common(8)]
+
+    ips = {(e.ip or "").strip() for e in eventos if (e.ip or "").strip()}
+    reglas = {}
+    if ips:
+        for row in IpAcceso.query.filter(IpAcceso.ip.in_(list(ips))).all():
+            reglas[row.ip] = row
+
+    eventos_view = []
+    for e in eventos:
+        ip = (e.ip or "").strip()
+        regla = reglas.get(ip)
+        eventos_view.append(
+            {
+                "event": e,
+                "detalle_txt": format_audit_detalle(e.detalle) or "—",
+                "ip": ip or "—",
+                "clasificacion": (regla.clasificacion if regla else None),
+                "bloqueada": bool(regla.bloqueada) if regla else False,
+                "etiqueta": (regla.etiqueta if regla else None),
+            }
+        )
+
+    ips_gestion = (
+        IpAcceso.query.order_by(IpAcceso.bloqueada.desc(), IpAcceso.clasificacion.asc(), IpAcceso.ip.asc())
+        .limit(200)
+        .all()
+    )
+
     return render_template(
         "seguridad/auditoria_sesion.html",
+        eventos_view=eventos_view,
         eventos=eventos,
         q=q,
         usuario=usuario,
         accion=accion,
         solo_logout=solo_logout,
+        solo_login=solo_login,
         total_eventos=total_eventos,
         available_users=available_users,
         available_acciones=available_acciones,
         top_usuarios_list=top_usuarios_list,
         top_acciones_list=top_acciones_list,
+        ips_gestion=ips_gestion,
         active_page="seguridad_auditoria_sesion",
+    )
+
+
+@seguridad_bp.route("/auditoria-sesion/ip", methods=["POST"])
+@login_required
+def auditoria_ip_accion():
+    denied = _require_superadmin()
+    if denied:
+        return denied
+
+    ip = (request.form.get("ip") or "").strip()
+    accion = (request.form.get("accion_ip") or "").strip().lower()
+    etiqueta = (request.form.get("etiqueta") or "").strip()
+    actor = (session.get("user") or "").strip() or None
+
+    clasificacion = None
+    bloqueada = None
+    audit_accion = "ip_clasificada"
+    if accion == "empresa":
+        clasificacion = CLASIF_EMPRESA
+    elif accion == "externa":
+        clasificacion = CLASIF_EXTERNA
+    elif accion == "bloquear":
+        bloqueada = True
+        audit_accion = "ip_bloqueada"
+        if clasificacion is None and get_ip_regla(ip) is None:
+            clasificacion = CLASIF_EXTERNA
+    elif accion == "desbloquear":
+        bloqueada = False
+        audit_accion = "ip_desbloqueada"
+    else:
+        flash("Acción de IP no reconocida.", "error")
+        return redirect(url_for("seguridad.auditoria_sesion"))
+
+    row, err = upsert_ip_acceso(
+        ip,
+        clasificacion=clasificacion,
+        bloqueada=bloqueada,
+        etiqueta=etiqueta or None,
+        actor=actor,
+    )
+    if err or row is None:
+        flash(err or "No se pudo actualizar la IP.", "error")
+        return redirect(url_for("seguridad.auditoria_sesion"))
+
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        flash(f"No se pudo guardar: {exc}", "error")
+        return redirect(url_for("seguridad.auditoria_sesion"))
+
+    record_audit_event(
+        audit_accion,
+        {
+            "ip": row.ip,
+            "clasificacion": row.clasificacion,
+            "bloqueada": bool(row.bloqueada),
+            "etiqueta": row.etiqueta,
+        },
+        actor_usuario=actor,
+    )
+    if accion == "bloquear":
+        flash(f"IP {row.ip} bloqueada: no podrá iniciar sesión (salvo SuperAdmin).", "success")
+    elif accion == "desbloquear":
+        flash(f"IP {row.ip} desbloqueada.", "success")
+    else:
+        flash(f"IP {row.ip} marcada como {row.clasificacion}.", "success")
+
+    # Mantener foco en el usuario/filtro si venía de la auditoría.
+    return redirect(
+        url_for(
+            "seguridad.auditoria_sesion",
+            q=request.form.get("q") or None,
+            usuario=request.form.get("usuario") or None,
+            accion=request.form.get("filtro_accion") or None,
+        )
     )
 
 

@@ -107,3 +107,20 @@ class AuditEvent(db.Model):
     detalle = db.Column(db.Text, nullable=True)
     ip = db.Column(db.String(80), nullable=True)
     ruta = db.Column(db.String(500), nullable=True)
+
+
+class IpAcceso(db.Model):
+    """IPs vistas en login: clasificación empresa/externa y bloqueo de acceso."""
+
+    __tablename__ = "seguridad_ip_acceso"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ip = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    clasificacion = db.Column(db.String(20), nullable=False, default="externa", index=True)
+    bloqueada = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    etiqueta = db.Column(db.String(120), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    creado_por = db.Column(db.String(120), nullable=True)
+    actualizado_por = db.Column(db.String(120), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

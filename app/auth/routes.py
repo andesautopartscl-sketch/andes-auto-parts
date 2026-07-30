@@ -10,11 +10,42 @@ from app.models import Usuario as UsuarioLegacy, SessionDB
 from app.utils.csrf import rotate_csrf_token
 from app.utils.audit_log import record_audit_event
 from app.utils.login_wall import safe_next_path
-from app.utils.mobile_login import is_mobile_login_context, mobile_login_target
+from app.utils.mobile_login import (
+    clear_mobile_pwa_cookie,
+    is_mobile_login_context,
+    mobile_login_target,
+)
+from app.seguridad.ip_acceso import (
+    client_ip_from_request,
+    is_ip_blocked,
+    login_audit_detalle,
+)
 from app.extensions import limiter
 
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def _rol_is_superadmin(user) -> bool:
+    try:
+        return bool(user and user.rol and (user.rol.nombre or "").strip().lower() == "superadmin")
+    except Exception:
+        return False
+
+
+def _audit_login(accion: str, username: str | None, *, extra: dict | None = None) -> None:
+    record_audit_event(
+        accion,
+        login_audit_detalle(extra=extra),
+        actor_usuario=(username or "")[:120] or None,
+    )
+
+
+def _ip_bloqueada_para_usuario(user, ip: str | None) -> bool:
+    """SuperAdmin puede entrar aunque la IP esté bloqueada (para no autoexcluir la empresa)."""
+    if not is_ip_blocked(ip):
+        return False
+    return not _rol_is_superadmin(user)
 
 
 def _looks_like_werkzeug_hash(value: str | None) -> bool:
@@ -107,15 +138,27 @@ def login():
                 except Exception:
                     password_ok = False
 
+            login_ip = client_ip_from_request(request)
+
             # -----------------------------
             # VALIDAR LOGIN (con bloqueo por intentos)
             # -----------------------------
             if user:
                 if not user.activo:
                     error = "Usuario inactivo. Contacta al administrador."
+                    _audit_login("login_fallido", username, extra={"motivo": "usuario_inactivo"})
                     return render_template("login.html", error=error, next_url=next_url)
                 if user.bloqueado_seguridad:
                     error = "Usuario bloqueado por seguridad. El administrador debe desbloquear tu cuenta."
+                    _audit_login("login_fallido", username, extra={"motivo": "usuario_bloqueado"})
+                    return render_template("login.html", error=error, next_url=next_url)
+                if _ip_bloqueada_para_usuario(user, login_ip):
+                    error = "Acceso denegado desde esta IP. Contacta al administrador."
+                    _audit_login(
+                        "login_bloqueado_ip",
+                        username,
+                        extra={"motivo": "ip_bloqueada", "ip": login_ip},
+                    )
                     return render_template("login.html", error=error, next_url=next_url)
 
             if user and password_ok:
@@ -159,6 +202,12 @@ def login():
                     print(f"[LOGIN][ERROR] Error updating timestamps: {e}")
                     print("="*70 + "\n")
 
+                _audit_login(
+                    "login",
+                    username,
+                    extra={"nota": "ok", "ip": login_ip, "superadmin_bypass_ip": bool(is_ip_blocked(login_ip))},
+                )
+
                 if next_url:
                     if next_url.startswith("/m") or is_mobile_login_context(request, next_url):
                         return redirect(mobile_login_target(next_url))
@@ -176,6 +225,11 @@ def login():
                         user.en_linea = False
                         db.session.commit()
                         error = "Cuenta bloqueada por 3 intentos fallidos. Solicita desbloqueo al administrador."
+                        _audit_login(
+                            "login_fallido",
+                            username,
+                            extra={"motivo": "clave_incorrecta_bloqueo", "intentos": user.intentos_fallidos},
+                        )
                         return render_template("login.html", error=error, next_url=next_url)
                     db.session.commit()
 
@@ -196,9 +250,18 @@ def login():
                             legacy_password_ok = False
 
                     if legacy_user is not None and legacy_password_ok:
+                        if is_ip_blocked(login_ip):
+                            error = "Acceso denegado desde esta IP. Contacta al administrador."
+                            _audit_login(
+                                "login_bloqueado_ip",
+                                username,
+                                extra={"motivo": "ip_bloqueada", "ip": login_ip, "legacy": True},
+                            )
+                            return render_template("login.html", error=error, next_url=next_url)
                         session["user"] = legacy_user.username
                         session["rol"] = legacy_user.rol or ""
                         rotate_csrf_token()
+                        _audit_login("login", username, extra={"nota": "ok_legacy", "ip": login_ip})
                         if next_url:
                             if next_url.startswith("/m") or is_mobile_login_context(request, next_url):
                                 return redirect(mobile_login_target(next_url))
@@ -208,6 +271,11 @@ def login():
                         return redirect(url_for("productos.buscar"))
 
                 error = "Usuario o clave incorrectos"
+                _audit_login(
+                    "login_fallido",
+                    username,
+                    extra={"motivo": "credenciales_invalidas"},
+                )
 
         return render_template("login.html", error=error, next_url=next_url)
     except Exception as exc:
@@ -294,11 +362,23 @@ def logout():
         if user:
             user.en_linea = False
             db.session.commit()
-    record_audit_event("logout", actor_usuario=username)
+    record_audit_event("logout", login_audit_detalle(), actor_usuario=username)
     session.clear()
 
-    return redirect(url_for("auth.login"))
-
+    # Si salió desde la app móvil, volver al login con next=/m para no perder el contexto.
+    ref = (request.referrer or "").lower()
+    from_mobile = (
+        (request.form.get("from_mobile") or "").strip() == "1"
+        or "/m/" in ref
+        or ref.rstrip("/").endswith("/m")
+    )
+    if from_mobile:
+        resp = redirect(url_for("auth.login", next="/m/"))
+    else:
+        resp = redirect(url_for("auth.login"))
+    # Limpiar cookie PWA para que un login desde el ERP no abra la app móvil.
+    clear_mobile_pwa_cookie(resp)
+    return resp
 
 @auth_bp.route("/inicio-seguro")
 def inicio_seguro():

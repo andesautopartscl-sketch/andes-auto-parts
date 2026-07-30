@@ -4,317 +4,443 @@
 {% block content %}
 <style>
   .audit-card {
-    max-width: 1400px;
+    max-width: 1280px;
     margin: 0 auto;
-    width: calc(100% - 24px);
-    background: #ffffff;
-    border: 1px solid var(--line, #e2e8f0);
-    border-radius: 16px;
-    padding: 18px 20px;
-    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+    width: calc(100% - 16px);
+    background: #fff;
+    border: 1px solid #e8eef5;
+    border-radius: 10px;
+    padding: 10px 12px;
   }
   .audit-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 8px;
     flex-wrap: wrap;
-    margin-bottom: 14px;
+    margin-bottom: 8px;
+  }
+  .audit-header .page-title {
+    margin: 0;
+    font-size: 15px !important;
+    font-weight: 700;
   }
   .audit-subtitle {
-    margin: 6px 0 0;
-    color: var(--muted, #64748b);
-    font-size: 12px;
-    line-height: 1.45;
+    margin: 2px 0 0;
+    color: #94a3b8;
+    font-size: 10.5px;
+    line-height: 1.35;
+    max-width: 520px;
   }
-  .audit-back {
+  .audit-header .btn {
+    padding: 3px 8px !important;
+    font-size: 11px !important;
+  }
+
+  .audit-filters {
+    margin: 0 0 8px;
+    background: #fafbfc;
+    border: 1px solid #eef2f7;
+    border-radius: 8px;
+    padding: 8px;
+  }
+  .audit-filters-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    gap: 6px;
+    align-items: end;
+  }
+  .audit-filters .field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .audit-filters label {
+    font-size: 9px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+  .audit-filters input[type="text"],
+  .audit-filters select {
+    width: 100%;
+    height: 28px;
+    box-sizing: border-box;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0 8px;
+    font-size: 11.5px;
+    font-weight: 500;
+    background: #fff;
+    color: #334155;
+    outline: none;
+  }
+  .audit-filters input[type="text"]::placeholder { color: #cbd5e1; font-weight: 400; }
+  .audit-filters input[type="text"]:focus,
+  .audit-filters select:focus { border-color: #bfdbfe; }
+  .audit-filters-row2 {
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .audit-filters-toggle { display: flex; gap: 8px; flex-wrap: wrap; }
+  .audit-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 0;
+    cursor: pointer;
+    user-select: none;
+  }
+  .audit-toggle input { width: 12px; height: 12px; margin: 0; }
+  .audit-toggle span { font-size: 10.5px; font-weight: 600; color: #64748b; }
+  .audit-filters-actions { display: flex; gap: 4px; }
+  .audit-filters-actions .btn { padding: 3px 8px !important; font-size: 11px !important; }
+
+  .audit-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin: 0 0 8px;
+    align-items: center;
+  }
+  .audit-summary-title {
+    font-size: 9px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    margin-right: 2px;
+  }
+  .audit-chip-row { display: flex; flex-wrap: wrap; gap: 4px; }
+  .audit-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid #e8eef5;
+    background: #fff;
+    color: #64748b;
     text-decoration: none;
+    font-size: 10.5px;
     font-weight: 600;
   }
-  .audit-back:hover { text-decoration: underline; }
+  .audit-chip:hover { border-color: #cbd5e1; color: #334155; }
+  .audit-chip.is-active { border-color: #bfdbfe; background: #f8fbff; color: #3b82f6; }
+  .audit-chip-count {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #94a3b8;
+  }
+  .audit-chip.is-active .audit-chip-count { color: #60a5fa; }
+
   .audit-table-wrap {
     overflow: auto;
-    max-height: min(70vh, 640px);
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
+    max-height: min(62vh, 520px);
+    border: 1px solid #eef2f7;
+    border-radius: 8px;
     background: #fff;
   }
   .audit-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: 11px;
   }
   .audit-table thead th {
-    background: #f8fafc;
-    color: #0f172a;
+    background: #fafbfc;
+    color: #94a3b8;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .04em;
-    font-size: 11px;
+    letter-spacing: .03em;
+    font-size: 9px;
     text-align: left;
-    padding: 10px 12px;
-    border-bottom: 1px solid #e2e8f0;
+    padding: 5px 8px;
+    border-bottom: 1px solid #eef2f7;
+    position: sticky;
+    top: 0;
+    z-index: 1;
   }
   .audit-table tbody td {
-    padding: 8px 12px;
-    border-bottom: 1px solid #edf2f7;
-    vertical-align: top;
+    padding: 4px 8px;
+    border-bottom: 1px solid #f5f7fa;
+    vertical-align: middle;
+    color: #475569;
   }
-  .audit-table tbody tr:hover td { background: #f1f6ff; }
-  .audit-cell-muted { color: #64748b; font-size: 11px; }
+  .audit-table tbody tr:hover td { background: #fafbfc; }
+  .audit-cell-muted { color: #94a3b8; font-size: 10.5px; }
   .audit-footer {
-    margin-top: 12px;
+    margin-top: 6px;
     display: flex;
     justify-content: space-between;
-    gap: 10px;
-    flex-wrap: wrap;
-    color: var(--muted, #64748b);
-    font-size: 12px;
-  }
-
-  .audit-filters {
-    width: 100%;
-    margin: 2px 0 14px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 12px 12px 10px;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
-  }
-  .audit-filters-grid {
-    display: grid;
-    grid-template-columns: 2fr 1fr 1fr;
-    gap: 10px;
-    align-items: end;
-  }
-  .audit-filters .field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-  }
-  .audit-filters label {
-    font-size: 10px;
-    font-weight: 800;
-    color: var(--muted, #64748b);
-    text-transform: uppercase;
-    letter-spacing: .04em;
-  }
-  .audit-filters input[type="text"] {
-    height: 40px;
-  }
-  .audit-filters select {
-    height: 40px;
-  }
-  .audit-filters-actions {
-    margin-top: 12px;
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .audit-filters-toggle {
-    margin-top: 10px;
-    display: flex;
-    justify-content: flex-start;
-  }
-  .audit-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    padding: 7px 10px;
-    border-radius: 12px;
-    border: 1px solid #dbe3ef;
-    background: #ffffff;
-    cursor: pointer;
-    user-select: none;
-  }
-  .audit-toggle input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-  }
-  .audit-toggle span {
-    font-size: 12px;
-    font-weight: 700;
-    color: #334155;
-  }
-
-  .audit-summary {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin: 0 0 14px;
-  }
-  .audit-summary-block {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 12px;
-  }
-  .audit-summary-title {
-    font-size: 10px;
-    font-weight: 900;
-    color: var(--muted, #64748b);
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    margin-bottom: 8px;
-  }
-  .audit-chip-row {
-    display: flex;
-    flex-wrap: wrap;
     gap: 8px;
-  }
-  .audit-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    border-radius: 999px;
-    border: 1px solid #dbe3ef;
-    background: #fff;
-    color: #0f172a;
-    text-decoration: none;
-    font-size: 12px;
-    font-weight: 700;
-    max-width: 100%;
-  }
-  .audit-chip:hover {
-    border-color: #93c5fd;
-    background: #f8fafc;
-  }
-  .audit-chip.is-active {
-    border-color: #2563eb;
-    background: #eff6ff;
-    color: #1d4ed8;
-  }
-  .audit-chip-count {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: #e0e7ff;
-    color: #1d4ed8;
-    font-size: 11px;
-    font-weight: 900;
-  }
-
-  .audit-filters input[type="text"],
-  .audit-filters select {
-    width: 100%;
-    box-sizing: border-box;
-    border: 1px solid #dbe3ef;
-    border-radius: 11px;
-    padding: 0 12px;
-    font-size: 13px;
-    font-weight: 600;
-    background: #ffffff;
-    color: #0f172a;
-    outline: none;
-  }
-
-  .audit-filters input[type="text"]::placeholder {
+    flex-wrap: wrap;
     color: #94a3b8;
-    font-weight: 500;
+    font-size: 10px;
   }
 
-  .audit-filters input[type="text"]:focus,
-  .audit-filters select:focus {
-    border-color: #93c5fd;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+  .ip-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 5px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    line-height: 1.5;
   }
+  .ip-badge.empresa { background: #f0fdf4; color: #16a34a; }
+  .ip-badge.externa { background: #fff7ed; color: #ea580c; }
+  .ip-badge.sin { background: #f8fafc; color: #94a3b8; }
+  .ip-badge.blocked { background: #fef2f2; color: #dc2626; }
+
+  .ip-cell { white-space: nowrap; }
+  .ip-cell-top {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .ip-cell-ip { font-weight: 600; color: #334155; font-size: 11px; }
+  .ip-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0 6px;
+    margin-top: 1px;
+  }
+  .ip-actions form { margin: 0; display: inline; }
+  .ip-actions button {
+    border: 0;
+    background: none;
+    padding: 0;
+    margin: 0;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .ip-actions button.emp { color: #16a34a; }
+  .ip-actions button.emp:hover { color: #15803d; }
+  .ip-actions button.ext { color: #ea580c; }
+  .ip-actions button.ext:hover { color: #c2410c; }
+  .ip-actions button.danger { color: #dc2626; }
+  .ip-actions button.danger:hover { color: #b91c1c; }
+  .ip-actions button.ok { color: #16a34a; }
+  .ip-actions button.ok:hover { color: #15803d; }
+
+  .accion-pill {
+    display: inline-block;
+    padding: 0 5px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    line-height: 1.55;
+  }
+  .accion-pill.login { background: #f0fdf4; color: #16a34a; }
+  .accion-pill.login_fallido,
+  .accion-pill.login_bloqueado_ip { background: #fef2f2; color: #dc2626; }
+  .accion-pill.logout { background: #f8fafc; color: #64748b; }
+  .accion-pill.ip_bloqueada { background: #fef2f2; color: #dc2626; }
+  .accion-pill.navegacion { background: #f8fafc; color: #64748b; }
+  .hist-link {
+    display: inline-block;
+    margin-left: 5px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    color: #3b82f6;
+    text-decoration: none;
+  }
+  .hist-link:hover { text-decoration: underline; color: #1d4ed8; }
+  .user-cell { line-height: 1.25; }
+
+  .ips-panel {
+    margin: 0 0 8px;
+    border: 1px solid #eef2f7;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .ips-panel-h {
+    padding: 4px 8px;
+    background: #fafbfc;
+    border-bottom: 1px solid #eef2f7;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: #94a3b8;
+  }
+  .ips-panel .audit-table { font-size: 10.5px; }
+  .ips-panel .audit-table-wrap { max-height: 140px; border: none; border-radius: 0; }
+
   @media (max-width: 920px) {
-    .audit-filters-grid { grid-template-columns: 1fr; }
-    .audit-filters-actions { justify-content: flex-start; }
-    .audit-summary { grid-template-columns: 1fr; }
+    .audit-filters-grid { grid-template-columns: 1fr 1fr; }
+    .audit-filters-grid .field:first-child { grid-column: 1 / -1; }
   }
 </style>
 
 <section class="audit-card">
   <div class="audit-header">
     <div>
-      <h1 class="page-title" style="margin:0;">Auditoría de sesión</h1>
-      <p class="audit-subtitle">Últimos eventos (p. ej. cierres de sesión). Solo lectura. Visible solo para SuperAdmin.</p>
+      <h1 class="page-title">Auditoría de sesión</h1>
+      <p class="audit-subtitle">Logins, navegación, búsquedas e IPs · usa Historial en cada usuario</p>
     </div>
-    <div class="topbar-actions" style="margin-top: 2px;">
-      <a class="btn outline" href="{{ url_for('productos.buscar') }}">Volver a Buscar</a>
-    </div>
+    <a class="btn outline sm" href="{{ url_for('productos.buscar') }}">Volver</a>
   </div>
 
   <form method="get" class="audit-filters">
     <div class="audit-filters-grid">
       <div class="field">
         <label>Buscar</label>
-        <input
-          type="text"
-          name="q"
-          value="{{ q }}"
-          placeholder="Usuario, acción, IP, ruta o detalle"
-        />
+        <input type="text" name="q" value="{{ q }}" placeholder="Usuario, IP, acción…">
       </div>
       <div class="field">
         <label>Usuario</label>
         <select name="usuario">
-          <option value="">(Todos)</option>
+          <option value="">Todos</option>
           {% for u in available_users %}
-            <option value="{{ u }}" {% if usuario == u %}selected{% endif %}>{{ u }}</option>
+          <option value="{{ u }}" {% if usuario == u %}selected{% endif %}>{{ u }}</option>
           {% endfor %}
         </select>
       </div>
       <div class="field">
         <label>Acción</label>
         <select name="accion">
-          <option value="">(Todas)</option>
+          <option value="">Todas</option>
           {% for a in available_acciones %}
-            <option value="{{ a }}" {% if accion == a %}selected{% endif %}>{{ a }}</option>
+          <option value="{{ a }}" {% if accion == a %}selected{% endif %}>{{ a }}</option>
           {% endfor %}
         </select>
       </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <div class="audit-filters-actions">
+          <a class="btn outline sm" href="{{ url_for('seguridad.auditoria_sesion') }}">Limpiar</a>
+          <button class="btn primary sm" type="submit">Buscar</button>
+        </div>
+      </div>
     </div>
-    <div class="audit-filters-toggle">
-      <label class="audit-toggle">
-        <input type="checkbox" name="solo_logout" value="1" {% if solo_logout %}checked{% endif %}>
-        <span>Solo cierres (logout)</span>
-      </label>
-    </div>
-    <div class="audit-filters-actions">
-      <a class="btn outline" href="{{ url_for('seguridad.auditoria_sesion') }}">Limpiar</a>
-      <button class="btn primary" type="submit">Buscar</button>
+    <div class="audit-filters-row2">
+      <div class="audit-filters-toggle">
+        <label class="audit-toggle">
+          <input type="checkbox" name="solo_login" value="1" {% if solo_login %}checked{% endif %}>
+          <span>Solo login</span>
+        </label>
+        <label class="audit-toggle">
+          <input type="checkbox" name="solo_logout" value="1" {% if solo_logout %}checked{% endif %}>
+          <span>Solo logout</span>
+        </label>
+      </div>
     </div>
   </form>
 
-  {% if eventos %}
-  <div class="audit-summary">
-    <div class="audit-summary-block">
-      <div class="audit-summary-title">Top usuarios</div>
-      <div class="audit-chip-row">
-        {% for u, c in top_usuarios_list %}
-          {% if u %}
-            <a class="audit-chip {% if usuario == u %}is-active{% endif %}"
-               href="{{ url_for('seguridad.auditoria_sesion', q=q, usuario=u, accion=accion, solo_logout='1' if solo_logout else '') }}"
-               data-module-url="{{ url_for('seguridad.auditoria_sesion', q=q, usuario=u, accion=accion, solo_logout='1' if solo_logout else '') }}">
-              {{ u }}
-              <span class="audit-chip-count">{{ c }}</span>
-            </a>
-          {% endif %}
-        {% endfor %}
-      </div>
+  {% if ips_gestion %}
+  <div class="ips-panel">
+    <div class="ips-panel-h">IPs clasificadas / bloqueadas</div>
+    <div class="audit-table-wrap">
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>IP</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+            <th>Etiqueta</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ipr in ips_gestion %}
+          <tr>
+            <td class="ip-cell-ip">{{ ipr.ip }}</td>
+            <td>
+              {% if ipr.clasificacion == 'empresa' %}<span class="ip-badge empresa">Empresa</span>
+              {% else %}<span class="ip-badge externa">Externa</span>{% endif %}
+            </td>
+            <td>
+              {% if ipr.bloqueada %}<span class="ip-badge blocked">Bloqueada</span>
+              {% else %}<span class="ip-badge sin">Ok</span>{% endif %}
+            </td>
+            <td class="audit-cell-muted">{{ ipr.etiqueta or '—' }}</td>
+            <td>
+              <div class="ip-actions">
+                <form method="post" action="{{ url_for('seguridad.auditoria_ip_accion') }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="ip" value="{{ ipr.ip }}">
+                  <input type="hidden" name="accion_ip" value="empresa">
+                  <input type="hidden" name="q" value="{{ q }}">
+                  <input type="hidden" name="usuario" value="{{ usuario }}">
+                  <input type="hidden" name="filtro_accion" value="{{ accion }}">
+                  <button type="submit" class="emp">EMP</button>
+                </form>
+                <form method="post" action="{{ url_for('seguridad.auditoria_ip_accion') }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="ip" value="{{ ipr.ip }}">
+                  <input type="hidden" name="accion_ip" value="externa">
+                  <input type="hidden" name="q" value="{{ q }}">
+                  <input type="hidden" name="usuario" value="{{ usuario }}">
+                  <input type="hidden" name="filtro_accion" value="{{ accion }}">
+                  <button type="submit" class="ext">EXT</button>
+                </form>
+                {% if ipr.bloqueada %}
+                <form method="post" action="{{ url_for('seguridad.auditoria_ip_accion') }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="ip" value="{{ ipr.ip }}">
+                  <input type="hidden" name="accion_ip" value="desbloquear">
+                  <input type="hidden" name="q" value="{{ q }}">
+                  <input type="hidden" name="usuario" value="{{ usuario }}">
+                  <input type="hidden" name="filtro_accion" value="{{ accion }}">
+                  <button type="submit" class="ok">OK</button>
+                </form>
+                {% else %}
+                <form method="post" action="{{ url_for('seguridad.auditoria_ip_accion') }}" onsubmit="return confirm('¿Bloquear {{ ipr.ip }}?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="ip" value="{{ ipr.ip }}">
+                  <input type="hidden" name="accion_ip" value="bloquear">
+                  <input type="hidden" name="q" value="{{ q }}">
+                  <input type="hidden" name="usuario" value="{{ usuario }}">
+                  <input type="hidden" name="filtro_accion" value="{{ accion }}">
+                  <button type="submit" class="danger">BLOQ</button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
+  </div>
+  {% endif %}
 
-    <div class="audit-summary-block">
-      <div class="audit-summary-title">Top acciones</div>
-      <div class="audit-chip-row">
-        {% for a, c in top_acciones_list %}
-          {% if a %}
-            <a class="audit-chip {% if accion == a %}is-active{% endif %}"
-               href="{{ url_for('seguridad.auditoria_sesion', q=q, usuario=usuario, accion=a, solo_logout='1' if solo_logout else '') }}"
-               data-module-url="{{ url_for('seguridad.auditoria_sesion', q=q, usuario=usuario, accion=a, solo_logout='1' if solo_logout else '') }}">
-              {{ a }}
-              <span class="audit-chip-count">{{ c }}</span>
-            </a>
-          {% endif %}
-        {% endfor %}
-      </div>
+  {% if eventos_view %}
+  <div class="audit-summary">
+    <span class="audit-summary-title">Usuarios</span>
+    <div class="audit-chip-row">
+      {% for u, c in top_usuarios_list %}
+      {% if u %}
+      <a class="audit-chip {% if usuario == u %}is-active{% endif %}"
+         href="{{ url_for('seguridad.auditoria_sesion', q=q, usuario=u, accion=accion, solo_logout='1' if solo_logout else None, solo_login='1' if solo_login else None) }}">
+        {{ u }}<span class="audit-chip-count">{{ c }}</span>
+      </a>
+      {% endif %}
+      {% endfor %}
+    </div>
+    <span class="audit-summary-title">Acciones</span>
+    <div class="audit-chip-row">
+      {% for a, c in top_acciones_list %}
+      {% if a %}
+      <a class="audit-chip {% if accion == a %}is-active{% endif %}"
+         href="{{ url_for('seguridad.auditoria_sesion', q=q, usuario=usuario, accion=a, solo_logout='1' if solo_logout else None, solo_login='1' if solo_login else None) }}">
+        {{ a }}<span class="audit-chip-count">{{ c }}</span>
+      </a>
+      {% endif %}
+      {% endfor %}
     </div>
   </div>
   {% endif %}
@@ -332,19 +458,80 @@
         </tr>
       </thead>
       <tbody>
-        {% for e in eventos %}
+        {% for row in eventos_view %}
+        {% set e = row.event %}
         <tr>
-          <td style="white-space:nowrap; color:#334155;">{{ e.created_at | chile_datetime }}</td>
-          <td style="color:#334155;">{{ e.actor_usuario or '—' }}</td>
-          <td style="color:#334155;">{{ e.accion }}</td>
-          <td class="audit-cell-muted">{{ e.ip or '—' }}</td>
-          <td class="audit-cell-muted" title="{{ e.ruta or '' }}" style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ e.ruta or '—' }}</td>
-          <td class="audit-cell-muted" style="max-width:220px; word-break:break-word;">{{ e.detalle or '—' }}</td>
+          <td style="white-space:nowrap;font-size:10.5px;">{{ e.created_at | chile_datetime }}</td>
+          <td class="user-cell">
+            <span style="font-weight:600;color:#334155;">{{ e.actor_usuario or '—' }}</span>
+            {% if e.actor_usuario %}
+            <a class="hist-link"
+               href="{{ url_for('seguridad.auditoria_sesion', usuario=e.actor_usuario) }}"
+               title="Ver movimientos de {{ e.actor_usuario }}">Historial</a>
+            {% endif %}
+          </td>
+          <td><span class="accion-pill {{ e.accion }}">{{ e.accion }}</span></td>
+          <td class="ip-cell">
+            <div class="ip-cell-top">
+              <span class="ip-cell-ip">{{ row.ip }}</span>
+              {% if row.ip != '—' %}
+                {% if row.bloqueada %}<span class="ip-badge blocked">Bloq.</span>
+                {% elif row.clasificacion == 'empresa' %}<span class="ip-badge empresa">Emp.</span>
+                {% elif row.clasificacion == 'externa' %}<span class="ip-badge externa">Ext.</span>
+                {% else %}<span class="ip-badge sin">—</span>{% endif %}
+              {% endif %}
+            </div>
+            {% if row.ip != '—' %}
+            <div class="ip-actions">
+              <form method="post" action="{{ url_for('seguridad.auditoria_ip_accion') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="ip" value="{{ row.ip }}">
+                <input type="hidden" name="accion_ip" value="empresa">
+                <input type="hidden" name="q" value="{{ q }}">
+                <input type="hidden" name="usuario" value="{{ usuario }}">
+                <input type="hidden" name="filtro_accion" value="{{ accion }}">
+                <button type="submit" class="emp" title="Marcar empresa">EMP</button>
+              </form>
+              <form method="post" action="{{ url_for('seguridad.auditoria_ip_accion') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="ip" value="{{ row.ip }}">
+                <input type="hidden" name="accion_ip" value="externa">
+                <input type="hidden" name="q" value="{{ q }}">
+                <input type="hidden" name="usuario" value="{{ usuario }}">
+                <input type="hidden" name="filtro_accion" value="{{ accion }}">
+                <button type="submit" class="ext" title="Marcar externa">EXT</button>
+              </form>
+              {% if row.bloqueada %}
+              <form method="post" action="{{ url_for('seguridad.auditoria_ip_accion') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="ip" value="{{ row.ip }}">
+                <input type="hidden" name="accion_ip" value="desbloquear">
+                <input type="hidden" name="q" value="{{ q }}">
+                <input type="hidden" name="usuario" value="{{ usuario }}">
+                <input type="hidden" name="filtro_accion" value="{{ accion }}">
+                <button type="submit" class="ok">OK</button>
+              </form>
+              {% else %}
+              <form method="post" action="{{ url_for('seguridad.auditoria_ip_accion') }}" onsubmit="return confirm('¿Bloquear {{ row.ip }}?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="ip" value="{{ row.ip }}">
+                <input type="hidden" name="accion_ip" value="bloquear">
+                <input type="hidden" name="q" value="{{ q }}">
+                <input type="hidden" name="usuario" value="{{ usuario }}">
+                <input type="hidden" name="filtro_accion" value="{{ accion }}">
+                <button type="submit" class="danger">BLOQ</button>
+              </form>
+              {% endif %}
+            </div>
+            {% endif %}
+          </td>
+          <td class="audit-cell-muted" title="{{ e.ruta or '' }}" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ e.ruta or '—' }}</td>
+          <td class="audit-cell-muted" style="max-width:220px;word-break:break-word;">{{ row.detalle_txt }}</td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" style="padding: 22px; text-align:center; color:#94a3b8;">
-            Sin eventos registrados aún.
+          <td colspan="6" style="padding:16px;text-align:center;color:#cbd5e1;font-size:11px;">
+            Sin eventos aún. Los próximos logins y cierres aparecerán aquí.
           </td>
         </tr>
         {% endfor %}
@@ -353,10 +540,8 @@
   </div>
 
   <div class="audit-footer">
-    <span>
-      Mostrando {{ eventos|length }} de {{ total_eventos }} (máx. 300).
-    </span>
-    <span>Solo lectura.</span>
+    <span>{{ eventos_view|length }} / {{ total_eventos }} (máx. 500)</span>
+    <span>SuperAdmin entra aunque la IP esté bloqueada</span>
   </div>
 </section>
 {% endblock %}

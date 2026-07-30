@@ -106,6 +106,7 @@
 
   <form method="post" action="{{ url_for('auth.logout') }}" class="m-settings__logout">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="from_mobile" value="1">
     <button type="submit" class="m-btn m-btn--danger m-btn--block m-btn--lg">Cerrar sesión</button>
   </form>
 </div>

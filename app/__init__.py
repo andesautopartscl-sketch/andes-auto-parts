@@ -436,6 +436,27 @@ def create_app():
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usuarios_perm_det_usuario_id ON usuarios_permisos_detalle(usuario_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usuarios_perm_det_permiso_key ON usuarios_permisos_detalle(permiso_key)"))
 
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS seguridad_ip_acceso (
+                        id INTEGER PRIMARY KEY,
+                        ip VARCHAR(80) NOT NULL UNIQUE,
+                        clasificacion VARCHAR(20) NOT NULL DEFAULT 'externa',
+                        bloqueada BOOLEAN NOT NULL DEFAULT 0,
+                        etiqueta VARCHAR(120),
+                        notas TEXT,
+                        creado_por VARCHAR(120),
+                        actualizado_por VARCHAR(120),
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_seguridad_ip_acceso_ip ON seguridad_ip_acceso(ip)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_seguridad_ip_acceso_bloqueada ON seguridad_ip_acceso(bloqueada)"))
+
             # Seed inicial de permisos granulares (deny-by-default para no superadmin).
             user_rows = conn.execute(text("SELECT u.id AS uid, COALESCE(r.nombre, '') AS rol_nombre FROM usuarios_sistema u LEFT JOIN roles r ON r.id = u.rol_id")).fetchall()
             for ur in user_rows:
@@ -1369,6 +1390,54 @@ def create_app():
             db.session.commit()
         except Exception:
             db.session.rollback()
+
+    @app.before_request
+    def log_user_navigation() -> None:
+        """Traza ligera de páginas visitadas (para historial en Auditoría de sesión)."""
+        if request.method != "GET":
+            return None
+        if request.endpoint in {None, "static", _IDLE_STATUS_ENDPOINT}:
+            return None
+        username = (session.get("user") or "").strip()
+        if not username:
+            return None
+        path = request.path or ""
+        if (
+            path.startswith("/static")
+            or path.startswith("/favicon")
+            or "/api/" in path
+            or path.endswith("/service-worker.js")
+        ):
+            return None
+        if request.is_json:
+            return None
+        if (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest":
+            return None
+        # Debounce: no repetir la misma ruta cada pocos segundos.
+        now = time.time()
+        last = session.get("_nav_audit")
+        if (
+            isinstance(last, dict)
+            and (last.get("path") or "") == path
+            and now - float(last.get("ts") or 0) < 60
+        ):
+            return None
+        session["_nav_audit"] = {"path": path, "ts": now}
+        session.modified = True
+        try:
+            from app.utils.audit_log import record_audit_event
+
+            detalle: dict = {"pagina": path[:200]}
+            ep = (request.endpoint or "").strip()
+            if ep and "." in ep:
+                detalle["modulo"] = ep.split(".", 1)[0][:40]
+            q = (request.args.get("q") or "").strip()
+            if q:
+                detalle["busqueda"] = q[:80]
+            record_audit_event("navegacion", detalle, actor_usuario=username)
+        except Exception:
+            pass
+        return None
 
     @app.before_request
     def enforce_csrf() -> None:

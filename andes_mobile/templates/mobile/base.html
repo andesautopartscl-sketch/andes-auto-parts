@@ -248,6 +248,7 @@
         <div class="m-mas-menu__divider" role="separator"></div>
         <form method="post" action="{{ url_for('auth.logout') }}" class="m-mas-item m-mas-item--logout">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="from_mobile" value="1">
           <button type="submit" class="m-mas-item__btn">
             <span class="m-mas-item__icon m-mas-item__icon--logout" aria-hidden="true">🚪</span>
             <span class="m-mas-item__body">

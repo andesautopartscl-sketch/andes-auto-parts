@@ -27,3 +27,4 @@ _mod = _load()
 MOBILE_PWA_COOKIE = _mod.MOBILE_PWA_COOKIE
 is_mobile_login_context = _mod.is_mobile_login_context
 mobile_login_target = _mod.mobile_login_target
+clear_mobile_pwa_cookie = _mod.clear_mobile_pwa_cookie
