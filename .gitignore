@@ -26,6 +26,7 @@ data/fts_timing.txt
 data/public_docs/
 data/chat_uploads/
 data/usuarios_fotos/
+data/vehiculos_vin_uploads/
 data/backups/
 data/gdrive_oauth_credentials.json
 data/gdrive_token.json

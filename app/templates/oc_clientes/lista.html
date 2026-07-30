@@ -180,10 +180,10 @@
                         data-oc-num="{{ f.oc.numero_oc }}"
                         data-oc-total="{{ f.monto_pendiente if f.monto_pendiente is not none else (f.oc.total or 0) }}"
                         data-cliente-id="{{ f.oc.cliente_id }}"
-                        data-oc-pendiente="{% if f.oc.estado == 'entregada' and not f.pago_parcial %}1{% else %}0{% endif %}">
+                        data-oc-pendiente="{% if f.oc.estado == 'entregada' %}1{% else %}0{% endif %}">
                         {% if puede_modificar %}
                         <td class="check">
-                            {% if f.oc.estado == 'entregada' and not f.pago_parcial %}
+                            {% if f.oc.estado == 'entregada' %}
                             <input type="checkbox" class="oc-row-check" aria-label="Seleccionar OC {{ f.oc.numero_oc }}">
                             {% endif %}
                         </td>
@@ -206,7 +206,7 @@
                                             data-oc-num="{{ f.oc.numero_oc }}"
                                             data-anular-url="{{ url_for('oc_clientes.anular', oid=f.oc.id) }}">Anular</button>
                                     {% elif f.oc.estado == 'entregada' and f.pago_parcial %}
-                                    <a class="btn sm primary" href="{{ url_for('oc_clientes.detalle', oid=f.oc.id) }}">Completar cobro</a>
+                                    <button type="button" class="btn sm primary btn-oc-pago-uno" title="Saldo pendiente: ${{ '{:,.0f}'.format(f.monto_pendiente or 0).replace(',', '.') }}">Completar cobro</button>
                                     {% elif f.oc.estado == 'entregada' %}
                                     <button type="button" class="btn sm primary btn-oc-pago-uno">Pago</button>
                                     {% elif f.oc.estado == 'anulada' %}

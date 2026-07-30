@@ -116,7 +116,7 @@
           <div class="exp-pill">
             <strong>{{ a.titulo }}</strong>
             <div class="exp-muted" style="font-size:11px; margin:0 0 6px;">
-              Recibido {{ a.creado_at.strftime('%d/%m/%Y %H:%M') if a.creado_at else '—' }} ·
+              Recibido {{ a.creado_at|chile_datetime if a.creado_at else '—' }} ·
               <span class="exp-badge pendiente">Pendiente</span>
             </div>
             {% if a.mensaje %}
@@ -162,7 +162,7 @@
           <tr>
             <td><strong>{{ a.titulo }}</strong></td>
             <td><span class="exp-badge aceptado">Aceptado</span></td>
-            <td style="font-size:11px; color:#64748b;">{{ a.aceptado_at.strftime('%d/%m/%Y %H:%M') if a.aceptado_at else '—' }}</td>
+            <td style="font-size:11px; color:#64748b;">{{ a.aceptado_at|chile_datetime if a.aceptado_at else '—' }}</td>
             <td><a href="{{ url_for('rrhh.rrhh_archivo_anexo', aid=a.id) }}" target="_blank" rel="noopener">Ver PDF</a></td>
           </tr>
           {% endfor %}

@@ -527,6 +527,9 @@ html {
 				<a class="{% if active_page == 'productos_buscar' %}nav-active{% endif %}"
 				   href="{{ url_for('productos.buscar') }}"
 				   data-module-url="{{ url_for('productos.buscar') }}">🔍 Buscar</a>
+				<a class="{% if active_page == 'vehiculos_vin' %}nav-active{% endif %}"
+				   href="{{ url_for('vehiculos_vin.index') }}"
+				   data-module-url="{{ url_for('vehiculos_vin.index') }}">🚗 VIN / Chasis</a>
 				<a href="{{ url_for('productos.modal_crear_producto') }}"
 				   {% if not acceso_productos_directo %}data-product-auth="Crear producto"{% endif %}
 				   data-modal-url="{{ url_for('productos.modal_crear_producto') }}">➕ Crear</a>

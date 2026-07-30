@@ -345,22 +345,24 @@
         flex-direction: column;
     }
 }
-.history-back-bar {
-    margin-bottom: 4px;
-}
 .history-back-link {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
-    color: #64748b;
+    color: rgba(255, 255, 255, 0.65);
     text-decoration: none;
-    padding: 2px 0 4px;
+    padding: 0;
+    margin: 0 0 6px;
 }
 .history-back-link:hover {
     text-decoration: underline;
-    color: #2563eb;
+    color: #fff;
+}
+.history-hero-main {
+    min-width: 0;
+    flex: 1 1 200px;
 }
 /* Pestaña pagos: mismo aire que documentos */
 .history-pane--pagos {
@@ -369,8 +371,8 @@
 /* Pagos: compacto, paleta suave (slate / sage) */
 .history-pagos-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-    gap: 12px 14px;
+    grid-template-columns: minmax(160px, 210px) minmax(0, 1fr);
+    gap: 12px 12px;
     align-items: start;
 }
 @media (max-width: 880px) {
@@ -382,13 +384,16 @@
     border-radius: 10px;
     background: #fcfcfd;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    min-width: 0;
 }
-/* Saldo: bloque con acento sutil, sin azul duro */
+/* Saldo: columna angosta, monto centrado */
 .history-pagos-card--saldo {
     background: linear-gradient(165deg, #f4f6f8 0%, #f0f2f5 50%, #eef1f4 100%);
     border: 1px solid #e2e6eb;
     border-left: 3px solid #94a3b8;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(15, 23, 42, 0.03);
+    padding: 14px 12px 12px;
+    text-align: center;
 }
 .history-pagos-card--detail {
     background: #fff;
@@ -396,11 +401,11 @@
 }
 .history-pagos-saldo-row {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 4px 12px;
-    margin-bottom: 6px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: 8px;
 }
 .history-pagos-saldo-row .hp-label {
     font-size: 10px;
@@ -410,18 +415,57 @@
     color: #64748b;
 }
 .history-pagos-saldo-row .hp-amount {
-    font-size: 1.2rem;
+    font-size: 1.45rem;
     font-weight: 700;
     color: #1e293b;
     letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
+    line-height: 1.15;
 }
 .history-pagos-hint {
-    font-size: 11px;
-    line-height: 1.45;
+    font-size: 10px;
+    line-height: 1.4;
     color: #7c8a9a;
-    margin: 0;
-    max-width: 44ch;
+    margin: 0 auto;
+    max-width: 22ch;
+    text-align: center;
+}
+.history-pagos-card--saldo .sf-details {
+    text-align: left;
+}
+.history-pagos-card--saldo .sf-form-grid {
+    grid-template-columns: 1fr;
+}
+.history-pagos-card--saldo .sf-details > summary {
+    justify-content: center;
+}
+.history-pagos-table-scroll .history-table {
+    width: 100%;
+    table-layout: fixed;
+}
+.history-pagos-table-scroll .history-table th:nth-child(1),
+.history-pagos-table-scroll .history-table td:nth-child(1) {
+    width: 22%;
+}
+.history-pagos-table-scroll--mov .history-table th:nth-child(1),
+.history-pagos-table-scroll--mov .history-table td:nth-child(1) {
+    width: 26%;
+    font-variant-numeric: tabular-nums;
+}
+.history-pagos-table-scroll .history-table th:nth-child(2),
+.history-pagos-table-scroll .history-table td:nth-child(2) {
+    width: 16%;
+}
+.history-pagos-table-scroll .history-table th:nth-child(3),
+.history-pagos-table-scroll .history-table td:nth-child(3) {
+    width: 14%;
+}
+.history-pagos-table-scroll .history-table th:nth-child(4),
+.history-pagos-table-scroll .history-table td:nth-child(4) {
+    width: 44%;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 .history-pagos-section {
     margin: 0;
@@ -553,13 +597,11 @@ textarea.sf-input {
 
 {% block ventas_inner %}
 <div class="history-shell">
-    {% if not embed_modal|default(false) %}
-    <div class="history-back-bar">
-        <a class="history-back-link" href="{{ url_for('ventas.clientes') }}">← Volver a clientes</a>
-    </div>
-    {% endif %}
     <section class="history-hero">
-        <div>
+        <div class="history-hero-main">
+            {% if not embed_modal|default(false) %}
+            <a class="history-back-link" href="{{ url_for('ventas.clientes') }}">← Volver a clientes</a>
+            {% endif %}
             <h2>{{ cliente.nombre }}</h2>
             <p>RUT: {{ cliente.rut|format_rut if cliente.rut else 'Sin RUT' }} | Email: {{ cliente.email or 'Sin email' }} | Telefono: {% if cliente.telefono %}{{ cliente.telefono|format_telefono }}{% else %}Sin telefono{% endif %}</p>
         </div>
@@ -681,30 +723,54 @@ textarea.sf-input {
                         <span class="hp-label">Saldo a favor</span>
                         <span class="hp-amount">${{ '{:,.0f}'.format((data.saldo_favor|default(0))|float).replace(',', '.') }}</span>
                     </div>
-                    <p class="history-pagos-hint">NC a saldo, cargas manuales y descuentos en factura/boleta. Podés descontar este crédito al emitir documentos e indicar otro medio para el resto.</p>
+                    <p class="history-pagos-hint">NC a saldo, cargas/consumos manuales (factura SII) y descuentos al emitir docs.</p>
                     <details class="sf-details">
-                        <summary>Acreditación manual (auditoría)</summary>
-                        <form method="post" action="{{ url_for('ventas.cliente_saldo_favor_manual', cid=cliente.id) }}">
+                        <summary>Movimiento manual (auditoría)</summary>
+                        <form method="post" action="{{ url_for('ventas.cliente_saldo_favor_manual', cid=cliente.id) }}" id="clienteSaldoFavorForm">
                             <div class="sf-form-grid">
                                 <div>
+                                    <label class="sf-label">Acción *</label>
+                                    <select class="sf-input" name="accion_saldo" id="clienteAccionSaldo">
+                                        <option value="consumir">Consumir (−) — aplicar a venta / factura SII</option>
+                                        <option value="acreditar">Acreditar (+)</option>
+                                    </select>
+                                </div>
+                                <div>
                                     <label class="sf-label">Monto *</label>
-                                    <input class="sf-input" type="text" name="monto_saldo_agregar" inputmode="decimal" required placeholder="50000" autocomplete="off">
+                                    <input class="sf-input" type="text" name="monto_saldo" inputmode="decimal" required placeholder="40990" autocomplete="off">
                                 </div>
                                 <div>
-                                    <label class="sf-label">N° factura *</label>
-                                    <input class="sf-input" type="text" name="ref_numero_factura" required placeholder="Folio" maxlength="100" autocomplete="off">
+                                    <label class="sf-label" id="clienteSaldoFacLabel">N° factura/boleta SII *</label>
+                                    <input class="sf-input" type="text" name="ref_numero_factura" id="clienteSaldoFac" required placeholder="Folio SII" maxlength="100" autocomplete="off">
                                 </div>
                                 <div>
-                                    <label class="sf-label">N° N.C. *</label>
-                                    <input class="sf-input" type="text" name="ref_numero_nota_credito" required placeholder="Folio" maxlength="100" autocomplete="off">
+                                    <label class="sf-label" id="clienteSaldoNcLabel">N° N.C. <span id="clienteSaldoNcReq">(opcional)</span></label>
+                                    <input class="sf-input" type="text" name="ref_numero_nota_credito" id="clienteSaldoNc" placeholder="Solo si acreditás" maxlength="100" autocomplete="off">
                                 </div>
                                 <div class="sf-wide">
-                                    <label class="sf-label">Razón *</label>
-                                    <textarea class="sf-input" name="ref_razon_saldo" rows="2" required placeholder="Motivo del ajuste"></textarea>
+                                    <label class="sf-label">Razón / detalle *</label>
+                                    <textarea class="sf-input" name="ref_razon_saldo" rows="2" required placeholder="Ej: Aplicado a factura SII 156 — resto cobrado por transferencia $XX"></textarea>
                                 </div>
                             </div>
                             <button class="sf-submit" type="submit">Registrar</button>
                         </form>
+                        <script>
+                        (function () {
+                            var sel = document.getElementById('clienteAccionSaldo');
+                            var nc = document.getElementById('clienteSaldoNc');
+                            var ncReq = document.getElementById('clienteSaldoNcReq');
+                            var facLabel = document.getElementById('clienteSaldoFacLabel');
+                            function sync() {
+                                var cons = sel && sel.value === 'consumir';
+                                if (nc) nc.required = !cons;
+                                if (ncReq) ncReq.textContent = cons ? '(opcional)' : '*';
+                                if (facLabel) facLabel.textContent = cons
+                                    ? 'N° factura/boleta SII *'
+                                    : 'N° factura *';
+                            }
+                            if (sel) { sel.addEventListener('change', sync); sync(); }
+                        })();
+                        </script>
                     </details>
                 </div>
                 <div class="history-pagos-right history-pagos-card history-pagos-card--detail">
@@ -747,7 +813,7 @@ textarea.sf-input {
                         <table class="history-table" style="font-size: 9px;">
                             <thead>
                                 <tr>
-                                    <th>Fecha</th>
+                                    <th>Fecha / hora</th>
                                     <th>Tipo</th>
                                     <th>Monto</th>
                                     <th>Detalle</th>
@@ -756,7 +822,7 @@ textarea.sf-input {
                             <tbody>
                                 {% for sm in data.saldo_movimientos %}
                                 <tr>
-                                    <td style="white-space: nowrap;">{{ (sm.created_at or '')[:10] }}</td>
+                                    <td style="white-space: nowrap;">{{ sm.created_at|chile_datetime if sm.created_at else '—' }}</td>
                                     <td>{{ sm.tipo|replace('_', ' ') }}</td>
                                     <td style="font-weight: 600; color: {% if sm.monto|float < 0 %}#b91c1c{% else %}#15803d{% endif %};">
                                         {% if sm.monto|float >= 0 %}+{% endif %}${{ '{:,.0f}'.format(sm.monto|float).replace(',', '.') }}

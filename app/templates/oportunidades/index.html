@@ -59,7 +59,7 @@
             {% if op.fecha_seguimiento %}
             <div>Seguimiento: <strong>{{ op.fecha_seguimiento.strftime('%d/%m/%Y') }}</strong></div>
             {% endif %}
-            <div>{{ op.usuario or '—' }} &bull; {{ op.created_at.strftime('%d/%m/%Y') }}</div>
+            <div>{{ op.usuario or '—' }} &bull; {{ op.created_at|chile_date if op.created_at else '—' }}</div>
           </div>
           <div class="card-actions">
             <button class="btn sm outline btn-cambiar-estado"

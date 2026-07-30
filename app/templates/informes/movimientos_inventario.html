@@ -50,7 +50,7 @@
       <tbody>
         {% for m in movimientos %}
         <tr>
-          <td>{{ m.fecha.strftime('%d/%m/%Y %H:%M') if m.fecha else '-' }}</td>
+          <td>{{ m.fecha|chile_datetime if m.fecha else '-' }}</td>
           <td>
             {% if m.tipo == 'ingreso' %}
             <span class="mov-badge ing">Ingreso</span>

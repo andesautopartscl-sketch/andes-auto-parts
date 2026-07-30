@@ -566,7 +566,7 @@
                     <tbody>
                         {% for sm in data.saldo_movimientos %}
                         <tr>
-                            <td style="white-space:nowrap;">{{ (sm.created_at or '')[:16]|replace('T', ' ') }}</td>
+                            <td style="white-space:nowrap;">{{ sm.created_at|chile_datetime if sm.created_at else '—' }}</td>
                             <td>{{ sm.tipo|replace('_', ' ') }}</td>
                             <td style="font-weight:600;color:{% if sm.monto|float < 0 %}#b91c1c{% else %}#15803d{% endif %};">
                                 {% if sm.monto|float >= 0 %}+{% endif %}${{ '{:,.0f}'.format(sm.monto|float).replace(',', '.') }}

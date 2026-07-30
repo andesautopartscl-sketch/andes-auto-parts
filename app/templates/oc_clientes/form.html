@@ -272,8 +272,8 @@
                         <input id="direccion_despacho" name="direccion_despacho" value="{{ form_data.direccion_despacho }}">
                     </div>
                     <div class="oc-field span-4">
-                        <label for="observaciones">Observaciones</label>
-                        <textarea id="observaciones" name="observaciones" rows="2" placeholder="Opcional">{{ form_data.observaciones }}</textarea>
+                        <label for="observaciones">Observaciones <span style="font-weight:400;color:#64748b;">(si incluye marca, modelo, año y VIN → se guarda en VIN / Chasis)</span></label>
+                        <textarea id="observaciones" name="observaciones" rows="3" placeholder="Ej: JMC GRAND AVENUE 2024&#10;VIN ; LEFADEF1XSTP00861">{{ form_data.observaciones }}</textarea>
                     </div>
                 </div>
             </div>
@@ -814,6 +814,10 @@
         if (data.vendedor) setVendedorValue(data.vendedor, { register: true });
         else if (vendedorInput) vendedorInput.value = '';
         if (data.direccion_despacho) document.getElementById('direccion_despacho').value = data.direccion_despacho;
+        if (data.observaciones) {
+            var obsEl = document.getElementById('observaciones');
+            if (obsEl) obsEl.value = data.observaciones;
+        }
         applyClienteFromScan(data);
         itemsBody.innerHTML = '';
         (data.items || []).forEach(function (it) {

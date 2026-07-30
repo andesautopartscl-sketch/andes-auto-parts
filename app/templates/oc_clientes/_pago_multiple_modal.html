@@ -75,7 +75,7 @@
 <div id="ocPagoModal" class="oc-pago-modal" aria-hidden="true">
     <div class="oc-pago-card" role="dialog" aria-modal="true" aria-labelledby="ocPagoModalTitle">
         <h3 id="ocPagoModalTitle">Pago conjunto</h3>
-        <p class="sub" id="ocPagoModalSub">Un solo abono del cliente con factura distinta por cada OC.</p>
+        <p class="sub" id="ocPagoModalSub">Un solo abono del cliente con factura distinta por cada OC. En OC parcialmente cobradas se cobra solo el saldo pendiente.</p>
         <form id="ocPagoForm" method="post" action="{{ url_for('oc_clientes.registrar_pago_multiple') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="oc-pago-grid">

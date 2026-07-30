@@ -26,6 +26,7 @@ from .chat import models as chat_models  # noqa: F401 – registers ORM models
 from .inventario import models as inventario_models  # noqa: F401
 from .oportunidades import models as oportunidades_models  # noqa: F401
 from .postventa import models as postventa_models  # noqa: F401
+from .vehiculos_vin import models as vehiculos_vin_models  # noqa: F401
 from .contabilidad import models as contabilidad_models  # noqa: F401
 from .rrhh import models as rrhh_models  # noqa: F401
 from .sii_sync import models as sii_sync_models  # noqa: F401
@@ -33,6 +34,7 @@ from .oc_clientes import models as oc_clientes_models  # noqa: F401
 from .inventario.routes import inventario_bp
 from .oportunidades.routes import oportunidades_bp
 from .postventa.routes import postventa_bp
+from .vehiculos_vin.routes import vehiculos_vin_bp
 from .dashboard.routes import dashboard_bp
 from .contabilidad.routes import contabilidad_bp, finanzas_bp
 from .informes.routes import informes_bp
@@ -42,7 +44,11 @@ from .oc_clientes import oc_clientes_bp
 from .mobile import mobile_bp
 from app.seguridad.init_roles import crear_roles
 from app.seguridad.crear_superadmin import crear_superadmin
-from app.utils.datetime_utils import chile_datetime_filter
+from app.utils.datetime_utils import (
+    chile_date_filter,
+    chile_datetime_filter,
+    chile_tz_status,
+)
 from app.utils.rut_utils import format_rut
 from app.utils.phone_format import format_phone_display
 from app.utils.audit_metadata_filter import format_audit_metadata
@@ -239,6 +245,18 @@ def create_app():
     # Render / reverse proxy: esquema y host correctos para cookies y redirects.
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
     app.jinja_env.filters["chile_datetime"] = chile_datetime_filter
+    app.jinja_env.filters["chile_date"] = chile_date_filter
+    try:
+        _tz_info = chile_tz_status()
+        app.logger.info(
+            "Zona horaria Chile: %s | ahora=%s | offset=%sh | dst=%s",
+            _tz_info.get("tz"),
+            _tz_info.get("now_chile"),
+            _tz_info.get("utc_offset_hours"),
+            _tz_info.get("is_dst"),
+        )
+    except Exception as _tz_exc:  # pragma: no cover
+        app.logger.warning("No se pudo verificar zona America/Santiago: %s", _tz_exc)
     app.jinja_env.filters["format_rut"] = format_rut
     app.jinja_env.filters["format_telefono"] = format_phone_display
     app.jinja_env.filters["audit_metadata"] = format_audit_metadata
@@ -332,6 +350,7 @@ def create_app():
         app.register_blueprint(inventario_bp)
         app.register_blueprint(oportunidades_bp)
         app.register_blueprint(postventa_bp)
+        app.register_blueprint(vehiculos_vin_bp)
         app.register_blueprint(dashboard_bp)
         app.register_blueprint(contabilidad_bp)
         app.register_blueprint(finanzas_bp)
@@ -1154,6 +1173,56 @@ def create_app():
             conn.execute(
                 text("CREATE INDEX IF NOT EXISTS idx_oc_clientes_pago_grupo ON oc_clientes(pago_grupo_id)")
             )
+
+            # Registro VIN / Chasis (maestro de unidades; no toca productos)
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS vehiculos_vin (
+                        id INTEGER PRIMARY KEY,
+                        vin VARCHAR(32) UNIQUE,
+                        chasis VARCHAR(64),
+                        marca VARCHAR(80),
+                        modelo VARCHAR(160),
+                        modelo_completo VARCHAR(200),
+                        anio INTEGER,
+                        motor VARCHAR(120),
+                        version VARCHAR(120),
+                        transmision VARCHAR(80),
+                        cilindrada VARCHAR(40),
+                        patente VARCHAR(20),
+                        nombre_china VARCHAR(120),
+                        notas TEXT,
+                        fuente VARCHAR(40),
+                        activo BOOLEAN NOT NULL DEFAULT 1,
+                        usuario_alta VARCHAR(100),
+                        usuario_edicion VARCHAR(100),
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL
+                    )
+                    """
+                )
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vehiculos_vin_vin ON vehiculos_vin(vin)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vehiculos_vin_chasis ON vehiculos_vin(chasis)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vehiculos_vin_marca ON vehiculos_vin(marca)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vehiculos_vin_modelo ON vehiculos_vin(modelo)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vehiculos_vin_anio ON vehiculos_vin(anio)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vehiculos_vin_activo ON vehiculos_vin(activo)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vehiculos_vin_created_at ON vehiculos_vin(created_at)"))
+            vin_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(vehiculos_vin)")).fetchall()}
+            if vin_cols and "modelo_completo" not in vin_cols:
+                conn.execute(text("ALTER TABLE vehiculos_vin ADD COLUMN modelo_completo VARCHAR(200)"))
+            if vin_cols and "nombre_china" not in vin_cols:
+                conn.execute(text("ALTER TABLE vehiculos_vin ADD COLUMN nombre_china VARCHAR(120)"))
+            if vin_cols and "imagen_url" not in vin_cols:
+                conn.execute(text("ALTER TABLE vehiculos_vin ADD COLUMN imagen_url VARCHAR(500)"))
+            # Refrescar nombres por si acabamos de agregar columnas
+            vin_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(vehiculos_vin)")).fetchall()}
+            if "nombre_china" in vin_cols:
+                conn.execute(
+                    text("CREATE INDEX IF NOT EXISTS idx_vehiculos_vin_nombre_china ON vehiculos_vin(nombre_china)")
+                )
 
             # Tablas antiguas sin producto_codigo: ALTER primero; luego el índice (no indexar columna inexistente).
             oem_d_cols = conn.execute(text("PRAGMA table_info(oem_despiece)")).fetchall()

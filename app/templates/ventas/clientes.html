@@ -104,11 +104,15 @@
 table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 880px;
+    min-width: 920px;
+}
+.td-actions {
+    width: 1%;
+    white-space: nowrap;
 }
 th,
 td {
-    padding: 7px 10px;
+    padding: 5px 8px;
     border-bottom: 1px solid #f1f5f9;
     text-align: left;
     vertical-align: middle;
@@ -137,20 +141,24 @@ td {
 }
 .actions {
     display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
+    gap: 4px;
+    flex-wrap: nowrap;
     align-items: center;
+    white-space: nowrap;
 }
 .inline-form {
     margin: 0;
+    display: inline-flex;
 }
 .page-stack .actions .btn.sm {
-    padding: 4px 8px;
-    font-size: 11px;
+    padding: 3px 7px;
+    font-size: 10px;
     font-weight: 500;
-    border-radius: 6px;
+    border-radius: 5px;
+    line-height: 1.2;
     transform: none;
     box-shadow: none;
+    white-space: nowrap;
 }
 .page-stack .actions .btn.sm:hover {
     transform: none;
@@ -260,9 +268,9 @@ td {
                                 <span>{{ cliente.email or 'Sin email' }}</span>
                             </div>
                         </td>
-                        <td>
+                        <td class="td-actions">
                             <div class="actions">
-                                <a class="btn sm outline" href="{{ url_for('oc_clientes.nueva', cliente_id=cliente.id) }}">➕ OC</a>
+                                <a class="btn sm outline" href="{{ url_for('oc_clientes.nueva', cliente_id=cliente.id) }}">+ OC</a>
                                 <a class="btn sm outline" href="{{ url_for('ventas.cliente_historial', cid=cliente.id) }}">Historial</a>
                                 <a class="btn sm" href="{{ url_for('ventas.cliente_editar', cid=cliente.id) }}">Editar</a>
                                 <form class="inline-form" method="post" action="{{ url_for('ventas.cliente_eliminar', cid=cliente.id) }}" onsubmit="return confirm('Eliminar cliente {{ cliente.nombre }}?');">

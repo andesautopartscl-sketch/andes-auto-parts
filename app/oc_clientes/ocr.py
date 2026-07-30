@@ -24,7 +24,7 @@ from app.ventas.models import Cliente
 
 logger = logging.getLogger(__name__)
 
-OCR_PARSER_REV = "oc-cliente-v6"
+OCR_PARSER_REV = "oc-cliente-v7"
 RUT_PROPIO = "78074288-7"
 RUT_PROPIO_NORM = clean_rut(RUT_PROPIO)
 
@@ -700,6 +700,23 @@ def _extract_observaciones(texto: str) -> dict[str, str | None]:
     obs = "\n".join(obs_lines).strip()
     marca = None
     vehiculo = None
+    vin = None
+
+    # VIN / chasis en observaciones
+    m_vin = re.search(
+        r"(?:VIN|CHASIS|CHASSIS)\s*[;:=\-]?\s*([A-HJ-NPR-Z0-9]{11,17})",
+        obs,
+        re.IGNORECASE,
+    )
+    if m_vin:
+        vin = re.sub(r"[^A-Za-z0-9]", "", m_vin.group(1)).upper()
+    if not vin:
+        for ln in obs.splitlines():
+            m2 = re.search(r"\b([A-HJ-NPR-Z0-9]{17})\b", ln.upper())
+            if m2:
+                vin = m2.group(1)
+                break
+
     if re.search(r"GREAT\s*WALL", obs, re.IGNORECASE):
         marca = "GREAT WALL"
         for ln in obs.splitlines():
@@ -765,7 +782,49 @@ def _extract_observaciones(texto: str) -> dict[str, str | None]:
             if vm:
                 vehiculo = "CHANGAN " + re.sub(r"\s+", " ", vm.group(1)).strip().upper()
                 break
-    return {"texto": obs, "marca": marca, "vehiculo": vehiculo}
+    elif re.search(r"\bJMC\b", obs, re.IGNORECASE):
+        marca = "JMC"
+        for ln in obs.splitlines():
+            vm = re.search(r"(JMC\s+[A-Z0-9][A-Z0-9 \-.]*\d{4})", ln, re.IGNORECASE)
+            if vm and not re.search(r"\bVIN\b", ln, re.I):
+                vehiculo = re.sub(r"\s+", " ", vm.group(1)).strip().upper()
+                break
+    elif re.search(r"\bCHERY\b", obs, re.IGNORECASE):
+        marca = "CHERY"
+        for ln in obs.splitlines():
+            vm = re.search(r"(CHERY\s+[A-Z0-9][A-Z0-9 \-.]*\d{4})", ln, re.IGNORECASE)
+            if vm and not re.search(r"\bVIN\b", ln, re.I):
+                vehiculo = re.sub(r"\s+", " ", vm.group(1)).strip().upper()
+                break
+    elif re.search(r"\bBYD\b", obs, re.IGNORECASE):
+        marca = "BYD"
+        for ln in obs.splitlines():
+            vm = re.search(r"(BYD\s+[A-Z0-9][A-Z0-9 \-.]*\d{4})", ln, re.IGNORECASE)
+            if vm and not re.search(r"\bVIN\b", ln, re.I):
+                vehiculo = re.sub(r"\s+", " ", vm.group(1)).strip().upper()
+                break
+
+    # Genérico: línea con marca+año si aún no hay vehiculo
+    if not vehiculo:
+        for ln in obs.splitlines():
+            s = re.sub(r"\s+", " ", ln).strip()
+            if re.search(r"\bVIN\b|\bCHASIS\b|\bGUIA\b|\bSINIESTRO\b", s, re.I):
+                continue
+            if re.match(r"^[-–]", s):
+                continue
+            if re.search(r"\b(?:19|20)\d{2}\b", s) and len(s) >= 8:
+                vehiculo = s.upper()
+                if not marca:
+                    for brand in (
+                        "GREAT WALL", "CHANGAN", "CHERY", "BYD", "JMC", "JAC",
+                        "MAXUS", "HAVAL", "GEELY", "FOTON", "MG",
+                    ):
+                        if brand in vehiculo:
+                            marca = brand
+                            break
+                break
+
+    return {"texto": obs, "marca": marca, "vehiculo": vehiculo, "vin": vin}
 
 
 def _is_price_block_end(line: str) -> bool:
@@ -1369,6 +1428,8 @@ def parse_oc_text(texto: str) -> dict[str, Any]:
     items = _extract_items(texto, totales_leidos.get("neto"))
     catalogo = _load_product_catalog()
     items = _enrich_items_with_catalog(items, catalogo, warnings)
+    obs_info = _extract_observaciones(texto)
+    observaciones = (obs_info.get("texto") or "").strip() or None
 
     suma_items = round(sum(float(it.get("subtotal") or 0) for it in items), 2)
     neto_leido = totales_leidos.get("neto")
@@ -1392,6 +1453,12 @@ def parse_oc_text(texto: str) -> dict[str, Any]:
         "cliente_nombre": cliente_nombre,
         "cliente_rut": rut_cliente,
         "cliente_razon_social": razon_social,
+        "observaciones": observaciones,
+        "vehiculo_ocr": {
+            "marca": obs_info.get("marca"),
+            "vehiculo": obs_info.get("vehiculo"),
+            "vin": obs_info.get("vin"),
+        },
         "totales_leidos": totales_leidos,
         "suma_items": suma_items,
         "checksum_ok": checksum_ok,

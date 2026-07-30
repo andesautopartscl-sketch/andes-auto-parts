@@ -1,0 +1,631 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}VIN / Chasis | Andes Auto Parts{% endblock %}
+
+{% block extra_head %}
+<style>
+.vin-page,.vin-page *{
+  font-family:inherit !important;
+}
+.vin-page{display:grid;gap:8px;font-size:11px;color:#475569;}
+.vin-page .vin-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}
+.vin-page .vin-head h2{font-size:13.5px;margin:0;font-weight:650;letter-spacing:-.01em;color:#0f172a;}
+.vin-page .vin-head p{color:#94a3b8;font-size:10px;margin:1px 0 0;}
+.vin-stats{display:flex;gap:4px;}
+.vin-stat{background:#f8fafc;border:1px solid #eef2f7;border-radius:6px;padding:3px 8px;min-width:58px;text-align:center;line-height:1.15;}
+.vin-stat strong{display:block;font-size:12px;color:#0f172a;font-weight:650;}
+.vin-stat span{font-size:8px;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em;}
+.vin-toolbar{display:flex;gap:4px;flex-wrap:wrap;align-items:center;padding:7px 8px !important;}
+.vin-toolbar form{display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin:0;}
+.vin-toolbar input[type="search"]{flex:1;min-width:160px;height:26px;padding:2px 8px;font-size:11px;border-radius:6px;border-color:#e2e8f0;}
+.vin-page table.erp-table{font-size:10.5px;border-collapse:separate;border-spacing:0;}
+.vin-page table.erp-table th,
+.vin-page table.erp-table td{
+  padding:8px 8px !important;
+  line-height:1.35;
+  vertical-align:middle;
+  border-color:#f1f5f9 !important;
+  font-size:10.5px !important;
+}
+.vin-page table.erp-table th{
+  font-size:10.5px !important;
+  letter-spacing:.02em;
+  white-space:nowrap;
+  color:#94a3b8;
+  font-weight:600;
+  background:#fafbfc !important;
+  padding:7px 8px !important;
+  text-transform:none;
+}
+.vin-page table.erp-table td{white-space:nowrap;color:#475569;font-weight:400;}
+.vin-page table.erp-table tbody tr:nth-child(even) td{background:#fafbfc;}
+.vin-page table.erp-table tr:hover td{background:#f1f5f9 !important;}
+.vin-page table.erp-table td.vin-modelo{white-space:normal;max-width:150px;}
+.vin-page a.vin-link,
+.vin-page a.vin-link:link,
+.vin-page a.vin-link:visited,
+.vin-page a.vin-link:hover,
+.vin-page a.vin-link:active,
+.vin-page a.vin-link:focus{
+  color:#475569 !important;
+  text-decoration:none !important;
+  border-bottom:none !important;
+  background:transparent;
+  font-weight:400 !important;
+  cursor:pointer;
+  font-size:10.5px !important;
+}
+.vin-page a.vin-link:hover{color:#0f172a !important;}
+.vin-actions{display:flex;gap:4px;flex-wrap:nowrap;}
+.vin-page .badge{
+  padding:2px 6px;
+  font-size:10.5px !important;
+  border-radius:999px;
+  font-weight:500;
+  letter-spacing:.02em;
+  opacity:.88;
+}
+.vin-page .btn.sm,.vin-page a.btn.sm{
+  padding:3px 8px !important;
+  font-size:10.5px !important;
+  line-height:1.25 !important;
+  border-radius:5px !important;
+  min-height:0 !important;
+  font-weight:500 !important;
+}
+.vin-page .btn.outline,.vin-page a.btn.outline{border-color:#e2e8f0 !important;color:#64748b !important;background:#fff !important;}
+.vin-page .btn.primary,.vin-page a.btn.primary{box-shadow:none !important;opacity:.9;}
+.vin-page .panel{margin:0;border-color:#eef2f7 !important;}
+.vin-page .badge.green{background:#ecfdf5 !important;color:#047857 !important;border:1px solid #a7f3d0;}
+.vin-flash{list-style:none;margin:0;padding:0;display:grid;gap:3px;}
+.vin-flash li{padding:5px 8px;border-radius:6px;font-size:10.5px;}
+.vin-flash .error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;}
+.vin-flash .success{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;}
+.vin-pager{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-top:1px solid #f1f5f9;flex-wrap:wrap;gap:4px;font-size:10px;color:#94a3b8;}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1000;align-items:center;justify-content:center;padding:16px;}
+.modal-bg.open{display:flex;}
+.modal-box{background:#fff;border-radius:12px;padding:18px 18px 14px;max-width:600px;width:100%;box-shadow:0 20px 50px rgba(15,23,42,.22);max-height:90vh;overflow:auto;font-family:inherit;}
+.modal-box.modal-box--sm{max-width:420px;}
+.modal-box,.modal-box *{font-family:inherit !important;}
+.modal-box h3{margin:0 0 6px;font-size:14px;color:#0f172a;font-weight:650;}
+.modal-box .modal-sub{margin:0 0 14px;font-size:11.5px;color:#64748b;line-height:1.4;}
+.vin-choice{display:grid;gap:8px;margin:0 0 14px;}
+.vin-choice a,.vin-choice button{
+  display:block;width:100%;text-align:left;padding:10px 12px;border-radius:9px;
+  border:1px solid #e2e8f0;background:#fff;color:#0f172a;cursor:pointer;
+  font-size:12px;line-height:1.35;text-decoration:none !important;
+}
+.vin-choice a:hover,.vin-choice button:hover{border-color:#94a3b8;background:#f8fafc;}
+.vin-choice strong{display:block;font-size:12.5px;margin-bottom:2px;color:#0f172a;}
+.vin-choice span{display:block;font-size:11px;color:#64748b;font-weight:400;}
+.vin-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.vin-form-grid .form-group label{font-size:10px;margin-bottom:1px;color:#64748b;}
+.vin-form-grid .form-group input,
+.vin-form-grid .form-group textarea{font-size:11px;padding:5px 7px;}
+.ficha-layout{display:grid;grid-template-columns:148px 1fr;gap:12px;align-items:start;}
+.ficha-media{display:flex;flex-direction:column;gap:6px;}
+.ficha-img-box{
+  width:148px;height:110px;border:1px solid #e2e8f0;border-radius:8px;
+  background:#f8fafc;overflow:hidden;display:flex;align-items:center;justify-content:center;
+  position:relative;
+}
+.ficha-img-box img{width:100%;height:100%;object-fit:cover;display:block;}
+.ficha-img-box .ficha-img-empty{font-size:10px;color:#94a3b8;text-align:center;padding:8px;line-height:1.35;}
+.ficha-media-actions{display:flex;flex-direction:column;gap:4px;}
+.ficha-media-actions .btn{width:100%;justify-content:center;}
+.vin-page .btn.danger,.vin-page a.btn.danger{
+  border-color:#fecaca !important;color:#b91c1c !important;background:#fff !important;
+}
+.vin-page .btn.danger:hover{background:#fef2f2 !important;}
+@media (max-width:720px){
+  .vin-form-grid{grid-template-columns:1fr;}
+  .ficha-layout{grid-template-columns:1fr;}
+  .ficha-img-box{width:100%;height:140px;}
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="vin-page">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <ul class="vin-flash">
+    {% for cat, msg in messages %}
+    <li class="{{ cat }}">{{ msg }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endwith %}
+
+  <div class="vin-head">
+    <div>
+      <h2>VIN / Chasis</h2>
+      <p>Desglose automático de modelo · año · cilindrada (incluye 1.0T)</p>
+    </div>
+    <div class="vin-stats">
+      <div class="vin-stat"><strong>{{ total_activos }}</strong><span>Activos</span></div>
+      <div class="vin-stat"><strong>{{ total_registros }}</strong><span>Total</span></div>
+    </div>
+  </div>
+
+  <section class="panel vin-toolbar">
+    <form method="get" action="{{ url_for('vehiculos_vin.index') }}" style="flex:1;">
+      <input type="search" name="q" value="{{ q }}" placeholder="VIN, patente, marca, modelo, motor, China…" autocomplete="off">
+      {% if not solo_activos %}
+      <input type="hidden" name="estado" value="todos">
+      {% endif %}
+      <button type="submit" class="btn primary sm">Buscar</button>
+      {% if q %}
+      <a class="btn outline sm" href="{{ url_for('vehiculos_vin.index', estado='todos' if not solo_activos else None) }}">Limpiar</a>
+      {% endif %}
+      {% if solo_activos %}
+      <a class="btn outline sm" href="{{ url_for('vehiculos_vin.index', q=q, estado='todos') }}">Todos</a>
+      {% else %}
+      <a class="btn outline sm" href="{{ url_for('vehiculos_vin.index', q=q) }}">Activos</a>
+      {% endif %}
+    </form>
+    <button type="button" class="btn primary sm" id="btnNuevoVin">+ Nuevo</button>
+    <button type="button" class="btn outline sm" id="btnImportarVin">Importar</button>
+    <button type="button" class="btn outline sm" id="btnPlantillaVin">Plantilla</button>
+    <button type="button" class="btn outline sm" id="btnDesglosarVin">Desglosar</button>
+  </section>
+
+  <section class="panel" style="overflow:hidden;">
+    {% if items %}
+    <div style="overflow-x:auto;">
+      <table class="erp-table">
+        <thead>
+          <tr>
+            <th>VIN / Chasis</th>
+            <th>Marca</th>
+            <th>Modelo</th>
+            <th>Año</th>
+            <th>Cil.</th>
+            <th>N° Motor</th>
+            <th>Patente</th>
+            <th>China</th>
+            <th>Transm.</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in items %}
+          <tr>
+            <td><a class="vin-link js-ficha-vin" href="{{ url_for('vehiculos_vin.detalle', vid=v.id) }}" data-vid="{{ v.id }}">{{ v.vin or v.chasis or '—' }}</a></td>
+            <td>{{ v.marca or '—' }}</td>
+            <td class="vin-modelo" title="{{ v.modelo_completo or '' }}">{{ v.modelo or '—' }}</td>
+            <td>{{ v.anio or '—' }}</td>
+            <td>{{ v.cilindrada or '—' }}</td>
+            <td>{{ v.motor or '—' }}</td>
+            <td>{{ v.patente or '—' }}</td>
+            <td>{{ v.nombre_china or '—' }}</td>
+            <td>{{ v.transmision or '—' }}</td>
+            <td>
+              <div class="vin-actions">
+                <button type="button" class="btn sm outline js-ficha-vin" data-vid="{{ v.id }}">Ficha</button>
+                {% if v.modelo or v.modelo_completo %}
+                <a class="btn sm primary" href="{{ url_for('vehiculos_vin.productos_compatibles', vid=v.id) }}">Cat.</a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if total_pages > 1 %}
+    <div class="vin-pager">
+      <span>{{ total }} · pág. {{ page }}/{{ total_pages }}</span>
+      <div style="display:flex;gap:4px;">
+        {% if page > 1 %}
+        <a class="btn sm outline" href="{{ url_for('vehiculos_vin.index', q=q, page=page-1, estado='todos' if not solo_activos else None) }}">←</a>
+        {% endif %}
+        {% if page < total_pages %}
+        <a class="btn sm outline" href="{{ url_for('vehiculos_vin.index', q=q, page=page+1, estado='todos' if not solo_activos else None) }}">→</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% else %}
+    <div style="padding:24px;text-align:center;color:var(--muted);font-size:12.5px;">
+      {% if q %}Sin resultados para “{{ q }}”.
+      {% else %}Sin vehículos. Importa el Excel o crea el primero.
+      {% endif %}
+    </div>
+    {% endif %}
+  </section>
+
+</div>
+
+<div class="modal-bg" id="modalNuevoVin">
+  <div class="modal-box">
+    <h3>Nuevo vehículo</h3>
+    <form method="post" action="{{ url_for('vehiculos_vin.nuevo') }}">
+      <div class="vin-form-grid">
+        <div class="form-group" style="grid-column:1 / -1;">
+          <label>VIN / Chasis</label>
+          <input type="text" name="vin" placeholder="LSYCKE2MXNG201990" autocomplete="off" required>
+          <input type="hidden" name="chasis" value="">
+        </div>
+        <div class="form-group">
+          <label>Marca</label>
+          <input type="text" name="marca" placeholder="CHERY" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Modelo (ej. TIGGO 2 PRO 1.0T AUT)</label>
+          <input type="text" name="modelo" placeholder="TIGGO 2 PRO 1.0T AUT 2023" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Año</label>
+          <input type="number" name="anio" min="1950" max="2100" placeholder="auto">
+        </div>
+        <div class="form-group">
+          <label>Cilindrada</label>
+          <input type="text" name="cilindrada" placeholder="1.0T" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>N° Motor</label>
+          <input type="text" name="motor" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Patente</label>
+          <input type="text" name="patente" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Nombre en China</label>
+          <input type="text" name="nombre_china" placeholder="A21" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Transmisión</label>
+          <input type="text" name="transmision" placeholder="CVT / AUT" autocomplete="off">
+        </div>
+        <div class="form-group" style="grid-column:1 / -1;">
+          <label>Notas</label>
+          <textarea name="notas" rows="2" style="resize:vertical;"></textarea>
+        </div>
+      </div>
+      <p style="font-size:11px;color:#64748b;margin:10px 0 0;"><code>1.0T</code> = 1.0 turbo · se separa solo del modelo.</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+        <button type="button" class="btn outline sm" data-close-modal="modalNuevoVin">Cancelar</button>
+        <button type="submit" class="btn primary sm">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalImportarVin">
+  <div class="modal-box" style="max-width:460px;">
+    <h3>Importar Excel</h3>
+    <form method="post" action="{{ url_for('vehiculos_vin.importar') }}" enctype="multipart/form-data">
+      <div class="form-group">
+        <label>Archivo Excel o CSV</label>
+        <input type="file" name="archivo" accept=".xlsx,.xls,.csv" required>
+      </div>
+      <p class="modal-sub" style="margin-top:8px;">
+        Columnas: <code>VIN / Chasis</code>, <code>Marca</code>, <code>Modelo</code>, <code>Año</code>,
+        <code>Cilindrada</code>, <code>N° Motor</code>, <code>Patente</code>, <code>Nombre en China</code>.
+        Reimportar actualiza por VIN.
+      </p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+        <button type="button" class="btn outline sm" data-close-modal="modalImportarVin">Cancelar</button>
+        <button type="submit" class="btn primary sm">Importar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalPlantillaVin">
+  <div class="modal-box modal-box--sm">
+    <h3>Descargar Excel</h3>
+    <p class="modal-sub">Elige qué quieres bajar para trabajar.</p>
+    <div class="vin-choice">
+      <a href="{{ url_for('vehiculos_vin.exportar_excel', scope='visible', q=q, page=page, estado='todos' if not solo_activos else None) }}">
+        <strong>Lo visible en pantalla</strong>
+        <span>Solo las filas de esta página ({{ items|length }} registro{{ 's' if items|length != 1 else '' }}).</span>
+      </a>
+      <a href="{{ url_for('vehiculos_vin.exportar_excel', scope='all') }}">
+        <strong>Todo el registro</strong>
+        <span>Descarga completa de VIN / Chasis para trabajar offline.</span>
+      </a>
+      <a href="{{ url_for('vehiculos_vin.plantilla_excel') }}">
+        <strong>Plantilla vacía</strong>
+        <span>Formato de ejemplo para importar vehículos nuevos.</span>
+      </a>
+    </div>
+    <div style="display:flex;justify-content:flex-end;">
+      <button type="button" class="btn outline sm" data-close-modal="modalPlantillaVin">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalDesglosarVin">
+  <div class="modal-box modal-box--sm">
+    <h3>Desglosar registros</h3>
+    <p class="modal-sub">
+      Se volverán a separar <strong>modelo</strong>, <strong>año</strong> y <strong>cilindrada</strong>
+      en todos los vehículos existentes (incluye formatos como <code>1.0T</code> y años al medio).
+      No elimina datos.
+    </p>
+    <form method="post" action="{{ url_for('vehiculos_vin.desglosar_existentes') }}">
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button type="button" class="btn outline sm" data-close-modal="modalDesglosarVin">Cancelar</button>
+        <button type="submit" class="btn primary sm">Desglosar ahora</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalFichaVin">
+  <div class="modal-box" style="max-width:720px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;">
+      <div>
+        <h3 id="fichaTitulo" style="margin:0;">Ficha vehículo</h3>
+        <p class="modal-sub" id="fichaSub" style="margin:4px 0 0;">Cargando…</p>
+      </div>
+      <button type="button" class="btn outline sm" data-close-modal="modalFichaVin">Cerrar</button>
+    </div>
+    <div class="ficha-layout">
+      <div class="ficha-media">
+        <div class="ficha-img-box" id="fichaImgBox">
+          <img id="fichaImg" alt="" style="display:none;">
+          <div class="ficha-img-empty" id="fichaImgEmpty">Sin imagen<br>del modelo</div>
+        </div>
+        <div class="ficha-media-actions">
+          <input type="file" id="fichaImgFile" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;">
+          <button type="button" class="btn outline sm" id="fichaBtnSubirImg">Subir imagen</button>
+          <button type="button" class="btn outline sm" id="fichaBtnQuitarImg" style="display:none;">Quitar imagen</button>
+          <span id="fichaImgStatus" style="font-size:10px;color:#94a3b8;min-height:14px;"></span>
+        </div>
+      </div>
+      <form method="post" id="formFichaVin" action="#">
+        <input type="hidden" name="next" id="fichaNext" value="">
+        <input type="hidden" name="chasis" id="fichaChasis" value="">
+        <div class="vin-form-grid">
+          <div class="form-group" style="grid-column:1 / -1;">
+            <label>VIN / Chasis</label>
+            <input type="text" name="vin" id="fichaVin" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label>Marca</label>
+            <input type="text" name="marca" id="fichaMarca" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label>Modelo</label>
+            <input type="text" name="modelo" id="fichaModelo" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label>Año</label>
+            <input type="number" name="anio" id="fichaAnio" min="1950" max="2100">
+          </div>
+          <div class="form-group">
+            <label>Cilindrada</label>
+            <input type="text" name="cilindrada" id="fichaCil" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label>N° Motor</label>
+            <input type="text" name="motor" id="fichaMotor" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label>Patente</label>
+            <input type="text" name="patente" id="fichaPatente" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label>Nombre en China</label>
+            <input type="text" name="nombre_china" id="fichaChina" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label>Transmisión</label>
+            <input type="text" name="transmision" id="fichaTrans" autocomplete="off">
+          </div>
+          <div class="form-group" style="grid-column:1 / -1;">
+            <label>Notas</label>
+            <textarea name="notas" id="fichaNotas" rows="2" style="resize:vertical;"></textarea>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-top:14px;">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <a class="btn outline sm" id="fichaBtnCatalogo" href="#" style="display:none;">Catálogo</a>
+        <form method="post" id="formFichaToggle" action="#" style="margin:0;">
+          <input type="hidden" name="next" id="fichaToggleNext" value="">
+          <button type="submit" class="btn outline sm" id="fichaBtnToggle">Desactivar</button>
+        </form>
+        <form method="post" id="formFichaEliminar" action="#" style="margin:0;"
+              onsubmit="return confirm('¿Eliminar este vehículo del registro VIN? Esta acción no se puede deshacer.');">
+          <input type="hidden" name="next" id="fichaEliminarNext" value="">
+          <button type="submit" class="btn danger sm">Eliminar</button>
+        </form>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button type="button" class="btn outline sm" data-close-modal="modalFichaVin">Cancelar</button>
+        <button type="submit" class="btn primary sm" form="formFichaVin">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  function openModal(id) { var el = document.getElementById(id); if (el) el.classList.add('open'); }
+  function closeModal(id) { var el = document.getElementById(id); if (el) el.classList.remove('open'); }
+  var btnNuevo = document.getElementById('btnNuevoVin');
+  var btnImport = document.getElementById('btnImportarVin');
+  var btnPlantilla = document.getElementById('btnPlantillaVin');
+  var btnDesglosar = document.getElementById('btnDesglosarVin');
+  if (btnNuevo) btnNuevo.addEventListener('click', function () { openModal('modalNuevoVin'); });
+  if (btnImport) btnImport.addEventListener('click', function () { openModal('modalImportarVin'); });
+  if (btnPlantilla) btnPlantilla.addEventListener('click', function () { openModal('modalPlantillaVin'); });
+  if (btnDesglosar) btnDesglosar.addEventListener('click', function () { openModal('modalDesglosarVin'); });
+
+  function setVal(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.value = (val == null ? '' : val);
+  }
+
+  var fichaState = { urlImagen: '', urlQuitar: '' };
+
+  function setFichaImagen(url) {
+    var img = document.getElementById('fichaImg');
+    var empty = document.getElementById('fichaImgEmpty');
+    var btnQuitar = document.getElementById('fichaBtnQuitarImg');
+    var has = !!(url && String(url).trim());
+    if (img) {
+      if (has) {
+        img.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
+        img.style.display = 'block';
+      } else {
+        img.removeAttribute('src');
+        img.style.display = 'none';
+      }
+    }
+    if (empty) empty.style.display = has ? 'none' : '';
+    if (btnQuitar) btnQuitar.style.display = has ? '' : 'none';
+  }
+
+  function openFicha(vid) {
+    var sub = document.getElementById('fichaSub');
+    var titulo = document.getElementById('fichaTitulo');
+    var status = document.getElementById('fichaImgStatus');
+    if (sub) sub.textContent = 'Cargando…';
+    if (titulo) titulo.textContent = 'Ficha vehículo';
+    if (status) status.textContent = '';
+    setFichaImagen('');
+    openModal('modalFichaVin');
+    fetch('/vehiculos-vin/' + vid + '/json', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+      credentials: 'same-origin'
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.ok) {
+          if (sub) sub.textContent = (data && data.error) || 'No se pudo cargar';
+          return;
+        }
+        if (titulo) titulo.textContent = data.etiqueta || 'Ficha vehículo';
+        if (sub) {
+          sub.textContent = (data.activo ? 'Activo' : 'Inactivo') +
+            (data.fuente ? ' · ' + data.fuente : '') +
+            (data.modelo_completo ? ' · ' + data.modelo_completo : '');
+        }
+        var nextUrl = window.location.pathname + window.location.search;
+        var form = document.getElementById('formFichaVin');
+        if (form) form.action = data.url_editar;
+        setVal('fichaNext', nextUrl);
+        setVal('fichaVin', data.vin || data.chasis);
+        setVal('fichaChasis', data.chasis || data.vin);
+        setVal('fichaMarca', data.marca);
+        setVal('fichaModelo', data.modelo);
+        setVal('fichaAnio', data.anio);
+        setVal('fichaCil', data.cilindrada);
+        setVal('fichaMotor', data.motor);
+        setVal('fichaPatente', data.patente);
+        setVal('fichaChina', data.nombre_china);
+        setVal('fichaTrans', data.transmision);
+        setVal('fichaNotas', data.notas);
+        setFichaImagen(data.imagen_url || '');
+        fichaState.urlImagen = data.url_imagen || '';
+        fichaState.urlQuitar = data.url_quitar_imagen || '';
+        var cat = document.getElementById('fichaBtnCatalogo');
+        if (cat) {
+          if (data.url_catalogo) {
+            cat.href = data.url_catalogo;
+            cat.style.display = '';
+          } else {
+            cat.style.display = 'none';
+          }
+        }
+        var formToggle = document.getElementById('formFichaToggle');
+        var btnToggle = document.getElementById('fichaBtnToggle');
+        if (formToggle) formToggle.action = data.url_toggle || '#';
+        setVal('fichaToggleNext', nextUrl);
+        if (btnToggle) btnToggle.textContent = data.activo ? 'Desactivar' : 'Reactivar';
+        var formElim = document.getElementById('formFichaEliminar');
+        if (formElim) formElim.action = data.url_eliminar || '#';
+        setVal('fichaEliminarNext', nextUrl);
+      })
+      .catch(function () {
+        if (sub) sub.textContent = 'Error de red al cargar la ficha';
+      });
+  }
+
+  var btnSubir = document.getElementById('fichaBtnSubirImg');
+  var fileInput = document.getElementById('fichaImgFile');
+  var btnQuitar = document.getElementById('fichaBtnQuitarImg');
+  if (btnSubir && fileInput) {
+    btnSubir.addEventListener('click', function () { fileInput.click(); });
+    fileInput.addEventListener('change', function () {
+      if (!fileInput.files || !fileInput.files[0] || !fichaState.urlImagen) return;
+      var status = document.getElementById('fichaImgStatus');
+      if (status) status.textContent = 'Subiendo…';
+      var fd = new FormData();
+      fd.append('imagen', fileInput.files[0]);
+      fetch(fichaState.urlImagen, {
+        method: 'POST',
+        body: fd,
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          if (!res.j || !res.j.ok) {
+            if (status) status.textContent = (res.j && res.j.error) || 'Error al subir';
+            return;
+          }
+          setFichaImagen(res.j.imagen_url || '');
+          if (status) status.textContent = 'Imagen guardada';
+        })
+        .catch(function () {
+          if (status) status.textContent = 'Error de red';
+        })
+        .finally(function () { fileInput.value = ''; });
+    });
+  }
+  if (btnQuitar) {
+    btnQuitar.addEventListener('click', function () {
+      if (!fichaState.urlQuitar) return;
+      if (!confirm('¿Quitar la imagen de este vehículo?')) return;
+      var status = document.getElementById('fichaImgStatus');
+      if (status) status.textContent = 'Quitando…';
+      fetch(fichaState.urlQuitar, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data || !data.ok) {
+            if (status) status.textContent = (data && data.error) || 'No se pudo quitar';
+            return;
+          }
+          setFichaImagen('');
+          if (status) status.textContent = 'Imagen quitada';
+        })
+        .catch(function () {
+          if (status) status.textContent = 'Error de red';
+        });
+    });
+  }
+
+  document.querySelectorAll('.js-ficha-vin').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      var vid = el.getAttribute('data-vid');
+      if (!vid) return;
+      e.preventDefault();
+      openFicha(vid);
+    });
+  });
+
+  document.querySelectorAll('[data-close-modal]').forEach(function (btn) {
+    btn.addEventListener('click', function () { closeModal(btn.getAttribute('data-close-modal')); });
+  });
+  document.querySelectorAll('.modal-bg').forEach(function (bg) {
+    bg.addEventListener('click', function (e) { if (e.target === bg) bg.classList.remove('open'); });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('.modal-bg.open').forEach(function (bg) { bg.classList.remove('open'); });
+  });
+})();
+</script>
+{% endblock %}

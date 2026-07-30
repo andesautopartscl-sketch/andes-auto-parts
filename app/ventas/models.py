@@ -171,7 +171,7 @@ class ClienteSaldoFavorMovimiento(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     cliente_id = db.Column(db.Integer, db.ForeignKey("ventas_clientes.id"), index=True, nullable=False)
     monto = db.Column(db.Float, nullable=False)  # suma: positivo acredita, negativo consume
-    tipo = db.Column(db.String(32), nullable=False)  # manual_ingreso | ajuste_documento | nota_credito_credito
+    tipo = db.Column(db.String(32), nullable=False)  # manual_ingreso | manual_consumo | ajuste_documento | nota_credito_credito
     ref_factura_numero = db.Column(db.String(100))
     ref_nota_credito_numero = db.Column(db.String(100))
     razon = db.Column(db.String(2000))

@@ -72,7 +72,7 @@ th{position:sticky;top:0;background:#1e3a8a;color:#fff;font-size:11px}
       <tbody>
       {% for e in eventos %}
         <tr>
-          <td>{{ e.created_at.strftime('%Y-%m-%d %H:%M:%S') if e.created_at else '' }}</td>
+          <td>{{ e.created_at|chile_datetime if e.created_at else '' }}</td>
           <td>{{ e.actor }}</td>
           <td><span class="chip">{{ e.action }}</span></td>
           <td>{{ e.producto_codigo or '—' }}</td>

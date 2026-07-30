@@ -237,7 +237,7 @@
                         <tbody id="historialRowsBody">
                             {% for m in movimientos %}
                             <tr data-ref-type="{{ m.ref_type or 'otros' }}" data-mov-type="{{ (m.row.tipo or '')|lower }}">
-                                <td>{{ m.row.fecha.strftime('%d/%m/%Y %H:%M') if m.row.fecha else '-' }}</td>
+                                <td>{{ m.row.fecha|chile_datetime if m.row.fecha else '-' }}</td>
                                 <td>
                                     {% if m.row.tipo == 'ingreso' %}<span class="badge in">Ingreso</span>
                                     {% elif m.row.tipo == 'salida' %}<span class="badge out">Salida</span>

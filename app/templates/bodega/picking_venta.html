@@ -251,7 +251,7 @@ html { scrollbar-gutter: stable; }
                         <td><strong>{{ ov.numero if ov else ('Doc #' ~ p.orden_venta_id) }}</strong></td>
                         <td>{{ ov.cliente_nombre if ov else '—' }}</td>
                         <td>{{ lineas_por_picking.get(p.id, 0) }}</td>
-                        <td class="pv-muted">{{ p.updated_at.strftime('%d-%m-%Y %H:%M') if p.updated_at else '—' }}</td>
+                        <td class="pv-muted">{{ p.updated_at|chile_datetime if p.updated_at else '—' }}</td>
                         <td style="text-align:right;">
                             <div class="pv-actions" style="justify-content:flex-end;">
                                 <a class="pv-btn" href="{{ url_for('bodega.picking_venta_detalle', pid=p.id) }}">Abrir</a>

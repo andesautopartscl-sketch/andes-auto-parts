@@ -34,7 +34,7 @@
       <div><dt>Cliente</dt><dd>{{ garantia.cliente_nombre or '—' }}</dd></div>
       <div><dt>RUT</dt><dd>{{ garantia.cliente_rut or '—' }}</dd></div>
       <div><dt>Producto</dt><dd>{{ garantia.producto_codigo or '—' }}{% if garantia.producto_descripcion %} — {{ garantia.producto_descripcion }}{% endif %}</dd></div>
-      <div><dt>Registrado</dt><dd>{{ garantia.fecha.strftime('%d/%m/%Y %H:%M') if garantia.fecha else '—' }}</dd></div>
+      <div><dt>Registrado</dt><dd>{{ garantia.fecha|chile_datetime if garantia.fecha else '—' }}</dd></div>
       <div><dt>Usuario</dt><dd>{{ garantia.usuario or '—' }}</dd></div>
     </dl>
     {% if garantia.motivo %}

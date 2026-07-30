@@ -211,11 +211,11 @@
             </div>
             <div>
                 <dt>Creado</dt>
-                <dd>{{ picking.created_at.strftime('%d-%m-%Y %H:%M') if picking.created_at else '—' }}</dd>
+                <dd>{{ picking.created_at|chile_datetime if picking.created_at else '—' }}</dd>
             </div>
             <div>
                 <dt>Última actualización</dt>
-                <dd>{{ picking.updated_at.strftime('%d-%m-%Y %H:%M') if picking.updated_at else '—' }}</dd>
+                <dd>{{ picking.updated_at|chile_datetime if picking.updated_at else '—' }}</dd>
             </div>
             {% if picking.usuario_creacion %}
             <div>

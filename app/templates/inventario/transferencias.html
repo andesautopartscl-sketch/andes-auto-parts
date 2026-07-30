@@ -83,7 +83,7 @@
         <tbody>
           {% for t in historial %}
           <tr>
-            <td>{{ t.fecha.strftime('%d/%m/%Y %H:%M') }}</td>
+            <td>{{ t.fecha|chile_datetime }}</td>
             <td><strong>{{ t.codigo_producto }}</strong></td>
             <td>{{ t.marca or '—' }}</td>
             <td><span class="badge orange">{{ t.cantidad }}</span></td>

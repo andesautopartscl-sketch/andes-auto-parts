@@ -521,7 +521,10 @@ def registrar_pagos_conjuntos(
     referencia_pago: str | None = None,
     usuario: str | None = None,
 ) -> tuple[list[OrdenCompraCliente], list[str]]:
-    """Marca varias OC como pagadas con un mismo abono (factura distinta por OC)."""
+    """Marca varias OC como pagadas con un mismo abono (factura distinta por OC).
+
+    Incluye OC parcialmente cobradas: cobra el saldo pendiente de cada una.
+    """
     errors: list[str] = []
     ids = sorted({int(i) for i in oc_ids if int(i) > 0})
     if not ids:
@@ -538,21 +541,20 @@ def registrar_pagos_conjuntos(
     for oc in ocs:
         if (oc.estado or "") != "entregada":
             errors.append(f"OC {oc.numero_oc}: no está pendiente de pago.")
-        elif oc_tiene_pago_parcial(oc):
-            errors.append(
-                f"OC {oc.numero_oc}: tiene cobro parcial; complete el pago desde el detalle de la OC."
-            )
+        elif not oc_items_pendientes(oc):
+            errors.append(f"OC {oc.numero_oc}: no quedan ítems pendientes de cobro.")
         nf = (facturas.get(oc.id) or "").strip()
         if not nf:
             errors.append(f"OC {oc.numero_oc}: ingrese el número de factura.")
 
-    suma = round(sum(float(o.total or 0) for o in ocs), 2)
+    # Suma saldos pendientes (incluye completar cobro de OC parciales).
+    suma = round(sum(oc_monto_pendiente(o) for o in ocs), 2)
     if monto_recibido is not None and monto_recibido > 0:
         tolerancia = max(10.0, suma * 0.01)
         if abs(monto_recibido - suma) > tolerancia:
             errors.append(
                 f"El monto recibido (${monto_recibido:,.0f}) no cuadra con la suma "
-                f"de las OC (${suma:,.0f})."
+                f"pendiente de las OC (${suma:,.0f})."
             )
 
     if errors:

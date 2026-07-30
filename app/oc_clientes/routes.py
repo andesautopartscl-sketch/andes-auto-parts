@@ -9,6 +9,7 @@ from werkzeug.security import check_password_hash
 
 from app.extensions import db
 from app.seguridad.models import Usuario
+from app.utils.datetime_utils import chile_today_str, now_chile
 from app.utils.decorators import login_required, permission_required
 from app.utils.permissions import has_permission
 from app.utils.rut_utils import format_rut
@@ -429,7 +430,7 @@ def nueva():
     if request.method == "POST" and not _can_modify():
         return _deny("Sin permiso para crear órdenes de compra de clientes.")
 
-    now = datetime.now()
+    now = now_chile()
     preload_id = _safe_int(request.args.get("cliente_id") or (request.form.get("cliente_id") if request.method == "POST" else "0"))
     selected_client = _client_by_id(preload_id) if preload_id > 0 else None
     party = _entity_snapshot(selected_client, False) if selected_client else {
@@ -438,7 +439,7 @@ def nueva():
 
     form_data = {
         "numero_oc": "",
-        "fecha_oc": now.strftime("%Y-%m-%d"),
+        "fecha_oc": chile_today_str(),
         "fecha_entrega_comprometida": "",
         "forma_pago": "",
         "vendedor": "",
@@ -521,6 +522,22 @@ def nueva():
                         )
                     )
                 db.session.commit()
+                try:
+                    from app.vehiculos_vin.oc_sync import upsert_vehiculo_desde_oc
+
+                    vvin = upsert_vehiculo_desde_oc(
+                        observaciones=oc.observaciones,
+                        numero_oc=oc.numero_oc,
+                        usuario=_current_user(),
+                    )
+                    if vvin:
+                        flash(
+                            f"VIN / Chasis actualizado automáticamente: {vvin.vin} "
+                            f"({vvin.marca} {vvin.modelo} {vvin.anio or ''})".strip(),
+                            "success",
+                        )
+                except Exception:
+                    current_app.logger.exception("VIN sync desde OC nueva")
                 flash("Orden de compra del cliente registrada.", "success")
                 return redirect(url_for("oc_clientes.detalle", oid=oc.id))
             except Exception as exc:
@@ -631,6 +648,22 @@ def editar(oid: int):
                         )
                     )
                 db.session.commit()
+                try:
+                    from app.vehiculos_vin.oc_sync import upsert_vehiculo_desde_oc
+
+                    vvin = upsert_vehiculo_desde_oc(
+                        observaciones=oc.observaciones,
+                        numero_oc=oc.numero_oc,
+                        usuario=_current_user(),
+                    )
+                    if vvin:
+                        flash(
+                            f"VIN / Chasis actualizado automáticamente: {vvin.vin} "
+                            f"({vvin.marca} {vvin.modelo} {vvin.anio or ''})".strip(),
+                            "success",
+                        )
+                except Exception:
+                    current_app.logger.exception("VIN sync desde OC editar")
                 flash("Orden de compra actualizada.", "success")
                 return redirect(url_for("oc_clientes.detalle", oid=oc.id))
             except Exception as exc:
@@ -760,7 +793,7 @@ def marcar_entregada(oid: int):
         flash("Solo se puede marcar entregada una OC en estado recibida.", "error")
         return redirect(url_for("oc_clientes.detalle", oid=oid))
 
-    now = datetime.now()
+    now = now_chile().replace(tzinfo=None)
     fecha_raw = (request.form.get("fecha_entrega_real") or "").strip()
     fecha_entrega = _parse_date_with_time_from_default(fecha_raw, now) or now
     guia = (request.form.get("numero_guia_despacho") or "").strip()[:60]
@@ -849,7 +882,7 @@ def registrar_pago(oid: int):
         return redirect(url_for("oc_clientes.detalle", oid=oid))
 
     numero_factura = (request.form.get("numero_factura") or "").strip()
-    now = datetime.now()
+    now = now_chile().replace(tzinfo=None)
     fecha_pago = _parse_date_with_time_from_default(
         (request.form.get("fecha_pago") or "").strip(),
         now,
@@ -906,7 +939,7 @@ def registrar_pago_multiple():
     for oc_id in oc_ids:
         facturas[oc_id] = (request.form.get(f"numero_factura_{oc_id}") or "").strip()
 
-    now = datetime.now()
+    now = now_chile().replace(tzinfo=None)
     fecha_pago = _parse_date_with_time_from_default(
         (request.form.get("fecha_pago") or "").strip(),
         now,

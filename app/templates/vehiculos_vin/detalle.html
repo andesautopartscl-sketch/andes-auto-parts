@@ -1,0 +1,184 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}{{ v.etiqueta() }} | VIN / Chasis{% endblock %}
+
+{% block extra_head %}
+<style>
+.vin-grid,.vin-grid *{font-family:inherit !important;}
+.vin-grid{display:grid;gap:10px;max-width:920px;font-size:12.5px;color:#0f172a;}
+.vin-meta{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;font-size:12.5px;}
+.vin-meta dt{color:#64748b;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;margin:0 0 2px;}
+.vin-meta dd{margin:0;font-weight:600;color:#0f172a;word-break:break-word;}
+.vin-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.vin-form-grid .form-group label{font-size:11px;margin-bottom:2px;}
+.vin-form-grid .form-group input,
+.vin-form-grid .form-group textarea{font-size:12.5px;padding:6px 8px;}
+@media (max-width:720px){.vin-form-grid{grid-template-columns:1fr;}}
+.vin-actions{display:flex;flex-wrap:wrap;gap:6px;}
+.vin-grid .panel{padding:12px 14px !important;}
+.vin-grid h2{font-size:16px !important;}
+.vin-grid h3{font-size:13px !important;margin:0 0 10px !important;}
+.vin-grid .btn.sm{padding:4px 9px !important;font-size:11.5px !important;}
+.vin-grid .btn.danger{border-color:#fecaca;color:#b91c1c;background:#fff;}
+.vin-grid a.vin-link,
+.vin-grid a.vin-link:link,
+.vin-grid a.vin-link:visited,
+.vin-grid a.vin-link:hover,
+.vin-grid a.vin-link:active{
+  color:#0f172a !important;
+  text-decoration:none !important;
+  border-bottom:none !important;
+  font-weight:600;
+}
+.vin-flash{list-style:none;margin:0;padding:0;display:grid;gap:4px;}
+.vin-flash li{padding:6px 10px;border-radius:7px;font-size:12px;}
+.vin-flash .error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;}
+.vin-flash .success{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="vin-grid">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <ul class="vin-flash">
+    {% for cat, msg in messages %}
+    <li class="{{ cat }}">{{ msg }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endwith %}
+
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+    <div>
+      <h2 style="margin:0;">{{ v.etiqueta() }}</h2>
+      <p style="color:var(--muted);font-size:11.5px;margin-top:2px;">
+        Ficha VIN / Chasis
+        {% if v.activo %}<span class="badge green" style="margin-left:6px;">Activo</span>
+        {% else %}<span class="badge slate" style="margin-left:6px;">Inactivo</span>{% endif %}
+      </p>
+    </div>
+    <div class="vin-actions">
+      <a class="btn outline sm" href="{{ url_for('vehiculos_vin.index') }}">← Listado</a>
+      {% if q_catalogo %}
+      <a class="btn primary sm" href="{{ url_for('vehiculos_vin.productos_compatibles', vid=v.id) }}">Catálogo</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <section class="panel" style="padding:18px;">
+    <h3 style="margin:0 0 14px;font-size:16px;">Identificación</h3>
+    <div style="display:grid;grid-template-columns:minmax(160px,220px) 1fr;gap:16px;align-items:start;">
+      <div>
+        <div style="width:100%;aspect-ratio:4/3;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;overflow:hidden;display:flex;align-items:center;justify-content:center;">
+          {% if imagen_url %}
+          <img src="{{ imagen_url }}" alt="{{ v.etiqueta() }}" style="width:100%;height:100%;object-fit:cover;">
+          {% else %}
+          <span style="font-size:12px;color:#94a3b8;text-align:center;padding:12px;">Sin imagen del modelo</span>
+          {% endif %}
+        </div>
+        <form method="post" action="{{ url_for('vehiculos_vin.subir_imagen', vid=v.id) }}" enctype="multipart/form-data" style="margin-top:8px;display:grid;gap:6px;">
+          <input type="hidden" name="next" value="{{ url_for('vehiculos_vin.detalle', vid=v.id) }}">
+          <input type="file" name="imagen" accept="image/jpeg,image/png,image/webp,image/gif" style="font-size:12px;">
+          <button type="submit" class="btn outline sm">Subir / cambiar imagen</button>
+        </form>
+        {% if imagen_url %}
+        <form method="post" action="{{ url_for('vehiculos_vin.quitar_imagen', vid=v.id) }}" style="margin-top:6px;">
+          <input type="hidden" name="next" value="{{ url_for('vehiculos_vin.detalle', vid=v.id) }}">
+          <button type="submit" class="btn outline sm">Quitar imagen</button>
+        </form>
+        {% endif %}
+      </div>
+      <dl class="vin-meta">
+      <div><dt>VIN / Chasis</dt><dd>{{ v.vin or v.chasis or '—' }}</dd></div>
+      <div><dt>Patente</dt><dd>{{ v.patente or '—' }}</dd></div>
+      <div><dt>Marca</dt><dd>{{ v.marca or '—' }}</dd></div>
+      <div><dt>Modelo</dt><dd>{{ v.modelo or '—' }}</dd></div>
+      <div><dt>Año</dt><dd>{{ v.anio or '—' }}</dd></div>
+      <div><dt>Cilindrada</dt><dd>{{ v.cilindrada or '—' }}</dd></div>
+      <div><dt>N° Motor</dt><dd>{{ v.motor or '—' }}</dd></div>
+      <div><dt>Nombre en China</dt><dd>{{ v.nombre_china or '—' }}</dd></div>
+      <div><dt>Transmisión</dt><dd>{{ v.transmision or '—' }}</dd></div>
+      <div><dt>Modelo original</dt><dd>{{ v.modelo_completo or '—' }}</dd></div>
+      <div><dt>Fuente</dt><dd>{{ v.fuente or '—' }}</dd></div>
+      <div><dt>Alta</dt><dd>{{ v.usuario_alta or '—' }}{% if v.created_at %} · {{ v.created_at|chile_datetime }}{% endif %}</dd></div>
+    </dl>
+    </div>
+    {% if v.notas %}
+    <p style="margin:14px 0 0;font-size:13px;line-height:1.45;color:#334155;"><strong>Notas:</strong> {{ v.notas }}</p>
+    {% endif %}
+    {% if q_catalogo %}
+    <p style="margin:14px 0 0;font-size:12px;color:#64748b;">Búsqueda en catálogo: <code>{{ q_catalogo }}</code></p>
+    {% else %}
+    <p style="margin:14px 0 0;font-size:12px;color:#92400e;">Completa el modelo para poder abrir productos compatibles.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel" style="padding:18px;">
+    <h3 style="margin:0 0 14px;font-size:16px;">Editar datos</h3>
+    <form method="post" action="{{ url_for('vehiculos_vin.editar', vid=v.id) }}">
+      <div class="vin-form-grid">
+        <div class="form-group" style="grid-column:1 / -1;">
+          <label>VIN / Chasis</label>
+          <input type="text" name="vin" value="{{ v.vin or v.chasis or '' }}" autocomplete="off">
+          <input type="hidden" name="chasis" value="{{ v.chasis or v.vin or '' }}">
+        </div>
+        <div class="form-group">
+          <label>Marca</label>
+          <input type="text" name="marca" value="{{ v.marca or '' }}" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Modelo</label>
+          <input type="text" name="modelo" value="{{ v.modelo or '' }}" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Año</label>
+          <input type="number" name="anio" min="1950" max="2100" value="{{ v.anio or '' }}">
+        </div>
+        <div class="form-group">
+          <label>Cilindrada</label>
+          <input type="text" name="cilindrada" value="{{ v.cilindrada or '' }}" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>N° Motor</label>
+          <input type="text" name="motor" value="{{ v.motor or '' }}" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Patente</label>
+          <input type="text" name="patente" value="{{ v.patente or '' }}" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Nombre en China</label>
+          <input type="text" name="nombre_china" value="{{ v.nombre_china or '' }}" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Transmisión</label>
+          <input type="text" name="transmision" value="{{ v.transmision or '' }}" autocomplete="off">
+        </div>
+        <div class="form-group" style="grid-column:1 / -1;">
+          <label>Notas</label>
+          <textarea name="notas" rows="3" style="resize:vertical;">{{ v.notas or '' }}</textarea>
+        </div>
+      </div>
+      <div class="vin-actions" style="margin-top:16px;">
+        <button type="submit" class="btn primary">Guardar cambios</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel" style="padding:18px;">
+    <h3 style="margin:0 0 10px;font-size:16px;">Acciones</h3>
+    <div class="vin-actions">
+      <form method="post" action="{{ url_for('vehiculos_vin.toggle_activo', vid=v.id) }}">
+        <button type="submit" class="btn outline sm">
+          {% if v.activo %}Desactivar{% else %}Reactivar{% endif %}
+        </button>
+      </form>
+      <form method="post" action="{{ url_for('vehiculos_vin.eliminar', vid=v.id) }}" onsubmit="return confirm('¿Eliminar este vehículo del registro VIN? Esta acción no se puede deshacer.');">
+        <button type="submit" class="btn danger sm">Eliminar</button>
+      </form>
+    </div>
+  </section>
+
+</div>
+{% endblock %}

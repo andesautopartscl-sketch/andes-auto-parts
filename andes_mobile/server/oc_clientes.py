@@ -347,6 +347,16 @@ def crear_oc(data: dict, usuario: str) -> tuple[bool, int | None, list[str]]:
                 )
             )
         db.session.commit()
+        try:
+            from app.vehiculos_vin.oc_sync import upsert_vehiculo_desde_oc
+
+            upsert_vehiculo_desde_oc(
+                observaciones=oc.observaciones,
+                numero_oc=oc.numero_oc,
+                usuario=usuario or "sistema",
+            )
+        except Exception:
+            pass
         return True, oc.id, []
     except Exception as exc:
         db.session.rollback()

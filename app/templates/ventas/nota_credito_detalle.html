@@ -38,7 +38,7 @@ th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spa
         <dl class="meta-grid">
             <div>
                 <dt>Fecha</dt>
-                <dd>{{ nota.fecha_documento.strftime('%d-%m-%Y %H:%M') if nota.fecha_documento else '—' }}</dd>
+                <dd>{{ nota.fecha_documento|chile_datetime if nota.fecha_documento else '—' }}</dd>
             </div>
             <div>
                 <dt>Estado</dt>

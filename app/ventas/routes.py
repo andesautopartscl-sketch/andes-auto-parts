@@ -3762,6 +3762,7 @@ def cliente_historial(cid: int):
 @ventas_bp.route("/clientes/<int:cid>/saldo_favor", methods=["POST"])
 @login_required
 def cliente_saldo_favor_manual(cid: int):
+    """Acredita (+) o consume (−) saldo a favor del cliente (auditoría manual / docs SII externos)."""
     if not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
         flash("Sin permiso para registrar saldo a favor.", "error")
         return redirect(url_for("ventas.cliente_historial", cid=cid))
@@ -3769,30 +3770,57 @@ def cliente_saldo_favor_manual(cid: int):
     if c is None or not c.activo:
         flash("Cliente no encontrado.", "error")
         return redirect(url_for("ventas.clientes"))
-    monto = _round_money_cl(_safe_float((request.form.get("monto_saldo_agregar") or "0").strip()))
+
+    accion = (request.form.get("accion_saldo") or "acreditar").strip().lower()
+    monto_raw = request.form.get("monto_saldo") or request.form.get("monto_saldo_agregar") or "0"
+    monto = _round_money_cl(_safe_float(monto_raw.strip()))
     nfac = (request.form.get("ref_numero_factura") or "").strip()[:100]
     nnc = (request.form.get("ref_numero_nota_credito") or "").strip()[:100]
     razon = (request.form.get("ref_razon_saldo") or "").strip()
+
     if monto <= 0:
-        flash("El monto a acreditar debe ser mayor a 0.", "error")
+        flash("El monto debe ser mayor a 0.", "error")
         return redirect(url_for("ventas.cliente_historial", cid=cid))
-    if not nfac or not nnc or not razon:
-        flash("Completá número de factura, nota de crédito y la razón del crédito.", "error")
+    if not razon:
+        flash("Indicá la razón del movimiento de saldo.", "error")
         return redirect(url_for("ventas.cliente_historial", cid=cid))
+
+    if accion == "consumir":
+        if not nfac:
+            flash("Para consumir saldo indicá el N° de factura/boleta SII aplicada.", "error")
+            return redirect(url_for("ventas.cliente_historial", cid=cid))
+        disponible = _round_money_cl(_cliente_saldo_favor_ledger(c.id))
+        if monto > disponible + 0.02:
+            flash(
+                f"No hay saldo suficiente para consumir. Disponible: ${disponible:,.0f}".replace(",", "."),
+                "error",
+            )
+            return redirect(url_for("ventas.cliente_historial", cid=cid))
+        signed = -monto
+        tipo = "manual_consumo"
+        ok_msg = "Consumo de saldo a favor registrado (doc. externo / SII)."
+    else:
+        if not nfac or not nnc:
+            flash("Para acreditar completá número de factura, nota de crédito y la razón.", "error")
+            return redirect(url_for("ventas.cliente_historial", cid=cid))
+        signed = monto
+        tipo = "manual_ingreso"
+        ok_msg = "Saldo a favor registrado correctamente."
+
     try:
         db.session.add(
             ClienteSaldoFavorMovimiento(
                 cliente_id=c.id,
-                monto=monto,
-                tipo="manual_ingreso",
-                ref_factura_numero=nfac,
-                ref_nota_credito_numero=nnc,
+                monto=signed,
+                tipo=tipo,
+                ref_factura_numero=nfac or None,
+                ref_nota_credito_numero=nnc or None,
                 razon=razon[:2000],
                 usuario=session.get("user") or "sistema",
             )
         )
         db.session.commit()
-        flash("Saldo a favor registrado correctamente.", "success")
+        flash(ok_msg, "success")
     except Exception as exc:
         db.session.rollback()
         current_app.logger.exception("saldo_favor manual")
