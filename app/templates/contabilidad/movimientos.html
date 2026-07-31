@@ -2,6 +2,117 @@
 {% block title %}Libro Diario | Finanzas | Andes Auto Parts{% endblock %}
 
 {% block content %}
+<style>
+.contab-fecha-hora {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+}
+.contab-fecha-hora__hora {
+  font-size: 10px;
+  font-weight: 500;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
+}
+.contab-field-search {
+  position: relative;
+  width: 100%;
+}
+.contab-field-search > input {
+  width: 100%;
+  padding-right: 34px !important;
+  box-sizing: border-box;
+}
+.contab-search-btn,
+.contab-desc-drop-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+.contab-search-btn:hover,
+.contab-desc-drop-btn:hover,
+.contab-search-btn[aria-expanded="true"],
+.contab-desc-drop-btn[aria-expanded="true"] {
+  background: #eef6ff;
+  color: #1d4ed8;
+}
+.contab-emisor-block {
+  position: relative;
+}
+.contab-search-menu,
+.contab-desc-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 2px);
+  max-height: 200px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14);
+  z-index: 50;
+  font-size: 12px;
+}
+.contab-search-menu-item,
+.contab-desc-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  color: #0f172a;
+  text-transform: uppercase;
+}
+.contab-search-menu-item:hover,
+.contab-search-menu-item.is-active,
+.contab-desc-menu-item:hover,
+.contab-desc-menu-item.is-active {
+  background: #f1f5f9;
+}
+.contab-search-menu-item small {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.contab-search-menu-empty,
+.contab-desc-menu-empty {
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+.contab-field-search--desc > input {
+  padding-right: 34px !important;
+}
+.contab-field-search--desc .contab-desc-menu {
+  top: auto;
+  bottom: calc(100% + 2px);
+  max-height: 160px;
+}
+</style>
 <div class="contab-compact">
   <div class="topbar">
     <div>
@@ -43,7 +154,7 @@
         <table class="lv-table lv-money-col4">
           <thead>
             <tr>
-              <th>Fecha</th>
+              <th title="Fecha del movimiento y hora de registro">Fecha</th>
               <th>Cuenta</th>
               <th>Tipo</th>
               <th>Monto</th>
@@ -57,7 +168,11 @@
           <tbody>
             {% for m in movimientos %}
             <tr>
-              <td>{{ m.fecha.strftime('%d/%m/%Y') }}</td>
+              <td>
+                <span class="contab-fecha-hora" title="{% if m.created_at %}Registrado el {{ m.created_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}">
+                  {{ m.fecha.strftime('%d/%m/%Y') }}{% if m.created_at %}<span class="contab-fecha-hora__hora">{{ m.created_at.strftime('%H:%M') }}</span>{% endif %}
+                </span>
+              </td>
               <td><strong>{{ m.cuenta.codigo if m.cuenta else '?' }}</strong> — {{ m.cuenta.nombre if m.cuenta else '—' }}</td>
               <td>
                 {% if m.tipo == 'debe' %}<span class="badge blue">Debe</span>
@@ -96,15 +211,24 @@
               <input type="text" name="documento_ref" placeholder="N° factura, boleta o interno" maxlength="60">
             </div>
           </div>
-          <div class="contab-modal-row-equal">
-            <div class="form-group">
-              <label for="emisorNombre">Razón social (emisor de la factura)</label>
-              <input type="text" id="emisorNombre" name="emisor_nombre" maxlength="200" placeholder="Empresa o proveedor que emite el documento" autocomplete="organization">
+          <div class="contab-emisor-block">
+            <div class="contab-modal-row-equal">
+              <div class="form-group">
+                <label for="emisorNombre">Razón social (emisor de la factura)</label>
+                <div class="contab-field-search">
+                  <input type="text" id="emisorNombre" name="emisor_nombre" maxlength="200" placeholder="Empresa o proveedor que emite el documento" autocomplete="off">
+                  <button type="button" class="contab-search-btn" id="btnBuscarEmisorNombre" title="Buscar por nombre o RUT" aria-label="Buscar emisor por nombre" aria-haspopup="listbox" aria-expanded="false" aria-controls="emisorSearchMenu">🔍</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="emisorRut">RUT emisor</label>
+                <div class="contab-field-search">
+                  <input type="text" id="emisorRut" name="emisor_rut" maxlength="24" placeholder="12.345.678-9" inputmode="text" spellcheck="false" autocomplete="off">
+                  <button type="button" class="contab-search-btn" id="btnBuscarEmisorRut" title="Buscar por RUT o nombre" aria-label="Buscar emisor por RUT" aria-haspopup="listbox" aria-expanded="false" aria-controls="emisorSearchMenu">🔍</button>
+                </div>
+              </div>
             </div>
-            <div class="form-group">
-              <label for="emisorRut">RUT emisor</label>
-              <input type="text" id="emisorRut" name="emisor_rut" maxlength="24" placeholder="12.345.678-9" inputmode="text" spellcheck="false">
-            </div>
+            <div id="emisorSearchMenu" class="contab-search-menu" role="listbox" aria-label="Resultados de emisores" hidden></div>
           </div>
           <p id="emisorCatalogHint" class="contab-modal-hint" hidden style="margin:-4px 0 8px;">
             Ficha en directorio contable:
@@ -150,8 +274,12 @@
             </div>
           </div>
           <div class="form-group">
-            <label>Descripción</label>
-            <input type="text" name="descripcion" placeholder="Ej: Envío courier, luz bodega">
+            <label for="movDescripcion">Descripción</label>
+            <div class="contab-field-search contab-field-search--desc" id="descWrap">
+              <input type="text" id="movDescripcion" name="descripcion" maxlength="300" placeholder="Ej: Envío courier, luz bodega" autocomplete="off" aria-autocomplete="list" aria-controls="descMenu" aria-expanded="false">
+              <button type="button" class="contab-desc-drop-btn" id="btnDescDrop" title="Ver descripciones usadas" aria-label="Ver descripciones usadas" aria-haspopup="listbox" aria-expanded="false" aria-controls="descMenu">&#9662;</button>
+              <div id="descMenu" class="contab-desc-menu" role="listbox" aria-label="Descripciones" hidden></div>
+            </div>
           </div>
           <div class="contab-modal-actions">
             <button type="button" class="btn btn-secondary" id="btnCancelarMov">Cancelar</button>
@@ -173,6 +301,10 @@
   const btnAyuda = document.getElementById('btnAyudaDebeHaber');
   const panelAyuda = document.getElementById('panelAyudaDebeHaber');
 
+  const DESCRIPCIONES = {{ (descripciones_opciones or [])|tojson }};
+  const URL_EMISOR_RUT = {{ url_for('contabilidad.api_emisor_por_rut')|tojson }};
+  const URL_EMISORES_BUSCAR = {{ url_for('contabilidad.api_emisores_buscar')|tojson }};
+
   function closeAyuda() {
     if (!panelAyuda || !btnAyuda) return;
     panelAyuda.classList.remove('is-open');
@@ -191,52 +323,108 @@
     else openAyuda();
   }
 
-  btnNuevo.addEventListener('click', function () {
-    modal.style.display = 'flex';
-    closeAyuda();
-    resetEmisorHint();
-    const fechaInput = modal.querySelector('[name="fecha"]');
-    if (fechaInput) fechaInput.value = new Date().toISOString().slice(0, 10);
-  });
-  btnCancel.addEventListener('click', function () {
-    modal.style.display = 'none';
-    closeAyuda();
-  });
-  modal.addEventListener('click', function (e) {
-    if (e.target === modal) {
-      modal.style.display = 'none';
-      closeAyuda();
-    }
-  });
-  if (btnAyuda && panelAyuda) {
-    btnAyuda.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleAyuda();
-    });
-  }
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && modal.style.display === 'flex') {
-      if (panelAyuda && panelAyuda.classList.contains('is-open')) {
-        closeAyuda();
-        e.preventDefault();
-        return;
-      }
-      modal.style.display = 'none';
-    }
-  });
-  const fechaInput = modal.querySelector('[name="fecha"]');
-  if (fechaInput) fechaInput.value = new Date().toISOString().slice(0, 10);
-
   const emisorRut = document.getElementById('emisorRut');
   const emisorNombre = document.getElementById('emisorNombre');
   const emisorCatalogHint = document.getElementById('emisorCatalogHint');
   const emisorEditLink = document.getElementById('emisorEditLink');
-  const URL_EMISOR_RUT = '/contabilidad/api/emisor-por-rut';
+  const emisorSearchMenu = document.getElementById('emisorSearchMenu');
+  const btnBuscarEmisorNombre = document.getElementById('btnBuscarEmisorNombre');
+  const btnBuscarEmisorRut = document.getElementById('btnBuscarEmisorRut');
   let emisorLookupTimer = null;
+  let emisorSearchTimer = null;
+
+  const descInput = document.getElementById('movDescripcion');
+  const descMenu = document.getElementById('descMenu');
+  const btnDescDrop = document.getElementById('btnDescDrop');
+  let descripcionesCatalogo = (DESCRIPCIONES || []).slice();
+  let descMenuShowAll = false;
 
   function resetEmisorHint() {
     if (emisorCatalogHint) emisorCatalogHint.hidden = true;
+  }
+
+  function setEmisorSearchExpanded(open) {
+    const exp = open ? 'true' : 'false';
+    if (btnBuscarEmisorNombre) btnBuscarEmisorNombre.setAttribute('aria-expanded', exp);
+    if (btnBuscarEmisorRut) btnBuscarEmisorRut.setAttribute('aria-expanded', exp);
+  }
+
+  function closeEmisorMenu() {
+    if (!emisorSearchMenu) return;
+    emisorSearchMenu.hidden = true;
+    emisorSearchMenu.innerHTML = '';
+    setEmisorSearchExpanded(false);
+  }
+
+  function applyEmisor(item) {
+    if (!item) return;
+    if (emisorNombre && item.emisor_nombre) emisorNombre.value = item.emisor_nombre;
+    if (emisorRut && item.emisor_rut) emisorRut.value = item.emisor_rut;
+    if (item.id && emisorEditLink && emisorCatalogHint) {
+      emisorEditLink.href = '/contabilidad/emisores/' + item.id + '/editar';
+      emisorCatalogHint.hidden = false;
+    } else {
+      resetEmisorHint();
+    }
+    closeEmisorMenu();
+  }
+
+  function renderEmisorMenu(items, q) {
+    if (!emisorSearchMenu) return;
+    emisorSearchMenu.innerHTML = '';
+    if (!items || !items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'contab-search-menu-empty';
+      empty.textContent = q
+        ? 'Sin resultados. Podés escribir el emisor a mano.'
+        : 'No hay emisores en el directorio.';
+      emisorSearchMenu.appendChild(empty);
+    } else {
+      items.forEach(function (item) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'contab-search-menu-item';
+        btn.setAttribute('role', 'option');
+        const nombre = item.emisor_nombre || '—';
+        const rut = item.emisor_rut || '';
+        btn.innerHTML = nombre + (rut ? '<small>' + rut + '</small>' : '');
+        btn.addEventListener('click', function () { applyEmisor(item); });
+        emisorSearchMenu.appendChild(btn);
+      });
+    }
+    emisorSearchMenu.hidden = false;
+    setEmisorSearchExpanded(true);
+  }
+
+  function searchQueryFrom(source) {
+    const nombre = (emisorNombre && emisorNombre.value || '').trim();
+    const rut = (emisorRut && emisorRut.value || '').trim();
+    if (source === 'rut') return rut || nombre;
+    if (source === 'nombre') return nombre || rut;
+    return nombre || rut;
+  }
+
+  function buscarEmisores(source, force) {
+    const q = searchQueryFrom(source);
+    if (!force && q && q.replace(/[^0-9kK]/g, '').length < 2 && q.length < 2) {
+      closeEmisorMenu();
+      return;
+    }
+    fetch(URL_EMISORES_BUSCAR + '?q=' + encodeURIComponent(q) + '&limit=15', {
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) {
+          renderEmisorMenu([], q);
+          return;
+        }
+        renderEmisorMenu(j.items || [], q);
+      })
+      .catch(function () {
+        renderEmisorMenu([], q);
+      });
   }
 
   function lookupEmisorPorRut() {
@@ -246,11 +434,8 @@
       resetEmisorHint();
       return;
     }
-    if ((emisorNombre.value || '').trim()) {
-      /* Si ya hay nombre, igual buscamos para hint de edición */
-    }
     fetch(URL_EMISOR_RUT + '?rut=' + encodeURIComponent(rut), {
-      headers: { 'Accept': 'application/json' },
+      headers: { Accept: 'application/json' },
       credentials: 'same-origin',
     })
       .then(function (r) { return r.json(); })
@@ -273,18 +458,225 @@
       .catch(function () { resetEmisorHint(); });
   }
 
+  function closeDescMenu() {
+    if (!descMenu) return;
+    descMenu.hidden = true;
+    descMenu.innerHTML = '';
+    descMenuShowAll = false;
+    if (btnDescDrop) btnDescDrop.setAttribute('aria-expanded', 'false');
+    if (descInput) descInput.setAttribute('aria-expanded', 'false');
+  }
+
+  function rememberDescripcion(text) {
+    const raw = (text || '').trim();
+    if (!raw) return;
+    const key = raw.toLocaleLowerCase('es');
+    for (let i = 0; i < descripcionesCatalogo.length; i++) {
+      if ((descripcionesCatalogo[i] || '').toLocaleLowerCase('es') === key) return;
+    }
+    descripcionesCatalogo.unshift(raw);
+  }
+
+  function openDescMenu(showAll) {
+    if (!descInput || !descMenu) return;
+    const q = (descInput.value || '').trim().toLocaleLowerCase('es');
+    descMenu.innerHTML = '';
+    let matched = 0;
+    descripcionesCatalogo.forEach(function (nombre) {
+      if (!showAll && q && (nombre || '').toLocaleLowerCase('es').indexOf(q) === -1) return;
+      matched += 1;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'contab-desc-menu-item';
+      btn.setAttribute('role', 'option');
+      btn.textContent = nombre;
+      btn.addEventListener('click', function () {
+        descInput.value = nombre;
+        closeDescMenu();
+        descInput.focus();
+      });
+      descMenu.appendChild(btn);
+    });
+    if (!matched) {
+      const empty = document.createElement('div');
+      empty.className = 'contab-desc-menu-empty';
+      empty.textContent = descripcionesCatalogo.length
+        ? 'Sin coincidencias. Escribí una nueva descripción.'
+        : 'Aún no hay descripciones guardadas. La que escribas quedará disponible después.';
+      descMenu.appendChild(empty);
+    }
+    descMenuShowAll = !!showAll;
+    descMenu.hidden = false;
+    if (btnDescDrop) btnDescDrop.setAttribute('aria-expanded', 'true');
+    descInput.setAttribute('aria-expanded', 'true');
+  }
+
+  function resetModalForm() {
+    const form = modal.querySelector('form');
+    if (form) form.reset();
+    resetEmisorHint();
+    closeEmisorMenu();
+    closeDescMenu();
+    closeAyuda();
+    const fechaInput = modal.querySelector('[name="fecha"]');
+    if (fechaInput) {
+      const d = new Date();
+      fechaInput.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+  }
+
+  btnNuevo.addEventListener('click', function () {
+    resetModalForm();
+    modal.style.display = 'flex';
+  });
+  btnCancel.addEventListener('click', function () {
+    modal.style.display = 'none';
+    closeAyuda();
+    closeEmisorMenu();
+    closeDescMenu();
+  });
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) {
+      modal.style.display = 'none';
+      closeAyuda();
+      closeEmisorMenu();
+      closeDescMenu();
+    }
+  });
+  if (btnAyuda && panelAyuda) {
+    btnAyuda.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleAyuda();
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal.style.display === 'flex') {
+      if (panelAyuda && panelAyuda.classList.contains('is-open')) {
+        closeAyuda();
+        e.preventDefault();
+        return;
+      }
+      if (emisorSearchMenu && !emisorSearchMenu.hidden) {
+        closeEmisorMenu();
+        e.preventDefault();
+        return;
+      }
+      if (descMenu && !descMenu.hidden) {
+        closeDescMenu();
+        e.preventDefault();
+        return;
+      }
+      modal.style.display = 'none';
+    }
+  });
+  document.addEventListener('click', function (e) {
+    if (emisorSearchMenu && !emisorSearchMenu.hidden) {
+      const block = e.target.closest('.contab-emisor-block');
+      if (!block) closeEmisorMenu();
+    }
+    if (descMenu && !descMenu.hidden) {
+      const wrap = e.target.closest('#descWrap');
+      if (!wrap) closeDescMenu();
+    }
+  });
+
+  if (btnBuscarEmisorNombre) {
+    btnBuscarEmisorNombre.addEventListener('click', function (e) {
+      e.preventDefault();
+      clearTimeout(emisorSearchTimer);
+      buscarEmisores('nombre', true);
+    });
+  }
+  if (btnBuscarEmisorRut) {
+    btnBuscarEmisorRut.addEventListener('click', function (e) {
+      e.preventDefault();
+      clearTimeout(emisorSearchTimer);
+      buscarEmisores('rut', true);
+    });
+  }
+
+  function scheduleEmisorSearch(source) {
+    clearTimeout(emisorSearchTimer);
+    emisorSearchTimer = setTimeout(function () {
+      const q = searchQueryFrom(source);
+      if (q.length >= 2) buscarEmisores(source, false);
+      else closeEmisorMenu();
+    }, 280);
+  }
+
+  if (emisorNombre) {
+    emisorNombre.addEventListener('input', function () {
+      resetEmisorHint();
+      scheduleEmisorSearch('nombre');
+    });
+    emisorNombre.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && emisorSearchMenu && !emisorSearchMenu.hidden) {
+        const first = emisorSearchMenu.querySelector('.contab-search-menu-item');
+        if (first) {
+          e.preventDefault();
+          first.click();
+        }
+      }
+    });
+  }
+
   if (emisorRut) {
     emisorRut.addEventListener('input', function () {
       clearTimeout(emisorLookupTimer);
       emisorLookupTimer = setTimeout(lookupEmisorPorRut, 450);
+      scheduleEmisorSearch('rut');
     });
     emisorRut.addEventListener('blur', lookupEmisorPorRut);
     emisorRut.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
+        if (emisorSearchMenu && !emisorSearchMenu.hidden) {
+          const first = emisorSearchMenu.querySelector('.contab-search-menu-item');
+          if (first) {
+            e.preventDefault();
+            first.click();
+            return;
+          }
+        }
         e.preventDefault();
         clearTimeout(emisorLookupTimer);
         lookupEmisorPorRut();
       }
+    });
+  }
+
+  if (btnDescDrop) {
+    btnDescDrop.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (descMenu && !descMenu.hidden && descMenuShowAll) closeDescMenu();
+      else openDescMenu(true);
+    });
+  }
+  if (descInput) {
+    descInput.addEventListener('input', function () {
+      if ((descInput.value || '').trim().length >= 1) openDescMenu(false);
+      else closeDescMenu();
+    });
+    descInput.addEventListener('focus', function () {
+      if (descripcionesCatalogo.length && (descInput.value || '').trim().length >= 1) {
+        openDescMenu(false);
+      }
+    });
+    descInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && descMenu && !descMenu.hidden) {
+        const first = descMenu.querySelector('.contab-desc-menu-item');
+        if (first) {
+          e.preventDefault();
+          first.click();
+        }
+      }
+    });
+  }
+
+  const formMov = modal.querySelector('form');
+  if (formMov) {
+    formMov.addEventListener('submit', function () {
+      if (descInput) rememberDescripcion(descInput.value);
     });
   }
 })();

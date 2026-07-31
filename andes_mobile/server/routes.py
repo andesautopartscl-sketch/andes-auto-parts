@@ -877,6 +877,7 @@ def api_oc_clientes_entregar(oid: int):
     ok, msg = mobile_oc_clientes.marcar_entregada(
         oid,
         fecha_entrega_real=payload.get("fecha_entrega_real"),
+        hora_entrega_real=payload.get("hora_entrega_real"),
         numero_guia_despacho=payload.get("numero_guia_despacho"),
         descontar_stock=bool(payload.get("descontar_stock")),
         usuario=session.get("user") or "sistema",

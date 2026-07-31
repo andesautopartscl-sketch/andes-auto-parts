@@ -163,7 +163,8 @@
                 <thead>
                     <tr>
                         {% if puede_modificar %}<th style="width:28px;"></th>{% endif %}
-                        <th>Fecha</th>
+                        <th title="Fecha del documento OC">Fecha OC</th>
+                        <th title="Cuándo se ingresó la OC al sistema">Fecha ingreso</th>
                         <th>N° OC</th>
                         <th>Cliente</th>
                         <th>Vendedor</th>
@@ -189,6 +190,7 @@
                         </td>
                         {% endif %}
                         <td>{{ f.oc.fecha_oc.strftime('%d/%m/%y') if f.oc.fecha_oc else '—' }}</td>
+                        <td>{{ f.oc.created_at.strftime('%d/%m/%y %H:%M') if f.oc.created_at else '—' }}</td>
                         <td class="oc-num"><strong>{{ f.oc.numero_oc }}</strong></td>
                         <td class="cliente" title="{{ f.cliente_nombre }}">{{ f.cliente_nombre }}</td>
                         <td class="vendedor" title="{{ f.oc.vendedor or '' }}">{{ f.oc.vendedor or '—' }}</td>
@@ -220,7 +222,7 @@
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="{% if puede_modificar %}9{% else %}8{% endif %}" class="empty">Sin órdenes de compra registradas.</td></tr>
+                    <tr><td colspan="{% if puede_modificar %}10{% else %}9{% endif %}" class="empty">Sin órdenes de compra registradas.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

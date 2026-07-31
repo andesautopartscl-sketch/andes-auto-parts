@@ -46,6 +46,7 @@
     function applyMax(forceMetodo) {
         var tot = totalDoc();
         var use = tot > 0 ? Math.min(maxSaldo, tot) : maxSaldo;
+        // Peso entero (la UI); si el saldo tiene centavos, el backend ajusta al real.
         inp.value = use > 0 ? String(Math.round(use)) : '0';
         if (forceMetodo && use > 0 && met && tot > 0 && use + 0.01 >= tot) {
             met.value = 'Saldo a favor';

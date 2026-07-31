@@ -77,18 +77,44 @@ def _parse_date(value: str | None, default: datetime | None = None) -> datetime 
         return default
 
 
+def _parse_time_parts(value: str | None) -> tuple[int, int, int] | None:
+    """Parsea HH:MM o HH:MM:SS desde un input type=\"time\"."""
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    for fmt in ("%H:%M:%S", "%H:%M"):
+        try:
+            t = datetime.strptime(raw, fmt).time()
+            return t.hour, t.minute, t.second
+        except ValueError:
+            continue
+    return None
+
+
 def _parse_date_with_time_from_default(
     value: str | None,
     default: datetime | None = None,
+    time_value: str | None = None,
 ) -> datetime | None:
     """
-    Parsea una fecha (YYYY-MM-DD) y le inyecta la hora/min/seg del `default`.
-    Misma lógica que en web: inputs type="date" sin hora, pero el evento
-    se registra con la hora real del momento.
+    Parsea una fecha (YYYY-MM-DD) y le inyecta hora/min/seg.
+    Si `time_value` (HH:MM) viene informado, se usa; si no, se toma del `default`
+    (hora automática del momento). Misma lógica que en web.
     """
     base = _parse_date(value, None)
     if base is None:
         return default
+    parts = _parse_time_parts(time_value)
+    if parts is not None:
+        try:
+            return base.replace(
+                hour=parts[0],
+                minute=parts[1],
+                second=parts[2],
+                microsecond=0,
+            )
+        except Exception:
+            pass
     if default is None:
         return base
     try:
@@ -124,6 +150,16 @@ def _fmt_fecha(value) -> str:
         return "—"
     if isinstance(value, datetime):
         return value.strftime("%d/%m/%Y")
+    if isinstance(value, date):
+        return value.strftime("%d/%m/%Y")
+    return "—"
+
+
+def _fmt_fecha_hora(value) -> str:
+    if value is None:
+        return "—"
+    if isinstance(value, datetime):
+        return value.strftime("%d/%m/%Y %H:%M")
     if isinstance(value, date):
         return value.strftime("%d/%m/%Y")
     return "—"
@@ -257,8 +293,9 @@ def detalle_oc(oid: int) -> dict | None:
         "monto_cobrado_fmt": _fmt_monto(oc_monto_cobrado(oc)),
         "monto_pendiente_fmt": _fmt_monto(oc_monto_pendiente(oc)),
         "fecha_oc_fmt": _fmt_fecha(oc.fecha_oc),
+        "fecha_ingreso_fmt": _fmt_fecha_hora(oc.created_at),
         "fecha_entrega_comprometida_fmt": _fmt_fecha(oc.fecha_entrega_comprometida),
-        "fecha_entrega_real_fmt": _fmt_fecha(oc.fecha_entrega_real),
+        "fecha_entrega_real_fmt": _fmt_fecha_hora(oc.fecha_entrega_real),
         "forma_pago": oc.forma_pago or "",
         "vendedor": oc.vendedor or "",
         "direccion_despacho": oc.direccion_despacho or "",
@@ -280,7 +317,7 @@ def detalle_oc(oid: int) -> dict | None:
             {
                 **ev,
                 "titulo": ev.get("label") or "",
-                "fecha_fmt": _fmt_fecha(ev.get("fecha")),
+                "fecha_fmt": _fmt_fecha_hora(ev.get("fecha")),
             }
             for ev in timeline_eventos(oc)
         ],
@@ -370,6 +407,7 @@ def marcar_entregada(
     numero_guia_despacho: str | None,
     descontar_stock: bool,
     usuario: str,
+    hora_entrega_real: str | None = None,
 ) -> tuple[bool, str]:
     oc = db.session.get(OrdenCompraCliente, oid)
     if oc is None:
@@ -378,7 +416,9 @@ def marcar_entregada(
         return False, "Solo se puede marcar entregada una OC en estado recibida."
 
     now = datetime.now()
-    fecha_entrega = _parse_date_with_time_from_default(fecha_entrega_real, now) or now
+    fecha_entrega = (
+        _parse_date_with_time_from_default(fecha_entrega_real, now, hora_entrega_real) or now
+    )
     guia = (numero_guia_despacho or "").strip()[:60]
 
     try:

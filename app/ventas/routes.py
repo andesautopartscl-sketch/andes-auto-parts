@@ -242,10 +242,15 @@ def _aplicar_consumo_saldo_favor_en_ingreso(
     disponible = _round_money_cl(_proveedor_saldo_favor_ledger(int(proveedor_id)))
     # Al editar, el prev_monto ya está “reservado” en el doc; se suma de vuelta al tope usable.
     usable = _round_money_cl(disponible + prev_monto)
+    # La UI muestra pesos enteros (p. ej. 42202.72 → $42.203). Si piden ese
+    # redondeo, consumir el saldo real completo en vez de rechazar por centavos.
     if new_monto > usable + 0.02:
-        return (
-            f"Saldo a favor insuficiente. Disponible: ${usable:,.0f}".replace(",", ".")
-        )
+        if new_monto <= round(usable) + 0.02:
+            new_monto = usable
+        else:
+            return (
+                f"Saldo a favor insuficiente. Disponible: ${usable:,.0f}".replace(",", ".")
+            )
 
     delta = _round_money_cl(float(prev_monto) - float(new_monto))
     if abs(delta) > 0.001:

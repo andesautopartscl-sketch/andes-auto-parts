@@ -210,18 +210,44 @@ def _parse_date(value: str | None, default: datetime | None = None) -> datetime 
         return default
 
 
+def _parse_time_parts(value: str | None) -> tuple[int, int, int] | None:
+    """Parsea HH:MM o HH:MM:SS desde un input type=\"time\"."""
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    for fmt in ("%H:%M:%S", "%H:%M"):
+        try:
+            t = datetime.strptime(raw, fmt).time()
+            return t.hour, t.minute, t.second
+        except ValueError:
+            continue
+    return None
+
+
 def _parse_date_with_time_from_default(
     value: str | None,
     default: datetime | None = None,
+    time_value: str | None = None,
 ) -> datetime | None:
     """
-    Parsea una fecha (YYYY-MM-DD) y le inyecta la hora/min/seg del `default`.
-    Útil para inputs HTML type="date" (sin hora) cuando queremos registrar el evento
-    con la hora real del momento, manteniendo el día elegido por el usuario.
+    Parsea una fecha (YYYY-MM-DD) y le inyecta hora/min/seg.
+    Si `time_value` (HH:MM) viene informado, se usa; si no, se toma del `default`
+    (hora automática del momento). Útil para inputs type=\"date\" + type=\"time\".
     """
     base = _parse_date(value, None)
     if base is None:
         return default
+    parts = _parse_time_parts(time_value)
+    if parts is not None:
+        try:
+            return base.replace(
+                hour=parts[0],
+                minute=parts[1],
+                second=parts[2],
+                microsecond=0,
+            )
+        except Exception:
+            pass
     if default is None:
         return base
     try:
@@ -795,7 +821,8 @@ def marcar_entregada(oid: int):
 
     now = now_chile().replace(tzinfo=None)
     fecha_raw = (request.form.get("fecha_entrega_real") or "").strip()
-    fecha_entrega = _parse_date_with_time_from_default(fecha_raw, now) or now
+    hora_raw = (request.form.get("hora_entrega_real") or "").strip()
+    fecha_entrega = _parse_date_with_time_from_default(fecha_raw, now, hora_raw) or now
     guia = (request.form.get("numero_guia_despacho") or "").strip()[:60]
     descontar = (request.form.get("descontar_stock") or "").strip().lower() in {"1", "on", "true", "yes"}
 

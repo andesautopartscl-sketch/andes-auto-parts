@@ -26,6 +26,7 @@
     <h2 class="m-kv-card__title">Datos de la orden</h2>
     <dl class="m-kv-list">
       <div class="m-kv-list__row"><dt class="m-kv-list__key">Fecha OC</dt><dd class="m-kv-list__val">{{ oc.fecha_oc_fmt }}</dd></div>
+      <div class="m-kv-list__row"><dt class="m-kv-list__key">Fecha ingreso</dt><dd class="m-kv-list__val">{{ oc.fecha_ingreso_fmt }}</dd></div>
       {% if oc.fecha_entrega_comprometida_fmt != '—' %}
       <div class="m-kv-list__row"><dt class="m-kv-list__key">Entrega comprometida</dt><dd class="m-kv-list__val">{{ oc.fecha_entrega_comprometida_fmt }}</dd></div>
       {% endif %}
@@ -103,6 +104,11 @@
       <span class="m-field__label">Fecha entrega real</span>
       <input type="date" class="m-field__input" id="m-oc-fecha-entrega">
     </label>
+    <label class="m-field">
+      <span class="m-field__label">Hora entrega</span>
+      <input type="time" class="m-field__input" id="m-oc-hora-entrega">
+    </label>
+    <p class="m-field__hint" style="margin:-4px 0 10px;font-size:12px;color:#94a3b8;">Se completa con la hora actual; puedes ajustarla.</p>
     <label class="m-field">
       <span class="m-field__label">N° guía despacho</span>
       <input type="text" class="m-field__input" id="m-oc-guia" placeholder="Opcional">

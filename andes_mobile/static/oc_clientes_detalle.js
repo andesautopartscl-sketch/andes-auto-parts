@@ -13,6 +13,11 @@
     return new Date().toISOString().slice(0, 10);
   }
 
+  function nowTimeIso() {
+    var d = new Date();
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+
   function showToast(msg) {
     var el = document.getElementById("mobile-toast");
     if (!el) return;
@@ -58,6 +63,8 @@
 
     var fechaEntrega = document.getElementById("m-oc-fecha-entrega");
     if (fechaEntrega && !fechaEntrega.value) fechaEntrega.value = todayIso();
+    var horaEntrega = document.getElementById("m-oc-hora-entrega");
+    if (horaEntrega && !horaEntrega.value) horaEntrega.value = nowTimeIso();
 
     var fechaPago = document.getElementById("m-oc-fecha-pago");
     if (fechaPago && !fechaPago.value) fechaPago.value = todayIso();
@@ -65,6 +72,8 @@
     var btnEntregar = document.getElementById("m-oc-btn-entregar");
     if (btnEntregar) {
       btnEntregar.addEventListener("click", function () {
+        if (fechaEntrega) fechaEntrega.value = todayIso();
+        if (horaEntrega) horaEntrega.value = nowTimeIso();
         openModal("m-oc-modal-entregar");
       });
     }
@@ -89,6 +98,7 @@
         confirmEntregar.disabled = true;
         postJson(actions.getAttribute("data-url-entregar"), {
           fecha_entrega_real: document.getElementById("m-oc-fecha-entrega").value,
+          hora_entrega_real: document.getElementById("m-oc-hora-entrega").value,
           numero_guia_despacho: document.getElementById("m-oc-guia").value,
           descontar_stock: document.getElementById("m-oc-descontar-stock").checked,
         })

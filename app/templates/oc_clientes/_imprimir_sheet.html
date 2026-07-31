@@ -440,7 +440,7 @@
                 <div class="oc-print-meta-row"><dt>Entrega comprometida</dt><dd>{{ oc.fecha_entrega_comprometida.strftime('%d/%m/%Y') }}</dd></div>
                 {% endif %}
                 {% if oc.fecha_entrega_real %}
-                <div class="oc-print-meta-row"><dt>Entrega real</dt><dd>{{ oc.fecha_entrega_real.strftime('%d/%m/%Y') }}</dd></div>
+                <div class="oc-print-meta-row"><dt>Entrega real</dt><dd>{{ oc.fecha_entrega_real.strftime('%d/%m/%Y %H:%M') }}</dd></div>
                 {% endif %}
                 {% if oc.numero_guia_despacho %}
                 <div class="oc-print-meta-row"><dt>Guía despacho</dt><dd>{{ oc.numero_guia_despacho }}</dd></div>

@@ -17,9 +17,11 @@ from app.utils.rut_utils import clean_rut, format_rut
 from .models import CuentaContable, EmisorContable, MovimientoContable, TIPOS_CUENTA
 from .emisores_service import (
     backfill_emisores_desde_movimientos,
+    buscar_emisores,
     emisor_form_data,
     emisor_to_form_dict,
     hydrate_emisor,
+    listar_descripciones_movimientos,
     resolve_emisor_por_rut,
     upsert_emisor_contable_desde_movimiento,
     validate_emisor_form,
@@ -187,6 +189,7 @@ def movimientos():
         movimientos=movs,
         cuentas=cuentas,
         cuenta_id_filter=cuenta_id,
+        descripciones_opciones=listar_descripciones_movimientos(),
         active_page="contabilidad_movimientos",
     )
 
@@ -301,6 +304,20 @@ def api_emisor_por_rut():
     if data is None:
         return jsonify({"ok": True, "encontrado": False})
     return jsonify({"ok": True, "encontrado": True, **data})
+
+
+@contabilidad_bp.route("/api/emisores-buscar", methods=["GET"])
+@login_required
+@permission_required("ver_finanzas")
+def api_emisores_buscar():
+    """Buscar emisores por RUT o razón social (lupa del libro diario)."""
+    q = (request.args.get("q") or "").strip()
+    try:
+        limit = int(request.args.get("limit") or 15)
+    except (TypeError, ValueError):
+        limit = 15
+    items = buscar_emisores(q, limit=limit)
+    return jsonify({"ok": True, "items": items, "q": q})
 
 
 @contabilidad_bp.route("/emisores", methods=["GET"])

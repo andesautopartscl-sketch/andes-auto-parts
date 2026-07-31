@@ -225,3 +225,80 @@ def resolve_emisor_por_rut(rut_raw: str | None) -> dict | None:
         "emisor_nombre": (mov.emisor_nombre or "").strip(),
         "emisor_rut": format_rut(mov.emisor_rut) or (mov.emisor_rut or "").strip(),
     }
+
+
+def buscar_emisores(q: str | None, limit: int = 15) -> list[dict]:
+    """Busca emisores del directorio por nombre o RUT. Sin texto: primeros del catálogo."""
+    from sqlalchemy import or_
+
+    lim = max(1, min(int(limit or 15), 40))
+    query = EmisorContable.query.filter_by(activo=True)
+    raw = (q or "").strip()
+    if raw:
+        term = f"%{raw}%"
+        filtros = [EmisorContable.nombre.ilike(term)]
+        cr = clean_rut(raw)
+        if len(cr) >= 2:
+            filtros.append(EmisorContable.rut.ilike(f"%{cr}%"))
+        query = query.filter(or_(*filtros))
+    emisores = query.order_by(EmisorContable.nombre.asc()).limit(lim).all()
+    results = [e.to_dict() for e in emisores]
+    if results or not raw:
+        return results
+
+    # Fallback: RUTs/nombres ya usados en libro diario (aún no en directorio)
+    cr = clean_rut(raw)
+    mov_q = MovimientoContable.query.filter(
+        MovimientoContable.emisor_nombre.isnot(None),
+        MovimientoContable.emisor_nombre != "",
+    )
+    if len(cr) >= 2:
+        mov_q = mov_q.filter(emisor_rut_norm_sql().like(f"%{cr.upper()}%"))
+    else:
+        mov_q = mov_q.filter(MovimientoContable.emisor_nombre.ilike(f"%{raw}%"))
+    seen: set[str] = set()
+    out: list[dict] = []
+    for mov in mov_q.order_by(MovimientoContable.fecha.desc(), MovimientoContable.id.desc()).limit(80):
+        rut_fmt = format_rut(mov.emisor_rut) or (mov.emisor_rut or "").strip()
+        key = clean_rut(rut_fmt) or (mov.emisor_nombre or "").strip().upper()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(
+            {
+                "fuente": "movimiento",
+                "emisor_nombre": (mov.emisor_nombre or "").strip(),
+                "emisor_rut": rut_fmt,
+            }
+        )
+        if len(out) >= lim:
+            break
+    return out
+
+
+def listar_descripciones_movimientos(limit: int = 80) -> list[str]:
+    """Descripciones usadas en el libro diario (más frecuentes primero)."""
+    from sqlalchemy import func
+
+    lim = max(1, min(int(limit or 80), 200))
+    rows = (
+        db.session.query(MovimientoContable.descripcion, func.count().label("n"))
+        .filter(MovimientoContable.descripcion.isnot(None))
+        .filter(MovimientoContable.descripcion != "")
+        .group_by(MovimientoContable.descripcion)
+        .order_by(func.count().desc(), MovimientoContable.descripcion.asc())
+        .limit(lim)
+        .all()
+    )
+    out: list[str] = []
+    seen: set[str] = set()
+    for desc, _n in rows:
+        text = (desc or "").strip()
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(text)
+    return out
