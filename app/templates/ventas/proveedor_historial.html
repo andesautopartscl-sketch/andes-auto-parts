@@ -419,8 +419,9 @@
                 <table class="history-table">
                     <thead>
                         <tr>
+                            <th>ID</th>
                             <th>Tipo</th>
-                            <th>Numero</th>
+                            <th>N° documento</th>
                             <th>Fecha</th>
                             <th>Total</th>
                             <th>Estado</th>
@@ -429,8 +430,9 @@
                     <tbody>
                         {% for doc in data.documentos %}
                         <tr>
+                            <td>{{ doc.id }}</td>
                             <td><span class="doc-badge {{ doc.badge_tone }}">{{ doc.label }}</span></td>
-                            <td><strong>{{ doc.number or ('#' ~ doc.id) }}</strong></td>
+                            <td><strong>{{ doc.number or '—' }}</strong></td>
                             <td>{{ doc.fecha }}</td>
                             <td>${{ '{:,.0f}'.format(doc.total or 0).replace(',', '.') }}</td>
                             <td>

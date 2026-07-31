@@ -199,7 +199,8 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     font-weight: 600;
     color: #334155;
 }
-.ing-dev-box input[type="text"] {
+.ing-dev-box input[type="text"],
+.ing-dev-box select {
     display: block;
     margin-top: 2px;
     padding: 4px 7px;
@@ -207,6 +208,7 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     border-radius: 5px;
     font-size: 11px;
     background: #fff;
+    width: 100%;
 }
 .ing-dev-box .ing-dev-check {
     display: inline-flex;
@@ -603,17 +605,26 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
                     Marcá el/los ítems devueltos. Se acredita con IVA prorrateado. El ingreso no se modifica.
                 </p>
                 <div class="ing-dev-row">
-                    <label style="flex:1 1 220px;">
-                        Motivo *
-                        <input type="text" name="razon_devolucion" required maxlength="500"
-                               placeholder="Ej: CAPOT abollado — devolución" style="width:100%;">
+                    <label style="flex:1 1 200px;">
+                        Opción *
+                        <select name="opcion_devolucion" required>
+                            <option value="">Seleccionar…</option>
+                            {% for opc in (devolucion_opciones or []) %}
+                            <option value="{{ opc }}">{{ opc }}</option>
+                            {% endfor %}
+                        </select>
                     </label>
-                    <label style="flex:0 1 160px;">
+                    <label style="flex:1 1 220px;">
+                        Motivo
+                        <input type="text" name="razon_devolucion" maxlength="500"
+                               placeholder="Ej: Cliente necesitaba muñón 4x4">
+                    </label>
+                    <label style="flex:0 1 140px;">
                         N° NC proveedor
-                        <input type="text" name="ref_nota_credito" maxlength="100" placeholder="Opcional" style="width:100%;">
+                        <input type="text" name="ref_nota_credito" maxlength="100" placeholder="Opcional">
                     </label>
                     <label class="ing-dev-check">
-                        <input type="checkbox" name="descontar_stock" value="1" checked>
+                        <input type="checkbox" name="descontar_stock" value="1">
                         Descontar stock
                     </label>
                     <button type="button" id="btnAbrirModalCredito">Registrar crédito</button>
@@ -707,10 +718,10 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
                 window.alert('Seleccioná al menos un ítem para registrar el crédito.');
                 return;
             }
-            var motivo = form.querySelector('input[name="razon_devolucion"]');
-            if (motivo && !(motivo.value || '').trim()) {
-                motivo.focus();
-                window.alert('Indicá el motivo de la devolución / crédito.');
+            var opcion = form.querySelector('select[name="opcion_devolucion"]');
+            if (opcion && !(opcion.value || '').trim()) {
+                opcion.focus();
+                window.alert('Seleccioná la opción de devolución.');
                 return;
             }
             openModal();

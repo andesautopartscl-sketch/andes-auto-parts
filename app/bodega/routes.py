@@ -177,6 +177,17 @@ SALIDA_MOTIVO_OPCIONES = [
     MOTIVO_INCORPORACION,
 ]
 
+DEVOLUCION_INGRESO_OPCIONES = [
+    "Variante / especificación incorrecta",
+    "Producto dañado o defectuoso",
+    "Error de pedido / no solicitado",
+    "Faltante o incompleto",
+    "Calidad no conforme",
+    "Cliente desiste compra",
+    "Cambio de producto",
+    "Otro",
+]
+
 
 def _es_motivo_incorporacion(motivo: str | None) -> bool:
     return (motivo or "").strip() == MOTIVO_INCORPORACION
@@ -3472,6 +3483,7 @@ def ingreso_ver(doc_id: int):
             embed_modal=embed_modal,
             credited_item_ids=credited_item_ids,
             credito_sugerido=credito_sugerido,
+            devolucion_opciones=DEVOLUCION_INGRESO_OPCIONES,
             _partial=_ingreso_wants_embed_partial(),
             **nav,
             **detalle,
@@ -3514,10 +3526,13 @@ def ingreso_devolucion_credito(doc_id: int):
         flash("Seleccioná al menos un ítem a devolver.", "error")
         return _ingreso_ver_redirect(doc_id)
 
-    razon = (request.form.get("razon_devolucion") or "").strip()
-    if not razon:
-        flash("Indicá el motivo de la devolución / crédito.", "error")
+    opcion = (request.form.get("opcion_devolucion") or "").strip()
+    motivo_detalle = (request.form.get("razon_devolucion") or "").strip()
+    if not opcion or opcion not in DEVOLUCION_INGRESO_OPCIONES:
+        flash("Seleccioná la opción de devolución.", "error")
         return _ingreso_ver_redirect(doc_id)
+    razon = f"{opcion}. {motivo_detalle}".strip() if motivo_detalle else opcion
+    razon = razon[:500]
     descontar_stock = (request.form.get("descontar_stock") or "").strip().lower() in {
         "1",
         "on",
