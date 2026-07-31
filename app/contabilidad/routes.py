@@ -8,9 +8,11 @@ from types import SimpleNamespace
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for, Response
 from sqlalchemy import and_, func, or_
+from werkzeug.security import check_password_hash
 
 from app.bodega.models import IngresoDocumento, IngresoDocumentoItem
 from app.extensions import db
+from app.seguridad.models import Usuario
 from app.utils.decorators import login_required, permission_required
 from app.utils.permissions import has_permission
 from app.utils.rut_utils import clean_rut, format_rut
@@ -42,6 +44,83 @@ finanzas_bp = Blueprint(
 
 def _current_user() -> str:
     return session.get("user") or "sistema"
+
+
+def _validar_autorizacion_edicion_movimiento(
+    username: str, password: str
+) -> tuple[bool, str, Usuario | None]:
+    """Usuario + clave de quien autoriza editar un movimiento del libro diario."""
+    user_name = (username or "").strip()
+    raw_pass = password or ""
+    if not user_name or not raw_pass:
+        return False, "Debe ingresar usuario y contraseña para autorizar la edición.", None
+
+    u = Usuario.query.filter_by(usuario=user_name).first()
+    if u is None:
+        return False, "Usuario de autorización no válido.", None
+    if not bool(u.activo):
+        return False, "El usuario de autorización está inactivo.", None
+    if bool(getattr(u, "bloqueado_seguridad", False)):
+        return False, "El usuario de autorización está bloqueado.", None
+
+    try:
+        ok = check_password_hash(u.password_hash or "", raw_pass)
+    except Exception:
+        ok = False
+    if not ok:
+        return False, "Contraseña de autorización incorrecta.", None
+
+    rol_name = (u.rol.nombre if getattr(u, "rol", None) and u.rol.nombre else "") or ""
+    if not has_permission(u.usuario, rol_name, "finanzas_registrar_movimientos"):
+        return False, "El usuario no tiene permiso para editar movimientos contables.", None
+    return True, "", u
+
+
+def _parse_movimiento_form(form) -> tuple[dict | None, str | None]:
+    """Parsea y valida el formulario de movimiento. Retorna (data, error)."""
+    cuenta_id = (form.get("cuenta_id") or "").strip()
+    tipo = (form.get("tipo") or "").strip().lower()
+    monto_raw = (form.get("monto") or "0").strip().replace(",", ".")
+    descripcion = (form.get("descripcion") or "").strip()[:300]
+    documento_ref = (form.get("documento_ref") or "").strip()[:60]
+    emisor_nombre = (form.get("emisor_nombre") or "").strip().upper()[:200]
+    emisor_rut_raw = (form.get("emisor_rut") or "").strip()[:24]
+    emisor_rut_cr = clean_rut(emisor_rut_raw)
+    emisor_rut = (format_rut(emisor_rut_cr) or emisor_rut_cr)[:24] if emisor_rut_cr else ""
+    fecha_str = (form.get("fecha") or "").strip()
+
+    if not cuenta_id or not cuenta_id.isdigit():
+        return None, "Cuenta inválida."
+    if tipo not in ("debe", "haber"):
+        return None, "Tipo debe ser 'debe' o 'haber'."
+    try:
+        monto = float(monto_raw)
+        if monto <= 0:
+            raise ValueError
+    except ValueError:
+        return None, "Monto inválido."
+
+    cuenta = db.session.get(CuentaContable, int(cuenta_id))
+    if cuenta is None:
+        return None, "Cuenta no encontrada."
+
+    fecha = date.today()
+    if fecha_str:
+        try:
+            fecha = date.fromisoformat(fecha_str)
+        except ValueError:
+            pass
+
+    return {
+        "fecha": fecha,
+        "cuenta_id": int(cuenta_id),
+        "tipo": tipo,
+        "monto": monto,
+        "descripcion": descripcion,
+        "documento_ref": documento_ref,
+        "emisor_nombre": emisor_nombre,
+        "emisor_rut": emisor_rut,
+    }, None
 
 
 def _origenes_a_etiqueta(origins: set[str]) -> str:
@@ -184,12 +263,16 @@ def movimientos():
         q = q.filter(MovimientoContable.cuenta_id == int(cuenta_id))
     movs = q.limit(200).all()
     cuentas = CuentaContable.query.filter_by(activo=True).order_by(CuentaContable.codigo).all()
+    puede_registrar_mov = has_permission(
+        session.get("user"), session.get("rol"), "finanzas_registrar_movimientos"
+    )
     return render_template(
         "contabilidad/movimientos.html",
         movimientos=movs,
         cuentas=cuentas,
         cuenta_id_filter=cuenta_id,
         descripciones_opciones=listar_descripciones_movimientos(),
+        puede_registrar_mov=puede_registrar_mov,
         active_page="contabilidad_movimientos",
     )
 
@@ -201,60 +284,83 @@ def movimiento_nuevo():
     if not has_permission(session.get("user"), session.get("rol"), "finanzas_registrar_movimientos"):
         flash("No tienes permiso para registrar movimientos contables.", "error")
         return redirect(url_for("contabilidad.movimientos"))
-    cuenta_id = request.form.get("cuenta_id", "").strip()
-    tipo = request.form.get("tipo", "").strip().lower()
-    monto_raw = request.form.get("monto", "0").strip().replace(",", ".")
-    descripcion = request.form.get("descripcion", "").strip()
-    documento_ref = request.form.get("documento_ref", "").strip()
-    emisor_nombre = (request.form.get("emisor_nombre") or "").strip().upper()[:200]
-    emisor_rut_raw = (request.form.get("emisor_rut") or "").strip()[:24]
-    emisor_rut_cr = clean_rut(emisor_rut_raw)
-    emisor_rut = (format_rut(emisor_rut_cr) or emisor_rut_cr)[:24] if emisor_rut_cr else ""
-    fecha_str = request.form.get("fecha", "").strip()
 
-    if not cuenta_id or not cuenta_id.isdigit():
-        flash("Cuenta inválida.", "error")
+    data, err = _parse_movimiento_form(request.form)
+    if err:
+        flash(err, "error")
         return redirect(url_for("contabilidad.movimientos"))
-    if tipo not in ("debe", "haber"):
-        flash("Tipo debe ser 'debe' o 'haber'.", "error")
-        return redirect(url_for("contabilidad.movimientos"))
-    try:
-        monto = float(monto_raw)
-        if monto <= 0:
-            raise ValueError
-    except ValueError:
-        flash("Monto inválido.", "error")
-        return redirect(url_for("contabilidad.movimientos"))
-
-    cuenta = db.session.get(CuentaContable, int(cuenta_id))
-    if cuenta is None:
-        flash("Cuenta no encontrada.", "error")
-        return redirect(url_for("contabilidad.movimientos"))
-
-    fecha = date.today()
-    if fecha_str:
-        try:
-            fecha = date.fromisoformat(fecha_str)
-        except ValueError:
-            pass
 
     mov = MovimientoContable(
-        fecha=fecha,
-        cuenta_id=int(cuenta_id),
-        tipo=tipo,
-        monto=monto,
-        descripcion=descripcion,
-        documento_ref=documento_ref,
-        emisor_nombre=emisor_nombre,
-        emisor_rut=emisor_rut,
+        fecha=data["fecha"],
+        cuenta_id=data["cuenta_id"],
+        tipo=data["tipo"],
+        monto=data["monto"],
+        descripcion=data["descripcion"],
+        documento_ref=data["documento_ref"],
+        emisor_nombre=data["emisor_nombre"],
+        emisor_rut=data["emisor_rut"],
         usuario=_current_user(),
     )
     db.session.add(mov)
-    upsert_emisor_contable_desde_movimiento(emisor_rut, emisor_nombre)
+    upsert_emisor_contable_desde_movimiento(data["emisor_rut"], data["emisor_nombre"])
     db.session.commit()
     flash("Movimiento registrado.", "success")
     return redirect(url_for("contabilidad.movimientos"))
 
+
+@contabilidad_bp.route("/api/movimientos/autorizar-edicion", methods=["POST"])
+@login_required
+@permission_required("ver_finanzas")
+def api_autorizar_edicion_movimiento():
+    """Valida usuario/clave antes de abrir el formulario de edición."""
+    if not has_permission(session.get("user"), session.get("rol"), "finanzas_registrar_movimientos"):
+        return jsonify(ok=False, error="No tienes permiso para editar movimientos."), 403
+    payload = request.get_json(silent=True) or {}
+    auth_user = (payload.get("auth_user") or request.form.get("auth_user") or "").strip()
+    auth_pass = payload.get("auth_password") or request.form.get("auth_password") or ""
+    auth_ok, auth_err, actor = _validar_autorizacion_edicion_movimiento(auth_user, auth_pass)
+    if not auth_ok:
+        return jsonify(ok=False, error=auth_err), 403
+    return jsonify(ok=True, actor=(actor.usuario if actor else auth_user))
+
+
+@contabilidad_bp.route("/movimientos/<int:mid>/editar", methods=["POST"])
+@login_required
+@permission_required("ver_finanzas")
+def movimiento_editar(mid: int):
+    if not has_permission(session.get("user"), session.get("rol"), "finanzas_registrar_movimientos"):
+        flash("No tienes permiso para editar movimientos contables.", "error")
+        return redirect(url_for("contabilidad.movimientos"))
+
+    auth_user = (request.form.get("auth_user") or "").strip()
+    auth_pass = request.form.get("auth_password") or ""
+    auth_ok, auth_err, _actor = _validar_autorizacion_edicion_movimiento(auth_user, auth_pass)
+    if not auth_ok:
+        flash(auth_err, "error")
+        return redirect(url_for("contabilidad.movimientos"))
+
+    mov = db.session.get(MovimientoContable, mid)
+    if mov is None:
+        flash("Movimiento no encontrado.", "error")
+        return redirect(url_for("contabilidad.movimientos"))
+
+    data, err = _parse_movimiento_form(request.form)
+    if err:
+        flash(err, "error")
+        return redirect(url_for("contabilidad.movimientos"))
+
+    mov.fecha = data["fecha"]
+    mov.cuenta_id = data["cuenta_id"]
+    mov.tipo = data["tipo"]
+    mov.monto = data["monto"]
+    mov.descripcion = data["descripcion"]
+    mov.documento_ref = data["documento_ref"]
+    mov.emisor_nombre = data["emisor_nombre"]
+    mov.emisor_rut = data["emisor_rut"]
+    upsert_emisor_contable_desde_movimiento(data["emisor_rut"], data["emisor_nombre"])
+    db.session.commit()
+    flash("Movimiento actualizado.", "success")
+    return redirect(url_for("contabilidad.movimientos"))
 
 @contabilidad_bp.route("/api/libro_diario")
 @login_required
@@ -733,6 +839,7 @@ def libro_compras():
             tipo_origen=lbl,
             numero=doc.numero_documento,
             cliente_nombre=doc.proveedor_nombre,
+            proveedor_rut=format_rut(doc.proveedor_rut) or (doc.proveedor_rut or ""),
             estado_pago=ep,
             subtotal=neto_v,
             impuesto=iva_v,
@@ -747,7 +854,7 @@ def libro_compras():
             sio = io.StringIO()
             writer = csv.writer(sio)
             writer.writerow(
-                ["Fecha", "Origen (compra)", "N° documento proveedor", "Proveedor", "Estado pago", "Neto", "IVA", "Total"]
+                ["Fecha", "Origen (compra)", "N° documento proveedor", "Proveedor", "RUT", "Estado pago", "Neto", "IVA", "Total"]
             )
             for d in docs:
                 writer.writerow(
@@ -756,6 +863,7 @@ def libro_compras():
                         d.tipo_origen or "",
                         d.numero or "",
                         d.cliente_nombre or "",
+                        d.proveedor_rut or "",
                         (d.estado_pago or "pendiente"),
                         float(d.subtotal or 0),
                         float(d.impuesto or 0),
@@ -770,7 +878,7 @@ def libro_compras():
                 headers={"Content-Disposition": f"attachment; filename={filename}"},
             )
 
-        lines = ["Fecha\tOrigen (compra)\tN° documento proveedor\tProveedor\tEstado pago\tNeto\tIVA\tTotal"]
+        lines = ["Fecha\tOrigen (compra)\tN° documento proveedor\tProveedor\tRUT\tEstado pago\tNeto\tIVA\tTotal"]
         for d in docs:
             lines.append(
                 "\t".join(
@@ -779,6 +887,7 @@ def libro_compras():
                         str(d.tipo_origen or ""),
                         str(d.numero or ""),
                         str(d.cliente_nombre or ""),
+                        str(d.proveedor_rut or ""),
                         str(d.estado_pago or "pendiente"),
                         str(float(d.subtotal or 0)),
                         str(float(d.impuesto or 0)),

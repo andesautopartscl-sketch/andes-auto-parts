@@ -112,42 +112,232 @@
   bottom: calc(100% + 2px);
   max-height: 160px;
 }
+.contab-mov-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+.contab-mov-actions .btn-editar-mov {
+  padding: 2px 8px !important;
+  font-family: inherit !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  line-height: 1.3 !important;
+  border-radius: 6px !important;
+  color: #475569 !important;
+  background: #fff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+.contab-mov-actions .btn-editar-mov:hover {
+  color: #1d4ed8 !important;
+  background: #f8fafc !important;
+  border-color: #bfdbfe !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+.contab-auth-modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.48);
+  z-index: 1300;
+}
+.contab-auth-modal.open { display: flex; }
+.contab-auth-card {
+  width: min(400px, 100%);
+  background: #fff;
+  border: 1px solid #dbe3ef;
+  border-radius: 12px;
+  box-shadow: 0 20px 55px rgba(15, 23, 42, 0.28);
+  padding: 14px 16px;
+}
+.contab-auth-card h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.contab-auth-card p {
+  margin: 0 0 12px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.contab-auth-card label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 3px;
+}
+.contab-auth-card input {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid #dbe3ef;
+  border-radius: 6px;
+  font-size: 12px;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+}
+.contab-auth-error {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #b91c1c;
+}
+.contab-auth-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.contab-diario-hero {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.contab-diario-hero__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+}
+.contab-diario-hero__eyebrow {
+  margin: 0 0 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+.contab-diario-hero__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: #0f172a;
+}
+.contab-diario-hero__desc {
+  margin: 6px 0 0;
+  max-width: 560px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #64748b;
+}
+.contab-diario-hero__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.contab-diario-hero__actions .btn,
+.contab-diario-hero__actions .link-btn {
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.contab-diario-hero__actions .link-btn {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #334155;
+  text-decoration: none;
+}
+.contab-diario-hero__actions .link-btn:hover {
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+  background: #f8fafc;
+}
+.contab-diario-hero__filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-top: 1px solid #eef2f7;
+  background: #f8fafc;
+}
+.contab-diario-hero__filters .form-group {
+  margin: 0;
+  min-width: 220px;
+  flex: 1 1 220px;
+  max-width: 360px;
+}
+.contab-diario-hero__filters label {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+.contab-diario-hero__filters select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  font-size: 12px;
+  background: #fff;
+  color: #0f172a;
+  box-sizing: border-box;
+}
+.contab-diario-hero__filters .btn {
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  text-transform: none;
+}
 </style>
 <div class="contab-compact">
-  <div class="topbar">
-    <div>
-      <h1 class="page-title">Finanzas</h1>
-      <p class="page-subtitle">Libro diario</p>
-    </div>
-    <div class="topbar-actions">
-      <a class="link-btn" href="{{ url_for('contabilidad.index') }}">📒 Plan de cuentas</a>
-      <a class="link-btn" href="{{ url_for('contabilidad.emisores_lista') }}">🏢 Emisores</a>
-      <button class="btn btn-primary" id="btnNuevoMov" type="button">+ Registrar movimiento</button>
-    </div>
-  </div>
-
-  <div class="conta-wrap">
-    <div class="conta-head">
+  <section class="contab-diario-hero" aria-label="Libro diario">
+    <div class="contab-diario-hero__top">
       <div>
-        <h2>Libro diario</h2>
-        <p>Registro cronológico de movimientos contables. Cada fila es un movimiento; para partida doble podés completar el contrapartido con otro registro.</p>
+        <p class="contab-diario-hero__eyebrow">Finanzas</p>
+        <h1 class="contab-diario-hero__title">Libro diario</h1>
+        <p class="contab-diario-hero__desc">Registro cronológico de movimientos contables. Cada fila es un movimiento; para partida doble podés completar el contrapartido con otro registro.</p>
+      </div>
+      <div class="contab-diario-hero__actions">
+        <a class="link-btn" href="{{ url_for('contabilidad.index') }}">📒 Plan de cuentas</a>
+        <a class="link-btn" href="{{ url_for('contabilidad.emisores_lista') }}">🏢 Emisores</a>
+        {% if puede_registrar_mov %}
+        <button class="btn primary" id="btnNuevoMov" type="button">+ Registrar movimiento</button>
+        {% endif %}
       </div>
     </div>
-
-    <form class="contab-filter-bar" method="get">
+    <form class="contab-diario-hero__filters" method="get">
       <div class="form-group">
-        <label>Cuenta</label>
-        <select name="cuenta_id">
+        <label for="filtroCuentaMov">Cuenta</label>
+        <select id="filtroCuentaMov" name="cuenta_id">
           <option value="">Todas las cuentas</option>
           {% for c in cuentas %}
           <option value="{{ c.id }}" {% if cuenta_id_filter == c.id|string %}selected{% endif %}>{{ c.codigo }} — {{ c.nombre }}</option>
           {% endfor %}
         </select>
       </div>
-      <button class="btn btn-secondary" type="submit">Filtrar</button>
-      <a href="{{ url_for('contabilidad.movimientos') }}" class="btn btn-secondary">Limpiar</a>
+      <button class="btn outline" type="submit">Filtrar</button>
+      <a href="{{ url_for('contabilidad.movimientos') }}" class="btn outline">Limpiar</a>
     </form>
+  </section>
 
+  <div class="conta-wrap">
     <section class="conta-panel">
       {% if movimientos %}
       <div class="conta-table-wrap">
@@ -163,6 +353,7 @@
               <th>RUT emisor</th>
               <th>Ref. documento</th>
               <th>Usuario</th>
+              {% if puede_registrar_mov %}<th style="width:88px;text-align:right;">Acciones</th>{% endif %}
             </tr>
           </thead>
           <tbody>
@@ -184,6 +375,22 @@
               <td>{{ m.emisor_rut or '—' }}</td>
               <td>{{ m.documento_ref or '—' }}</td>
               <td>{{ m.usuario or '—' }}</td>
+              {% if puede_registrar_mov %}
+              <td class="contab-mov-actions">
+                <button type="button"
+                        class="btn btn-secondary btn-editar-mov"
+                        data-mid="{{ m.id }}"
+                        data-fecha="{{ m.fecha.isoformat() if m.fecha else '' }}"
+                        data-cuenta-id="{{ m.cuenta_id or '' }}"
+                        data-tipo="{{ m.tipo or 'debe' }}"
+                        data-monto="{{ m.monto or '' }}"
+                        data-descripcion="{{ m.descripcion or '' }}"
+                        data-emisor-nombre="{{ m.emisor_nombre or '' }}"
+                        data-emisor-rut="{{ m.emisor_rut or '' }}"
+                        data-documento-ref="{{ m.documento_ref or '' }}"
+                        data-edit-url="{{ url_for('contabilidad.movimiento_editar', mid=m.id) }}">Editar</button>
+              </td>
+              {% endif %}
             </tr>
             {% endfor %}
           </tbody>
@@ -197,9 +404,12 @@
 
   <div id="modalNuevoMov" class="modal-overlay">
     <div class="modal-card contab-modal-mov">
-      <h3>Registrar movimiento contable</h3>
-      <p class="contab-modal-hint">Si aplica, completá al <strong>emisor de la factura</strong> (razón social y RUT) y el <strong>N° de documento</strong> en Referencia, así el registro queda trazable. Elegí cuenta, monto y <strong>Debe</strong>/<strong>Haber</strong> (el <strong>?</strong> al lado de Tipo explica la diferencia).</p>
-      <form method="post" action="{{ url_for('contabilidad.movimiento_nuevo') }}">
+      <h3 id="movModalTitle">Registrar movimiento contable</h3>
+      <p class="contab-modal-hint" id="movModalHint">Si aplica, completá al <strong>emisor de la factura</strong> (razón social y RUT) y el <strong>N° de documento</strong> en Referencia, así el registro queda trazable. Elegí cuenta, monto y <strong>Debe</strong>/<strong>Haber</strong> (el <strong>?</strong> al lado de Tipo explica la diferencia).</p>
+      <form method="post" id="formMovimiento" action="{{ url_for('contabilidad.movimiento_nuevo') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="auth_user" id="movAuthUserHidden" value="">
+        <input type="hidden" name="auth_password" id="movAuthPassHidden" value="">
         <div class="contab-modal-grid">
           <div class="contab-modal-row-equal">
             <div class="form-group">
@@ -282,13 +492,34 @@
             </div>
           </div>
           <div class="contab-modal-actions">
-            <button type="button" class="btn btn-secondary" id="btnCancelarMov">Cancelar</button>
-            <button type="submit" class="btn btn-primary" {% if not cuentas %}disabled title="Crear cuentas en Plan de cuentas primero"{% endif %}>Registrar</button>
+            <button type="button" class="btn outline" id="btnCancelarMov">Cancelar</button>
+            <button type="submit" class="btn primary" id="btnSubmitMov" {% if not cuentas %}disabled title="Crear cuentas en Plan de cuentas primero"{% endif %}>Registrar</button>
           </div>
         </div>
       </form>
     </div>
   </div>
+
+  {% if puede_registrar_mov %}
+  <div id="modalAuthEditarMov" class="contab-auth-modal" aria-hidden="true">
+    <div class="contab-auth-card" role="dialog" aria-modal="true" aria-labelledby="authEditarMovTitle">
+      <h3 id="authEditarMovTitle">Autorizar edición</h3>
+      <p id="authEditarMovSub">Ingrese usuario y contraseña para editar este movimiento del libro diario.</p>
+      <form id="formAuthEditarMov" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="authEditarMovUser">Usuario</label>
+        <input id="authEditarMovUser" name="auth_user" required autocomplete="username">
+        <label for="authEditarMovPass">Contraseña</label>
+        <input id="authEditarMovPass" name="auth_password" type="password" required autocomplete="current-password">
+        <p id="authEditarMovError" class="contab-auth-error" hidden></p>
+        <div class="contab-auth-actions">
+          <button type="button" class="btn outline" id="btnAuthEditarCancel">Cancelar</button>
+          <button type="submit" class="btn primary" id="btnAuthEditarSubmit">Autorizar y editar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
 </div>
 
 <script>
@@ -304,6 +535,29 @@
   const DESCRIPCIONES = {{ (descripciones_opciones or [])|tojson }};
   const URL_EMISOR_RUT = {{ url_for('contabilidad.api_emisor_por_rut')|tojson }};
   const URL_EMISORES_BUSCAR = {{ url_for('contabilidad.api_emisores_buscar')|tojson }};
+  const URL_AUTORIZAR_EDIT = {{ url_for('contabilidad.api_autorizar_edicion_movimiento')|tojson }};
+  const URL_MOV_NUEVO = {{ url_for('contabilidad.movimiento_nuevo')|tojson }};
+  const CSRF_TOKEN = {{ csrf_token|tojson }};
+
+  const formMov = document.getElementById('formMovimiento');
+  const movModalTitle = document.getElementById('movModalTitle');
+  const movModalHint = document.getElementById('movModalHint');
+  const btnSubmitMov = document.getElementById('btnSubmitMov');
+  const movAuthUserHidden = document.getElementById('movAuthUserHidden');
+  const movAuthPassHidden = document.getElementById('movAuthPassHidden');
+
+  const authModal = document.getElementById('modalAuthEditarMov');
+  const authForm = document.getElementById('formAuthEditarMov');
+  const authUser = document.getElementById('authEditarMovUser');
+  const authPass = document.getElementById('authEditarMovPass');
+  const authError = document.getElementById('authEditarMovError');
+  const authSub = document.getElementById('authEditarMovSub');
+  const btnAuthCancel = document.getElementById('btnAuthEditarCancel');
+  const btnAuthSubmit = document.getElementById('btnAuthEditarSubmit');
+
+  let movMode = 'nuevo';
+  let pendingEdit = null;
+  let pendingAuth = { user: '', pass: '' };
 
   function closeAyuda() {
     if (!panelAyuda || !btnAyuda) return;
@@ -511,13 +765,58 @@
     descInput.setAttribute('aria-expanded', 'true');
   }
 
+  function setMovMode(mode) {
+    movMode = mode === 'editar' ? 'editar' : 'nuevo';
+    if (movModalTitle) {
+      movModalTitle.textContent = movMode === 'editar'
+        ? 'Editar movimiento contable'
+        : 'Registrar movimiento contable';
+    }
+    if (movModalHint) {
+      movModalHint.innerHTML = movMode === 'editar'
+        ? 'Corregí los datos del movimiento. Al guardar se vuelve a validar la autorización con usuario y clave.'
+        : 'Si aplica, completá al <strong>emisor de la factura</strong> (razón social y RUT) y el <strong>N° de documento</strong> en Referencia, así el registro queda trazable. Elegí cuenta, monto y <strong>Debe</strong>/<strong>Haber</strong> (el <strong>?</strong> al lado de Tipo explica la diferencia).';
+    }
+    if (btnSubmitMov) {
+      btnSubmitMov.textContent = movMode === 'editar' ? 'Guardar cambios' : 'Registrar';
+    }
+    if (formMov) {
+      formMov.action = movMode === 'editar' && pendingEdit && pendingEdit.editUrl
+        ? pendingEdit.editUrl
+        : URL_MOV_NUEVO;
+    }
+    if (movAuthUserHidden) movAuthUserHidden.value = movMode === 'editar' ? (pendingAuth.user || '') : '';
+    if (movAuthPassHidden) movAuthPassHidden.value = movMode === 'editar' ? (pendingAuth.pass || '') : '';
+  }
+
+  function fillMovForm(data) {
+    if (!formMov || !data) return;
+    const setVal = function (name, value) {
+      const el = formMov.querySelector('[name="' + name + '"]');
+      if (el) el.value = value == null ? '' : String(value);
+    };
+    setVal('fecha', data.fecha || '');
+    setVal('documento_ref', data.documentoRef || '');
+    setVal('emisor_nombre', data.emisorNombre || '');
+    setVal('emisor_rut', data.emisorRut || '');
+    setVal('cuenta_id', data.cuentaId || '');
+    setVal('tipo', data.tipo || 'debe');
+    setVal('monto', data.monto || '');
+    setVal('descripcion', data.descripcion || '');
+  }
+
   function resetModalForm() {
-    const form = modal.querySelector('form');
-    if (form) form.reset();
+    pendingEdit = null;
+    pendingAuth = { user: '', pass: '' };
+    if (formMov) formMov.reset();
+    // Restaurar csrf tras reset
+    const csrfInput = formMov && formMov.querySelector('[name="csrf_token"]');
+    if (csrfInput) csrfInput.value = CSRF_TOKEN;
     resetEmisorHint();
     closeEmisorMenu();
     closeDescMenu();
     closeAyuda();
+    setMovMode('nuevo');
     const fechaInput = modal.querySelector('[name="fecha"]');
     if (fechaInput) {
       const d = new Date();
@@ -525,23 +824,78 @@
     }
   }
 
-  btnNuevo.addEventListener('click', function () {
-    resetModalForm();
-    modal.style.display = 'flex';
-  });
-  btnCancel.addEventListener('click', function () {
+  function closeMovModal() {
     modal.style.display = 'none';
     closeAyuda();
     closeEmisorMenu();
     closeDescMenu();
-  });
-  modal.addEventListener('click', function (e) {
-    if (e.target === modal) {
-      modal.style.display = 'none';
-      closeAyuda();
-      closeEmisorMenu();
-      closeDescMenu();
+    pendingAuth = { user: '', pass: '' };
+    if (movAuthUserHidden) movAuthUserHidden.value = '';
+    if (movAuthPassHidden) movAuthPassHidden.value = '';
+  }
+
+  function openAuthModal(btn) {
+    if (!authModal || !btn) return;
+    pendingEdit = {
+      mid: btn.getAttribute('data-mid') || '',
+      editUrl: btn.getAttribute('data-edit-url') || '',
+      fecha: btn.getAttribute('data-fecha') || '',
+      cuentaId: btn.getAttribute('data-cuenta-id') || '',
+      tipo: btn.getAttribute('data-tipo') || 'debe',
+      monto: btn.getAttribute('data-monto') || '',
+      descripcion: btn.getAttribute('data-descripcion') || '',
+      emisorNombre: btn.getAttribute('data-emisor-nombre') || '',
+      emisorRut: btn.getAttribute('data-emisor-rut') || '',
+      documentoRef: btn.getAttribute('data-documento-ref') || '',
+    };
+    if (authError) {
+      authError.hidden = true;
+      authError.textContent = '';
     }
+    if (authPass) authPass.value = '';
+    if (authSub) {
+      authSub.textContent = pendingEdit.descripcion
+        ? ('Va a editar el movimiento «' + pendingEdit.descripcion + '». Ingrese credenciales de un usuario autorizado.')
+        : 'Ingrese credenciales de un usuario autorizado para editar este movimiento.';
+    }
+    authModal.classList.add('open');
+    authModal.setAttribute('aria-hidden', 'false');
+    setTimeout(function () { if (authUser) authUser.focus(); }, 20);
+  }
+
+  function closeAuthModal() {
+    if (!authModal) return;
+    authModal.classList.remove('open');
+    authModal.setAttribute('aria-hidden', 'true');
+    if (authPass) authPass.value = '';
+    if (authError) {
+      authError.hidden = true;
+      authError.textContent = '';
+    }
+  }
+
+  function openEditAfterAuth() {
+    closeAuthModal();
+    resetEmisorHint();
+    closeEmisorMenu();
+    closeDescMenu();
+    closeAyuda();
+    fillMovForm(pendingEdit);
+    setMovMode('editar');
+    modal.style.display = 'flex';
+  }
+
+  if (btnNuevo) {
+    btnNuevo.addEventListener('click', function () {
+      resetModalForm();
+      modal.style.display = 'flex';
+    });
+  }
+  if (btnCancel) {
+    btnCancel.addEventListener('click', closeMovModal);
+  }
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) closeMovModal();
   });
   if (btnAyuda && panelAyuda) {
     btnAyuda.addEventListener('click', function (e) {
@@ -551,7 +905,13 @@
     });
   }
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && modal.style.display === 'flex') {
+    if (e.key !== 'Escape') return;
+    if (authModal && authModal.classList.contains('open')) {
+      closeAuthModal();
+      e.preventDefault();
+      return;
+    }
+    if (modal.style.display === 'flex') {
       if (panelAyuda && panelAyuda.classList.contains('is-open')) {
         closeAyuda();
         e.preventDefault();
@@ -567,9 +927,67 @@
         e.preventDefault();
         return;
       }
-      modal.style.display = 'none';
+      closeMovModal();
     }
   });
+
+  document.body.addEventListener('click', function (e) {
+    const btn = e.target.closest('.btn-editar-mov');
+    if (!btn) return;
+    e.preventDefault();
+    openAuthModal(btn);
+  });
+
+  if (btnAuthCancel) btnAuthCancel.addEventListener('click', closeAuthModal);
+  if (authModal) {
+    authModal.addEventListener('click', function (e) {
+      if (e.target === authModal) closeAuthModal();
+    });
+  }
+  if (authForm) {
+    authForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!pendingEdit) return;
+      const user = (authUser && authUser.value || '').trim();
+      const pass = authPass ? authPass.value : '';
+      if (authError) {
+        authError.hidden = true;
+        authError.textContent = '';
+      }
+      if (btnAuthSubmit) btnAuthSubmit.disabled = true;
+      fetch(URL_AUTORIZAR_EDIT, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-Token': CSRF_TOKEN,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({ auth_user: user, auth_password: pass }),
+      })
+        .then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); })
+        .then(function (res) {
+          if (btnAuthSubmit) btnAuthSubmit.disabled = false;
+          if (!res.body || !res.body.ok) {
+            if (authError) {
+              authError.textContent = (res.body && res.body.error) || 'No se pudo autorizar.';
+              authError.hidden = false;
+            }
+            return;
+          }
+          pendingAuth = { user: user, pass: pass };
+          openEditAfterAuth();
+        })
+        .catch(function () {
+          if (btnAuthSubmit) btnAuthSubmit.disabled = false;
+          if (authError) {
+            authError.textContent = 'Error de conexión al autorizar.';
+            authError.hidden = false;
+          }
+        });
+    });
+  }
   document.addEventListener('click', function (e) {
     if (emisorSearchMenu && !emisorSearchMenu.hidden) {
       const block = e.target.closest('.contab-emisor-block');
@@ -673,10 +1091,13 @@
     });
   }
 
-  const formMov = modal.querySelector('form');
   if (formMov) {
     formMov.addEventListener('submit', function () {
       if (descInput) rememberDescripcion(descInput.value);
+      if (movMode === 'editar') {
+        if (movAuthUserHidden) movAuthUserHidden.value = pendingAuth.user || '';
+        if (movAuthPassHidden) movAuthPassHidden.value = pendingAuth.pass || '';
+      }
     });
   }
 })();

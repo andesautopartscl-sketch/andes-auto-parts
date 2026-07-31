@@ -5,28 +5,44 @@
 <div class="contab-compact">
 	<style>
 		.lc-filters {
-			display: grid;
-			grid-template-columns: 2fr 1.1fr 1fr 1fr 1fr 1fr .8fr auto;
+			display: flex;
+			flex-wrap: wrap;
 			gap: 8px;
 			align-items: end;
 			margin-bottom: 8px;
-			padding: 9px 10px;
+			padding: 10px 12px;
 			border: 1px solid #e2e8f0;
 			border-radius: 10px;
 			background: #fff;
+			box-sizing: border-box;
+			width: 100%;
+			overflow: hidden;
 		}
 		.lc-rut-quick {
 			margin: 6px 0 10px;
-			padding: 10px;
+			padding: 10px 12px;
 			border: 1px solid #e2e8f0;
 			border-radius: 10px;
 			background: #fff;
-			display: grid;
-			grid-template-columns: minmax(240px, 380px) auto;
+			display: flex;
+			flex-wrap: wrap;
 			align-items: end;
 			gap: 8px;
+			box-sizing: border-box;
+			width: 100%;
 		}
-		.lc-field { display: flex; flex-direction: column; gap: 4px; }
+		.lc-rut-quick .lc-field {
+			flex: 1 1 240px;
+			max-width: 380px;
+		}
+		.lc-field {
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+			flex: 1 1 130px;
+			min-width: 120px;
+			max-width: 220px;
+		}
 		.lc-field label {
 			font-size: 9px;
 			font-weight: 700;
@@ -40,8 +56,17 @@
 			border: 1px solid #cbd5e1;
 			border-radius: 8px;
 			font-size: 11px;
+			width: 100%;
+			box-sizing: border-box;
 		}
-		.lc-actions { display: flex; gap: 8px; }
+		.lc-actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			align-items: center;
+			flex: 1 1 100%;
+			min-width: 0;
+		}
 		.lc-quick-ranges {
 			display: flex;
 			flex-wrap: wrap;
@@ -129,14 +154,12 @@
 			border-color: #fcd34d;
 		}
 		@media (max-width: 1300px) {
-			.lc-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-			.lc-actions { grid-column: 1 / -1; }
+			.lc-field { max-width: none; }
 			.lc-resumen { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 		}
 		@media (max-width: 800px) {
-			.lc-filters { grid-template-columns: 1fr; }
 			.lc-resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-			.lc-rut-quick { grid-template-columns: 1fr; }
+			.lc-field { flex: 1 1 100%; max-width: none; }
 		}
 	</style>
 	<div class="topbar">
@@ -234,6 +257,7 @@
 					<th title="Origen de compra (líneas del ingreso)">Origen</th>
 					<th title="N° factura o guía del proveedor (ingreso bodega)">Documento</th>
 					<th>Proveedor</th>
+					<th>RUT</th>
 					<th>Estado pago</th>
 					<th>Neto</th>
 					<th>IVA</th>
@@ -247,6 +271,7 @@
 					<td>{{ d.tipo }}</td>
 					<td>{{ d.numero or '-' }}</td>
 					<td>{{ d.cliente_nombre or '-' }}</td>
+					<td>{{ d.proveedor_rut or '—' }}</td>
 					<td>
 						{% set ep = (d.estado_pago or 'pendiente')|lower %}
 						<span class="lc-estado {{ 'pagado' if ep == 'pagado' else 'pendiente' }}">
@@ -258,7 +283,7 @@
 					<td>${{ '{:,.0f}'.format(d.total or 0).replace(',', '.') }}</td>
 				</tr>
 				{% else %}
-				<tr><td class="lv-empty" colspan="8">Sin registros para los filtros seleccionados.</td></tr>
+				<tr><td class="lv-empty" colspan="9">Sin registros para los filtros seleccionados.</td></tr>
 				{% endfor %}
 			</tbody>
 		</table>
