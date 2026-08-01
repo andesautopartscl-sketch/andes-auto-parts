@@ -47,3 +47,20 @@ def is_valid_rut(raw: str | None) -> bool:
     if not body.isdigit():
         return False
     return _compute_dv(body) == dv
+
+
+def normalize_foreign_tax_id(raw: str | None) -> str:
+    """ID fiscal extranjero (ej. USCC China): solo alfanumérico, mayúsculas."""
+    return re.sub(r"[^A-Za-z0-9]", "", (raw or "")).upper()[:40]
+
+
+def display_tax_id(raw: str | None) -> str:
+    """Formatea RUT chileno; si no es RUT válido, muestra el ID tal cual (extranjero)."""
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    if is_valid_rut(text):
+        return format_rut(text)
+    # Preferir forma compacta alfanumérica para USCC u otros.
+    foreign = normalize_foreign_tax_id(text)
+    return foreign or text.upper()

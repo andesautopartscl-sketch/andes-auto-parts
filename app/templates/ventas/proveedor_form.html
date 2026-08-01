@@ -158,6 +158,24 @@
 .sii-rut-label-row label {
     margin: 0;
 }
+.proveedor-exterior-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #475569;
+    cursor: pointer;
+    margin: 0 0 4px;
+    user-select: none;
+}
+.proveedor-exterior-toggle input {
+    margin: 0;
+    width: 14px;
+    height: 14px;
+    accent-color: #0f766e;
+    cursor: pointer;
+}
 .sii-rut-badge {
     font-size: 10px;
     font-weight: 700;
@@ -254,12 +272,25 @@
                     <input id="nombre_contacto" name="nombre" value="{% if proveedor.empresa and proveedor.nombre and proveedor.nombre != proveedor.empresa %}{{ proveedor.nombre }}{% endif %}">
                 </div>
                 <div class="field">
+                    {% set es_exterior = proveedor.proveedor_exterior|default(false) %}
+                    <label class="proveedor-exterior-toggle" for="proveedor_exterior">
+                        <input type="checkbox" id="proveedor_exterior" name="proveedor_exterior" value="1"
+                               {% if es_exterior %}checked{% endif %}>
+                        Proveedor exterior (sin RUT Chile)
+                    </label>
                     <div class="sii-rut-label-row">
-                        <label for="rut">RUT</label>
+                        <label for="rut" id="proveedorIdLabel">{% if es_exterior %}Nº de identificación{% else %}RUT{% endif %}</label>
                         <span id="siiRutBadge" class="sii-rut-badge" hidden></span>
                         <span id="siiRutSpinner" class="sii-rut-spinner" hidden aria-hidden="true"></span>
                     </div>
-                    <input id="rut" name="rut" data-rut-input data-rut-required="1" required value="{{ proveedor.rut|format_rut if proveedor.rut else '' }}">
+                    <input id="rut" name="rut"
+                           {% if not es_exterior %}data-rut-input data-rut-required="1" required{% endif %}
+                           maxlength="40"
+                           placeholder="{% if es_exterior %}Ej: 91330100716105852F{% else %}Ej: 76.123.456-7{% endif %}"
+                           value="{% if es_exterior %}{{ proveedor.rut or '' }}{% else %}{{ proveedor.rut|format_rut if proveedor.rut else '' }}{% endif %}">
+                    <small id="proveedorIdHint" style="font-size:10px;color:#64748b;line-height:1.35;">
+                        {% if es_exterior %}ID fiscal del país (ej. USCC China). No se valida como RUT chileno.{% else %}RUT chileno con dígito verificador.{% endif %}
+                    </small>
                 </div>
                 <div class="field">
                     <label for="giro">Giro</label>
@@ -351,7 +382,8 @@
         <ul>
             <li>Empresa / razon social y pais son obligatorios.</li>
             <li>El nombre de contacto es opcional; la grilla usa Empresa para la columna homonima.</li>
-            <li>En Chile se exige region y comuna.</li>
+            <li>En Chile se exige region, comuna y RUT valido.</li>
+            <li>Proveedor exterior: el campo pasa a <strong>Nº de identificación</strong> (ej. USCC <code>91330100716105852F</code>) sin validar RUT Chile.</li>
             <li>Orden de compra consume esta ficha de proveedor.</li>
         </ul>
     </aside>
@@ -553,6 +585,65 @@
     }
     bindHelpToggle('telefonoHelpBtn', 'telefonoHelpPanel', 'telefonoHelpClose');
     bindHelpToggle('ubicacionHelpBtn', 'ubicacionHelpPanel', 'ubicacionHelpClose');
+
+    const exteriorChk = document.getElementById('proveedor_exterior');
+    const rutInput = document.getElementById('rut');
+    const idLabel = document.getElementById('proveedorIdLabel');
+    const idHint = document.getElementById('proveedorIdHint');
+    const siiBadge = document.getElementById('siiRutBadge');
+    const siiSpinner = document.getElementById('siiRutSpinner');
+
+    function isExteriorMode() {
+        return !!(exteriorChk && exteriorChk.checked);
+    }
+
+    function applyExteriorIdMode() {
+        const on = isExteriorMode();
+        if (idLabel) idLabel.textContent = on ? 'Nº de identificación' : 'RUT';
+        if (idHint) {
+            idHint.textContent = on
+                ? 'ID fiscal del país (ej. USCC China). No se valida como RUT chileno.'
+                : 'RUT chileno con dígito verificador.';
+        }
+        if (!rutInput) return;
+        if (on) {
+            rutInput.removeAttribute('data-rut-input');
+            rutInput.removeAttribute('data-rut-required');
+            rutInput.removeAttribute('required');
+            rutInput.dataset.rutRequired = '0';
+            rutInput.setCustomValidity('');
+            rutInput.placeholder = 'Ej: 91330100716105852F';
+            var raw = (rutInput.value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+            rutInput.value = raw;
+            if (siiBadge) siiBadge.hidden = true;
+            if (siiSpinner) siiSpinner.hidden = true;
+        } else {
+            rutInput.setAttribute('data-rut-input', '');
+            rutInput.setAttribute('data-rut-required', '1');
+            rutInput.setAttribute('required', 'required');
+            rutInput.dataset.rutRequired = '1';
+            rutInput.placeholder = 'Ej: 76.123.456-7';
+            if (window.RutUtils && window.RutUtils.format) {
+                rutInput.value = window.RutUtils.format(rutInput.value || '');
+            }
+            if (window.RutUtils && typeof window.RutUtils.autoBindRutInputs === 'function') {
+                window.RutUtils.autoBindRutInputs(document.getElementById('proveedorForm') || document);
+            }
+        }
+    }
+
+    if (exteriorChk) {
+        exteriorChk.addEventListener('change', applyExteriorIdMode);
+    }
+    if (paisSelect) {
+        paisSelect.addEventListener('change', function () {
+            if (!isChile() && exteriorChk && !exteriorChk.checked) {
+                exteriorChk.checked = true;
+                applyExteriorIdMode();
+            }
+        });
+    }
+    applyExteriorIdMode();
 })();
 </script>
 {% endblock %}

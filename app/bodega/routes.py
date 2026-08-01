@@ -24,7 +24,7 @@ from app.utils.codigo_matcher import aplicar_fuzzy_a_productos
 from app.utils.finance_visibility import user_can_view_finanzas
 from app.utils.permissions import has_permission
 from app.utils.phone_format import phone_to_compact_e164
-from app.utils.rut_utils import clean_rut, format_rut, is_valid_rut
+from app.utils.rut_utils import clean_rut, format_rut, is_valid_rut, display_tax_id
 
 from .models import (
     CatalogoBodega,
@@ -125,7 +125,7 @@ def _proveedor_json_ingreso(proveedor: Proveedor) -> dict:
         saldo = 0.0
     return {
         "id": int(proveedor.id),
-        "rut": format_rut(proveedor.rut or ""),
+        "rut": display_tax_id(proveedor.rut or ""),
         "name": name,
         "contact": contact,
         "giro": (proveedor.giro or "").strip(),
@@ -715,13 +715,17 @@ def _ingreso_numero_documento_duplicado(
     numero_documento: str,
     *,
     exclude_doc_id: int | None = None,
+    proveedor_id: int | None = None,
+    proveedor_nombre: str | None = None,
 ) -> IngresoDocumento | None:
-    """Ingreso vigente (no anulado) con mismo N° documento y mismo RUT proveedor."""
+    """Ingreso vigente (no anulado) con mismo N° documento y mismo proveedor (RUT o id/nombre)."""
     numero = (numero_documento or "").strip()
     if not numero:
         return None
     rut_norm = _normalize_rut(rut)
-    if not rut_norm:
+    nombre_key = party_text_upper(proveedor_nombre or "")
+    pid = int(proveedor_id) if proveedor_id else None
+    if not rut_norm and not pid and not nombre_key:
         return None
     numero_key = numero.upper()
     q = (
@@ -732,8 +736,16 @@ def _ingreso_numero_documento_duplicado(
     if exclude_doc_id is not None:
         q = q.filter(IngresoDocumento.id != int(exclude_doc_id))
     for doc in q.order_by(IngresoDocumento.id.desc()).all():
-        if _normalize_rut(doc.proveedor_rut or "") == rut_norm:
+        if rut_norm and _normalize_rut(doc.proveedor_rut or "") == rut_norm:
             return doc
+        if not rut_norm:
+            if pid and doc.proveedor_id and int(doc.proveedor_id) == pid:
+                return doc
+            if nombre_key and party_text_upper(doc.proveedor_nombre or "") == nombre_key:
+                # Solo documentos sin RUT chileno válido (proveedor extranjero).
+                doc_rut = _normalize_rut(doc.proveedor_rut or "")
+                if not doc_rut or not _is_valid_rut(doc_rut):
+                    return doc
     return None
 
 
@@ -766,6 +778,114 @@ def _buscar_proveedor_por_rut(rut: str) -> Proveedor | None:
         if _normalize_rut(proveedor.rut or "") == normalized:
             return proveedor
     return None
+
+
+def _buscar_proveedor_extranjero_por_nombre(nombre: str) -> Proveedor | None:
+    """Proveedor activo sin RUT chileno válido, coincidente por empresa o nombre."""
+    key = party_text_upper(nombre)
+    if not key:
+        return None
+    for proveedor in Proveedor.query.filter_by(activo=True).all():
+        emp = party_text_upper(proveedor.empresa or "")
+        nom = party_text_upper(proveedor.nombre or "")
+        if emp != key and nom != key:
+            continue
+        rut = (proveedor.rut or "").strip()
+        if not rut or not _is_valid_rut(rut):
+            return proveedor
+    return None
+
+
+def _es_proveedor_extranjero_flag(raw) -> bool:
+    return (str(raw or "")).strip().lower() in {"1", "on", "true", "yes"}
+
+
+# Datos legales de la matriz que opera AliExpress (Alibaba China). Sin RUT Chile; USCC en giro.
+ALIEXPRESS_PROVEEDOR_EMPRESA = "ALIEXPRESS"
+ALIEXPRESS_PROVEEDOR_PRESET = {
+    "name": ALIEXPRESS_PROVEEDOR_EMPRESA,
+    "contact": "FANG JIANG",
+    "giro": (
+        "USCC 91330100716105852F · Alibaba (China) Network Technology Co., Ltd. · "
+        "阿里巴巴（中国）网络技术有限公司 · Operadora AliExpress (Alibaba Group)"
+    ),
+    "email": "",
+    "telefono": "+86 571-8502-2088",
+    "address": (
+        "No. 699, Wangshang Road, Binjiang District, Hangzhou, "
+        "Zhejiang Province, China 310052"
+    ),
+    "comuna": "Binjiang",
+    "region": "Zhejiang",
+    "ciudad": "Hangzhou",
+    "country": "China",
+    "uscc": "91330100716105852F",
+    "razon_social_cn": "阿里巴巴（中国）网络技术有限公司",
+    "razon_social_en": "Alibaba (China) Network Technology Co., Ltd.",
+}
+ALIEXPRESS_PROVEEDOR_ALIASES = (
+    "ALIEXPRESS",
+    "ALIBABA",
+    "ALIBABA CHINA",
+    "ALIBABA (CHINA) NETWORK TECHNOLOGY CO., LTD.",
+    "阿里巴巴（中国）网络技术有限公司",
+)
+
+
+def _nombre_es_alias_aliexpress(nombre: str) -> bool:
+    key = party_text_upper(nombre)
+    if not key:
+        return False
+    aliases = {party_text_upper(a) for a in ALIEXPRESS_PROVEEDOR_ALIASES}
+    if key in aliases:
+        return True
+    return "ALIEXPRESS" in key or key.startswith("ALIBABA")
+
+
+def _ensure_proveedor_aliexpress() -> Proveedor:
+    """Crea o actualiza el proveedor extranjero AliExpress/Alibaba (idempotente)."""
+    preset = ALIEXPRESS_PROVEEDOR_PRESET
+    emp = party_text_upper(preset["name"])[:200]
+    prov = _buscar_proveedor_extranjero_por_nombre(emp)
+    if prov is None:
+        for alias in ALIEXPRESS_PROVEEDOR_ALIASES:
+            prov = _buscar_proveedor_extranjero_por_nombre(alias)
+            if prov is not None:
+                break
+    tel_n = phone_to_compact_e164(preset["telefono"], preset["country"])[:50]
+    uscc = (preset.get("uscc") or "").strip().upper()[:20]
+    if prov is None:
+        prov = Proveedor(
+            nombre=party_text_upper(preset["contact"])[:200],
+            empresa=emp,
+            rut=uscc,
+            giro=party_text_upper(preset["giro"])[:200],
+            direccion=party_text_upper(preset["address"])[:300],
+            comuna=party_text_upper(preset["comuna"])[:120],
+            region=party_text_upper(preset["region"])[:120],
+            ciudad=party_text_upper(preset["ciudad"])[:120],
+            pais=party_text_upper(preset["country"])[:120],
+            email="",
+            telefono=tel_n,
+            activo=True,
+        )
+        db.session.add(prov)
+        db.session.flush()
+    else:
+        prov.empresa = emp
+        prov.nombre = party_text_upper(preset["contact"])[:200]
+        prov.rut = uscc
+        prov.giro = party_text_upper(preset["giro"])[:200]
+        prov.direccion = party_text_upper(preset["address"])[:300]
+        prov.comuna = party_text_upper(preset["comuna"])[:120]
+        prov.region = party_text_upper(preset["region"])[:120]
+        prov.ciudad = party_text_upper(preset["ciudad"])[:120]
+        prov.pais = party_text_upper(preset["country"])[:120]
+        if not (prov.telefono or "").strip():
+            prov.telefono = tel_n
+        prov.activo = True
+        db.session.flush()
+    return prov
 
 
 def _merge_ingreso_rows(rows: list[dict]) -> list[dict]:
@@ -2411,6 +2531,7 @@ def ingreso():
         return _deny_bodega_perm("No tienes permiso para registrar ingresos de stock.")
     today_str = datetime.now(CHILE_TZ).strftime("%Y-%m-%d")
     form_data = {
+        "supplier_extranjero": _es_proveedor_extranjero_flag(request.form.get("supplier_extranjero")),
         "supplier_rut": _normalize_rut(request.form.get("supplier_rut") or ""),
         "supplier_name": (request.form.get("supplier_name") or "").strip(),
         "supplier_contact": (request.form.get("supplier_contact") or "").strip(),
@@ -2433,6 +2554,15 @@ def ingreso():
         if request.method == "POST"
         else "",
     }
+    if form_data["supplier_extranjero"]:
+        from app.utils.rut_utils import normalize_foreign_tax_id
+
+        # Conservar USCC / ID extranjero; no usar clean_rut chileno.
+        form_data["supplier_rut"] = normalize_foreign_tax_id(
+            request.form.get("supplier_rut") or ""
+        )
+        if request.method == "POST" and not (request.form.get("supplier_country") or "").strip():
+            form_data["supplier_country"] = "China"
 
     default_rows = [
         {
@@ -2459,7 +2589,40 @@ def ingreso():
         if not rows:
             rows = default_rows
 
-        if not form_data["supplier_rut"]:
+        extranjero = bool(form_data["supplier_extranjero"])
+        if extranjero:
+            if not form_data["supplier_name"]:
+                message = {
+                    "type": "error",
+                    "text": "Indicá el nombre / empresa del proveedor extranjero.",
+                }
+            elif not form_data["supplier_country"]:
+                message = {"type": "error", "text": "Indicá el país del proveedor extranjero."}
+            elif not form_data["numero_documento"]:
+                message = {
+                    "type": "error",
+                    "text": "Debes ingresar el número de factura/documento del proveedor.",
+                }
+            elif not form_data["metodo_pago"]:
+                message = {"type": "error", "text": "Debes seleccionar el método de pago."}
+            elif row_errors:
+                message = {"type": "error", "text": row_errors[0]}
+            elif not rows or not rows[0].get("codigo"):
+                message = {"type": "error", "text": "Debes agregar al menos un producto para el ingreso."}
+            else:
+                prov_prev = _buscar_proveedor_extranjero_por_nombre(form_data["supplier_name"])
+                dup_doc = _ingreso_numero_documento_duplicado(
+                    "",
+                    form_data["numero_documento"],
+                    proveedor_id=int(prov_prev.id) if prov_prev is not None else None,
+                    proveedor_nombre=form_data["supplier_name"],
+                )
+                if dup_doc is not None:
+                    message = {
+                        "type": "error",
+                        "text": _mensaje_ingreso_numero_documento_duplicado(dup_doc),
+                    }
+        elif not form_data["supplier_rut"]:
             message = {"type": "error", "text": "Debes ingresar el RUT del proveedor."}
         elif not form_data["numero_documento"]:
             message = {"type": "error", "text": "Debes ingresar el número de factura/documento del proveedor."}
@@ -2480,7 +2643,10 @@ def ingreso():
                 message = {"type": "error", "text": _mensaje_ingreso_numero_documento_duplicado(dup_doc)}
 
         if message is None and request.method == "POST" and rows and rows[0].get("codigo"):
-            proveedor = _buscar_proveedor_por_rut(form_data["supplier_rut"])
+            if extranjero:
+                proveedor = _buscar_proveedor_extranjero_por_nombre(form_data["supplier_name"])
+            else:
+                proveedor = _buscar_proveedor_por_rut(form_data["supplier_rut"])
             if proveedor is not None:
                 supplier_found = True
                 pj = _proveedor_json_ingreso(proveedor)
@@ -2495,40 +2661,63 @@ def ingreso():
                 form_data["supplier_ciudad"] = pj["ciudad"]
                 form_data["supplier_country"] = pj["country"]
             else:
-                required_for_new = [
-                    form_data["supplier_name"],
-                    form_data["supplier_address"],
-                    form_data["supplier_comuna"],
-                    form_data["supplier_region"],
-                ]
-                if not all(required_for_new):
-                    message = {
-                        "type": "error",
-                        "text": "Proveedor no encontrado. Completa empresa, calle y número, comuna y región para crearlo en línea.",
-                    }
+                if extranjero:
+                    if not form_data["supplier_name"]:
+                        message = {
+                            "type": "error",
+                            "text": "Indicá el nombre / empresa del proveedor extranjero.",
+                        }
+                else:
+                    required_for_new = [
+                        form_data["supplier_name"],
+                        form_data["supplier_address"],
+                        form_data["supplier_comuna"],
+                        form_data["supplier_region"],
+                    ]
+                    if not all(required_for_new):
+                        message = {
+                            "type": "error",
+                            "text": "Proveedor no encontrado. Completa empresa, calle y número, comuna y región para crearlo en línea.",
+                        }
 
             if message is None:
                 try:
                     _ingreso_begin_save_transaction()
-                    dup_doc_locked = _ingreso_numero_documento_duplicado(
-                        form_data["supplier_rut"],
-                        form_data["numero_documento"],
-                    )
+                    if extranjero:
+                        dup_doc_locked = _ingreso_numero_documento_duplicado(
+                            "",
+                            form_data["numero_documento"],
+                            proveedor_id=int(proveedor.id) if proveedor is not None else None,
+                            proveedor_nombre=form_data["supplier_name"],
+                        )
+                    else:
+                        dup_doc_locked = _ingreso_numero_documento_duplicado(
+                            form_data["supplier_rut"],
+                            form_data["numero_documento"],
+                        )
                     if dup_doc_locked is not None:
                         raise ValueError(
                             _mensaje_ingreso_numero_documento_duplicado(dup_doc_locked)
                         )
 
-                    proveedor = _buscar_proveedor_por_rut(form_data["supplier_rut"])
+                    if extranjero:
+                        proveedor = _buscar_proveedor_extranjero_por_nombre(form_data["supplier_name"])
+                    else:
+                        proveedor = _buscar_proveedor_por_rut(form_data["supplier_rut"])
                     if proveedor is None:
                         emp = party_text_upper(form_data["supplier_name"])[:200]
                         con = party_text_upper(form_data.get("supplier_contact") or "")[:200]
                         nom = con if con else emp
-                        ciudad_n = _ingreso_resolve_ciudad_chile(
-                            form_data["supplier_region"],
-                            form_data["supplier_comuna"],
-                            form_data.get("supplier_ciudad") or "",
-                        )
+                        country_u = party_text_upper(form_data["supplier_country"])[:120]
+                        is_chile = country_u in {"CHILE", "CL"}
+                        if extranjero and not is_chile:
+                            ciudad_n = (form_data.get("supplier_ciudad") or "").strip()
+                        else:
+                            ciudad_n = _ingreso_resolve_ciudad_chile(
+                                form_data["supplier_region"],
+                                form_data["supplier_comuna"],
+                                form_data.get("supplier_ciudad") or "",
+                            )
                         tel_n = phone_to_compact_e164(
                             form_data["supplier_telefono"], form_data["supplier_country"]
                         )[:50]
@@ -2541,7 +2730,7 @@ def ingreso():
                             comuna=party_text_upper(form_data["supplier_comuna"])[:120],
                             region=party_text_upper(form_data["supplier_region"])[:120],
                             ciudad=party_text_upper(ciudad_n)[:120],
-                            pais=party_text_upper(form_data["supplier_country"])[:120],
+                            pais=country_u or party_text_upper(DEFAULT_COUNTRY),
                             email=normalize_party_email(form_data["supplier_email"])[:150],
                             telefono=tel_n,
                             activo=True,
@@ -2706,6 +2895,7 @@ def ingreso():
                     }
                     rows = default_rows
                     form_data = {
+                        "supplier_extranjero": False,
                         "supplier_rut": "",
                         "supplier_name": "",
                         "supplier_contact": "",
@@ -2743,19 +2933,40 @@ def ingreso():
     ingreso_mostrar_resumen_proveedor = False
     ingreso_mostrar_tarjeta_proveedor = False
     proveedor_saldo_favor = 0.0
-    rut_ui = (form_data.get("supplier_rut") or "").strip()
-    if rut_ui and _is_valid_rut(rut_ui):
-        prov_ui = _buscar_proveedor_por_rut(rut_ui)
-        if prov_ui is not None:
-            ingreso_mostrar_resumen_proveedor = True
-            try:
-                from app.ventas.routes import _proveedor_saldo_favor_ledger, _round_money_cl
+    if form_data.get("supplier_extranjero"):
+        name_ui = (form_data.get("supplier_name") or "").strip()
+        if name_ui:
+            prov_ui = _buscar_proveedor_extranjero_por_nombre(name_ui)
+            if prov_ui is not None:
+                ingreso_mostrar_resumen_proveedor = True
+                try:
+                    from app.ventas.routes import _proveedor_saldo_favor_ledger, _round_money_cl
 
-                proveedor_saldo_favor = _round_money_cl(_proveedor_saldo_favor_ledger(int(prov_ui.id)))
-            except Exception:
-                proveedor_saldo_favor = 0.0
+                    proveedor_saldo_favor = _round_money_cl(
+                        _proveedor_saldo_favor_ledger(int(prov_ui.id))
+                    )
+                except Exception:
+                    proveedor_saldo_favor = 0.0
+            else:
+                ingreso_mostrar_tarjeta_proveedor = True
         else:
             ingreso_mostrar_tarjeta_proveedor = True
+    else:
+        rut_ui = (form_data.get("supplier_rut") or "").strip()
+        if rut_ui and _is_valid_rut(rut_ui):
+            prov_ui = _buscar_proveedor_por_rut(rut_ui)
+            if prov_ui is not None:
+                ingreso_mostrar_resumen_proveedor = True
+                try:
+                    from app.ventas.routes import _proveedor_saldo_favor_ledger, _round_money_cl
+
+                    proveedor_saldo_favor = _round_money_cl(
+                        _proveedor_saldo_favor_ledger(int(prov_ui.id))
+                    )
+                except Exception:
+                    proveedor_saldo_favor = 0.0
+            else:
+                ingreso_mostrar_tarjeta_proveedor = True
 
     _geo_ingreso = _load_chile_geo_ingreso()
 
@@ -2919,6 +3130,63 @@ def ingreso_proveedor_por_rut():
     return jsonify({"success": True, "found": True, "proveedor": _proveedor_json_ingreso(proveedor)})
 
 
+@bodega_bp.route("/ingreso/proveedor-por-nombre", methods=["GET"])
+@admin_required
+def ingreso_proveedor_por_nombre():
+    """Busca proveedor extranjero (sin RUT chileno válido) por empresa/nombre."""
+    if not has_permission(session.get("user"), session.get("rol"), "bodega_ingreso"):
+        return jsonify({"success": False, "message": "No tienes permiso para registrar ingresos."}), 403
+    nombre = (request.args.get("nombre") or "").strip()
+    if not nombre:
+        return jsonify({"success": False, "message": "Indicá el nombre del proveedor."}), 400
+    if _nombre_es_alias_aliexpress(nombre):
+        try:
+            proveedor = _ensure_proveedor_aliexpress()
+            db.session.commit()
+            return jsonify(
+                {
+                    "success": True,
+                    "found": True,
+                    "proveedor": _proveedor_json_ingreso(proveedor),
+                    "preset": "aliexpress",
+                }
+            )
+        except Exception as exc:
+            db.session.rollback()
+            current_app.logger.exception("ensure aliexpress proveedor")
+            return jsonify(
+                {"success": False, "message": f"No se pudo cargar AliExpress: {exc}"}
+            ), 500
+    proveedor = _buscar_proveedor_extranjero_por_nombre(nombre)
+    if proveedor is None:
+        return jsonify({"success": True, "found": False, "nombre": nombre})
+    return jsonify(
+        {"success": True, "found": True, "proveedor": _proveedor_json_ingreso(proveedor)}
+    )
+
+
+@bodega_bp.route("/ingreso/proveedor-aliexpress", methods=["POST"])
+@admin_required
+def ingreso_proveedor_aliexpress():
+    """Crea/actualiza y devuelve el proveedor extranjero AliExpress (Alibaba China)."""
+    if not has_permission(session.get("user"), session.get("rol"), "bodega_ingreso"):
+        return jsonify({"ok": False, "message": "No tienes permiso para registrar ingresos."}), 403
+    try:
+        proveedor = _ensure_proveedor_aliexpress()
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("ingreso_proveedor_aliexpress")
+        return jsonify({"ok": False, "message": f"No se pudo guardar AliExpress: {exc}"}), 500
+    return jsonify(
+        {
+            "ok": True,
+            "proveedor": _proveedor_json_ingreso(proveedor),
+            "preset": ALIEXPRESS_PROVEEDOR_PRESET,
+        }
+    )
+
+
 @bodega_bp.route("/api/ingreso/numero-documento-duplicado", methods=["GET"])
 @login_required
 def api_ingreso_numero_documento_duplicado():
@@ -2928,17 +3196,29 @@ def api_ingreso_numero_documento_duplicado():
 
     rut = _normalize_rut(request.args.get("rut") or "")
     numero = (request.args.get("numero") or "").strip()
+    nombre = (request.args.get("nombre") or "").strip()
+    extranjero = _es_proveedor_extranjero_flag(request.args.get("extranjero"))
+    proveedor_id_raw = (request.args.get("proveedor_id") or "").strip()
+    proveedor_id: int | None = int(proveedor_id_raw) if proveedor_id_raw.isdigit() else None
     exclude_raw = (request.args.get("exclude_doc_id") or "").strip()
     exclude_doc_id: int | None = None
     if exclude_raw.isdigit():
         exclude_doc_id = int(exclude_raw)
 
-    if not rut:
-        return jsonify(success=False, message="RUT de proveedor requerido."), 400
     if not numero:
         return jsonify(success=True, duplicado=False)
+    if not extranjero and not rut:
+        return jsonify(success=False, message="RUT de proveedor requerido."), 400
+    if extranjero and not rut and not proveedor_id and not nombre:
+        return jsonify(success=True, duplicado=False)
 
-    dup_doc = _ingreso_numero_documento_duplicado(rut, numero, exclude_doc_id=exclude_doc_id)
+    dup_doc = _ingreso_numero_documento_duplicado(
+        rut,
+        numero,
+        exclude_doc_id=exclude_doc_id,
+        proveedor_id=proveedor_id,
+        proveedor_nombre=nombre if extranjero else None,
+    )
     if dup_doc is None:
         return jsonify(success=True, duplicado=False)
 
@@ -3086,25 +3366,75 @@ def ingreso_guardar_proveedor():
     if not has_permission(session.get("user"), session.get("rol"), "bodega_ingreso"):
         return jsonify({"ok": False, "message": "No tienes permiso para registrar ingresos."}), 403
     data = request.get_json(silent=True) or {}
+    extranjero = _es_proveedor_extranjero_flag(data.get("extranjero"))
     rut = _normalize_rut(data.get("rut") or "")
-    if not rut or not _is_valid_rut(rut):
-        return jsonify({"ok": False, "message": "RUT inválido."}), 400
     empresa = party_text_upper(data.get("name") or "")
     contact = party_text_upper(data.get("contact") or "")
     address = party_text_upper(data.get("address") or "")
     comuna = party_text_upper(data.get("comuna") or "")
     region = party_text_upper(data.get("region") or "")
     ciudad_in = party_text_upper(data.get("ciudad") or "")
-    if not all([empresa, address, comuna, region]):
-        return jsonify({"ok": False, "message": "Completa empresa, calle y número, comuna y región."}), 400
-
     giro = party_text_upper(data.get("giro") or "")[:200]
     email = normalize_party_email(data.get("email"))[:150]
     telefono_raw = (data.get("telefono") or "").strip()[:80]
     country = party_text_upper(data.get("country") or DEFAULT_COUNTRY) or party_text_upper(DEFAULT_COUNTRY)
-    ciudad = _ingreso_resolve_ciudad_chile(region, comuna, ciudad_in)
     nombre = contact[:200] if contact else empresa[:200]
     telefono = phone_to_compact_e164(telefono_raw, country)[:50]
+
+    if extranjero:
+        if not empresa:
+            return jsonify({"ok": False, "message": "Indicá el nombre / empresa del proveedor."}), 400
+        if not country:
+            return jsonify({"ok": False, "message": "Indicá el país del proveedor."}), 400
+        is_chile = country in {"CHILE", "CL"}
+        ciudad = (
+            ciudad_in
+            if not is_chile
+            else _ingreso_resolve_ciudad_chile(region, comuna, ciudad_in)
+        )
+        try:
+            prov = _buscar_proveedor_extranjero_por_nombre(empresa)
+            if prov is None:
+                prov = Proveedor(
+                    nombre=nombre,
+                    empresa=empresa[:200],
+                    rut="",
+                    giro=giro[:200],
+                    direccion=address[:300],
+                    comuna=comuna[:120],
+                    region=region[:120],
+                    ciudad=ciudad[:120],
+                    pais=country[:120],
+                    email=email[:150],
+                    telefono=telefono[:50],
+                    activo=True,
+                )
+                db.session.add(prov)
+            else:
+                prov.nombre = nombre
+                prov.empresa = empresa[:200]
+                prov.giro = giro[:200]
+                prov.direccion = address[:300]
+                prov.comuna = comuna[:120]
+                prov.region = region[:120]
+                prov.ciudad = ciudad[:120]
+                prov.pais = country[:120]
+                prov.email = email[:150]
+                prov.telefono = telefono[:50]
+                prov.rut = ""
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            return jsonify({"ok": False, "message": f"No se pudo guardar: {exc}"}), 500
+        prov2 = _buscar_proveedor_extranjero_por_nombre(empresa)
+        return jsonify({"ok": True, "proveedor": _proveedor_json_ingreso(prov2) if prov2 else {}})
+
+    if not rut or not _is_valid_rut(rut):
+        return jsonify({"ok": False, "message": "RUT inválido."}), 400
+    if not all([empresa, address, comuna, region]):
+        return jsonify({"ok": False, "message": "Completa empresa, calle y número, comuna y región."}), 400
+
+    ciudad = _ingreso_resolve_ciudad_chile(region, comuna, ciudad_in)
 
     try:
         prov = _buscar_proveedor_por_rut(rut)

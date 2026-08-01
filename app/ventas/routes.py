@@ -16,7 +16,7 @@ from app.extensions import db
 from app.seguridad.models import Usuario as UsuarioSistema
 from app.utils.decorators import login_required
 from app.utils.permissions import has_permission
-from app.utils.rut_utils import clean_rut, format_rut, is_valid_rut
+from app.utils.rut_utils import clean_rut, format_rut, is_valid_rut, normalize_foreign_tax_id, display_tax_id
 from app.utils.phone_format import format_phone_display, phone_to_compact_e164
 from app.utils.party_fields import normalize_party_email, party_text_upper
 from app.utils.variante_comercial import find_variante_stock, merge_ingreso_ref_variante_overrides
@@ -3076,6 +3076,19 @@ def _cliente_form_data(source=None) -> dict:
     }
 
 
+def _proveedor_es_exterior(data: dict | None) -> bool:
+    data = data or {}
+    if _parse_bool_flag(data.get("proveedor_exterior")):
+        return True
+    pais = data.get("pais") or ""
+    if not _is_chile_country(pais):
+        return True
+    rut = (data.get("rut") or "").strip()
+    if rut and not is_valid_rut(rut):
+        return True
+    return False
+
+
 def _proveedor_form_data(source=None) -> dict:
     source = source or {}
     pais = _normalize_country(source.get("pais"), default=CHILE_COUNTRY_NAME)
@@ -3093,10 +3106,21 @@ def _proveedor_form_data(source=None) -> dict:
         empresa = nombre
     if not nombre and empresa:
         nombre = empresa
+
+    exterior = _parse_bool_flag(source.get("proveedor_exterior"))
+    if not exterior and not _is_chile_country(pais):
+        exterior = True
+    raw_id = _clean_text(source.get("rut"))
+    if exterior:
+        rut_val = normalize_foreign_tax_id(raw_id)
+    else:
+        rut_val = clean_rut(raw_id)
+
     return {
         "nombre": nombre,
         "empresa": empresa,
-        "rut": clean_rut(source.get("rut")),
+        "rut": rut_val,
+        "proveedor_exterior": exterior,
         "giro": _upper_text(source.get("giro")),
         "direccion": _upper_text(source.get("direccion")),
         "region": region,
@@ -3134,15 +3158,20 @@ def _validate_proveedor_data(data: dict, rut_required: bool = True) -> list[str]
         errors.append("La empresa / razon social o el nombre de contacto es obligatorio.")
     if not data["pais"]:
         errors.append("El pais del proveedor es obligatorio.")
-    if _is_chile_country(data["pais"]):
+    if _is_chile_country(data["pais"]) and not data.get("proveedor_exterior"):
         if not data["region"]:
             errors.append("La region es obligatoria para proveedores de Chile.")
         if not data["comuna"]:
             errors.append("La comuna es obligatoria para proveedores de Chile.")
-    if rut_required and not data["rut"]:
-        errors.append("El RUT del proveedor es obligatorio.")
-    if data["rut"] and not is_valid_rut(data["rut"]):
-        errors.append("El RUT del proveedor no es valido.")
+    exterior = bool(data.get("proveedor_exterior")) or not _is_chile_country(data["pais"])
+    if exterior:
+        # Número de identificación extranjero (USCC, etc.): opcional, sin dígito verificador chileno.
+        pass
+    else:
+        if rut_required and not data["rut"]:
+            errors.append("El RUT del proveedor es obligatorio.")
+        if data["rut"] and not is_valid_rut(data["rut"]):
+            errors.append("El RUT del proveedor no es valido.")
     if not _is_valid_email(data["email"]):
         errors.append("El email del proveedor no es valido.")
     return errors
@@ -3933,6 +3962,7 @@ def proveedor_editar(pid: int):
             flash(error, "error")
     else:
         form_data = p.to_dict()
+        form_data["proveedor_exterior"] = _proveedor_es_exterior(form_data)
 
     return render_template(
         "ventas/proveedor_form.html",

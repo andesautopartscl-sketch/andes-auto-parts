@@ -49,7 +49,7 @@ from app.utils.datetime_utils import (
     chile_datetime_filter,
     chile_tz_status,
 )
-from app.utils.rut_utils import format_rut
+from app.utils.rut_utils import format_rut, display_tax_id
 from app.utils.phone_format import format_phone_display
 from app.utils.audit_metadata_filter import format_audit_metadata
 from app.utils.csrf import get_csrf_token, validate_csrf_request
@@ -258,6 +258,7 @@ def create_app():
     except Exception as _tz_exc:  # pragma: no cover
         app.logger.warning("No se pudo verificar zona America/Santiago: %s", _tz_exc)
     app.jinja_env.filters["format_rut"] = format_rut
+    app.jinja_env.filters["display_tax_id"] = display_tax_id
     app.jinja_env.filters["format_telefono"] = format_phone_display
     app.jinja_env.filters["audit_metadata"] = format_audit_metadata
     app.jinja_env.filters["format_precio_publico_con_iva"] = format_precio_publico_con_iva

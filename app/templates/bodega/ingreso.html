@@ -742,18 +742,56 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
     border-radius: 8px;
     box-sizing: border-box;
 }
-.ingreso-rut-row #btnBuscarProveedor {
-    padding: 5px 11px;
-    font-size: 12px;
+.ingreso-rut-row .ingreso-prov-search-btn {
+    width: 32px;
+    min-width: 32px;
+    height: 30px;
+    padding: 0;
     border-radius: 8px;
-    line-height: 1.2;
-    white-space: nowrap;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #334155;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    line-height: 1;
+}
+.ingreso-rut-row .ingreso-prov-search-btn:hover {
+    background: #eef6ff;
+    border-color: #93c5fd;
+    color: #1d4ed8;
 }
 .ingreso-rut-row #rutStatus {
     display: block;
     margin-top: 3px;
     font-size: 11px !important;
     line-height: 1.35;
+    color: #64748b;
+}
+.ingreso-prov-results {
+    display: grid;
+    gap: 4px;
+    max-height: 320px;
+    overflow: auto;
+}
+.ingreso-prov-result-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+}
+.ingreso-prov-result-row strong {
+    font-size: 12px;
+    color: #0f172a;
+}
+.ingreso-prov-result-row span {
+    font-size: 11px;
     color: #64748b;
 }
 .ingreso-doc-meta-grid {
@@ -1150,13 +1188,26 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
           data-default-bodega="{{ default_bodega }}"
           data-supplier-found="{{ '1' if ingreso_mostrar_resumen_proveedor else '' }}"
           data-supplier-registration="{{ '1' if ingreso_mostrar_tarjeta_proveedor else '' }}">
-        <div class="field ingreso-rut-row">
-            <label for="supplier_rut">RUT del proveedor (requerido)</label>
+        <input type="hidden" name="supplier_extranjero" id="supplier_extranjero" value="{{ '1' if form_data.supplier_extranjero else '0' }}">
+        <div class="field ingreso-rut-row" id="ingresoRutRow">
+            <label for="supplier_rut" id="supplierRutLabel">Proveedor (RUT o buscar)</label>
             <div class="supplier-inline">
-                <input id="supplier_rut" name="supplier_rut" data-rut-input data-rut-required="1" value="{{ form_data.supplier_rut|format_rut if form_data.supplier_rut else '' }}" placeholder="Ej: 76.123.456-7" required>
-                <button type="button" class="btn btn-primary" id="btnBuscarProveedor" data-search-url="{{ url_for('bodega.ingreso_proveedor_por_rut') }}">Buscar</button>
+                <input id="supplier_rut" name="supplier_rut"
+                       data-rut-input
+                       data-rut-required="{{ '0' if form_data.supplier_extranjero else '1' }}"
+                       value="{% if form_data.supplier_extranjero %}{{ form_data.supplier_rut or '' }}{% else %}{{ form_data.supplier_rut|format_rut if form_data.supplier_rut else '' }}{% endif %}"
+                       placeholder="Ej: 76.123.456-7 o AliExpress"
+                       {% if not form_data.supplier_extranjero %}required{% endif %}>
+                <button type="button" class="ingreso-prov-search-btn" id="btnBuscarProveedorLupa"
+                        title="Buscar proveedor por nombre o RUT"
+                        aria-label="Buscar proveedor"
+                        data-search-url="{{ url_for('ventas.api_proveedores') }}">🔎</button>
+                <button type="button" class="btn btn-primary" id="btnBuscarProveedor"
+                        data-search-url="{{ url_for('bodega.ingreso_proveedor_por_rut') }}"
+                        data-search-nombre-url="{{ url_for('bodega.ingreso_proveedor_por_nombre') }}"
+                        hidden aria-hidden="true">Buscar</button>
             </div>
-            <small id="rutStatus">Ingresa el RUT para autocompletar proveedor.</small>
+            <small id="rutStatus">Ingresá RUT y Enter, o usá la lupa para buscar por nombre / RUT / ID.</small>
         </div>
 
         <div class="ingreso-doc-meta-grid">
@@ -1413,9 +1464,9 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
                 <div class="ingreso-help-section">
                     <h4 class="ingreso-help-section-title">1) Proveedor</h4>
                     <ul class="ingreso-help-list">
-                        <li>Ingresá el RUT y presioná <strong>Buscar</strong>.</li>
+                        <li>Ingresá el <strong>RUT</strong> y Enter, o usá la <strong>lupa</strong> para buscar por nombre, RUT o ID extranjero.</li>
                         <li>Si existe, se autocompleta y podés seguir con los productos.</li>
-                        <li>Si no existe, se abre la ficha <strong>Proveedor</strong>; completá datos y presioná <strong>Guardar proveedor</strong>.</li>
+                        <li>Proveedores nuevos (Chile o exterior): crealos en <strong>Ventas → Proveedores</strong> y después selecciónalos acá.</li>
                     </ul>
                 </div>
 
@@ -1457,6 +1508,23 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
             </div>
             <div id="ingresoProductSearchStatus" class="muted" style="margin-bottom:8px;">Escribe para buscar productos.</div>
             <div id="ingresoProductResults" class="ingreso-product-results"></div>
+        </div>
+    </div>
+</div>
+
+<div id="ingresoProveedorModal" class="ingreso-product-modal" aria-hidden="true">
+    <div class="ingreso-product-modal-card" role="dialog" aria-modal="true" aria-labelledby="ingresoProveedorModalTitle">
+        <div class="ingreso-product-modal-head">
+            <h3 id="ingresoProveedorModalTitle">Buscar proveedor</h3>
+            <button type="button" class="btn" id="ingresoProveedorModalClose">Cerrar</button>
+        </div>
+        <div class="ingreso-product-modal-body">
+            <div class="ingreso-product-search">
+                <input type="text" id="ingresoProveedorSearchInput" placeholder="Nombre, RUT o ID (ej. AliExpress / 913301…)" autocomplete="off">
+                <button type="button" class="btn btn-primary" id="ingresoProveedorSearchBtn">Buscar</button>
+            </div>
+            <div id="ingresoProveedorSearchStatus" class="muted" style="margin-bottom:8px;">Escribí al menos 2 caracteres.</div>
+            <div id="ingresoProveedorResults" class="ingreso-prov-results"></div>
         </div>
     </div>
 </div>

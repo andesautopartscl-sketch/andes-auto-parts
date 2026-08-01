@@ -5,7 +5,7 @@ from sqlalchemy.orm import validates
 
 from app.extensions import db
 from app.utils.party_fields import party_text_upper
-from app.utils.rut_utils import format_rut
+from app.utils.rut_utils import format_rut, display_tax_id
 from app.utils.phone_format import format_phone_display
 
 
@@ -272,7 +272,7 @@ class Proveedor(db.Model):
             "id": self.id,
             "nombre": self.nombre or "",
             "empresa": self.empresa or "",
-            "rut": format_rut(self.rut),
+            "rut": display_tax_id(self.rut),
             "giro": self.giro or "",
             "direccion": self.direccion or "",
             "region": self.region or "",

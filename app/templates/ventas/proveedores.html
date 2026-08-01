@@ -280,7 +280,7 @@ td:last-child {
                         <td>
                             <strong class="supplier-contact-name">{% if proveedor.empresa and proveedor.nombre != proveedor.empresa %}{{ proveedor.nombre|upper }}{% else %}{{ (proveedor.empresa or proveedor.nombre)|upper }}{% endif %}</strong>
                         </td>
-                        <td>{{ proveedor.rut|format_rut if proveedor.rut else 'Sin RUT' }}</td>
+                        <td>{{ proveedor.rut|display_tax_id if proveedor.rut else 'Sin RUT' }}</td>
                         <td>
                             {% set sf = (saldos_proveedor or {}).get(proveedor.id, 0) %}
                             {% if sf and sf|float > 0 %}

@@ -405,7 +405,10 @@
         var rutInput = form.querySelector("#supplier_rut");
         var rutRow = form.querySelector(".ingreso-rut-row");
         var btnBuscar = form.querySelector("#btnBuscarProveedor");
+        var btnLupaProv = form.querySelector("#btnBuscarProveedorLupa");
         var rutStatus = form.querySelector("#rutStatus");
+        var extranjeroHidden = form.querySelector("#supplier_extranjero");
+        var supplierRutLabel = form.querySelector("#supplierRutLabel");
         var numeroDocInput = form.querySelector("#numero_documento");
         var numeroDocStatus = form.querySelector("#numeroDocStatus");
         var numeroDuplicadoUrl = form.dataset.numeroDuplicadoUrl || "";
@@ -417,24 +420,63 @@
         var supplierSummaryMeta = form.querySelector("#supplierSummaryMeta");
         var btnEditarProveedor = form.querySelector("#btnEditarProveedor");
         var supplierNameInput = form.querySelector("#supplier_name");
+        var provModal = document.getElementById("ingresoProveedorModal");
+        var provModalClose = document.getElementById("ingresoProveedorModalClose");
+        var provSearchInput = document.getElementById("ingresoProveedorSearchInput");
+        var provSearchBtn = document.getElementById("ingresoProveedorSearchBtn");
+        var provSearchStatus = document.getElementById("ingresoProveedorSearchStatus");
+        var provResults = document.getElementById("ingresoProveedorResults");
 
         if (!itemsBody || !addRowBtn || !rutInput || !btnBuscar || !rutStatus || !supplierFormWrap || !supplierSummary || !supplierSummaryName || !supplierSummaryMeta || !btnEditarProveedor || !supplierNameInput) {
             return;
         }
 
         var supplierSearchUrl = btnBuscar.getAttribute("data-search-url") || "";
+        var supplierSearchNombreUrl = btnBuscar.getAttribute("data-search-nombre-url") || "";
+        var supplierListSearchUrl = (btnLupaProv && btnLupaProv.getAttribute("data-search-url")) || "/ventas/api/proveedores";
         var lookupTimer = null;
         var lastLookupRut = "";
+        var lastLookupNombre = "";
         var isLookingUp = false;
         var ingresoComunasPopulateFn = null;
         rutInput.readOnly = false;
         rutInput.disabled = false;
 
+        function isExtranjeroMode() {
+            return !!(extranjeroHidden && String(extranjeroHidden.value || "") === "1");
+        }
+
+        function setExtranjeroMode(on) {
+            if (extranjeroHidden) extranjeroHidden.value = on ? "1" : "0";
+            if (!rutInput) return;
+            if (on) {
+                rutInput.removeAttribute("data-rut-input");
+                rutInput.removeAttribute("required");
+                rutInput.dataset.rutRequired = "0";
+                rutInput.setCustomValidity("");
+            } else {
+                rutInput.setAttribute("data-rut-input", "");
+                rutInput.setAttribute("required", "required");
+                rutInput.dataset.rutRequired = "1";
+            }
+        }
+
+        function isChileCountryValue(raw) {
+            var c = String(raw || "").trim().toLowerCase();
+            return !c || c === "chile" || c === "cl";
+        }
+
         function showSupplierRutField() {
             if (rutRow) rutRow.style.display = "";
             if (rutInput) {
-                rutInput.setAttribute("required", "required");
-                rutInput.dataset.rutRequired = "1";
+                rutInput.style.display = "";
+                if (isExtranjeroMode()) {
+                    rutInput.removeAttribute("required");
+                    rutInput.dataset.rutRequired = "0";
+                } else {
+                    rutInput.setAttribute("required", "required");
+                    rutInput.dataset.rutRequired = "1";
+                }
             }
         }
 
@@ -459,6 +501,10 @@
 
         function syncSupplierRutValidity() {
             if (!rutInput) return;
+            if (isExtranjeroMode()) {
+                rutInput.setCustomValidity("");
+                return;
+            }
             var raw = (rutInput.value || "").trim();
             if (!raw) {
                 if (supplierSummary.classList.contains("is-visible")) {
@@ -533,10 +579,151 @@
         }
 
         function updateSupplierSummary() {
-            var rutFormatted = (rutInput.value || "").trim() || "Sin RUT";
             var name = (supplierNameInput.value || "").trim() || "Proveedor sin nombre";
             supplierSummaryName.textContent = name;
-            supplierSummaryMeta.textContent = "RUT: " + rutFormatted;
+            if (isExtranjeroMode()) {
+                var idVal = (rutInput.value || "").trim();
+                var country = (form.querySelector("#supplier_country") && form.querySelector("#supplier_country").value) || "";
+                supplierSummaryMeta.textContent =
+                    (idVal ? ("ID: " + idVal) : "Sin RUT Chile") +
+                    (country ? (" · " + country.trim()) : "");
+            } else {
+                var rutFormatted = (rutInput.value || "").trim() || "Sin RUT";
+                supplierSummaryMeta.textContent = "RUT: " + rutFormatted;
+            }
+        }
+
+        function closeProveedorSearchModal() {
+            if (!provModal) return;
+            provModal.classList.remove("open");
+            provModal.setAttribute("aria-hidden", "true");
+        }
+
+        function openProveedorSearchModal(prefill) {
+            if (!provModal) return;
+            provModal.classList.add("open");
+            provModal.setAttribute("aria-hidden", "false");
+            if (provSearchStatus) provSearchStatus.textContent = "Escribí al menos 2 caracteres.";
+            if (provResults) provResults.innerHTML = "";
+            if (provSearchInput) {
+                provSearchInput.value = (prefill || "").trim();
+                setTimeout(function () {
+                    provSearchInput.focus();
+                    if ((provSearchInput.value || "").trim().length >= 2) {
+                        doProveedorSearch();
+                    }
+                }, 20);
+            }
+        }
+
+        function applyProveedorDict(p) {
+            if (!p) return;
+            var country = (p.country || p.pais || "Chile").trim();
+            var rutRaw = (p.rut || "").trim();
+            var extranjero = !isChileCountryValue(country) ||
+                (rutRaw && window.RutUtils && window.RutUtils.isValid && !window.RutUtils.isValid(rutRaw)) ||
+                !rutRaw;
+            setExtranjeroMode(extranjero);
+            var emp = (p.name || p.empresa || p.nombre || "").trim();
+            var contact = (p.contact || "").trim();
+            if (!contact && p.nombre && p.empresa && String(p.nombre).toUpperCase() !== String(p.empresa).toUpperCase()) {
+                contact = p.nombre;
+            }
+            fillSupplier({
+                name: emp,
+                contact: contact,
+                giro: p.giro || "",
+                email: p.email || "",
+                telefono: p.telefono || "",
+                address: p.address || p.direccion || "",
+                comuna: p.comuna || "",
+                region: p.region || "",
+                ciudad: p.ciudad || "",
+                country: country || (extranjero ? "China" : "Chile")
+            });
+            if (extranjero) {
+                rutInput.value = rutRaw;
+                lastLookupNombre = emp.toUpperCase();
+                lastLookupRut = "";
+            } else if (rutRaw) {
+                setIngresoSupplierRut(rutRaw, { search: false });
+                lastLookupRut = (window.RutUtils && window.RutUtils.clean)
+                    ? window.RutUtils.clean(rutRaw)
+                    : rutRaw;
+            }
+            updateSupplierSummary();
+            collapseSupplierSection();
+            if (typeof window.setIngresoProveedorSaldo === "function") {
+                window.setIngresoProveedorSaldo(p.saldo_favor || 0);
+            }
+            if (rutStatus) {
+                rutStatus.textContent = extranjero
+                    ? "Proveedor exterior seleccionado."
+                    : "Proveedor encontrado y autocompletado.";
+                rutStatus.style.color = "#166534";
+            }
+            scheduleNumeroDocCheck();
+            setTimeout(function () {
+                var firstCodeInput = form.querySelector("input[name='codigo_producto[]']");
+                if (firstCodeInput) firstCodeInput.focus();
+            }, 20);
+        }
+
+        function doProveedorSearch() {
+            if (!supplierListSearchUrl || !provSearchInput) return;
+            var q = (provSearchInput.value || "").trim();
+            if (q.length < 2) {
+                if (provSearchStatus) provSearchStatus.textContent = "Escribí al menos 2 caracteres.";
+                if (provResults) provResults.innerHTML = "";
+                return;
+            }
+            if (provSearchStatus) provSearchStatus.textContent = "Buscando…";
+            fetch(supplierListSearchUrl + "?q=" + encodeURIComponent(q), {
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    var items = (data && data.success && Array.isArray(data.proveedores)) ? data.proveedores : [];
+                    if (provSearchStatus) {
+                        provSearchStatus.textContent = items.length
+                            ? (items.length + " proveedor(es).")
+                            : "Sin resultados. Creá el proveedor en Ventas → Proveedores.";
+                    }
+                    if (!provResults) return;
+                    provResults.innerHTML = "";
+                    items.forEach(function (p) {
+                        var row = document.createElement("div");
+                        row.className = "ingreso-prov-result-row";
+                        var left = document.createElement("div");
+                        var strong = document.createElement("strong");
+                        strong.textContent = p.empresa || p.nombre || "Sin nombre";
+                        left.appendChild(strong);
+                        var meta = document.createElement("span");
+                        meta.style.display = "block";
+                        meta.textContent = (p.pais || "—") + (p.giro ? (" · " + p.giro) : "");
+                        left.appendChild(meta);
+                        var mid = document.createElement("span");
+                        mid.textContent = p.rut || "Sin RUT/ID";
+                        var btn = document.createElement("button");
+                        btn.type = "button";
+                        btn.className = "btn btn-primary";
+                        btn.style.padding = "4px 10px";
+                        btn.style.fontSize = "11px";
+                        btn.textContent = "Elegir";
+                        btn.addEventListener("click", function () {
+                            applyProveedorDict(p);
+                            closeProveedorSearchModal();
+                        });
+                        row.appendChild(left);
+                        row.appendChild(mid);
+                        row.appendChild(btn);
+                        provResults.appendChild(row);
+                    });
+                })
+                .catch(function () {
+                    if (provSearchStatus) provSearchStatus.textContent = "No se pudo buscar proveedores.";
+                    if (provResults) provResults.innerHTML = "";
+                });
         }
 
         function initIngresoSupplierChileGeo() {
@@ -2158,23 +2345,83 @@
 
         initIngresoSupplierChileGeo();
 
-        function searchSupplier(force) {
-            var rut = (window.RutUtils && window.RutUtils.clean)
-                ? window.RutUtils.clean(rutInput.value)
-                : rutInput.value;
-            rutInput.value = (window.RutUtils && window.RutUtils.format)
-                ? window.RutUtils.format(rut)
-                : rut;
-            if (!rut) {
-                rutStatus.textContent = "Ingresa un RUT valido para buscar proveedor.";
-                rutStatus.style.color = "#64748b";
+        function searchSupplierByNombre(force) {
+            var nombre = (supplierNameInput.value || "").trim();
+            if (!nombre) {
+                rutStatus.textContent = "Indicá el nombre / empresa del proveedor extranjero.";
+                rutStatus.style.color = "#b91c1c";
+                expandSupplierSection();
+                supplierNameInput.focus();
                 return;
             }
-            if (window.RutUtils && window.RutUtils.isValid && !window.RutUtils.isValid(rut)) {
-                rutStatus.textContent = "RUT invalido. Verifica digito verificador.";
+            if (!supplierSearchNombreUrl) {
+                rutStatus.textContent = "Búsqueda por nombre no disponible.";
                 rutStatus.style.color = "#b91c1c";
                 return;
             }
+            if (!force && (isLookingUp || nombre.toUpperCase() === lastLookupNombre)) return;
+            isLookingUp = true;
+            lastLookupNombre = nombre.toUpperCase();
+
+            fetch(supplierSearchNombreUrl + "?nombre=" + encodeURIComponent(nombre), {
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            })
+                .then(function (res) {
+                    return res.json().then(function (data) {
+                        if (!res.ok) throw new Error(data.message || "No se pudo buscar proveedor");
+                        return data;
+                    });
+                })
+                .then(function (data) {
+                    if (data.found && data.proveedor) {
+                        fillSupplier(data.proveedor);
+                        updateSupplierSummary();
+                        collapseSupplierSection();
+                        rutStatus.textContent = "Proveedor extranjero encontrado y autocompletado.";
+                        rutStatus.style.color = "#166534";
+                        if (typeof window.setIngresoProveedorSaldo === "function") {
+                            window.setIngresoProveedorSaldo(data.proveedor.saldo_favor || 0);
+                        }
+                        setTimeout(function () {
+                            var firstCodeInput = form.querySelector("input[name='codigo_producto[]']");
+                            if (firstCodeInput) firstCodeInput.focus();
+                        }, 20);
+                    } else {
+                        expandSupplierSection();
+                        if (typeof window.setIngresoProveedorSaldo === "function") {
+                            window.setIngresoProveedorSaldo(0);
+                        }
+                        rutStatus.textContent = "No encontrado. Completá los datos y Guardar proveedor, o guardá el ingreso para crearlo.";
+                        rutStatus.style.color = "#92400e";
+                    }
+                })
+                .catch(function (err) {
+                    expandSupplierSection();
+                    rutStatus.textContent = err.message || "Error en búsqueda de proveedor.";
+                    rutStatus.style.color = "#b91c1c";
+                })
+                .finally(function () {
+                    isLookingUp = false;
+                });
+        }
+
+        function searchSupplier(force) {
+            if (isExtranjeroMode()) {
+                searchSupplierByNombre(force);
+                return;
+            }
+            var rut = (window.RutUtils && window.RutUtils.clean)
+                ? window.RutUtils.clean(rutInput.value)
+                : rutInput.value;
+            var rawTyped = (rutInput.value || "").trim();
+            if (!rut || (window.RutUtils && window.RutUtils.isValid && !window.RutUtils.isValid(rut))) {
+                // No es RUT chileno válido: abrir lupa / buscar por nombre o ID.
+                openProveedorSearchModal(rawTyped);
+                return;
+            }
+            rutInput.value = (window.RutUtils && window.RutUtils.format)
+                ? window.RutUtils.format(rut)
+                : rut;
             if (!supplierSearchUrl) return;
             if (!force && (isLookingUp || rut === lastLookupRut)) return;
             isLookingUp = true;
@@ -2191,6 +2438,7 @@
                 })
                 .then(function (data) {
                     if (data.found && data.proveedor) {
+                        setExtranjeroMode(false);
                         fillSupplier(data.proveedor);
                         updateSupplierSummary();
                         syncSupplierRutValidity();
@@ -2207,6 +2455,7 @@
                             if (firstCodeInput) firstCodeInput.focus();
                         }, 20);
                     } else {
+                        setExtranjeroMode(false);
                         fillSupplier({
                             name: "",
                             contact: "",
@@ -2225,7 +2474,7 @@
                         expandSupplierSection();
                         rutInput.readOnly = false;
                         rutInput.disabled = false;
-                        rutStatus.textContent = "RUT no encontrado. Completa los datos para crear proveedor en linea al guardar.";
+                        rutStatus.textContent = "RUT no encontrado. Creá el proveedor en Ventas → Proveedores, o completá la ficha acá.";
                         rutStatus.style.color = "#92400e";
                     }
                 })
@@ -2242,6 +2491,7 @@
         }
 
         function scheduleAutoLookup() {
+            if (isExtranjeroMode()) return;
             if (lookupTimer) clearTimeout(lookupTimer);
             lookupTimer = setTimeout(function () {
                 var rut = (window.RutUtils && window.RutUtils.clean)
@@ -2255,7 +2505,11 @@
 
         btnEditarProveedor.addEventListener("click", function () {
             expandSupplierSection();
-            rutInput.focus();
+            if (isExtranjeroMode()) {
+                supplierNameInput.focus();
+            } else {
+                rutInput.focus();
+            }
         });
 
         var btnGuardarProveedor = form.querySelector("#btnGuardarProveedorIngreso");
@@ -2265,22 +2519,32 @@
                 if (!guardarProveedorUrl) {
                     return;
                 }
-                var rut = (window.RutUtils && window.RutUtils.clean)
-                    ? window.RutUtils.clean(rutInput.value)
-                    : (rutInput.value || "").trim();
-                if (window.RutUtils && window.RutUtils.format) {
-                    rutInput.value = window.RutUtils.format(rut);
-                }
-                if (!rut || (window.RutUtils && window.RutUtils.isValid && !window.RutUtils.isValid(rut))) {
-                    rutStatus.textContent = "Ingresa un RUT valido antes de guardar el proveedor.";
+                var extranjero = isExtranjeroMode();
+                var rut = "";
+                if (!extranjero) {
+                    rut = (window.RutUtils && window.RutUtils.clean)
+                        ? window.RutUtils.clean(rutInput.value)
+                        : (rutInput.value || "").trim();
+                    if (window.RutUtils && window.RutUtils.format) {
+                        rutInput.value = window.RutUtils.format(rut);
+                    }
+                    if (!rut || (window.RutUtils && window.RutUtils.isValid && !window.RutUtils.isValid(rut))) {
+                        rutStatus.textContent = "Ingresa un RUT valido antes de guardar el proveedor.";
+                        rutStatus.style.color = "#b91c1c";
+                        return;
+                    }
+                } else if (!(supplierNameInput.value || "").trim()) {
+                    rutStatus.textContent = "Indicá el nombre / empresa del proveedor extranjero.";
                     rutStatus.style.color = "#b91c1c";
+                    supplierNameInput.focus();
                     return;
                 }
                 var regEl = form.querySelector("#ingresoSupplierRegion");
                 var comEl = form.querySelector("#ingresoSupplierComuna");
                 var payload = {
-                    rut: rut,
-                    name: (form.querySelector("#supplier_name") && form.querySelector("#supplier_name").value) || "",
+                    extranjero: extranjero ? 1 : 0,
+                    rut: extranjero ? "" : rut,
+                    name: (supplierNameInput && supplierNameInput.value) || "",
                     contact: (form.querySelector("#supplier_contact") && form.querySelector("#supplier_contact").value) || "",
                     giro: (form.querySelector("#supplier_giro") && form.querySelector("#supplier_giro").value) || "",
                     email: (form.querySelector("#supplier_email") && form.querySelector("#supplier_email").value) || "",
@@ -2289,7 +2553,7 @@
                     comuna: (comEl && comEl.value) || "",
                     region: (regEl && regEl.value) || "",
                     ciudad: (form.querySelector("#supplier_ciudad") && form.querySelector("#supplier_ciudad").value) || "",
-                    country: (form.querySelector("#supplier_country") && form.querySelector("#supplier_country").value) || "Chile"
+                    country: (form.querySelector("#supplier_country") && form.querySelector("#supplier_country").value) || (extranjero ? "China" : "Chile")
                 };
                 btnGuardarProveedor.disabled = true;
                 fetch(guardarProveedorUrl, {
@@ -2324,9 +2588,13 @@
                             comuna: p.comuna,
                             region: p.region,
                             ciudad: p.ciudad || "",
-                            country: p.country || "Chile"
+                            country: p.country || (extranjero ? "China" : "Chile")
                         });
-                        lastLookupRut = rut;
+                        if (!extranjero) {
+                            lastLookupRut = rut;
+                        } else {
+                            lastLookupNombre = (p.name || "").toUpperCase();
+                        }
                         updateSupplierSummary();
                         collapseSupplierSection();
                         rutStatus.textContent = "Proveedor guardado. Podés continuar con el ingreso.";
@@ -2349,6 +2617,7 @@
         }
 
         rutInput.addEventListener("input", function () {
+            if (isExtranjeroMode()) return;
             rutInput.readOnly = false;
             rutInput.disabled = false;
             lastLookupRut = "";
@@ -2359,6 +2628,7 @@
             scheduleAutoLookup();
         });
         rutInput.addEventListener("blur", function () {
+            if (isExtranjeroMode()) return;
             scheduleAutoLookup();
         });
 
@@ -2381,15 +2651,28 @@
             if (!numeroDuplicadoUrl || !numeroDocInput || !rutInput) {
                 return Promise.resolve(false);
             }
+            var extranjero = isExtranjeroMode();
             var rut = (rutInput.value || "").trim();
+            var nombre = (supplierNameInput.value || "").trim();
             var numero = (numeroDocInput.value || "").trim();
-            if (!rut || !numero) {
+            if (!numero) {
                 setNumeroDocStatus("", false);
                 return Promise.resolve(false);
             }
-            var url = numeroDuplicadoUrl
-                + "?rut=" + encodeURIComponent(rut)
-                + "&numero=" + encodeURIComponent(numero);
+            if (!extranjero && !rut) {
+                setNumeroDocStatus("", false);
+                return Promise.resolve(false);
+            }
+            if (extranjero && !nombre) {
+                setNumeroDocStatus("", false);
+                return Promise.resolve(false);
+            }
+            var url = numeroDuplicadoUrl + "?numero=" + encodeURIComponent(numero);
+            if (extranjero) {
+                url += "&extranjero=1&nombre=" + encodeURIComponent(nombre);
+            } else {
+                url += "&rut=" + encodeURIComponent(rut);
+            }
             return fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
                 .then(function (response) { return response.json(); })
                 .then(function (data) {
@@ -2525,6 +2808,52 @@
                 searchSupplier(true);
             }
         });
+        if (supplierNameInput) {
+            supplierNameInput.addEventListener("keydown", function (event) {
+                if (event.key === "Enter" && isExtranjeroMode()) {
+                    event.preventDefault();
+                    searchSupplier(true);
+                }
+            });
+            supplierNameInput.addEventListener("input", function () {
+                if (isExtranjeroMode()) {
+                    lastLookupNombre = "";
+                    updateSupplierSummary();
+                    scheduleNumeroDocCheck();
+                }
+            });
+        }
+        if (btnLupaProv) {
+            btnLupaProv.addEventListener("click", function () {
+                openProveedorSearchModal((rutInput && rutInput.value) || "");
+            });
+        }
+        if (provModalClose) {
+            provModalClose.addEventListener("click", closeProveedorSearchModal);
+        }
+        if (provModal) {
+            provModal.addEventListener("click", function (ev) {
+                if (ev.target === provModal) closeProveedorSearchModal();
+            });
+        }
+        if (provSearchBtn) {
+            provSearchBtn.addEventListener("click", doProveedorSearch);
+        }
+        if (provSearchInput) {
+            provSearchInput.addEventListener("keydown", function (ev) {
+                if (ev.key === "Enter") {
+                    ev.preventDefault();
+                    doProveedorSearch();
+                }
+                if (ev.key === "Escape") {
+                    closeProveedorSearchModal();
+                }
+            });
+        }
+        if (isExtranjeroMode()) {
+            setExtranjeroMode(true);
+            updateSupplierSummary();
+        }
         itemsBody.querySelectorAll(".btnRemove").forEach(bindRemove);
         itemsBody.querySelectorAll(".item-row").forEach(bindIngresoProductRow);
         refreshIngresoItemNumbers();

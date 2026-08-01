@@ -372,7 +372,7 @@
                 <a class="history-back-btn" href="{{ url_for('ventas.proveedores') }}">← Volver</a>
             </div>
             <h2>{{ (proveedor.empresa or proveedor.nombre)|upper }}</h2>
-            <p>RUT: {{ proveedor.rut|format_rut if proveedor.rut else 'Sin RUT' }} | Email: {% if proveedor.email %}{{ proveedor.email|upper }}{% else %}Sin email{% endif %} | Telefono: {% if proveedor.telefono %}{{ proveedor.telefono|format_telefono }}{% else %}Sin telefono{% endif %}</p>
+            <p>RUT / ID: {{ proveedor.rut|display_tax_id if proveedor.rut else 'Sin RUT' }} | Email: {% if proveedor.email %}{{ proveedor.email|upper }}{% else %}Sin email{% endif %} | Telefono: {% if proveedor.telefono %}{{ proveedor.telefono|format_telefono }}{% else %}Sin telefono{% endif %}</p>
         </div>
         <div class="history-stats">
             <div class="history-stat">
