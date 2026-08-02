@@ -5070,6 +5070,9 @@
                     tr.querySelectorAll("input").forEach(function (inp) {
                         inp.value = "";
                     });
+                    tr.querySelectorAll("select").forEach(function (sel) {
+                        sel.value = "nacional";
+                    });
                     var tdAct = tr.querySelector(".ajuste-stock-act");
                     if (tdAct) {
                         tdAct.textContent = "—";
@@ -5088,6 +5091,9 @@
             var clone = first.cloneNode(true);
             clone.querySelectorAll("input").forEach(function (inp) {
                 inp.value = "";
+            });
+            clone.querySelectorAll("select").forEach(function (sel) {
+                sel.value = "nacional";
             });
             var tdAct = clone.querySelector(".ajuste-stock-act");
             if (tdAct) {

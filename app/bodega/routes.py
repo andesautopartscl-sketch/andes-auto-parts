@@ -109,6 +109,13 @@ def _normalize_origen_compra(raw: str | None) -> str:
     return ORIGEN_COMPRA_DEFAULT
 
 
+def _origen_compra_label(raw: str | None) -> str:
+    origen = _normalize_origen_compra(raw)
+    if origen == "importacion":
+        return "Importación"
+    return "Nacional"
+
+
 def _proveedor_json_ingreso(proveedor: Proveedor) -> dict:
     emp = (proveedor.empresa or "").strip()
     nom = (proveedor.nombre or "").strip()
@@ -1563,15 +1570,17 @@ def _aplicar_movimiento_variante(
     return candidato
 
 
-def _lineas_ajuste_desde_form(form) -> list[tuple[str, int]]:
-    """Pares (marca, nuevo_stock) desde linea_marca[] / linea_nuevo_stock[]. Última fila gana si hay marca repetida."""
+def _lineas_ajuste_desde_form(form) -> list[tuple[str, str, int]]:
+    """Triplas (marca, origen_compra, nuevo_stock). Última fila gana si marca+origen se repiten."""
     marcas = form.getlist("linea_marca")
+    origenes = form.getlist("linea_origen")
     nuevos = form.getlist("linea_nuevo_stock")
-    n = max(len(marcas), len(nuevos))
-    por_marca: dict[str, int] = {}
-    orden: list[str] = []
+    n = max(len(marcas), len(origenes), len(nuevos))
+    por_key: dict[tuple[str, str], int] = {}
+    orden: list[tuple[str, str]] = []
     for i in range(n):
         m = _normalize_brand(marcas[i] if i < len(marcas) else "")
+        origen = _normalize_origen_compra(origenes[i] if i < len(origenes) else "")
         ns_raw = (nuevos[i] if i < len(nuevos) else "").strip()
         if not m and not ns_raw:
             continue
@@ -1581,22 +1590,29 @@ def _lineas_ajuste_desde_form(form) -> list[tuple[str, int]]:
             continue
         ns = _parse_int(ns_raw, allow_zero=True)
         if ns is None:
-            raise ValueError(f"El nuevo stock no es válido para la marca «{m}».")
-        if m not in por_marca:
-            orden.append(m)
-        por_marca[m] = ns
-    return [(m, por_marca[m]) for m in orden]
+            raise ValueError(
+                f"El nuevo stock no es válido para «{m}» ({_origen_compra_label(origen)})."
+            )
+        key = (m, origen)
+        if key not in por_key:
+            orden.append(key)
+        por_key[key] = ns
+    return [(m, origen, por_key[(m, origen)]) for m, origen in orden]
 
 
 def _form_data_lineas_ajuste(form) -> list[dict]:
     marcas = form.getlist("linea_marca")
+    origenes = form.getlist("linea_origen")
     nuevos = form.getlist("linea_nuevo_stock")
-    n = max(len(marcas), len(nuevos))
+    n = max(len(marcas), len(origenes), len(nuevos))
     out = []
     for i in range(n):
         out.append(
             {
                 "marca": (marcas[i] if i < len(marcas) else "") or "",
+                "origen_compra": _normalize_origen_compra(
+                    origenes[i] if i < len(origenes) else ""
+                ),
                 "nuevo_stock": (nuevos[i] if i < len(nuevos) else "") or "",
             }
         )
@@ -1606,18 +1622,24 @@ def _form_data_lineas_ajuste(form) -> list[dict]:
 def _ajuste_lineas_con_stock_actual(
     lineas: list[dict], variantes_bodega: list[dict]
 ) -> list[dict]:
-    by_m = {
-        _normalize_brand(v.get("marca") or ""): int(v.get("stock") or 0)
+    by_key = {
+        (
+            _normalize_brand(v.get("marca") or ""),
+            _normalize_origen_compra(v.get("origen_compra")),
+        ): int(v.get("stock") or 0)
         for v in (variantes_bodega or [])
     }
     out: list[dict] = []
     for row in lineas or []:
         m = _normalize_brand(row.get("marca") or "")
+        origen = _normalize_origen_compra(row.get("origen_compra"))
+        key = (m, origen)
         out.append(
             {
                 "marca": row.get("marca") or "",
+                "origen_compra": origen,
                 "nuevo_stock": row.get("nuevo_stock") or "",
-                "stock_actual": by_m.get(m) if m in by_m else None,
+                "stock_actual": by_key.get(key) if m and key in by_key else None,
             }
         )
     return out
@@ -4908,11 +4930,17 @@ def ajuste():
             ]
             if vb:
                 form_data["ajuste_lineas"] = [
-                    {"marca": v["marca"], "nuevo_stock": str(v["stock"])}
+                    {
+                        "marca": v["marca"],
+                        "origen_compra": _normalize_origen_compra(v.get("origen_compra")),
+                        "nuevo_stock": str(v["stock"]),
+                    }
                     for v in vb
                 ]
             else:
-                form_data["ajuste_lineas"] = [{"marca": "", "nuevo_stock": ""}]
+                form_data["ajuste_lineas"] = [
+                    {"marca": "", "origen_compra": ORIGEN_COMPRA_DEFAULT, "nuevo_stock": ""}
+                ]
     else:
         producto, variantes_disponibles, stock_contexto_actual = None, [], None
 
@@ -4957,25 +4985,26 @@ def ajuste():
                         message = {"type": "error", "text": "El producto no existe o esta inactivo."}
                     else:
                         base_observacion = form_data["observacion"] or "Ajuste manual de inventario"
-                        cambios: list[tuple[str, int, int, int]] = []
+                        cambios: list[tuple[str, str, int, int, int]] = []
                         try:
-                            for marca, nuevo_s in lineas:
+                            for marca, origen, nuevo_s in lineas:
                                 variante = _obtener_o_crear_variante(
                                     form_data["codigo"],
                                     marca,
                                     form_data["bodega"],
+                                    origen_compra=origen,
                                 )
                                 stock_anterior = int(variante.stock or 0)
                                 delta = int(nuevo_s) - stock_anterior
                                 if delta != 0:
-                                    cambios.append((marca, nuevo_s, stock_anterior, delta))
+                                    cambios.append((marca, origen, nuevo_s, stock_anterior, delta))
                             if not cambios:
                                 message = {
                                     "type": "error",
                                     "text": "No hay cambios para aplicar en ninguna variante.",
                                 }
                             else:
-                                qty_baja = sum(-d for _, _, _, d in cambios if d < 0)
+                                qty_baja = sum(-d for _, _, _, _, d in cambios if d < 0)
                                 if codigo_destino and qty_baja <= 0:
                                     message = {
                                         "type": "error",
@@ -4988,7 +5017,7 @@ def ajuste():
                                     prorrateo = None
                                     if codigo_destino and qty_baja > 0:
                                         marca_costo = max(
-                                            ((m, -d) for m, _, _, d in cambios if d < 0),
+                                            ((m, -d) for m, _, _, _, d in cambios if d < 0),
                                             key=lambda t: t[1],
                                         )[0]
                                         prorrateo = _aplicar_prorrateo_incorporacion(
@@ -5003,11 +5032,12 @@ def ajuste():
                                                 prorrateo.get("mensaje")
                                                 or "No se pudo validar la incorporación."
                                             )
-                                    for marca, nuevo_s, stock_anterior, delta in cambios:
+                                    for marca, origen, nuevo_s, stock_anterior, delta in cambios:
+                                        origen_lbl = _origen_compra_label(origen)
                                         observacion = _observacion_con_incorporacion(
                                             (
-                                                f"{base_observacion}. Variante {marca} / {form_data['bodega']} "
-                                                f"{stock_anterior} -> {nuevo_s}"
+                                                f"{base_observacion}. Variante {marca} / {origen_lbl} / "
+                                                f"{form_data['bodega']} {stock_anterior} -> {nuevo_s}"
                                             ),
                                             codigo_destino if delta < 0 else None,
                                             prorrateo if delta < 0 else None,
@@ -5019,13 +5049,17 @@ def ajuste():
                                             observacion,
                                             marca=marca,
                                             bodega=form_data["bodega"],
+                                            origen_compra=origen,
                                             nuevo_stock_variante=int(nuevo_s),
                                             commit=False,
                                         )
                                     db.session.commit()
                                     producto = _producto_por_codigo(form_data["codigo"])
                                     variantes_disponibles = _stock_variantes_por_codigo(form_data["codigo"])
-                                    resumen = ", ".join(f"{m}→{ns}" for m, ns, _, _ in cambios)
+                                    resumen = ", ".join(
+                                        f"{m}/{_origen_compra_label(o)}→{ns}"
+                                        for m, o, ns, _, _ in cambios
+                                    )
                                     extra = (
                                         f" {prorrateo['mensaje']}"
                                         if prorrateo and prorrateo.get("mensaje")
@@ -5212,7 +5246,9 @@ def ajuste():
         and variantes_disponibles
     )
     if mostrar_ajuste_multi and not (form_data.get("ajuste_lineas") or []):
-        form_data["ajuste_lineas"] = [{"marca": "", "nuevo_stock": ""}]
+        form_data["ajuste_lineas"] = [
+            {"marca": "", "origen_compra": ORIGEN_COMPRA_DEFAULT, "nuevo_stock": ""}
+        ]
     ajuste_lineas_ui = _ajuste_lineas_con_stock_actual(
         form_data.get("ajuste_lineas") or [], variantes_bodega
     )
@@ -5234,6 +5270,7 @@ def ajuste():
             stock_suma_variantes_total=stock_suma_variantes_total,
             ajuste_observacion_opciones=AJUSTE_OBSERVACION_OPCIONES,
             motivo_incorporacion=MOTIVO_INCORPORACION,
+            origen_compra_opciones=ORIGEN_COMPRA_OPCIONES,
         ),
     )
 

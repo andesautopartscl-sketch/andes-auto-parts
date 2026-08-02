@@ -6,40 +6,40 @@
 {{ super() }}
 <style>
 .ajuste-view-topbar {
-    margin-bottom: 8px;
-    align-items: flex-start;
+    margin-bottom: 4px;
+    align-items: center;
 }
 .ajuste-view-topbar .page-title {
-    font-size: 1.35rem;
-    margin-bottom: 2px;
-    line-height: 1.2;
+    font-size: 1.15rem;
+    margin-bottom: 0;
+    line-height: 1.15;
 }
 .ajuste-view-topbar .page-subtitle {
-    font-size: 12px;
-    line-height: 1.35;
-    margin: 0;
+    display: none;
 }
 .ajuste-view-topbar .topbar-actions .link-btn {
-    font-size: 12px;
-    padding: 5px 10px;
-    border-radius: 8px;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 6px;
 }
 .ajuste-form-card.form-card {
     position: relative;
-    padding: 14px 16px 40px;
+    padding: 8px 10px 32px;
+    margin-bottom: 8px;
 }
 .ajuste-form-card > .section-title {
-    font-size: 15px;
-    margin: 0 0 10px;
+    font-size: 12px;
+    margin: 0 0 6px;
+    letter-spacing: 0.02em;
 }
 .ajuste-form-card .form-grid {
-    gap: 8px 12px;
+    gap: 5px 10px;
 }
 .ajuste-form-card .field label {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
-    margin-bottom: 3px;
-    color: #475569;
+    margin-bottom: 2px;
+    color: #64748b;
 }
 .ajuste-form-card .form-grid .field input#marca {
     width: 100%;
@@ -47,37 +47,38 @@
 .ajuste-form-card .form-grid .field input:not([type="hidden"]),
 .ajuste-form-card .form-grid .field select,
 .ajuste-form-card .form-grid .field textarea {
-    min-height: 30px;
-    padding: 5px 8px;
+    min-height: 26px;
+    padding: 2px 7px;
     font-size: 12px;
-    border-radius: 8px;
+    border-radius: 6px;
     box-sizing: border-box;
 }
 .ajuste-form-card .form-grid .field textarea#observacion {
-    min-height: 58px;
-    line-height: 1.35;
+    min-height: 44px;
+    line-height: 1.3;
     resize: vertical;
 }
 .ajuste-form-card .actions {
-    gap: 8px;
-    margin-top: 10px;
-    padding-top: 8px;
+    gap: 6px;
+    margin-top: 6px;
+    padding-top: 6px;
     flex-wrap: wrap;
 }
 .ajuste-form-card .actions .btn {
-    font-size: 12px;
-    padding: 6px 12px;
-    min-height: 32px;
-    border-radius: 8px;
+    font-size: 11px;
+    padding: 4px 10px;
+    min-height: 28px;
+    border-radius: 6px;
 }
 .ajuste-form-card .actions .link-btn {
-    font-size: 12px;
-    padding: 5px 10px;
+    font-size: 11px;
+    padding: 3px 8px;
 }
 .ajuste-form-card .field.field-full .message.success {
-    font-size: 12px;
-    padding: 8px 10px;
-    line-height: 1.4;
+    font-size: 11px;
+    padding: 4px 8px;
+    line-height: 1.3;
+    margin: 0;
 }
 /* .field { display:flex } en bodega anula el atributo HTML hidden */
 #ajusteIncorporacionWrap[hidden] {
@@ -197,12 +198,12 @@
 }
 /* Franja "Producto encontrado" más compacta solo en esta pantalla */
 .ajuste-producto-panel.panel {
-    margin-top: 10px;
-    padding: 12px 14px;
+    margin-top: 6px;
+    padding: 8px 10px;
 }
 .ajuste-producto-panel .section-title {
-    margin-bottom: 6px;
-    font-size: 15px;
+    margin-bottom: 4px;
+    font-size: 12px;
 }
 .ajuste-producto-panel .product-summary {
     gap: 6px;
@@ -284,20 +285,25 @@
 }
 .ajuste-multi-wrap {
     grid-column: 1 / -1;
-    margin-top: 2px;
-    padding: 8px 10px;
+    margin-top: 0;
+    padding: 4px 6px 5px;
     border: 1px solid #e2e8f0;
-    border-radius: 8px;
+    border-radius: 6px;
     background: #f8fafc;
 }
 .ajuste-multi-wrap .ajuste-multi-title {
-    margin: 0 0 6px;
-    font-size: 12px;
+    margin: 0 0 3px;
+    font-size: 10px;
     font-weight: 700;
-    color: #1e3a5f;
+    color: #64748b;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
 }
 .ajuste-multi-table-wrap {
     overflow-x: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 5px;
+    background: #fff;
 }
 .ajuste-multi-table {
     width: 100%;
@@ -306,102 +312,180 @@
 }
 .ajuste-multi-table th,
 .ajuste-multi-table td {
-    padding: 4px 6px;
+    padding: 2px 5px;
     text-align: left;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #f1f5f9;
     vertical-align: middle;
 }
+.ajuste-multi-table tbody tr:last-child td {
+    border-bottom: none;
+}
 .ajuste-multi-table th {
-    font-size: 11px;
+    font-size: 9px;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: #64748b;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
     font-weight: 700;
+    background: #f8fafc;
+    padding-top: 3px;
+    padding-bottom: 3px;
 }
-.ajuste-multi-table input[type="text"],
-.ajuste-multi-table input[type="number"] {
-    width: 100%;
-    min-height: 28px;
-    padding: 3px 6px;
-    font-size: 11px;
-    box-sizing: border-box;
+.ajuste-multi-table .ajuste-variante-cell {
+    min-width: 180px;
 }
-.ajuste-multi-table .ajuste-stock-act {
-    font-variant-numeric: tabular-nums;
-    color: #0f172a;
-    font-weight: 600;
-}
-.ajuste-multi-actions {
-    margin-top: 6px;
+.ajuste-multi-variante {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
+    min-width: 0;
+}
+.ajuste-multi-variante .ajuste-marca-linea {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.ajuste-multi-variante .ajuste-origen-linea {
+    flex: 0 0 96px;
+    width: 96px;
+}
+.ajuste-multi-table input[type="text"],
+.ajuste-multi-table input[type="number"],
+.ajuste-multi-table select {
+    width: 100%;
+    min-height: 22px;
+    padding: 1px 5px;
+    font-size: 11px;
+    box-sizing: border-box;
+    border: 1px solid #dbe3ee;
+    border-radius: 4px;
+    background: #fff;
+    color: #0f172a;
+}
+.ajuste-multi-table input[type="number"] {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.ajuste-multi-table select.ajuste-origen-linea {
+    font-size: 10px;
+    color: #334155;
+    background: #f8fafc;
+}
+.ajuste-multi-table .ajuste-stock-act {
+    width: 56px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: #64748b;
+    font-weight: 600;
+    font-size: 11px;
+}
+.ajuste-multi-table th.ajuste-col-num,
+.ajuste-multi-table td.ajuste-col-num {
+    width: 70px;
+    text-align: right;
+}
+.ajuste-multi-table th.ajuste-col-act,
+.ajuste-multi-table td.ajuste-col-act {
+    width: 28px;
+    text-align: center;
+    padding-left: 1px;
+    padding-right: 1px;
+}
+.ajuste-multi-table .btn-ajuste-remove-row {
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 1px 3px;
+    border-radius: 4px;
+}
+.ajuste-multi-table .btn-ajuste-remove-row:hover {
+    color: #b91c1c;
+    background: #fef2f2;
+}
+.ajuste-multi-actions {
+    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     flex-wrap: wrap;
 }
 .ajuste-multi-actions .btn-ghost {
-    font-size: 11px;
-    padding: 5px 8px;
-    border: 1px dashed #94a3b8;
-    background: #fff;
-    border-radius: 8px;
+    font-size: 10px;
+    padding: 2px 6px;
+    border: 1px dashed #cbd5e1;
+    background: transparent;
+    border-radius: 5px;
     cursor: pointer;
-    color: #334155;
+    color: #64748b;
 }
 .ajuste-multi-actions .btn-ghost:hover {
-    border-color: #64748b;
-    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #334155;
+    background: #fff;
 }
-.ajuste-multi-hint {
-    margin: 0 0 6px;
+.ajuste-origen-badge {
+    display: inline-block;
     font-size: 10px;
-    color: #64748b;
-    line-height: 1.35;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    background: #f8fafc;
+    white-space: nowrap;
+}
+.ajuste-origen-badge.is-imp {
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+    background: #eff6ff;
 }
 .ajuste-variantes-panel.panel {
-    margin-top: 12px !important;
-    padding: 12px 14px;
+    margin-top: 6px !important;
+    padding: 8px 10px;
 }
 .ajuste-variantes-panel .section-title {
-    font-size: 15px;
-    margin-bottom: 6px;
+    font-size: 12px;
+    margin-bottom: 4px;
 }
 .ajuste-variantes-panel .page-subtitle {
     font-size: 12px;
     line-height: 1.35;
 }
 .ajuste-variantes-panel .table-wrap table {
-    font-size: 12px;
+    font-size: 11px;
 }
 .ajuste-variantes-panel .table-wrap th,
 .ajuste-variantes-panel .table-wrap td {
-    padding: 6px 8px;
+    padding: 3px 6px;
 }
 .ajuste-variantes-panel .btn.sm {
-    font-size: 11px;
-    padding: 4px 8px;
-    min-height: 28px;
+    font-size: 10px;
+    padding: 2px 6px;
+    min-height: 22px;
 }
 .ajuste-single-hidden {
     display: none !important;
 }
 .ajuste-help-anchor {
     position: absolute;
-    bottom: 10px;
-    left: 12px;
+    bottom: 6px;
+    left: 8px;
     z-index: 6;
 }
 .ajuste-help-btn {
-    width: 32px;
-    height: 32px;
+    width: 26px;
+    height: 26px;
     border-radius: 999px;
     border: 1px solid #93c5fd;
     background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
     color: #1e3a8a;
     font-weight: 800;
-    font-size: 17px;
+    font-size: 14px;
     line-height: 1;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.12);
+    box-shadow: 0 2px 8px rgba(30, 64, 175, 0.1);
     padding: 0;
     display: inline-flex;
     align-items: center;
@@ -409,8 +493,8 @@
     transition: transform .15s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
 }
 .ajuste-help-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 14px;
+    height: 14px;
     display: block;
 }
 .ajuste-help-btn:hover {
@@ -425,7 +509,7 @@
 }
 .ajuste-help-panel {
     position: absolute;
-    bottom: 46px;
+    bottom: 34px;
     left: 0;
     width: min(420px, calc(100vw - 28px));
     max-height: min(68vh, 400px);
@@ -531,17 +615,15 @@
             {% if producto and stock_contexto_actual is not none %}
             <div class="field field-full" style="grid-column:1/-1;">
                 <div class="message success" style="margin:0;">
-                    <strong>Stock según esta consulta:</strong>
                     {% if mostrar_ajuste_multi %}
-                    suma en <strong>{{ form_data.bodega }}</strong> (todas las marcas de esa bodega): <strong>{{ stock_contexto_actual }}</strong> unidades. Ajustá una o más variantes en la tabla siguiente.
+                    Stock en <strong>{{ form_data.bodega }}</strong>: <strong>{{ stock_contexto_actual }}</strong>
                     {% elif variantes and not form_data.marca %}
-                    suma en <strong>{{ form_data.bodega }}</strong> (todas las marcas de esa bodega): <strong>{{ stock_contexto_actual }}</strong> unidades.
+                    Stock en <strong>{{ form_data.bodega }}</strong>: <strong>{{ stock_contexto_actual }}</strong>
                     {% if stock_suma_variantes_total is not none and stock_suma_variantes_total != stock_contexto_actual %}
-                    Total en todas las bodegas: <strong>{{ stock_suma_variantes_total }}</strong>.
+                    · Todas: <strong>{{ stock_suma_variantes_total }}</strong>
                     {% endif %}
-                    Para ajustar una marca concreta, usá <strong>«Usar esta fila»</strong> en la tabla o escribí la marca arriba.
                     {% else %}
-                    cantidad actual: <strong>{{ stock_contexto_actual }}</strong> unidades.
+                    Stock actual: <strong>{{ stock_contexto_actual }}</strong>
                     {% endif %}
                 </div>
             </div>
@@ -549,30 +631,36 @@
             {% if mostrar_ajuste_multi %}
             <input type="hidden" name="ajuste_multivariante" value="1">
             <div class="field field-full ajuste-multi-wrap">
-                <p class="ajuste-multi-title">Ajuste por variante (misma bodega)</p>
-                <p class="ajuste-multi-hint">Editá el <strong>nuevo stock</strong> por cada marca; podés agregar filas para otras variantes. Se aplican todos los cambios en un solo guardado.</p>
+                <p class="ajuste-multi-title">Variantes en {{ form_data.bodega }}</p>
                 <div class="ajuste-multi-table-wrap">
                     <table class="ajuste-multi-table" id="ajusteVariantesTable">
                         <thead>
                             <tr>
-                                <th style="min-width:140px;">Marca / variante</th>
-                                <th style="width:100px;">Stock actual</th>
-                                <th style="min-width:90px;">Nuevo stock</th>
-                                <th style="width:44px;"></th>
+                                <th>Marca · origen</th>
+                                <th class="ajuste-col-num">Actual</th>
+                                <th class="ajuste-col-num">Nuevo</th>
+                                <th class="ajuste-col-act"></th>
                             </tr>
                         </thead>
                         <tbody id="ajusteVariantesBody">
                             {% for line in ajuste_lineas_ui %}
                             <tr class="ajuste-variante-row">
-                                <td>
-                                    <input type="text" name="linea_marca" value="{{ line.marca }}" list="ajusteMarcaDl" class="ajuste-marca-linea" placeholder="Marca" autocomplete="off" aria-label="Marca variante">
+                                <td class="ajuste-variante-cell">
+                                    <div class="ajuste-multi-variante">
+                                        <input type="text" name="linea_marca" value="{{ line.marca }}" list="ajusteMarcaDl" class="ajuste-marca-linea" placeholder="Marca" autocomplete="off" aria-label="Marca variante">
+                                        {% set lo = line.origen_compra or 'nacional' %}
+                                        <select name="linea_origen" class="ajuste-origen-linea" aria-label="Origen de compra" title="Origen de compra">
+                                            <option value="nacional" {% if lo == 'nacional' %}selected{% endif %}>Nacional</option>
+                                            <option value="importacion" {% if lo == 'importacion' %}selected{% endif %}>Importación</option>
+                                        </select>
+                                    </div>
                                 </td>
-                                <td class="ajuste-stock-act">{% if line.stock_actual is not none %}{{ line.stock_actual | int }}{% else %}—{% endif %}</td>
-                                <td>
+                                <td class="ajuste-stock-act ajuste-col-num">{% if line.stock_actual is not none %}{{ line.stock_actual | int }}{% else %}—{% endif %}</td>
+                                <td class="ajuste-col-num">
                                     <input type="number" name="linea_nuevo_stock" min="0" step="1" value="{{ line.nuevo_stock }}" placeholder="0" aria-label="Nuevo stock">
                                 </td>
-                                <td>
-                                    <button type="button" class="btn-ajuste-remove-row" title="Quitar fila" aria-label="Quitar fila" style="border:none;background:transparent;color:#94a3b8;cursor:pointer;font-size:16px;line-height:1;padding:4px;">×</button>
+                                <td class="ajuste-col-act">
+                                    <button type="button" class="btn-ajuste-remove-row" title="Quitar fila" aria-label="Quitar fila">×</button>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -580,7 +668,7 @@
                     </table>
                 </div>
                 <div class="ajuste-multi-actions">
-                    <button type="button" class="btn-ghost" id="ajusteAddVarianteRow">+ Agregar variante</button>
+                    <button type="button" class="btn-ghost" id="ajusteAddVarianteRow">+ Variante</button>
                 </div>
             </div>
             {% endif %}
@@ -733,13 +821,13 @@
 
 {% if variantes %}
 <div class="panel ajuste-variantes-panel">
-    <h2 class="section-title">Variantes Disponibles</h2>
-    <p class="page-subtitle" style="margin-top:0;">Cada fila es una combinación marca + bodega. <strong>Usar esta fila</strong> carga marca y bodega en el formulario para consultar o ajustar solo esa variante.</p>
+    <h2 class="section-title">Variantes disponibles</h2>
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
                     <th>Marca</th>
+                    <th>Origen</th>
                     <th>Bodega</th>
                     <th>Proveedor</th>
                     <th>Stock</th>
@@ -748,13 +836,19 @@
             </thead>
             <tbody>
                 {% for variante in variantes %}
+                {% set vo = variante.origen_compra or 'nacional' %}
                 <tr>
                     <td><strong>{{ variante.marca }}</strong></td>
+                    <td>
+                        <span class="ajuste-origen-badge{% if vo == 'importacion' %} is-imp{% endif %}">
+                            {% if vo == 'importacion' %}Importación{% else %}Nacional{% endif %}
+                        </span>
+                    </td>
                     <td>{{ variante.bodega }}</td>
                     <td>{{ variante.proveedor or '—' }}</td>
                     <td>{{ variante.stock | int }}</td>
                     <td class="no-print">
-                        <a class="btn sm outline" href="{{ url_for('bodega.ajuste', codigo=form_data.codigo, marca=variante.marca, bodega=variante.bodega) }}">Usar esta fila</a>
+                        <a class="btn sm outline" href="{{ url_for('bodega.ajuste', codigo=form_data.codigo, marca=variante.marca, bodega=variante.bodega, origen_compra=vo) }}">Usar</a>
                     </td>
                 </tr>
                 {% endfor %}
