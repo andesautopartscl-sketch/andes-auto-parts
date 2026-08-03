@@ -194,6 +194,48 @@ DEVOLUCION_INGRESO_OPCIONES = [
     "Cambio de producto",
     "Otro",
 ]
+_DEVOLUCION_QTY_RE = re.compile(r"\bx(\d+)\s*$", re.IGNORECASE)
+
+
+def _cantidad_movimiento_devolucion(
+    mov: ProveedorSaldoFavorMovimiento, line_qty: int | None = None
+) -> int:
+    """Unidades asociadas a un movimiento de devolución (columna, razon xN o línea completa)."""
+    raw = getattr(mov, "cantidad", None)
+    try:
+        if raw is not None and int(raw) > 0:
+            return int(raw)
+    except (TypeError, ValueError):
+        pass
+    m = _DEVOLUCION_QTY_RE.search((mov.razon or "").strip())
+    if m:
+        return max(int(m.group(1)), 0)
+    if line_qty is not None and int(line_qty) > 0:
+        return int(line_qty)
+    return 0
+
+
+def _qty_devuelta_por_item_ingreso(
+    doc_id: int, items_by_id: dict[int, IngresoDocumentoItem] | None = None
+) -> dict[int, int]:
+    """Suma unidades ya acreditadas por devolución, por ingreso_item_id."""
+    movs = (
+        ProveedorSaldoFavorMovimiento.query.filter(
+            ProveedorSaldoFavorMovimiento.ingreso_documento_id == int(doc_id),
+            ProveedorSaldoFavorMovimiento.ingreso_item_id.isnot(None),
+            ProveedorSaldoFavorMovimiento.monto > 0,
+            ProveedorSaldoFavorMovimiento.tipo == "devolucion_ingreso",
+        )
+        .all()
+    )
+    out: dict[int, int] = {}
+    for mov in movs:
+        iid = int(mov.ingreso_item_id)
+        line_qty = None
+        if items_by_id and iid in items_by_id:
+            line_qty = int(items_by_id[iid].cantidad or 0)
+        out[iid] = out.get(iid, 0) + _cantidad_movimiento_devolucion(mov, line_qty)
+    return out
 
 
 def _es_motivo_incorporacion(motivo: str | None) -> bool:
@@ -3795,29 +3837,31 @@ def ingreso_ver(doc_id: int):
     embed_modal = (request.args.get("embed") or "").strip() == "1"
     rut_fmt = format_rut(doc.proveedor_rut or "") if (doc.proveedor_rut or "").strip() else ""
 
-    # Ítems ya acreditados como devolución/crédito (no se modifica el ingreso fiscal).
-    credited_item_ids: set[int] = set()
+    # Unidades ya acreditadas como devolución/crédito (no se modifica el ingreso fiscal).
+    items_by_id = {int(it.id): it for it in items}
+    credited_qty_by_item: dict[int, int] = {}
     try:
-        credited_rows = (
-            db.session.query(ProveedorSaldoFavorMovimiento.ingreso_item_id)
-            .filter(
-                ProveedorSaldoFavorMovimiento.ingreso_documento_id == doc.id,
-                ProveedorSaldoFavorMovimiento.ingreso_item_id.isnot(None),
-                ProveedorSaldoFavorMovimiento.monto > 0,
-            )
-            .all()
-        )
-        credited_item_ids = {int(r[0]) for r in credited_rows if r[0]}
+        credited_qty_by_item = _qty_devuelta_por_item_ingreso(doc.id, items_by_id)
     except Exception:
-        credited_item_ids = set()
+        credited_qty_by_item = {}
+    credited_item_ids = {
+        iid
+        for iid, it in items_by_id.items()
+        if credited_qty_by_item.get(iid, 0) >= max(int(it.cantidad or 0), 0) > 0
+    }
 
     credito_sugerido: dict[int, float] = {}
     try:
         from app.ventas.routes import _credito_item_ingreso_con_iva, _round_money_cl
 
         for it in items:
+            line_qty = max(int(it.cantidad or 0), 0)
+            remaining = max(line_qty - credited_qty_by_item.get(int(it.id), 0), 0)
+            if remaining <= 0:
+                credito_sugerido[int(it.id)] = 0.0
+                continue
             credito_sugerido[int(it.id)] = _round_money_cl(
-                _credito_item_ingreso_con_iva(it, doc, items)
+                _credito_item_ingreso_con_iva(it, doc, items, cantidad=remaining)
             )
     except Exception:
         credito_sugerido = {}
@@ -3834,6 +3878,7 @@ def ingreso_ver(doc_id: int):
             puede_ver_finanzas=user_can_view_finanzas(session.get("user"), session.get("rol")),
             embed_modal=embed_modal,
             credited_item_ids=credited_item_ids,
+            credited_qty_by_item=credited_qty_by_item,
             credito_sugerido=credito_sugerido,
             devolucion_opciones=DEVOLUCION_INGRESO_OPCIONES,
             _partial=_ingreso_wants_embed_partial(),
@@ -3904,20 +3949,38 @@ def ingreso_devolucion_credito(doc_id: int):
         flash("Los ítems seleccionados no pertenecen a este ingreso.", "error")
         return _ingreso_ver_redirect(doc_id)
 
-    ya = {
-        int(r[0])
-        for r in db.session.query(ProveedorSaldoFavorMovimiento.ingreso_item_id)
-        .filter(
-            ProveedorSaldoFavorMovimiento.ingreso_documento_id == doc.id,
-            ProveedorSaldoFavorMovimiento.ingreso_item_id.in_([it.id for it in selected]),
-            ProveedorSaldoFavorMovimiento.monto > 0,
+    try:
+        qty_ya = _qty_devuelta_por_item_ingreso(doc.id, by_id)
+    except Exception:
+        qty_ya = {}
+
+    lineas_dev: list[tuple[IngresoDocumentoItem, int]] = []
+    for it in selected:
+        line_qty = max(int(it.cantidad or 0), 0)
+        remaining = max(line_qty - qty_ya.get(int(it.id), 0), 0)
+        if remaining <= 0:
+            continue
+        qty = _parse_int(request.form.get(f"cantidad_{it.id}"), allow_zero=False)
+        if qty is None:
+            flash(
+                f"Indicá la cantidad a devolver para {it.codigo_producto or it.id}.",
+                "error",
+            )
+            return _ingreso_ver_redirect(doc_id)
+        if qty < 1 or qty > remaining:
+            flash(
+                f"Cantidad inválida para {it.codigo_producto or it.id}: "
+                f"máximo disponible {remaining}.",
+                "error",
+            )
+            return _ingreso_ver_redirect(doc_id)
+        lineas_dev.append((it, qty))
+
+    if not lineas_dev:
+        flash(
+            "Esos ítems ya tienen el crédito completo registrado para este ingreso.",
+            "error",
         )
-        .all()
-        if r[0]
-    }
-    selected = [it for it in selected if int(it.id) not in ya]
-    if not selected:
-        flash("Esos ítems ya tienen crédito registrado para este ingreso.", "error")
         return _ingreso_ver_redirect(doc_id)
 
     # Resolver proveedor
@@ -3942,16 +4005,15 @@ def ingreso_devolucion_credito(doc_id: int):
     try:
         total_credito = 0.0
         codigos_stock = []
-        for it in selected:
-            monto = _round_money_cl(_credito_item_ingreso_con_iva(it, doc, items))
+        for it, qty in lineas_dev:
+            monto = _round_money_cl(
+                _credito_item_ingreso_con_iva(it, doc, items, cantidad=qty)
+            )
             if monto <= 0:
                 raise ValueError(
                     f"No se pudo calcular crédito para {it.codigo_producto or it.id} "
                     "(sin valor neto)."
                 )
-            qty = max(int(it.cantidad or 0), 0)
-            if qty <= 0:
-                raise ValueError(f"La línea {it.codigo_producto} no tiene cantidad.")
 
             if descontar_stock:
                 codigo = (it.codigo_producto or "").strip().upper()
@@ -4010,6 +4072,7 @@ def ingreso_devolucion_credito(doc_id: int):
                     )[:2000],
                     ingreso_documento_id=doc.id,
                     ingreso_item_id=it.id,
+                    cantidad=int(qty),
                     usuario=session.get("user") or "sistema",
                 )
             )
@@ -4018,7 +4081,7 @@ def ingreso_devolucion_credito(doc_id: int):
         db.session.commit()
         msg = (
             f"Crédito con proveedor registrado: ${total_credito:,.0f}".replace(",", ".")
-            + f" ({len(selected)} ítem(s))."
+            + f" ({len(lineas_dev)} ítem(s))."
         )
         if descontar_stock and codigos_stock:
             msg += " Stock descontado."

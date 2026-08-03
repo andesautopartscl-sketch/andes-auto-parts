@@ -902,6 +902,19 @@ def create_app():
                     "ventas_proveedores_saldo_movimientos (ingreso_item_id)"
                 )
             )
+            vp_saldo_cols = {
+                col[1]
+                for col in conn.execute(
+                    text("PRAGMA table_info(ventas_proveedores_saldo_movimientos)")
+                ).fetchall()
+            }
+            if vp_saldo_cols and "cantidad" not in vp_saldo_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE ventas_proveedores_saldo_movimientos "
+                        "ADD COLUMN cantidad INTEGER"
+                    )
+                )
 
             ventas_items_cols = conn.execute(text("PRAGMA table_info(ventas_documentos_items)")).fetchall()
             ventas_items_col_names = {col[1] for col in ventas_items_cols}

@@ -232,7 +232,7 @@
 <div class="modal-bg" id="modalNuevoVin">
   <div class="modal-box">
     <h3>Nuevo vehículo</h3>
-    <form method="post" action="{{ url_for('vehiculos_vin.nuevo') }}">
+    <form method="post" action="{{ url_for('vehiculos_vin.nuevo') }}" id="formNuevoVin">
       <div class="vin-form-grid">
         <div class="form-group" style="grid-column:1 / -1;">
           <label>VIN / Chasis</label>
@@ -276,12 +276,25 @@
           <textarea name="notas" rows="2" style="resize:vertical;"></textarea>
         </div>
       </div>
+      <p id="nuevoVinError" style="display:none;font-size:11.5px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:6px 8px;margin:10px 0 0;"></p>
       <p style="font-size:11px;color:#64748b;margin:10px 0 0;"><code>1.0T</code> = 1.0 turbo · se separa solo del modelo.</p>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
         <button type="button" class="btn outline sm" data-close-modal="modalNuevoVin">Cancelar</button>
-        <button type="submit" class="btn primary sm">Guardar</button>
+        <button type="submit" class="btn primary sm" id="btnGuardarNuevoVin">Guardar</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalOkVin">
+  <div class="modal-box modal-box--sm" style="text-align:center;">
+    <div style="width:44px;height:44px;border-radius:999px;background:#ecfdf5;border:1px solid #a7f3d0;color:#047857;display:inline-flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;margin:4px 0 10px;">✓</div>
+    <h3 style="margin-bottom:6px;">Guardado</h3>
+    <p class="modal-sub" id="modalOkVinMsg" style="margin-bottom:4px;">Vehículo registrado correctamente.</p>
+    <p id="modalOkVinDetalle" style="margin:0 0 16px;font-size:12px;color:#0f172a;font-weight:600;"></p>
+    <div style="display:flex;justify-content:center;">
+      <button type="button" class="btn primary sm" id="btnOkVinCerrar">Aceptar</button>
+    </div>
   </div>
 </div>
 
@@ -445,10 +458,70 @@
   var btnImport = document.getElementById('btnImportarVin');
   var btnPlantilla = document.getElementById('btnPlantillaVin');
   var btnDesglosar = document.getElementById('btnDesglosarVin');
-  if (btnNuevo) btnNuevo.addEventListener('click', function () { openModal('modalNuevoVin'); });
+  if (btnNuevo) btnNuevo.addEventListener('click', function () {
+    var err = document.getElementById('nuevoVinError');
+    if (err) { err.style.display = 'none'; err.textContent = ''; }
+    openModal('modalNuevoVin');
+  });
   if (btnImport) btnImport.addEventListener('click', function () { openModal('modalImportarVin'); });
   if (btnPlantilla) btnPlantilla.addEventListener('click', function () { openModal('modalPlantillaVin'); });
   if (btnDesglosar) btnDesglosar.addEventListener('click', function () { openModal('modalDesglosarVin'); });
+
+  var formNuevo = document.getElementById('formNuevoVin');
+  if (formNuevo) {
+    formNuevo.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var errEl = document.getElementById('nuevoVinError');
+      var btn = document.getElementById('btnGuardarNuevoVin');
+      if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+      if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
+      fetch(formNuevo.action, {
+        method: 'POST',
+        body: new FormData(formNuevo),
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+      })
+        .then(function (r) {
+          return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; })
+            .catch(function () { return { ok: false, status: r.status, j: null }; });
+        })
+        .then(function (res) {
+          if (!res.j || !res.j.ok) {
+            var msg = (res.j && res.j.error) || 'No se pudo guardar el vehículo.';
+            if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+            return;
+          }
+          formNuevo.reset();
+          closeModal('modalNuevoVin');
+          var okMsg = document.getElementById('modalOkVinMsg');
+          var okDet = document.getElementById('modalOkVinDetalle');
+          if (okMsg) okMsg.textContent = res.j.message || 'Vehículo registrado correctamente.';
+          if (okDet) {
+            var parts = [];
+            if (res.j.etiqueta) parts.push(res.j.etiqueta);
+            if (res.j.vin) parts.push(res.j.vin);
+            okDet.textContent = parts.join(' · ');
+          }
+          openModal('modalOkVin');
+        })
+        .catch(function () {
+          if (errEl) {
+            errEl.textContent = 'Error de red al guardar.';
+            errEl.style.display = 'block';
+          }
+        })
+        .finally(function () {
+          if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; }
+        });
+    });
+  }
+
+  var btnOkVin = document.getElementById('btnOkVinCerrar');
+  function cerrarOkYRecargar() {
+    closeModal('modalOkVin');
+    window.location.reload();
+  }
+  if (btnOkVin) btnOkVin.addEventListener('click', cerrarOkYRecargar);
 
   function setVal(id, val) {
     var el = document.getElementById(id);
@@ -612,10 +685,22 @@
     btn.addEventListener('click', function () { closeModal(btn.getAttribute('data-close-modal')); });
   });
   document.querySelectorAll('.modal-bg').forEach(function (bg) {
-    bg.addEventListener('click', function (e) { if (e.target === bg) bg.classList.remove('open'); });
+    bg.addEventListener('click', function (e) {
+      if (e.target !== bg) return;
+      if (bg.id === 'modalOkVin') {
+        cerrarOkYRecargar();
+        return;
+      }
+      bg.classList.remove('open');
+    });
   });
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
+    var okOpen = document.getElementById('modalOkVin');
+    if (okOpen && okOpen.classList.contains('open')) {
+      cerrarOkYRecargar();
+      return;
+    }
     document.querySelectorAll('.modal-bg.open').forEach(function (bg) { bg.classList.remove('open'); });
   });
 })();

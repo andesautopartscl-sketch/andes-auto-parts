@@ -431,19 +431,32 @@ def index():
     )
 
 
+def _wants_json() -> bool:
+    return (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or "application/json" in (request.headers.get("Accept") or "")
+    )
+
+
 @vehiculos_vin_bp.route("/nuevo", methods=["POST"])
 @login_required
 def nuevo():
+    wants_json = _wants_json()
     data = _form_payload()
     err = _validate_identity(data["vin"], data["chasis"])
     if err:
+        if wants_json:
+            return jsonify({"ok": False, "error": err}), 400
         flash(err, "error")
         return redirect(url_for("vehiculos_vin.index"))
 
     dup = _find_duplicate(data["vin"], data["chasis"])
     if dup:
-        flash(f"Ya existe un vehículo con ese VIN/chasis (#{dup.id}).", "error")
-        return redirect(url_for("vehiculos_vin.detalle", vid=dup.id))
+        msg = f"Ya existe un vehículo con ese VIN/chasis (#{dup.id})."
+        if wants_json:
+            return jsonify({"ok": False, "error": msg, "id": dup.id}), 409
+        flash(msg, "error")
+        return redirect(url_for("vehiculos_vin.index"))
 
     user = _current_user()
     v = VehiculoVin(
@@ -458,15 +471,32 @@ def nuevo():
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
-        flash("No se pudo guardar el vehículo (VIN duplicado).", "error")
+        msg = "No se pudo guardar el vehículo (VIN duplicado)."
+        if wants_json:
+            return jsonify({"ok": False, "error": msg}), 409
+        flash(msg, "error")
         return redirect(url_for("vehiculos_vin.index"))
     except Exception:
         db.session.rollback()
-        flash("No se pudo guardar el vehículo.", "error")
+        msg = "No se pudo guardar el vehículo."
+        if wants_json:
+            return jsonify({"ok": False, "error": msg}), 500
+        flash(msg, "error")
         return redirect(url_for("vehiculos_vin.index"))
 
-    flash("Vehículo registrado correctamente.", "success")
-    return redirect(url_for("vehiculos_vin.detalle", vid=v.id))
+    msg = "Vehículo registrado correctamente."
+    if wants_json:
+        return jsonify(
+            {
+                "ok": True,
+                "message": msg,
+                "id": v.id,
+                "vin": v.vin or v.chasis or "",
+                "etiqueta": v.etiqueta or "",
+            }
+        )
+    flash(msg, "success")
+    return redirect(url_for("vehiculos_vin.index"))
 
 
 @vehiculos_vin_bp.route("/<int:vid>")

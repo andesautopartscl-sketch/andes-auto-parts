@@ -381,6 +381,7 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     text-align: right;
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
+    vertical-align: middle;
 }
 .ing-ver-table td.is-code {
     font-weight: 700;
@@ -388,6 +389,55 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     font-variant-numeric: tabular-nums;
 }
 .ing-ver-table td.is-soft { color: #475569; }
+.ing-ver-table td.ing-dev-qty-cell {
+    vertical-align: middle;
+    text-align: center;
+    line-height: 1;
+}
+.ing-dev-qty {
+    display: inline-block;
+    width: 52px;
+    height: 22px;
+    min-height: 22px;
+    margin: 0;
+    padding: 0 4px;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    font-size: 10.5px;
+    line-height: 20px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+    box-sizing: border-box;
+    vertical-align: middle;
+    background: #fff;
+    color: #1e293b;
+}
+.ing-dev-qty::-webkit-outer-spin-button,
+.ing-dev-qty::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.ing-dev-qty[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+.ing-dev-qty:disabled {
+    background: #f1f5f9;
+    color: #94a3b8;
+    border-color: #e2e8f0;
+}
+.ing-dev-qty:focus {
+    outline: none;
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+.ing-dev-partial {
+    color: #b45309;
+    font-size: 10px;
+    font-weight: 600;
+    margin-top: 2px;
+}
 .ing-ver-empty {
     margin: 0;
     padding: 18px;
@@ -554,6 +604,7 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
                             <th>Bodega</th>
                             <th>Origen</th>
                             <th class="is-num">Cant.</th>
+                            {% if puede_devolver %}<th class="is-num" title="Cantidad a devolver">Devolver</th>{% endif %}
                             {% if puede_ver_finanzas %}
                             <th class="is-num">V. neto</th>
                             <th class="is-num">P. neto</th>
@@ -563,14 +614,17 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
                     </thead>
                     <tbody>
                         {% for it in items %}
-                        {% set ya_credito = it.id in (credited_item_ids or []) %}
-                        <tr {% if ya_credito %}style="background:#f0fdf4;"{% endif %}>
+                        {% set line_qty = (it.cantidad or 0)|int %}
+                        {% set ya_qty = (credited_qty_by_item or {}).get(it.id, 0)|int %}
+                        {% set remaining = line_qty - ya_qty if line_qty > ya_qty else 0 %}
+                        {% set ya_credito = remaining <= 0 and line_qty > 0 %}
+                        <tr {% if ya_credito %}style="background:#f0fdf4;"{% elif ya_qty > 0 %}style="background:#fffbeb;"{% endif %}>
                             {% if puede_devolver %}
                             <td>
                                 {% if ya_credito %}
-                                <span title="Ya tiene crédito" style="color:#15803d;font-weight:700;font-size:11px;">✓</span>
+                                <span title="Crédito completo" style="color:#15803d;font-weight:700;font-size:11px;">✓</span>
                                 {% else %}
-                                <input type="checkbox" name="item_id" value="{{ it.id }}">
+                                <input type="checkbox" name="item_id" value="{{ it.id }}" class="ing-dev-check-item" data-item-id="{{ it.id }}">
                                 {% endif %}
                             </td>
                             {% endif %}
@@ -579,16 +633,34 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
                             <td class="is-desc" title="{{ it.descripcion_producto or '' }}{{ (' · ' ~ it.nota) if it.nota else '' }}">
                                 {{ it.descripcion_producto or '—' }}
                                 {% if it.nota %}<div class="is-soft" style="font-weight:500;font-size:10px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ it.nota }}</div>{% endif %}
-                                {% if ya_credito %}<div style="color:#15803d;font-size:10px;font-weight:600;margin-top:2px;">Crédito registrado</div>{% endif %}
+                                {% if ya_credito %}
+                                <div style="color:#15803d;font-size:10px;font-weight:600;margin-top:2px;">Crédito completo ({{ line_qty }}/{{ line_qty }})</div>
+                                {% elif ya_qty > 0 %}
+                                <div class="ing-dev-partial">Devuelto {{ ya_qty }}/{{ line_qty }} · quedan {{ remaining }}</div>
+                                {% endif %}
                             </td>
                             <td title="{{ it.marca or '' }}">{{ it.marca or '—' }}</td>
                             <td class="is-soft" title="{{ it.bodega or '' }}">{{ it.bodega or '—' }}</td>
                             <td class="is-soft">{{ it.origen_compra or '—' }}</td>
-                            <td class="is-num">{{ it.cantidad or 0 }}</td>
+                            <td class="is-num" style="text-align:center;">{{ line_qty }}</td>
+                            {% if puede_devolver %}
+                            <td class="is-num ing-dev-qty-cell">
+                                {% if ya_credito %}
+                                —
+                                {% else %}
+                                {% set sug = (credito_sugerido or {}).get(it.id) %}
+                                <input type="number" class="ing-dev-qty" name="cantidad_{{ it.id }}"
+                                       min="1" max="{{ remaining }}" value="{{ remaining }}"
+                                       disabled data-max="{{ remaining }}"
+                                       data-credito-full="{{ '%.2f'|format(sug|float) if sug else '0' }}"
+                                       aria-label="Cantidad a devolver de {{ it.codigo_producto or it.id }}">
+                                {% endif %}
+                            </td>
+                            {% endif %}
                             {% if puede_ver_finanzas %}
                             <td class="is-num">{{ money2(it.valor_neto) }}</td>
                             <td class="is-num">{{ money2(it.precio_venta_neto) }}</td>
-                            <td class="is-num" style="font-weight:600;color:#0f766e;">
+                            <td class="is-num ing-credito-sug" style="font-weight:600;color:#0f766e;">
                                 {% set sug = (credito_sugerido or {}).get(it.id) %}
                                 {% if sug %}{{ money2(sug) }}{% else %}—{% endif %}
                             </td>
@@ -602,7 +674,7 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
             <div class="ing-dev-box">
                 <div class="ing-dev-box__title">Devolución → saldo a favor del proveedor</div>
                 <p class="ing-dev-box__hint">
-                    Marcá el/los ítems devueltos. Se acredita con IVA prorrateado. El ingreso no se modifica.
+                    Marcá el/los ítems y la <strong>cantidad a devolver</strong> (puede ser parcial). Se acredita con IVA prorrateado. El ingreso no se modifica.
                 </p>
                 <div class="ing-dev-row">
                     <label style="flex:1 1 200px;">
@@ -702,6 +774,53 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     var modal = document.getElementById('ingresoCreditoConfirmModal');
     var cancelBtn = document.getElementById('ingresoCreditoConfirmCancel');
     var okBtn = document.getElementById('ingresoCreditoConfirmOk');
+    if (form) {
+        function formatMoneyCL(n) {
+            var v = Math.round(Number(n) * 100) / 100;
+            if (!isFinite(v)) return '—';
+            var parts = v.toFixed(2).split('.');
+            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            return '$' + parts[0] + ',' + parts[1];
+        }
+        function updateCreditoSug(qtyInp) {
+            if (!qtyInp) return;
+            var cell = qtyInp.closest('tr') && qtyInp.closest('tr').querySelector('.ing-credito-sug');
+            if (!cell) return;
+            var full = parseFloat(qtyInp.getAttribute('data-credito-full') || '0');
+            var max = parseInt(qtyInp.getAttribute('data-max') || qtyInp.max || '0', 10) || 0;
+            var q = parseInt(qtyInp.value || '0', 10) || 0;
+            if (max > 0 && q > max) {
+                qtyInp.value = String(max);
+                q = max;
+            }
+            if (q < 1 || full <= 0 || max <= 0) {
+                cell.textContent = '—';
+                return;
+            }
+            cell.textContent = formatMoneyCL(full * (q / max));
+        }
+        function syncQtyInput(cb) {
+            var qty = form.querySelector('input.ing-dev-qty[name="cantidad_' + cb.value + '"]');
+            if (!qty) return;
+            qty.disabled = !cb.checked;
+            if (cb.checked) {
+                var max = parseInt(qty.getAttribute('data-max') || qty.max || '1', 10) || 1;
+                var cur = parseInt(qty.value || '0', 10);
+                if (!cur || cur < 1) qty.value = String(Math.min(1, max));
+                if (cur > max) qty.value = String(max);
+            }
+            updateCreditoSug(qty);
+        }
+        form.querySelectorAll('input.ing-dev-check-item').forEach(function (cb) {
+            syncQtyInput(cb);
+            cb.addEventListener('change', function () { syncQtyInput(cb); });
+        });
+        form.querySelectorAll('input.ing-dev-qty').forEach(function (qty) {
+            qty.addEventListener('input', function () { updateCreditoSug(qty); });
+            qty.addEventListener('change', function () { updateCreditoSug(qty); });
+            updateCreditoSug(qty);
+        });
+    }
     if (form && openBtn && modal && cancelBtn && okBtn) {
         function openModal() {
             modal.classList.add('open');
@@ -717,6 +836,18 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
             if (!checked.length) {
                 window.alert('Seleccioná al menos un ítem para registrar el crédito.');
                 return;
+            }
+            for (var i = 0; i < checked.length; i++) {
+                var cb = checked[i];
+                var qty = form.querySelector('input.ing-dev-qty[name="cantidad_' + cb.value + '"]');
+                if (!qty) continue;
+                var max = parseInt(qty.getAttribute('data-max') || qty.max || '0', 10) || 0;
+                var cur = parseInt(qty.value || '0', 10);
+                if (!cur || cur < 1 || cur > max) {
+                    qty.focus();
+                    window.alert('Revisá la cantidad a devolver (1 a ' + max + ').');
+                    return;
+                }
             }
             var opcion = form.querySelector('select[name="opcion_devolucion"]');
             if (opcion && !(opcion.value || '').trim()) {
@@ -735,6 +866,11 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
         });
         okBtn.addEventListener('click', function () {
             closeModal();
+            form.querySelectorAll('input.ing-dev-qty').forEach(function (qty) {
+                var id = (qty.name || '').replace('cantidad_', '');
+                var cb = form.querySelector('input.ing-dev-check-item[value="' + id + '"]');
+                if (cb && cb.checked) qty.disabled = false;
+            });
             form.submit();
         });
     }

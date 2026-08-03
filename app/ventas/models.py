@@ -195,6 +195,7 @@ class ProveedorSaldoFavorMovimiento(db.Model):
     razon = db.Column(db.String(2000))
     ingreso_documento_id = db.Column(db.Integer, index=True)
     ingreso_item_id = db.Column(db.Integer, index=True)
+    cantidad = db.Column(db.Integer)  # unidades en devolucion_ingreso (parcial o total)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
     usuario = db.Column(db.String(100))
 

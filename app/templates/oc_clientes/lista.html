@@ -4,7 +4,7 @@
 
 {% block extra_head %}
 <style>
-.oc-list-page { display: grid; gap: 6px; max-width: 1280px; }
+.oc-list-page { display: grid; gap: 6px; width: 100%; max-width: none; min-width: 0; }
 .oc-list-header {
     display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
     padding: 8px 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
@@ -36,7 +36,8 @@
 }
 .oc-kpi.clickable:focus { outline: 2px solid #86efac; outline-offset: 1px; }
 .oc-list-card {
-    background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+    width: 100%; max-width: 100%; min-width: 0; overflow: hidden;
 }
 .oc-list-filters {
     display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end;
@@ -54,24 +55,31 @@
     outline: none; border-color: #93c5fd; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
 }
 .oc-list-filters .filter-actions { display: flex; gap: 4px; align-items: center; }
-.oc-list-page .table-wrap { overflow-x: auto; }
-.oc-list-page table { width: 100%; border-collapse: collapse; min-width: 700px; }
+.oc-list-page .table-wrap {
+    overflow-x: auto; width: 100%; max-width: 100%; min-width: 0;
+    -webkit-overflow-scrolling: touch;
+}
+.oc-list-page table {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    min-width: 0;
+}
 .oc-list-page thead th {
-    padding: 5px 10px; text-align: left; font-size: 9px; font-weight: 700;
+    padding: 5px 8px; text-align: left; font-size: 9px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.04em; color: #64748b;
     background: #f8fafc; border-bottom: 1px solid #e2e8f0; white-space: nowrap;
 }
 .oc-list-page tbody td {
-    padding: 5px 10px; border-bottom: 1px solid #f1f5f9;
+    padding: 5px 8px; border-bottom: 1px solid #f1f5f9;
     font-size: 11px; color: #475569; vertical-align: middle;
 }
 .oc-list-page tbody tr:nth-child(even) td { background: #fcfdfe; }
 .oc-list-page tbody tr:hover td { background: #f1f5f9 !important; }
 .oc-list-page tbody td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.oc-list-page tbody td.oc-num { white-space: nowrap; }
 .oc-list-page tbody td.oc-num strong { color: #0f172a; font-weight: 600; font-size: 11px; }
 .oc-list-page tbody td.cliente,
 .oc-list-page tbody td.vendedor {
-    max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .oc-list-page tbody td.empty { padding: 20px 10px; text-align: center; color: #94a3b8; font-size: 11px; }
 .badge-oc {
@@ -84,9 +92,32 @@
 .badge-oc.green { background: #dcfce7; color: #15803d; }
 .badge-oc.amber { background: #fef3c7; color: #b45309; }
 .badge-oc.slate { background: #f1f5f9; color: #64748b; }
-.oc-list-page .btn.sm { padding: 3px 8px; font-size: 10px; border-radius: 5px; line-height: 1.3; }
-.oc-list-actions { display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; align-items: center; }
+.oc-list-page .btn.sm { padding: 3px 7px; font-size: 10px; border-radius: 5px; line-height: 1.3; }
+.oc-list-actions {
+    display: inline-flex; flex-wrap: nowrap; gap: 3px;
+    justify-content: flex-end; align-items: center; white-space: nowrap;
+}
+.oc-list-actions .btn.sm { flex: 0 0 auto; white-space: nowrap; }
 .oc-list-actions form { display: inline; margin: 0; }
+.oc-list-page th.oc-th-acciones,
+.oc-list-page td.oc-td-acciones {
+    position: sticky;
+    right: 0;
+    z-index: 3;
+    width: 1%;
+    min-width: 188px;
+    padding-left: 10px;
+    padding-right: 10px;
+    white-space: nowrap;
+    text-align: right;
+}
+.oc-list-page th.oc-th-acciones {
+    background: #f8fafc;
+    z-index: 4;
+}
+.oc-list-page td.oc-td-acciones { background: #fff; }
+.oc-list-page tbody tr:nth-child(even) td.oc-td-acciones { background: #fcfdfe; }
+.oc-list-page tbody tr:hover td.oc-td-acciones { background: #f1f5f9 !important; }
 .oc-list-page tbody td.check { width: 28px; text-align: center; padding: 4px 4px 4px 8px; }
 .oc-row-check { width: 14px; height: 14px; cursor: pointer; }
 .oc-pago-bar {
@@ -96,6 +127,8 @@
 @media (max-width: 768px) {
     .oc-list-header { flex-direction: column; align-items: stretch; }
     .oc-list-filters input, .oc-list-filters select { min-width: 100%; }
+    .oc-list-page th.oc-th-acciones,
+    .oc-list-page td.oc-td-acciones { min-width: 168px; }
 }
 </style>
 {% endblock %}
@@ -172,7 +205,7 @@
                         <th>Estado</th>
                         <th style="text-align:center;" title="Días desde la fecha de la OC hasta la entrega real">Días de entrega</th>
                         <th title="Fecha y hora de la entrega real">Fecha y hora de entrega</th>
-                        <th style="width:168px;text-align:right;">Acciones</th>
+                        <th class="oc-th-acciones">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -198,7 +231,7 @@
                         <td><span class="badge-oc {{ f.badge }}" title="{{ f.estado_label }}">{{ f.estado_label }}</span></td>
                         <td class="num" style="text-align:center;">{% if f.dias_entrega is not none %}{{ f.dias_entrega }}{% else %}—{% endif %}</td>
                         <td>{{ f.oc.fecha_entrega_real.strftime('%d/%m/%y %H:%M') if f.oc.fecha_entrega_real else '—' }}</td>
-                        <td>
+                        <td class="oc-td-acciones">
                             <div class="oc-list-actions">
                                 <a class="btn sm outline" href="{{ url_for('oc_clientes.detalle', oid=f.oc.id) }}">Ver</a>
                                 {% if puede_modificar %}

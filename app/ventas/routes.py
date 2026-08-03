@@ -189,22 +189,27 @@ def _credito_item_ingreso_con_iva(
 ) -> float:
     """
     Monto del crédito (con IVA) por ítem/cantidad devuelta.
-    Prorratea el total_factura del ingreso cuando existe; si no, aplica 19% al neto.
+    `valor_neto` del ítem es unitario; se prorratea el total_factura del ingreso
+    cuando existe; si no, aplica 19% al neto de las unidades devueltas.
     """
     qty_line = max(int(item.cantidad or 0), 0)
     qty = qty_line if cantidad is None else max(int(cantidad), 0)
     if qty <= 0 or qty_line <= 0:
         return 0.0
-    neto_line = float(item.valor_neto or 0)
-    if neto_line <= 0:
+    if qty > qty_line:
+        qty = qty_line
+    unit_neto = float(item.valor_neto or 0)
+    if unit_neto <= 0:
         return 0.0
-    neto_parte = neto_line * (qty / qty_line)
+    neto_parte = unit_neto * qty
     hermanos = items
     if hermanos is None:
         hermanos = (
             IngresoDocumentoItem.query.filter_by(ingreso_documento_id=doc.id).all()
         )
-    sum_neto = sum(float(i.valor_neto or 0) for i in hermanos)
+    sum_neto = sum(
+        float(i.valor_neto or 0) * max(int(i.cantidad or 0), 0) for i in hermanos
+    )
     total_fac = float(doc.total_factura or 0)
     if total_fac > 0 and sum_neto > 0:
         return _round_money_cl(neto_parte / sum_neto * total_fac)
