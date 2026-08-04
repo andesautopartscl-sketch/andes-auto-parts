@@ -33,6 +33,46 @@
 .vin-flash li{padding:6px 10px;border-radius:7px;font-size:12px;}
 .vin-flash .error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;}
 .vin-flash .success{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;}
+.vin-det-img-wrap{display:grid;gap:8px;}
+.vin-det-main{
+  width:100%;aspect-ratio:4/3;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;
+  overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:zoom-in;position:relative;
+}
+.vin-det-main img{width:100%;height:100%;object-fit:cover;}
+.vin-det-main .zoom-hint{
+  position:absolute;right:6px;bottom:6px;background:rgba(15,23,42,.65);color:#fff;
+  font-size:10px;padding:2px 6px;border-radius:4px;pointer-events:none;
+}
+.vin-det-thumbs{display:flex;flex-wrap:wrap;gap:6px;}
+.vin-det-thumb{
+  width:52px;height:40px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;
+  background:#f8fafc;cursor:pointer;padding:0;
+}
+.vin-det-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.vin-det-thumb.is-active{border-color:#3b82f6;box-shadow:0 0 0 1px #93c5fd;}
+.vin-lightbox{
+  display:none;position:fixed;inset:0;z-index:2000;background:rgba(15,23,42,.82);
+  align-items:center;justify-content:center;padding:20px;
+}
+.vin-lightbox.open{display:flex;}
+.vin-lightbox img{
+  max-width:min(96vw,1100px);max-height:88vh;object-fit:contain;border-radius:8px;
+  box-shadow:0 20px 60px rgba(0,0,0,.45);background:#0f172a;
+}
+.vin-lightbox-close{
+  position:absolute;top:14px;right:16px;border:0;background:rgba(255,255,255,.12);
+  color:#fff;font-size:22px;width:36px;height:36px;border-radius:8px;cursor:pointer;line-height:1;
+}
+.vin-lightbox-nav{
+  position:absolute;top:50%;transform:translateY(-50%);border:0;background:rgba(255,255,255,.12);
+  color:#fff;font-size:28px;width:40px;height:48px;border-radius:8px;cursor:pointer;line-height:1;
+}
+.vin-lightbox-nav.prev{left:12px;}
+.vin-lightbox-nav.next{right:12px;}
+.vin-lightbox-cap{
+  position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+  color:#e2e8f0;font-size:12px;background:rgba(15,23,42,.55);padding:4px 10px;border-radius:6px;
+}
 </style>
 {% endblock %}
 
@@ -69,25 +109,46 @@
   <section class="panel" style="padding:18px;">
     <h3 style="margin:0 0 14px;font-size:16px;">Identificación</h3>
     <div style="display:grid;grid-template-columns:minmax(160px,220px) 1fr;gap:16px;align-items:start;">
-      <div>
-        <div style="width:100%;aspect-ratio:4/3;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;overflow:hidden;display:flex;align-items:center;justify-content:center;">
-          {% if imagen_url %}
-          <img src="{{ imagen_url }}" alt="{{ v.etiqueta() }}" style="width:100%;height:100%;object-fit:cover;">
+      <div class="vin-det-img-wrap">
+        <div class="vin-det-main" id="vinDetMain" {% if imagenes %}title="Clic para ver en grande"{% endif %}>
+          {% if imagenes and imagenes|length %}
+          <img id="vinDetImg" src="{{ imagenes[0].url }}" alt="{{ v.etiqueta() }}" data-idx="0">
+          <span class="zoom-hint">Ampliar</span>
           {% else %}
           <span style="font-size:12px;color:#94a3b8;text-align:center;padding:12px;">Sin imagen del modelo</span>
           {% endif %}
         </div>
-        <form method="post" action="{{ url_for('vehiculos_vin.subir_imagen', vid=v.id) }}" enctype="multipart/form-data" style="margin-top:8px;display:grid;gap:6px;">
-          <input type="hidden" name="next" value="{{ url_for('vehiculos_vin.detalle', vid=v.id) }}">
-          <input type="file" name="imagen" accept="image/jpeg,image/png,image/webp,image/gif" style="font-size:12px;">
-          <button type="submit" class="btn outline sm">Subir / cambiar imagen</button>
-        </form>
-        {% if imagen_url %}
-        <form method="post" action="{{ url_for('vehiculos_vin.quitar_imagen', vid=v.id) }}" style="margin-top:6px;">
-          <input type="hidden" name="next" value="{{ url_for('vehiculos_vin.detalle', vid=v.id) }}">
-          <button type="submit" class="btn outline sm">Quitar imagen</button>
-        </form>
+        {% if imagenes and imagenes|length > 1 %}
+        <div class="vin-det-thumbs" id="vinDetThumbs">
+          {% for im in imagenes %}
+          <button type="button" class="vin-det-thumb{% if loop.first %} is-active{% endif %}" data-idx="{{ loop.index0 }}" data-url="{{ im.url }}">
+            <img src="{{ im.url }}" alt="">
+          </button>
+          {% endfor %}
+        </div>
         {% endif %}
+        <form method="post" action="{{ url_for('vehiculos_vin.subir_imagen', vid=v.id) }}" enctype="multipart/form-data" style="display:grid;gap:6px;">
+          <input type="hidden" name="next" value="{{ url_for('vehiculos_vin.detalle', vid=v.id) }}">
+          <input type="hidden" name="append" value="1">
+          <input type="file" name="imagen" accept="image/jpeg,image/png,image/webp,image/gif" style="font-size:12px;" {% if imagenes and imagenes|length >= imagenes_max %}disabled{% endif %}>
+          <button type="submit" class="btn outline sm" {% if imagenes and imagenes|length >= imagenes_max %}disabled{% endif %}>
+            {% if imagenes and imagenes|length %}Agregar otra imagen{% else %}Subir imagen{% endif %}
+          </button>
+        </form>
+        {% if imagenes and imagenes|length %}
+        <div style="display:grid;gap:4px;">
+          {% for im in imagenes %}
+          <form method="post" action="{{ url_for('vehiculos_vin.quitar_imagen', vid=v.id) }}" style="margin:0;">
+            <input type="hidden" name="next" value="{{ url_for('vehiculos_vin.detalle', vid=v.id) }}">
+            <input type="hidden" name="slot" value="{{ im.slot }}">
+            <button type="submit" class="btn outline sm" style="width:100%;justify-content:center;">
+              Quitar imagen {{ loop.index }}{% if imagenes|length == 1 %}{% endif %}
+            </button>
+          </form>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <p style="margin:0;font-size:10.5px;color:#94a3b8;">Hasta {{ imagenes_max }} fotos · clic en la imagen para ampliar</p>
       </div>
       <dl class="vin-meta">
       <div><dt>VIN / Chasis</dt><dd>{{ v.vin or v.chasis or '—' }}</dd></div>
@@ -181,4 +242,82 @@
   </section>
 
 </div>
+
+{% if imagenes and imagenes|length %}
+<div class="vin-lightbox" id="vinLightbox" aria-hidden="true">
+  <button type="button" class="vin-lightbox-close" id="vinLbClose" aria-label="Cerrar">×</button>
+  <button type="button" class="vin-lightbox-nav prev" id="vinLbPrev" aria-label="Anterior">‹</button>
+  <img id="vinLbImg" alt="Imagen vehículo">
+  <button type="button" class="vin-lightbox-nav next" id="vinLbNext" aria-label="Siguiente">›</button>
+  <div class="vin-lightbox-cap" id="vinLbCap"></div>
+</div>
+<script>
+(function () {
+  var urls = {{ imagenes|map(attribute='url')|list|tojson }};
+  var idx = 0;
+  var main = document.getElementById('vinDetMain');
+  var mainImg = document.getElementById('vinDetImg');
+  var thumbs = document.getElementById('vinDetThumbs');
+  var lb = document.getElementById('vinLightbox');
+  var lbImg = document.getElementById('vinLbImg');
+  var lbCap = document.getElementById('vinLbCap');
+  function showIdx(i) {
+    if (!urls.length) return;
+    idx = (i + urls.length) % urls.length;
+    if (mainImg) {
+      mainImg.src = urls[idx];
+      mainImg.setAttribute('data-idx', String(idx));
+    }
+    if (thumbs) {
+      thumbs.querySelectorAll('.vin-det-thumb').forEach(function (t) {
+        t.classList.toggle('is-active', Number(t.getAttribute('data-idx')) === idx);
+      });
+    }
+  }
+  function openLb() {
+    if (!lb || !urls.length) return;
+    lbImg.src = urls[idx];
+    if (lbCap) lbCap.textContent = (idx + 1) + ' / ' + urls.length;
+    lb.classList.add('open');
+  }
+  function closeLb() {
+    if (lb) lb.classList.remove('open');
+  }
+  if (main) main.addEventListener('click', openLb);
+  if (thumbs) {
+    thumbs.querySelectorAll('.vin-det-thumb').forEach(function (t) {
+      t.addEventListener('click', function () {
+        showIdx(Number(t.getAttribute('data-idx') || 0));
+      });
+    });
+  }
+  document.getElementById('vinLbClose')?.addEventListener('click', closeLb);
+  document.getElementById('vinLbPrev')?.addEventListener('click', function () {
+    showIdx(idx - 1);
+    if (lbImg) lbImg.src = urls[idx];
+    if (lbCap) lbCap.textContent = (idx + 1) + ' / ' + urls.length;
+  });
+  document.getElementById('vinLbNext')?.addEventListener('click', function () {
+    showIdx(idx + 1);
+    if (lbImg) lbImg.src = urls[idx];
+    if (lbCap) lbCap.textContent = (idx + 1) + ' / ' + urls.length;
+  });
+  lb?.addEventListener('click', function (e) { if (e.target === lb) closeLb(); });
+  document.addEventListener('keydown', function (e) {
+    if (!lb || !lb.classList.contains('open')) return;
+    if (e.key === 'Escape') closeLb();
+    if (e.key === 'ArrowLeft') {
+      showIdx(idx - 1);
+      if (lbImg) lbImg.src = urls[idx];
+      if (lbCap) lbCap.textContent = (idx + 1) + ' / ' + urls.length;
+    }
+    if (e.key === 'ArrowRight') {
+      showIdx(idx + 1);
+      if (lbImg) lbImg.src = urls[idx];
+      if (lbCap) lbCap.textContent = (idx + 1) + ' / ' + urls.length;
+    }
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

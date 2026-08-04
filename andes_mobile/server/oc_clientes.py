@@ -31,6 +31,7 @@ from app.oc_clientes.services import (
 )
 from app.seguridad.models import Usuario
 from app.utils.permissions import has_permission
+from app.utils.datetime_utils import format_utc_to_chile
 from app.utils.rut_utils import format_rut
 from app.ventas.models import Cliente
 from app.ventas.routes import METODO_PAGO_LABELS, METODO_PAGO_OPTIONS, _client_by_id, _entity_snapshot, _full_address
@@ -155,10 +156,12 @@ def _fmt_fecha(value) -> str:
     return "—"
 
 
-def _fmt_fecha_hora(value) -> str:
+def _fmt_fecha_hora(value, *, utc: bool = False) -> str:
     if value is None:
         return "—"
     if isinstance(value, datetime):
+        if utc:
+            return format_utc_to_chile(value, default="—")
         return value.strftime("%d/%m/%Y %H:%M")
     if isinstance(value, date):
         return value.strftime("%d/%m/%Y")
@@ -293,7 +296,7 @@ def detalle_oc(oid: int) -> dict | None:
         "monto_cobrado_fmt": _fmt_monto(oc_monto_cobrado(oc)),
         "monto_pendiente_fmt": _fmt_monto(oc_monto_pendiente(oc)),
         "fecha_oc_fmt": _fmt_fecha(oc.fecha_oc),
-        "fecha_ingreso_fmt": _fmt_fecha_hora(oc.created_at),
+        "fecha_ingreso_fmt": _fmt_fecha_hora(oc.created_at, utc=True),
         "fecha_entrega_comprometida_fmt": _fmt_fecha(oc.fecha_entrega_comprometida),
         "fecha_entrega_real_fmt": _fmt_fecha_hora(oc.fecha_entrega_real),
         "forma_pago": oc.forma_pago or "",
@@ -317,7 +320,10 @@ def detalle_oc(oid: int) -> dict | None:
             {
                 **ev,
                 "titulo": ev.get("label") or "",
-                "fecha_fmt": _fmt_fecha_hora(ev.get("fecha")),
+                "fecha_fmt": _fmt_fecha_hora(
+                    ev.get("fecha"),
+                    utc=bool(ev.get("fecha_utc")),
+                ),
             }
             for ev in timeline_eventos(oc)
         ],

@@ -154,6 +154,17 @@
     background: #fef2f2; border: 1px solid #fecaca; font-size: 11px; color: #b91c1c;
 }
 .oc-dup-alert.visible { display: block; }
+.oc-vin-hint {
+    display: none; margin-top: 6px; padding: 7px 10px; border-radius: 6px;
+    font-size: 11px; line-height: 1.35; border: 1px solid transparent;
+}
+.oc-vin-hint.visible { display: block; }
+.oc-vin-hint.exists {
+    background: #fffbeb; color: #92400e; border-color: #fde68a;
+}
+.oc-vin-hint.new {
+    background: #f0fdf4; color: #166534; border-color: #bbf7d0;
+}
 .oc-field-invalid input { border-color: #f87171 !important; box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.2); }
 .oc-ocr-totals {
     display: none; gap: 12px; font-size: 11px; color: #92400e; margin-left: auto;
@@ -272,8 +283,9 @@
                         <input id="direccion_despacho" name="direccion_despacho" value="{{ form_data.direccion_despacho }}">
                     </div>
                     <div class="oc-field span-4">
-                        <label for="observaciones">Observaciones <span style="font-weight:400;color:#64748b;">(si incluye marca, modelo, año y VIN → se guarda en VIN / Chasis)</span></label>
-                        <textarea id="observaciones" name="observaciones" rows="3" placeholder="Ej: JMC GRAND AVENUE 2024&#10;VIN ; LEFADEF1XSTP00861">{{ form_data.observaciones }}</textarea>
+                        <label for="observaciones">Observaciones <span style="font-weight:400;color:#64748b;">(si incluye marca, modelo, año y VIN → se guarda en VIN / Chasis; si ya existe, no se duplica)</span></label>
+                        <textarea id="observaciones" name="observaciones" rows="3" placeholder="Ej: JMC GRAND AVENUE 2024&#10;VIN ; LEFADEF1XSTP00861&#10;PATENTE ABCD12">{{ form_data.observaciones }}</textarea>
+                        <div id="vinObsHint" class="oc-vin-hint" role="status" aria-live="polite"></div>
                     </div>
                 </div>
             </div>
@@ -360,6 +372,7 @@
     const URL_SEARCH = {{ url_productos_search|tojson }};
     const URL_ESCANEAR = {{ url_escanear_oc|tojson }};
     const URL_VERIFICAR_NUMERO = {{ url_verificar_numero|tojson }};
+    const URL_VERIFICAR_VIN_OBS = {{ url_verificar_vin_obs|tojson }};
     const URL_VENDEDORES = {{ url_vendedores|tojson }};
     const PUEDE_MODIFICAR = {{ puede_modificar|tojson }};
     const VENDEDORES_OPCIONES = {{ vendedores_opciones|tojson }};
@@ -817,6 +830,7 @@
         if (data.observaciones) {
             var obsEl = document.getElementById('observaciones');
             if (obsEl) obsEl.value = data.observaciones;
+            verificarVinObs();
         }
         applyClienteFromScan(data);
         itemsBody.innerHTML = '';
@@ -1033,6 +1047,65 @@
     });
     numeroOcInput?.addEventListener('blur', verificarNumeroOc);
     if ((numeroOcInput?.value || '').trim()) verificarNumeroOc();
+
+    var obsInput = document.getElementById('observaciones');
+    var vinObsHint = document.getElementById('vinObsHint');
+    var vinObsTimer = null;
+
+    function showVinObsHint(kind, msg) {
+        if (!vinObsHint) return;
+        vinObsHint.classList.remove('visible', 'exists', 'new');
+        if (!msg) {
+            vinObsHint.textContent = '';
+            return;
+        }
+        vinObsHint.textContent = msg;
+        vinObsHint.classList.add('visible', kind === 'exists' ? 'exists' : 'new');
+    }
+
+    function verificarVinObs() {
+        if (!URL_VERIFICAR_VIN_OBS || !obsInput) return;
+        var texto = (obsInput.value || '').trim();
+        if (!texto || texto.length < 11) {
+            showVinObsHint('', '');
+            return;
+        }
+        fetch(
+            URL_VERIFICAR_VIN_OBS + '?q=' + encodeURIComponent(texto),
+            { headers: { 'X-Requested-With': 'XMLHttpRequest' } },
+        )
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data || !data.ok || !data.detected) {
+                    showVinObsHint('', '');
+                    return;
+                }
+                var label = data.vin || '';
+                if (data.marca || data.modelo || data.anio) {
+                    label += ' · ' + [data.marca, data.modelo, data.anio].filter(Boolean).join(' ');
+                }
+                if (data.exists) {
+                    showVinObsHint(
+                        'exists',
+                        'VIN / Chasis ya registrado' + (data.etiqueta ? ' (' + data.etiqueta + ')' : '')
+                            + ': ' + (data.vin || '') + '. Al guardar no se duplicará.'
+                    );
+                } else {
+                    showVinObsHint(
+                        'new',
+                        'VIN detectado — se registrará en VIN / Chasis: ' + label.trim()
+                    );
+                }
+            })
+            .catch(function () { showVinObsHint('', ''); });
+    }
+
+    obsInput?.addEventListener('input', function () {
+        clearTimeout(vinObsTimer);
+        vinObsTimer = setTimeout(verificarVinObs, 400);
+    });
+    obsInput?.addEventListener('blur', verificarVinObs);
+    if ((obsInput?.value || '').trim()) verificarVinObs();
 
     var allowOcSubmit = false;
     ocForm?.addEventListener('submit', function (e) {

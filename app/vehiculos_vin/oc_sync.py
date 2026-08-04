@@ -8,6 +8,7 @@ from app.extensions import db
 from app.vehiculos_vin.models import VehiculoVin
 from app.vehiculos_vin.routes import (
     _build_vehicle_data,
+    _find_duplicate,
     desglosar_modelo,
     normalizar_texto,
     normalizar_vin,
@@ -42,15 +43,21 @@ _VIN_LINE_RE = re.compile(
     re.IGNORECASE,
 )
 _VIN_BARE_RE = re.compile(r"\b([A-HJ-NPR-Z0-9]{17})\b", re.IGNORECASE)
+_VIN_LINE_ONLY_RE = re.compile(r"^\s*([A-HJ-NPR-Z0-9]{11,17})\s*$", re.IGNORECASE)
+_PATENTE_RE = re.compile(
+    r"\bPATENTE\s*[;:=\-]?\s*([A-Z0-9]{4,8})\b",
+    re.IGNORECASE,
+)
 _YEAR_IN_LINE_RE = re.compile(r"\b((?:19|20)\d{2})\b")
 
 
 def parse_vehiculo_desde_texto(texto: str) -> dict[str, Any] | None:
     """
-    Extrae VIN + marca/modelo/año desde observaciones de OC (u OCR).
+    Extrae VIN + marca/modelo/año/patente desde observaciones de OC (u OCR).
     Ejemplo:
         JMC GRAND AVENUE 2024
         VIN ; LEFADEF1XSTP00861
+        PATENTE SSLT99
     """
     raw = (texto or "").strip()
     if not raw:
@@ -68,9 +75,23 @@ def parse_vehiculo_desde_texto(texto: str) -> dict[str, Any] | None:
                 if cand and len(cand) >= 11:
                     vin = cand
                     break
+    if not vin:
+        for ln in raw.splitlines():
+            m3 = _VIN_LINE_ONLY_RE.match(ln)
+            if not m3:
+                continue
+            cand = normalizar_vin(m3.group(1))
+            if cand and len(cand) >= 11:
+                vin = cand
+                break
 
     if not vin or len(vin) < 11:
         return None
+
+    patente = ""
+    m_pat = _PATENTE_RE.search(raw)
+    if m_pat:
+        patente = normalizar_texto(m_pat.group(1), 20).upper()
 
     marca = ""
     modelo_raw = ""
@@ -81,7 +102,7 @@ def parse_vehiculo_desde_texto(texto: str) -> dict[str, Any] | None:
             candidatos: list[str] = []
             for ln in raw.splitlines():
                 lu = ln.upper()
-                if brand in lu and not re.search(r"\bVIN\b|\bCHASIS\b", lu):
+                if brand in lu and not re.search(r"\bVIN\b|\bCHASIS\b|\bPATENTE\b", lu):
                     if re.match(r"^[-–]", ln.strip()):
                         continue
                     candidatos.append(re.sub(r"\s+", " ", ln).strip())
@@ -97,7 +118,7 @@ def parse_vehiculo_desde_texto(texto: str) -> dict[str, Any] | None:
             s = re.sub(r"\s+", " ", ln).strip()
             if not s or re.match(r"^[-–]", s):
                 continue
-            if re.search(r"\bVIN\b|\bCHASIS\b|\bGUIA\b|\bSINIESTRO\b", s, re.I):
+            if re.search(r"\bVIN\b|\bCHASIS\b|\bPATENTE\b|\bGUIA\b|\bSINIESTRO\b", s, re.I):
                 continue
             if _YEAR_IN_LINE_RE.search(s) and len(s) >= 6:
                 modelo_raw = s.upper()
@@ -125,6 +146,30 @@ def parse_vehiculo_desde_texto(texto: str) -> dict[str, Any] | None:
         "transmision": parsed.get("transmision") or "",
         "modelo": parsed.get("modelo") or "",
         "modelo_completo": parsed.get("modelo_completo") or modelo_raw,
+        "patente": patente,
+    }
+
+
+def buscar_vehiculo_por_observaciones(observaciones: str | None) -> dict[str, Any] | None:
+    """
+    Parsea observaciones y, si hay VIN, indica si ya existe en VIN / Chasis.
+    No escribe en BD. Útil para validación en el formulario de OC.
+    """
+    parsed = parse_vehiculo_desde_texto(observaciones or "")
+    if not parsed:
+        return None
+    vin = parsed["vin"]
+    existing = _find_duplicate(vin, vin)
+    return {
+        "vin": vin,
+        "marca": parsed.get("marca") or "",
+        "modelo": parsed.get("modelo") or "",
+        "anio": parsed.get("anio"),
+        "patente": parsed.get("patente") or "",
+        "exists": existing is not None,
+        "id": existing.id if existing else None,
+        "etiqueta": existing.etiqueta if existing else "",
+        "patente_existente": (existing.patente or "") if existing else "",
     }
 
 
@@ -133,9 +178,13 @@ def upsert_vehiculo_desde_oc(
     observaciones: str | None,
     numero_oc: str | None = None,
     usuario: str | None = None,
-) -> VehiculoVin | None:
+) -> dict[str, Any] | None:
     """
-    Si observaciones trae VIN, crea o actualiza vehiculos_vin.
+    Si observaciones trae VIN:
+      - si ya existe en VIN / Chasis → no duplica ni pisa datos (solo anota OC si falta)
+      - si no existe → crea el registro
+    Retorna None si no hay VIN parseable, o
+    {"vehiculo": VehiculoVin, "created": bool, "exists": bool}.
     No rompe el flujo de OC si falla (caller debe capturar excepciones).
     """
     parsed = parse_vehiculo_desde_texto(observaciones or "")
@@ -152,38 +201,36 @@ def upsert_vehiculo_desde_oc(
         version="",
         transmision_explicit=normalizar_texto(parsed.get("transmision"), 80).upper(),
         cilindrada_explicit=normalizar_texto(parsed.get("cilindrada"), 40).upper(),
-        patente="",
+        patente=normalizar_texto(parsed.get("patente"), 20).upper(),
         nombre_china="",
         notas="",
         auto_desglosar=True,
     )
 
     nota_oc = f"OC cliente {numero_oc}".strip() if numero_oc else "OC cliente"
-    existing = VehiculoVin.query.filter_by(vin=data["vin"]).first()
+    existing = _find_duplicate(data["vin"], data["chasis"])
     user = (usuario or "sistema").strip() or "sistema"
 
     if existing:
-        # No borrar motor/patente/china si ya existían; sí refrescar marca/modelo/año
-        for key in ("marca", "modelo", "modelo_completo", "anio", "cilindrada", "transmision", "chasis"):
-            val = data.get(key)
-            if val is None or val == "":
-                continue
-            setattr(existing, key, val)
-        # Anotar origen OC sin pisar notas largas
+        # Ya está en el menú VIN / Chasis: no repetir ni sobrescribir.
+        # Solo anotar referencia a esta OC si aún no está en notas.
         prev = (existing.notas or "").strip()
-        if nota_oc not in prev:
+        changed = False
+        if nota_oc and nota_oc not in prev:
             existing.notas = f"{prev}\n{nota_oc}".strip() if prev else nota_oc
-        if not existing.fuente or existing.fuente == "manual":
-            existing.fuente = "oc_cliente"
-        existing.activo = True
-        existing.usuario_edicion = user
-        existing.updated_at = datetime.utcnow()
-        db.session.add(existing)
-        db.session.commit()
-        return existing
+            changed = True
+        # Completar patente solo si el registro existente no la tiene
+        if data.get("patente") and not (existing.patente or "").strip():
+            existing.patente = data["patente"]
+            changed = True
+        if changed:
+            existing.usuario_edicion = user
+            existing.updated_at = datetime.utcnow()
+            db.session.add(existing)
+            db.session.commit()
+        return {"vehiculo": existing, "created": False, "exists": True}
 
-    notas = nota_oc
-    data["notas"] = notas
+    data["notas"] = nota_oc
     v = VehiculoVin(
         **data,
         fuente="oc_cliente",
@@ -193,4 +240,4 @@ def upsert_vehiculo_desde_oc(
     )
     db.session.add(v)
     db.session.commit()
-    return v
+    return {"vehiculo": v, "created": True, "exists": False}

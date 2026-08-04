@@ -98,12 +98,57 @@
 .ficha-img-box{
   width:148px;height:110px;border:1px solid #e2e8f0;border-radius:8px;
   background:#f8fafc;overflow:hidden;display:flex;align-items:center;justify-content:center;
-  position:relative;
+  position:relative;cursor:zoom-in;
 }
+.ficha-img-box.has-img:hover{outline:2px solid #93c5fd;outline-offset:1px;}
 .ficha-img-box img{width:100%;height:100%;object-fit:cover;display:block;}
 .ficha-img-box .ficha-img-empty{font-size:10px;color:#94a3b8;text-align:center;padding:8px;line-height:1.35;}
+.ficha-img-zoom{
+  position:absolute;right:4px;bottom:4px;background:rgba(15,23,42,.65);color:#fff;
+  font-size:9px;padding:2px 5px;border-radius:4px;pointer-events:none;display:none;
+}
+.ficha-img-box.has-img .ficha-img-zoom{display:block;}
+.ficha-thumbs{
+  display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;max-width:148px;
+}
+.ficha-thumb{
+  width:34px;height:28px;border:1px solid #e2e8f0;border-radius:5px;padding:0;
+  background:#f8fafc;overflow:hidden;cursor:pointer;position:relative;
+}
+.ficha-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.ficha-thumb.is-active{border-color:#3b82f6;box-shadow:0 0 0 1px #93c5fd;}
+.ficha-thumb-del{
+  position:absolute;top:0;right:0;width:14px;height:14px;border:0;border-radius:0 0 0 4px;
+  background:rgba(185,28,28,.88);color:#fff;font-size:9px;line-height:14px;cursor:pointer;
+  padding:0;display:none;
+}
+.ficha-thumb:hover .ficha-thumb-del{display:block;}
 .ficha-media-actions{display:flex;flex-direction:column;gap:4px;}
 .ficha-media-actions .btn{width:100%;justify-content:center;}
+.vin-lightbox{
+  display:none;position:fixed;inset:0;z-index:2000;background:rgba(15,23,42,.82);
+  align-items:center;justify-content:center;padding:20px;
+}
+.vin-lightbox.open{display:flex;}
+.vin-lightbox img{
+  max-width:min(96vw,1100px);max-height:88vh;object-fit:contain;border-radius:8px;
+  box-shadow:0 20px 60px rgba(0,0,0,.45);background:#0f172a;
+}
+.vin-lightbox-close{
+  position:absolute;top:14px;right:16px;border:0;background:rgba(255,255,255,.12);
+  color:#fff;font-size:22px;width:36px;height:36px;border-radius:8px;cursor:pointer;line-height:1;
+}
+.vin-lightbox-nav{
+  position:absolute;top:50%;transform:translateY(-50%);border:0;background:rgba(255,255,255,.12);
+  color:#fff;font-size:28px;width:40px;height:48px;border-radius:8px;cursor:pointer;line-height:1;
+}
+.vin-lightbox-nav.prev{left:12px;}
+.vin-lightbox-nav.next{right:12px;}
+.vin-lightbox-nav:disabled{opacity:.35;cursor:default;}
+.vin-lightbox-cap{
+  position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+  color:#e2e8f0;font-size:12px;background:rgba(15,23,42,.55);padding:4px 10px;border-radius:6px;
+}
 .vin-page .btn.danger,.vin-page a.btn.danger{
   border-color:#fecaca !important;color:#b91c1c !important;background:#fff !important;
 }
@@ -371,14 +416,16 @@
     </div>
     <div class="ficha-layout">
       <div class="ficha-media">
-        <div class="ficha-img-box" id="fichaImgBox">
+        <div class="ficha-img-box" id="fichaImgBox" title="Clic para ver en grande">
           <img id="fichaImg" alt="" style="display:none;">
           <div class="ficha-img-empty" id="fichaImgEmpty">Sin imagen<br>del modelo</div>
+          <span class="ficha-img-zoom">Ampliar</span>
         </div>
+        <div class="ficha-thumbs" id="fichaThumbs" aria-label="Galería de imágenes"></div>
         <div class="ficha-media-actions">
-          <input type="file" id="fichaImgFile" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;">
-          <button type="button" class="btn outline sm" id="fichaBtnSubirImg">Subir imagen</button>
-          <button type="button" class="btn outline sm" id="fichaBtnQuitarImg" style="display:none;">Quitar imagen</button>
+          <input type="file" id="fichaImgFile" accept="image/jpeg,image/png,image/webp,image/gif" multiple style="display:none;">
+          <button type="button" class="btn outline sm" id="fichaBtnSubirImg">Agregar imagen</button>
+          <button type="button" class="btn outline sm" id="fichaBtnQuitarImg" style="display:none;">Quitar actual</button>
           <span id="fichaImgStatus" style="font-size:10px;color:#94a3b8;min-height:14px;"></span>
         </div>
       </div>
@@ -448,6 +495,14 @@
       </div>
     </div>
   </div>
+</div>
+
+<div class="vin-lightbox" id="vinLightbox" aria-hidden="true">
+  <button type="button" class="vin-lightbox-close" id="vinLbClose" aria-label="Cerrar">×</button>
+  <button type="button" class="vin-lightbox-nav prev" id="vinLbPrev" aria-label="Anterior">‹</button>
+  <img id="vinLbImg" alt="Imagen vehículo">
+  <button type="button" class="vin-lightbox-nav next" id="vinLbNext" aria-label="Siguiente">›</button>
+  <div class="vin-lightbox-cap" id="vinLbCap"></div>
 </div>
 
 <script>
@@ -528,16 +583,36 @@
     if (el) el.value = (val == null ? '' : val);
   }
 
-  var fichaState = { urlImagen: '', urlQuitar: '' };
+  var fichaState = {
+    urlImagen: '',
+    urlQuitar: '',
+    imagenes: [],
+    activeIdx: 0,
+    max: 8
+  };
 
-  function setFichaImagen(url) {
+  function bust(url) {
+    if (!url) return '';
+    return url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
+  }
+
+  function setFichaGaleria(imagenes, preferIdx) {
+    fichaState.imagenes = Array.isArray(imagenes) ? imagenes.slice() : [];
+    var idx = typeof preferIdx === 'number' ? preferIdx : 0;
+    if (idx < 0 || idx >= fichaState.imagenes.length) idx = 0;
+    fichaState.activeIdx = idx;
+    var current = fichaState.imagenes[idx] || null;
+    var url = current ? current.url : '';
     var img = document.getElementById('fichaImg');
     var empty = document.getElementById('fichaImgEmpty');
+    var box = document.getElementById('fichaImgBox');
     var btnQuitar = document.getElementById('fichaBtnQuitarImg');
+    var thumbs = document.getElementById('fichaThumbs');
+    var btnAdd = document.getElementById('fichaBtnSubirImg');
     var has = !!(url && String(url).trim());
     if (img) {
       if (has) {
-        img.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
+        img.src = bust(url);
         img.style.display = 'block';
       } else {
         img.removeAttribute('src');
@@ -545,7 +620,114 @@
       }
     }
     if (empty) empty.style.display = has ? 'none' : '';
+    if (box) box.classList.toggle('has-img', has);
     if (btnQuitar) btnQuitar.style.display = has ? '' : 'none';
+    fichaState.urlQuitar = current && current.url_quitar ? current.url_quitar : '';
+    if (thumbs) {
+      thumbs.innerHTML = '';
+      fichaState.imagenes.forEach(function (it, i) {
+        var b = document.createElement('div');
+        b.className = 'ficha-thumb' + (i === idx ? ' is-active' : '');
+        b.title = 'Ver imagen ' + (i + 1);
+        b.setAttribute('role', 'button');
+        b.tabIndex = 0;
+        b.innerHTML = '<img alt=""><button type="button" class="ficha-thumb-del" title="Quitar" aria-label="Quitar">×</button>';
+        var timg = b.querySelector('img');
+        if (timg) timg.src = bust(it.url);
+        b.addEventListener('click', function (e) {
+          if (e.target && e.target.classList.contains('ficha-thumb-del')) return;
+          setFichaGaleria(fichaState.imagenes, i);
+        });
+        b.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setFichaGaleria(fichaState.imagenes, i);
+          }
+        });
+        var del = b.querySelector('.ficha-thumb-del');
+        if (del) {
+          del.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            quitarImagenSlot(it);
+          });
+        }
+        thumbs.appendChild(b);
+      });
+    }
+    if (btnAdd) {
+      var full = fichaState.imagenes.length >= (fichaState.max || 8);
+      btnAdd.disabled = full;
+      btnAdd.textContent = full ? 'Galería llena' : 'Agregar imagen';
+    }
+  }
+
+  function openLightbox(startIdx) {
+    var lb = document.getElementById('vinLightbox');
+    if (!lb || !fichaState.imagenes.length) return;
+    var idx = typeof startIdx === 'number' ? startIdx : fichaState.activeIdx;
+    if (idx < 0) idx = 0;
+    if (idx >= fichaState.imagenes.length) idx = fichaState.imagenes.length - 1;
+    fichaState.activeIdx = idx;
+    renderLightbox();
+    lb.classList.add('open');
+    lb.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeLightbox() {
+    var lb = document.getElementById('vinLightbox');
+    if (!lb) return;
+    lb.classList.remove('open');
+    lb.setAttribute('aria-hidden', 'true');
+  }
+
+  function renderLightbox() {
+    var list = fichaState.imagenes;
+    var idx = fichaState.activeIdx || 0;
+    var img = document.getElementById('vinLbImg');
+    var cap = document.getElementById('vinLbCap');
+    var prev = document.getElementById('vinLbPrev');
+    var next = document.getElementById('vinLbNext');
+    if (!list.length) {
+      closeLightbox();
+      return;
+    }
+    if (img) img.src = bust(list[idx].url);
+    if (cap) cap.textContent = (idx + 1) + ' / ' + list.length;
+    if (prev) prev.disabled = list.length < 2;
+    if (next) next.disabled = list.length < 2;
+  }
+
+  function lightboxStep(delta) {
+    var n = fichaState.imagenes.length;
+    if (n < 2) return;
+    fichaState.activeIdx = (fichaState.activeIdx + delta + n) % n;
+    setFichaGaleria(fichaState.imagenes, fichaState.activeIdx);
+    renderLightbox();
+  }
+
+  function quitarImagenSlot(item) {
+    if (!item || !item.url_quitar) return;
+    if (!confirm('¿Quitar esta imagen?')) return;
+    var status = document.getElementById('fichaImgStatus');
+    if (status) status.textContent = 'Quitando…';
+    fetch(item.url_quitar, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.ok) {
+          if (status) status.textContent = (data && data.error) || 'No se pudo quitar';
+          return;
+        }
+        setFichaGaleria(data.imagenes || [], 0);
+        if (status) status.textContent = 'Imagen quitada';
+      })
+      .catch(function () {
+        if (status) status.textContent = 'Error de red';
+      });
   }
 
   function openFicha(vid) {
@@ -555,7 +737,7 @@
     if (sub) sub.textContent = 'Cargando…';
     if (titulo) titulo.textContent = 'Ficha vehículo';
     if (status) status.textContent = '';
-    setFichaImagen('');
+    setFichaGaleria([]);
     openModal('modalFichaVin');
     fetch('/vehiculos-vin/' + vid + '/json', {
       headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
@@ -588,9 +770,13 @@
         setVal('fichaChina', data.nombre_china);
         setVal('fichaTrans', data.transmision);
         setVal('fichaNotas', data.notas);
-        setFichaImagen(data.imagen_url || '');
+        fichaState.max = data.imagenes_max || 8;
         fichaState.urlImagen = data.url_imagen || '';
-        fichaState.urlQuitar = data.url_quitar_imagen || '';
+        var imgs = data.imagenes;
+        if ((!imgs || !imgs.length) && data.imagen_url) {
+          imgs = [{ slot: 1, url: data.imagen_url, url_quitar: data.url_quitar_imagen }];
+        }
+        setFichaGaleria(imgs || [], 0);
         var cat = document.getElementById('fichaBtnCatalogo');
         if (cat) {
           if (data.url_catalogo) {
@@ -617,58 +803,79 @@
   var btnSubir = document.getElementById('fichaBtnSubirImg');
   var fileInput = document.getElementById('fichaImgFile');
   var btnQuitar = document.getElementById('fichaBtnQuitarImg');
+  var imgBox = document.getElementById('fichaImgBox');
+  if (imgBox) {
+    imgBox.addEventListener('click', function () {
+      if (!fichaState.imagenes.length) return;
+      openLightbox(fichaState.activeIdx);
+    });
+  }
   if (btnSubir && fileInput) {
     btnSubir.addEventListener('click', function () { fileInput.click(); });
     fileInput.addEventListener('change', function () {
-      if (!fileInput.files || !fileInput.files[0] || !fichaState.urlImagen) return;
+      if (!fileInput.files || !fileInput.files.length || !fichaState.urlImagen) return;
       var status = document.getElementById('fichaImgStatus');
-      if (status) status.textContent = 'Subiendo…';
-      var fd = new FormData();
-      fd.append('imagen', fileInput.files[0]);
-      fetch(fichaState.urlImagen, {
-        method: 'POST',
-        body: fd,
-        credentials: 'same-origin',
-        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
-      })
-        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-        .then(function (res) {
-          if (!res.j || !res.j.ok) {
-            if (status) status.textContent = (res.j && res.j.error) || 'Error al subir';
-            return;
-          }
-          setFichaImagen(res.j.imagen_url || '');
-          if (status) status.textContent = 'Imagen guardada';
+      var files = Array.prototype.slice.call(fileInput.files);
+      var i = 0;
+      function nextUpload() {
+        if (i >= files.length) {
+          fileInput.value = '';
+          return;
+        }
+        if (fichaState.imagenes.length >= (fichaState.max || 8)) {
+          if (status) status.textContent = 'Galería llena (máx. ' + fichaState.max + ')';
+          fileInput.value = '';
+          return;
+        }
+        if (status) status.textContent = 'Subiendo ' + (i + 1) + '/' + files.length + '…';
+        var fd = new FormData();
+        fd.append('imagen', files[i]);
+        fd.append('append', '1');
+        i += 1;
+        fetch(fichaState.urlImagen, {
+          method: 'POST',
+          body: fd,
+          credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
         })
-        .catch(function () {
-          if (status) status.textContent = 'Error de red';
-        })
-        .finally(function () { fileInput.value = ''; });
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (res) {
+            if (!res.j || !res.j.ok) {
+              if (status) status.textContent = (res.j && res.j.error) || 'Error al subir';
+              fileInput.value = '';
+              return;
+            }
+            var imgs = res.j.imagenes || [];
+            setFichaGaleria(imgs, Math.max(0, imgs.length - 1));
+            if (status) status.textContent = 'Imagen guardada';
+            nextUpload();
+          })
+          .catch(function () {
+            if (status) status.textContent = 'Error de red';
+            fileInput.value = '';
+          });
+      }
+      nextUpload();
     });
   }
   if (btnQuitar) {
     btnQuitar.addEventListener('click', function () {
-      if (!fichaState.urlQuitar) return;
-      if (!confirm('¿Quitar la imagen de este vehículo?')) return;
-      var status = document.getElementById('fichaImgStatus');
-      if (status) status.textContent = 'Quitando…';
-      fetch(fichaState.urlQuitar, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
-      })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          if (!data || !data.ok) {
-            if (status) status.textContent = (data && data.error) || 'No se pudo quitar';
-            return;
-          }
-          setFichaImagen('');
-          if (status) status.textContent = 'Imagen quitada';
-        })
-        .catch(function () {
-          if (status) status.textContent = 'Error de red';
-        });
+      var cur = fichaState.imagenes[fichaState.activeIdx];
+      if (!cur) return;
+      quitarImagenSlot(cur);
+    });
+  }
+
+  var lbClose = document.getElementById('vinLbClose');
+  var lbPrev = document.getElementById('vinLbPrev');
+  var lbNext = document.getElementById('vinLbNext');
+  var lb = document.getElementById('vinLightbox');
+  if (lbClose) lbClose.addEventListener('click', closeLightbox);
+  if (lbPrev) lbPrev.addEventListener('click', function () { lightboxStep(-1); });
+  if (lbNext) lbNext.addEventListener('click', function () { lightboxStep(1); });
+  if (lb) {
+    lb.addEventListener('click', function (e) {
+      if (e.target === lb) closeLightbox();
     });
   }
 
@@ -695,6 +902,12 @@
     });
   });
   document.addEventListener('keydown', function (e) {
+    var lbOpen = document.getElementById('vinLightbox');
+    if (lbOpen && lbOpen.classList.contains('open')) {
+      if (e.key === 'Escape') { closeLightbox(); e.preventDefault(); return; }
+      if (e.key === 'ArrowLeft') { lightboxStep(-1); e.preventDefault(); return; }
+      if (e.key === 'ArrowRight') { lightboxStep(1); e.preventDefault(); return; }
+    }
     if (e.key !== 'Escape') return;
     var okOpen = document.getElementById('modalOkVin');
     if (okOpen && okOpen.classList.contains('open')) {

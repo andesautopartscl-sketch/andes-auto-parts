@@ -193,6 +193,7 @@ def _render_oc_form(
         url_clientes=url_for("ventas.api_clientes"),
         url_escanear_oc=url_for("oc_clientes.api_escanear_oc"),
         url_verificar_numero=url_for("oc_clientes.api_verificar_numero"),
+        url_verificar_vin_obs=url_for("oc_clientes.api_verificar_vin_obs"),
         url_vendedores=url_for("oc_clientes.api_vendedores"),
         puede_modificar=_can_modify(),
         active_page="oc_clientes",
@@ -551,17 +552,26 @@ def nueva():
                 try:
                     from app.vehiculos_vin.oc_sync import upsert_vehiculo_desde_oc
 
-                    vvin = upsert_vehiculo_desde_oc(
+                    sync = upsert_vehiculo_desde_oc(
                         observaciones=oc.observaciones,
                         numero_oc=oc.numero_oc,
                         usuario=_current_user(),
                     )
-                    if vvin:
-                        flash(
-                            f"VIN / Chasis actualizado automáticamente: {vvin.vin} "
-                            f"({vvin.marca} {vvin.modelo} {vvin.anio or ''})".strip(),
-                            "success",
-                        )
+                    if sync and sync.get("vehiculo"):
+                        vvin = sync["vehiculo"]
+                        etiqueta = (
+                            f"{vvin.vin} ({vvin.marca} {vvin.modelo} {vvin.anio or ''})"
+                        ).strip()
+                        if sync.get("created"):
+                            flash(
+                                f"VIN / Chasis registrado automáticamente: {etiqueta}",
+                                "success",
+                            )
+                        else:
+                            flash(
+                                f"VIN / Chasis ya existía — no se duplicó: {etiqueta}",
+                                "success",
+                            )
                 except Exception:
                     current_app.logger.exception("VIN sync desde OC nueva")
                 flash("Orden de compra del cliente registrada.", "success")
@@ -677,17 +687,26 @@ def editar(oid: int):
                 try:
                     from app.vehiculos_vin.oc_sync import upsert_vehiculo_desde_oc
 
-                    vvin = upsert_vehiculo_desde_oc(
+                    sync = upsert_vehiculo_desde_oc(
                         observaciones=oc.observaciones,
                         numero_oc=oc.numero_oc,
                         usuario=_current_user(),
                     )
-                    if vvin:
-                        flash(
-                            f"VIN / Chasis actualizado automáticamente: {vvin.vin} "
-                            f"({vvin.marca} {vvin.modelo} {vvin.anio or ''})".strip(),
-                            "success",
-                        )
+                    if sync and sync.get("vehiculo"):
+                        vvin = sync["vehiculo"]
+                        etiqueta = (
+                            f"{vvin.vin} ({vvin.marca} {vvin.modelo} {vvin.anio or ''})"
+                        ).strip()
+                        if sync.get("created"):
+                            flash(
+                                f"VIN / Chasis registrado automáticamente: {etiqueta}",
+                                "success",
+                            )
+                        else:
+                            flash(
+                                f"VIN / Chasis ya existía — no se duplicó: {etiqueta}",
+                                "success",
+                            )
                 except Exception:
                     current_app.logger.exception("VIN sync desde OC editar")
                 flash("Orden de compra actualizada.", "success")
@@ -1135,6 +1154,37 @@ def api_verificar_numero():
         estado_label=_estado_label(existing.estado),
         fecha_oc=existing.fecha_oc.strftime("%d/%m/%Y") if existing.fecha_oc else None,
         detalle_url=url_for("oc_clientes.detalle", oid=existing.id),
+    )
+
+
+@oc_clientes_bp.route("/api/verificar-vin-obs")
+@login_required
+@permission_required("ver_oc_clientes")
+def api_verificar_vin_obs():
+    """Indica si el VIN/chasis detectado en observaciones ya está en VIN / Chasis."""
+    texto = (request.args.get("q") or request.args.get("observaciones") or "").strip()
+    if not texto:
+        return jsonify(ok=True, detected=False, exists=False)
+    try:
+        from app.vehiculos_vin.oc_sync import buscar_vehiculo_por_observaciones
+
+        info = buscar_vehiculo_por_observaciones(texto)
+    except Exception:
+        current_app.logger.exception("verificar VIN desde observaciones OC")
+        return jsonify(ok=False, error="No se pudo validar el VIN."), 500
+    if not info:
+        return jsonify(ok=True, detected=False, exists=False)
+    return jsonify(
+        ok=True,
+        detected=True,
+        exists=bool(info.get("exists")),
+        vin=info.get("vin") or "",
+        marca=info.get("marca") or "",
+        modelo=info.get("modelo") or "",
+        anio=info.get("anio"),
+        patente=info.get("patente") or "",
+        id=info.get("id"),
+        etiqueta=info.get("etiqueta") or "",
     )
 
 

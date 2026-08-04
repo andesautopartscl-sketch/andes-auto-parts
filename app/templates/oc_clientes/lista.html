@@ -223,7 +223,7 @@
                         </td>
                         {% endif %}
                         <td>{{ f.oc.fecha_oc.strftime('%d/%m/%y') if f.oc.fecha_oc else '—' }}</td>
-                        <td>{{ f.oc.created_at.strftime('%d/%m/%y %H:%M') if f.oc.created_at else '—' }}</td>
+                        <td>{{ f.oc.created_at|chile_datetime if f.oc.created_at else '—' }}</td>
                         <td class="oc-num"><strong>{{ f.oc.numero_oc }}</strong></td>
                         <td class="cliente" title="{{ f.cliente_nombre }}">{{ f.cliente_nombre }}</td>
                         <td class="vendedor" title="{{ f.oc.vendedor or '' }}">{{ f.oc.vendedor or '—' }}</td>

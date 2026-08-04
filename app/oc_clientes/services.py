@@ -378,6 +378,7 @@ def timeline_eventos(oc: OrdenCompraCliente) -> list[dict]:
                 "estado": "recibida",
                 "label": "OC recibida",
                 "fecha": oc.created_at,
+                "fecha_utc": True,
                 "detalle": f"Registrada por {oc.usuario or 'sistema'}",
             }
         )
@@ -471,6 +472,7 @@ def timeline_eventos(oc: OrdenCompraCliente) -> list[dict]:
                 "estado": "anulada",
                 "label": "Anulada",
                 "fecha": oc.updated_at or oc.created_at,
+                "fecha_utc": True,
                 "detalle": "Orden anulada",
             }
         )

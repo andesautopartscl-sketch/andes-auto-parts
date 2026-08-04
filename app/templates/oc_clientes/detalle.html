@@ -196,7 +196,7 @@
                 </div>
                 <div class="oc-meta-item">
                     <dt>Fecha ingreso</dt>
-                    <dd>{{ oc.created_at.strftime('%d/%m/%Y %H:%M') if oc.created_at else '—' }}</dd>
+                    <dd>{{ oc.created_at|chile_datetime if oc.created_at else '—' }}</dd>
                 </div>
                 <div class="oc-meta-item">
                     <dt>Entrega comprometida</dt>
@@ -345,7 +345,7 @@
                     {% for ev in timeline %}
                     <div class="oc-timeline-item">
                         <strong>{{ ev.label }}</strong>
-                        <div>{{ ev.fecha.strftime('%d/%m/%Y %H:%M') if ev.fecha else '' }} · {{ ev.detalle }}</div>
+                        <div>{% if ev.fecha_utc %}{{ ev.fecha|chile_datetime if ev.fecha else '' }}{% else %}{{ ev.fecha.strftime('%d/%m/%Y %H:%M') if ev.fecha else '' }}{% endif %} · {{ ev.detalle }}</div>
                     </div>
                     {% else %}
                     <p style="color:#94a3b8;font-size:12px;margin:0;">Sin eventos.</p>

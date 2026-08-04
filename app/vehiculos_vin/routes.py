@@ -47,7 +47,8 @@ _TRANSMISION_TOKENS = {
 }
 _IMG_ALLOWED = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 _IMG_MAX_BYTES = 4 * 1024 * 1024
-_IMG_THUMB = (640, 480)
+_IMG_THUMB = (1280, 960)  # suficiente para ver en grande
+_IMG_GALLERY_MAX = 8
 
 
 @vehiculos_vin_bp.before_request
@@ -70,11 +71,20 @@ def _imagenes_root() -> Path:
     return root
 
 
+def _slot_path(vid: int, slot: int) -> Path:
+    """slot 1 = imagen principal histórica ({vid}.jpg); 2..N = {vid}_gN.jpg."""
+    s = max(1, int(slot))
+    if s <= 1:
+        return _imagenes_root() / f"{int(vid)}.jpg"
+    return _imagenes_root() / f"{int(vid)}_g{s}.jpg"
+
+
 def _imagen_local_path(vid: int) -> Path:
-    return _imagenes_root() / f"{int(vid)}.jpg"
+    return _slot_path(vid, 1)
 
 
 def _borrar_imagen_local(vid: int) -> None:
+    """Compat: borra solo la imagen principal local."""
     p = _imagen_local_path(vid)
     try:
         if p.is_file():
@@ -83,7 +93,18 @@ def _borrar_imagen_local(vid: int) -> None:
         pass
 
 
+def _borrar_galeria_local(vid: int) -> None:
+    for slot in range(1, _IMG_GALLERY_MAX + 1):
+        p = _slot_path(vid, slot)
+        try:
+            if p.is_file():
+                p.unlink()
+        except OSError:
+            pass
+
+
 def _imagen_display_url(v: VehiculoVin) -> str:
+    """URL de la imagen principal (compat con pantallas existentes)."""
     url = (v.imagen_url or "").strip()
     if url.startswith("http://") or url.startswith("https://"):
         return url
@@ -92,7 +113,41 @@ def _imagen_display_url(v: VehiculoVin) -> str:
     return ""
 
 
-def _guardar_imagen_local(vid: int, file_storage) -> tuple[bool, str]:
+def _list_imagenes(v: VehiculoVin) -> list[dict[str, Any]]:
+    """Galería ordenada: principal + extras locales. No rompe registros viejos."""
+    out: list[dict[str, Any]] = []
+    primary = _imagen_display_url(v)
+    if primary:
+        out.append(
+            {
+                "slot": 1,
+                "url": primary,
+                "url_quitar": url_for("vehiculos_vin.quitar_imagen", vid=v.id) + "?slot=1",
+            }
+        )
+    for slot in range(2, _IMG_GALLERY_MAX + 1):
+        if _slot_path(v.id, slot).is_file():
+            out.append(
+                {
+                    "slot": slot,
+                    "url": url_for("vehiculos_vin.archivo_imagen_slot", vid=v.id, slot=slot),
+                    "url_quitar": url_for("vehiculos_vin.quitar_imagen", vid=v.id)
+                    + f"?slot={slot}",
+                }
+            )
+    return out
+
+
+def _siguiente_slot_libre(v: VehiculoVin) -> int | None:
+    if not _imagen_display_url(v):
+        return 1
+    for slot in range(2, _IMG_GALLERY_MAX + 1):
+        if not _slot_path(v.id, slot).is_file():
+            return slot
+    return None
+
+
+def _guardar_imagen_en_path(dest: Path, file_storage) -> tuple[bool, str]:
     if file_storage is None or not getattr(file_storage, "filename", None):
         return False, "No se recibió archivo"
     filename = secure_filename(file_storage.filename or "")
@@ -110,11 +165,16 @@ def _guardar_imagen_local(vid: int, file_storage) -> tuple[bool, str]:
         img = Image.open(io.BytesIO(raw))
         img = img.convert("RGB")
         img.thumbnail(_IMG_THUMB, Image.Resampling.LANCZOS)
-        dest = _imagen_local_path(vid)
+        dest.parent.mkdir(parents=True, exist_ok=True)
         img.save(dest, format="JPEG", quality=88, optimize=True)
     except Exception as exc:
         return False, f"No se pudo procesar la imagen: {exc}"
     return True, ""
+
+
+def _guardar_imagen_local(vid: int, file_storage) -> tuple[bool, str]:
+    """Compat: guarda/reemplaza la imagen principal."""
+    return _guardar_imagen_en_path(_imagen_local_path(vid), file_storage)
 
 
 def normalizar_vin(raw: Any) -> str | None:
@@ -513,6 +573,8 @@ def detalle(vid: int):
         v=v,
         q_catalogo=q_catalogo,
         imagen_url=_imagen_display_url(v),
+        imagenes=_list_imagenes(v),
+        imagenes_max=_IMG_GALLERY_MAX,
         active_page="vehiculos_vin",
     )
 
@@ -525,6 +587,7 @@ def ficha_json(vid: int):
         return jsonify({"ok": False, "error": "Vehículo no encontrado"}), 404
     q_catalogo = _modelo_busqueda_catalogo(v)
     img = _imagen_display_url(v)
+    imagenes = _list_imagenes(v)
     return jsonify(
         {
             "ok": True,
@@ -542,6 +605,8 @@ def ficha_json(vid: int):
             "nombre_china": v.nombre_china or "",
             "notas": v.notas or "",
             "imagen_url": img,
+            "imagenes": imagenes,
+            "imagenes_max": _IMG_GALLERY_MAX,
             "activo": bool(v.activo),
             "fuente": v.fuente or "",
             "etiqueta": v.etiqueta(),
@@ -649,7 +714,7 @@ def eliminar(vid: int):
         flash("Vehículo no encontrado.", "error")
         return redirect(url_for("vehiculos_vin.index"))
 
-    _borrar_imagen_local(vid)
+    _borrar_galeria_local(vid)
     db.session.delete(v)
     db.session.commit()
     flash("Vehículo eliminado del registro VIN.", "success")
@@ -659,10 +724,24 @@ def eliminar(vid: int):
 @vehiculos_vin_bp.route("/<int:vid>/imagen", methods=["GET"])
 @login_required
 def archivo_imagen(vid: int):
+    return archivo_imagen_slot(vid, 1)
+
+
+@vehiculos_vin_bp.route("/<int:vid>/imagen/<int:slot>", methods=["GET"])
+@login_required
+def archivo_imagen_slot(vid: int, slot: int):
     v = db.session.get(VehiculoVin, vid)
     if not v:
         return ("", 404)
-    path = _imagen_local_path(vid)
+    slot = int(slot or 1)
+    if slot < 1 or slot > _IMG_GALLERY_MAX:
+        return ("", 404)
+    # Slot 1 puede ser solo Cloudinary (sin archivo local)
+    if slot == 1:
+        cloud = (v.imagen_url or "").strip()
+        if cloud.startswith("http://") or cloud.startswith("https://"):
+            return redirect(cloud)
+    path = _slot_path(vid, slot)
     if not path.is_file():
         return ("", 404)
     return send_file(path, mimetype="image/jpeg", max_age=86400)
@@ -675,46 +754,68 @@ def subir_imagen(vid: int):
     if not v:
         return jsonify({"ok": False, "error": "Vehículo no encontrado"}), 404
 
+    wants_json = _wants_json()
+    append_flag = (
+        request.form.get("append")
+        or request.args.get("append")
+        or ("1" if wants_json else "")
+    )
+    append = str(append_flag).strip().lower() in {"1", "true", "yes", "on"}
+
     f = request.files.get("imagen") or request.files.get("file")
-    ok, err = _guardar_imagen_local(vid, f)
+    if append:
+        slot = _siguiente_slot_libre(v)
+        if slot is None:
+            msg = f"Máximo {_IMG_GALLERY_MAX} imágenes por vehículo."
+            if wants_json:
+                return jsonify({"ok": False, "error": msg}), 400
+            flash(msg, "error")
+            return _safe_next_redirect("vehiculos_vin.detalle", vid=vid)
+    else:
+        # Formulario clásico de detalle: reemplaza solo la principal
+        slot = 1
+
+    dest = _slot_path(vid, slot)
+    ok, err = _guardar_imagen_en_path(dest, f)
     if not ok:
-        wants_json = (
-            request.headers.get("X-Requested-With") == "XMLHttpRequest"
-            or "application/json" in (request.headers.get("Accept") or "")
-        )
         if wants_json:
             return jsonify({"ok": False, "error": err}), 400
         flash(err, "error")
         return _safe_next_redirect("vehiculos_vin.detalle", vid=vid)
 
-    # Preferir archivo local; si Cloudinary está configurado, subir también
-    cloud_url = ""
-    try:
-        from app.utils.cloudinary_config import is_configured, upload_image
-
-        if is_configured() and _imagen_local_path(vid).is_file():
-            result = upload_image(
-                _imagen_local_path(vid),
-                folder="andes_erp/vehiculos_vin",
-                public_id=f"vin_{vid}",
-            )
-            cloud_url = (result.get("url") or "").strip()
-    except Exception:
+    # Cloudinary solo para la principal (compatibilidad)
+    if slot == 1:
         cloud_url = ""
+        try:
+            from app.utils.cloudinary_config import is_configured, upload_image
 
-    v.imagen_url = cloud_url
+            if is_configured() and dest.is_file():
+                result = upload_image(
+                    dest,
+                    folder="andes_erp/vehiculos_vin",
+                    public_id=f"vin_{vid}",
+                )
+                cloud_url = (result.get("url") or "").strip()
+        except Exception:
+            cloud_url = ""
+        v.imagen_url = cloud_url
+
     v.usuario_edicion = _current_user()
     v.updated_at = datetime.utcnow()
     db.session.commit()
 
+    imagenes = _list_imagenes(v)
     display = _imagen_display_url(v)
-    wants_json = (
-        request.headers.get("X-Requested-With") == "XMLHttpRequest"
-        or "application/json" in (request.headers.get("Accept") or "")
-    )
     if wants_json:
-        return jsonify({"ok": True, "imagen_url": display})
-    flash("Imagen del vehículo actualizada.", "success")
+        return jsonify(
+            {
+                "ok": True,
+                "imagen_url": display,
+                "imagenes": imagenes,
+                "slot": slot,
+            }
+        )
+    flash("Imagen del vehículo actualizada." if slot == 1 else "Imagen agregada a la galería.", "success")
     return _safe_next_redirect("vehiculos_vin.detalle", vid=vid)
 
 
@@ -725,18 +826,42 @@ def quitar_imagen(vid: int):
     if not v:
         return jsonify({"ok": False, "error": "Vehículo no encontrado"}), 404
 
-    _borrar_imagen_local(vid)
-    v.imagen_url = ""
+    wants_json = _wants_json()
+    try:
+        slot = int(request.args.get("slot") or request.form.get("slot") or 1)
+    except (TypeError, ValueError):
+        slot = 1
+    if slot < 1 or slot > _IMG_GALLERY_MAX:
+        msg = "Imagen inválida."
+        if wants_json:
+            return jsonify({"ok": False, "error": msg}), 400
+        flash(msg, "error")
+        return _safe_next_redirect("vehiculos_vin.detalle", vid=vid)
+
+    if slot == 1:
+        _borrar_imagen_local(vid)
+        v.imagen_url = ""
+    else:
+        p = _slot_path(vid, slot)
+        try:
+            if p.is_file():
+                p.unlink()
+        except OSError:
+            pass
+
     v.usuario_edicion = _current_user()
     v.updated_at = datetime.utcnow()
     db.session.commit()
 
-    wants_json = (
-        request.headers.get("X-Requested-With") == "XMLHttpRequest"
-        or "application/json" in (request.headers.get("Accept") or "")
-    )
+    imagenes = _list_imagenes(v)
     if wants_json:
-        return jsonify({"ok": True, "imagen_url": ""})
+        return jsonify(
+            {
+                "ok": True,
+                "imagen_url": _imagen_display_url(v),
+                "imagenes": imagenes,
+            }
+        )
     flash("Imagen eliminada.", "success")
     return _safe_next_redirect("vehiculos_vin.detalle", vid=vid)
 
