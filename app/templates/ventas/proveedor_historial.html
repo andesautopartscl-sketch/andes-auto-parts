@@ -514,7 +514,8 @@
             <p style="margin:0 0 12px;color:#64748b;font-size:12px;max-width:760px;line-height:1.45;">
                 Crédito generado por devoluciones de mercadería o ajustes. El ingreso original no se altera
                 (queda el historial fiscal). Podés acreditar/consumir manualmente o registrar devolución
-                desde el detalle del ingreso de bodega.
+                desde el detalle del ingreso de bodega. Si el proveedor envía después la nota de crédito,
+                completá el <strong>N° NC</strong> en cada fila de la tabla (no cambia el monto ni el saldo).
             </p>
             <details style="margin-bottom:14px;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;background:#f8fafc;">
                 <summary style="cursor:pointer;font-weight:600;font-size:12px;color:#334155;">Registrar movimiento manual</summary>
@@ -562,6 +563,7 @@
                             <th>Tipo</th>
                             <th>Monto</th>
                             <th>Detalle</th>
+                            <th>N° NC</th>
                             <th>Usuario</th>
                         </tr>
                     </thead>
@@ -575,9 +577,28 @@
                             </td>
                             <td style="line-height:1.25;">
                                 {% if sm.ref_factura %}Fac: {{ sm.ref_factura }}{% endif %}
-                                {% if sm.ref_nc %}<br>NC: {{ sm.ref_nc }}{% endif %}
                                 {% if sm.ingreso_documento_id %}<br><a href="{{ url_for('bodega.ingreso_ver', doc_id=sm.ingreso_documento_id, **{'from': 'proveedor', 'pid': proveedor.id}) }}">Ingreso #{{ sm.ingreso_documento_id }}</a>{% endif %}
                                 {% if sm.razon %}<br><span style="color:#64748b;">{{ (sm.razon or '')[:140] }}{% if (sm.razon or '')|length > 140 %}…{% endif %}</span>{% endif %}
+                            </td>
+                            <td style="min-width:148px;vertical-align:middle;">
+                                <form method="post" class="js-nc-form"
+                                      action="{{ url_for('ventas.proveedor_saldo_favor_actualizar_nc', pid=proveedor.id, mid=sm.id) }}"
+                                      style="display:flex;gap:4px;align-items:center;margin:0;flex-wrap:nowrap;">
+                                    <input type="text" name="ref_numero_nota_credito"
+                                           value="{{ sm.ref_nc or '' }}"
+                                           maxlength="100"
+                                           placeholder="N° NC"
+                                           title="Número de nota de crédito del proveedor"
+                                           autocomplete="off"
+                                           class="js-nc-input"
+                                           style="width:96px;padding:4px 6px;border:1px solid #dbe3ef;border-radius:6px;font-size:11px;">
+                                    <button type="submit" class="js-nc-btn"
+                                            style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap;color:#334155;"
+                                            title="{% if sm.ref_nc %}Actualizar N° NC{% else %}Agregar N° NC{% endif %}">
+                                        {% if sm.ref_nc %}OK{% else %}+ NC{% endif %}
+                                    </button>
+                                </form>
+                                <div class="js-nc-msg" style="display:none;margin-top:3px;font-size:10px;line-height:1.2;"></div>
                             </td>
                             <td>{{ sm.usuario or '—' }}</td>
                         </tr>
@@ -671,16 +692,28 @@
     if (root) {
         const buttons = root.querySelectorAll('.tab-btn');
         const panes = document.querySelectorAll('.history-pane');
+        function activateTab(tabId) {
+            if (!tabId) return;
+            var pane = document.getElementById(tabId);
+            if (!pane) return;
+            buttons.forEach(function (item) {
+                item.classList.toggle('active', item.getAttribute('data-tab') === tabId);
+            });
+            panes.forEach(function (p) {
+                p.classList.toggle('active', p.id === tabId);
+            });
+        }
         buttons.forEach(function (btn) {
             btn.addEventListener('click', function () {
                 const tabId = btn.getAttribute('data-tab');
-                buttons.forEach(function (item) { item.classList.remove('active'); });
-                panes.forEach(function (pane) { pane.classList.remove('active'); });
-                btn.classList.add('active');
-                const pane = document.getElementById(tabId);
-                if (pane) pane.classList.add('active');
+                activateTab(tabId);
+                if (tabId && history.replaceState) {
+                    history.replaceState(null, '', '#' + tabId);
+                }
             });
         });
+        var hashTab = (location.hash || '').replace(/^#/, '');
+        if (hashTab) activateTab(hashTab);
     }
     document.querySelectorAll('[data-href]').forEach(function (row) {
         row.addEventListener('click', function () {
@@ -709,6 +742,82 @@
         homologFilter.addEventListener('input', applyHomologFilter);
         applyHomologFilter();
     }
+
+    document.querySelectorAll('form.js-nc-form').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var btn = form.querySelector('.js-nc-btn');
+            var inp = form.querySelector('.js-nc-input');
+            var msg = form.parentElement && form.parentElement.querySelector('.js-nc-msg');
+            var prevLabel = btn ? btn.textContent : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '…';
+            }
+            if (msg) {
+                msg.style.display = 'none';
+                msg.textContent = '';
+            }
+            fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form),
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+                .then(function (r) {
+                    return r.json().then(function (j) {
+                        return { ok: r.ok, j: j };
+                    }).catch(function () {
+                        return { ok: false, j: null };
+                    });
+                })
+                .then(function (res) {
+                    if (!res.j || !res.j.ok) {
+                        var err = (res.j && res.j.error) || 'No se pudo guardar.';
+                        if (msg) {
+                            msg.style.display = 'block';
+                            msg.style.color = '#b91c1c';
+                            msg.textContent = err;
+                        } else {
+                            window.alert(err);
+                        }
+                        return;
+                    }
+                    var nc = (res.j.ref_nc || '').trim();
+                    if (inp) inp.value = nc;
+                    if (btn) {
+                        btn.textContent = nc ? 'OK' : '+ NC';
+                        btn.title = nc ? 'Actualizar N° NC' : 'Agregar N° NC';
+                    }
+                    if (typeof window.showAndesFlash === 'function') {
+                        window.showAndesFlash([['success', res.j.message || (nc ? 'N° NC guardado' : 'N° NC quitado')]]);
+                    } else if (msg) {
+                        msg.style.display = 'block';
+                        msg.style.color = '#15803d';
+                        msg.textContent = nc ? 'Guardado' : 'Quitado';
+                        window.setTimeout(function () {
+                            msg.style.display = 'none';
+                        }, 1800);
+                    }
+                })
+                .catch(function () {
+                    if (msg) {
+                        msg.style.display = 'block';
+                        msg.style.color = '#b91c1c';
+                        msg.textContent = 'Error de red';
+                    } else {
+                        window.alert('Error de red al guardar N° NC.');
+                    }
+                })
+                .finally(function () {
+                    if (btn) btn.disabled = false;
+                    if (btn && btn.textContent === '…') btn.textContent = prevLabel || '+ NC';
+                });
+        });
+    });
 })();
 </script>
 {% endblock %}

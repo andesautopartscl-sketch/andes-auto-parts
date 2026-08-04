@@ -478,6 +478,9 @@ body.is-embed-modal #appMainContent {
 		{% block content %}{% endblock %}
 	</main>
 </div>
+{# Fuera de #appMainContent: al navegar/guardar por SPA se reemplaza innerHTML
+   y si el overlay vivía adentro se perdían estilos + showAndesFlash dejaba de verse. #}
+{% include 'partials/flash_overlay.html' %}
 
 {% if not embed_modal|default(false) %}
 <div id="appModal" class="app-modal" aria-hidden="true">
@@ -603,22 +606,54 @@ function toggleMenu(id) {
 		return scripts.reduce(function (chain, oldScript) {
 			return chain.then(function () {
 				return new Promise(function (resolve) {
-					var newScript = document.createElement('script');
-					Array.from(oldScript.attributes).forEach(function (attr) {
-						newScript.setAttribute(attr.name, attr.value);
-					});
-					if (oldScript.src) {
-						newScript.onload = resolve;
-						newScript.onerror = resolve;
-					} else {
-						newScript.textContent = oldScript.textContent;
+					try {
+						/* JSON boots se consumen aparte; no re-ejecutar como JS. */
+						var typ = (oldScript.getAttribute('type') || '').toLowerCase();
+						if (typ === 'application/json' || typ === 'application/ld+json') {
+							resolve();
+							return;
+						}
+						var newScript = document.createElement('script');
+						Array.from(oldScript.attributes).forEach(function (attr) {
+							newScript.setAttribute(attr.name, attr.value);
+						});
+						if (oldScript.src) {
+							newScript.onload = resolve;
+							newScript.onerror = resolve;
+							oldScript.parentNode.replaceChild(newScript, oldScript);
+						} else {
+							newScript.textContent = oldScript.textContent;
+							oldScript.parentNode.replaceChild(newScript, oldScript);
+							resolve();
+						}
+					} catch (errExec) {
+						resolve();
 					}
-					oldScript.parentNode.replaceChild(newScript, oldScript);
-					if (!oldScript.src) resolve();
 				});
 			});
 		}, Promise.resolve());
 	}
+
+	window.consumeAndesPageMessages = function (root) {
+		var scope = root || document;
+		var boots = Array.from(scope.querySelectorAll('script.andes-page-message-boot, #andesPageMessageBoot'));
+		if (!boots.length) return;
+		boots.forEach(function (boot) {
+			var raw = (boot.textContent || '').trim();
+			try {
+				if (boot.parentNode) boot.parentNode.removeChild(boot);
+			} catch (eRm) {}
+			if (!raw) return;
+			var data = null;
+			try { data = JSON.parse(raw); } catch (eParse) { return; }
+			var cat = (data && (data.type || data.category)) || 'info';
+			var text = (data && (data.text || data.message || data.msg)) || '';
+			if (!text) return;
+			if (typeof window.showAndesFlash === 'function') {
+				window.showAndesFlash([[cat, text]]);
+			}
+		});
+	};
 
 	/* Bodega carga bodega.css en el fragmento SPA (base_content). Si el <link> vive
 	   dentro de #appMainContent, al cambiar de pantalla el navegador retira la hoja y
@@ -697,7 +732,20 @@ function toggleMenu(id) {
 			while (temp.firstChild) {
 				container.appendChild(temp.firstChild);
 			}
-			return executeScripts(container);
+			return executeScripts(container).then(function () {
+				if (typeof window.consumeAndesPageMessages === 'function') {
+					window.consumeAndesPageMessages(container);
+				}
+				/* Flask flashes en fragmentos SPA (si vinieran en el HTML). */
+				var flashBoot = container.querySelector('#andesFlashBoot');
+				if (flashBoot && typeof window.showAndesFlash === 'function') {
+					try {
+						var raw = (flashBoot.textContent || '').trim();
+						if (flashBoot.parentNode) flashBoot.parentNode.removeChild(flashBoot);
+						if (raw) window.showAndesFlash(JSON.parse(raw));
+					} catch (eFlash) {}
+				}
+			});
 		});
 	}
 

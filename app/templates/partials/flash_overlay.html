@@ -1,0 +1,213 @@
+{# Overlay centrado para flashes: no ocupa espacio en el layout (no empuja la cabecera).
+   Debe vivir FUERA de #appMainContent (ver base.html): el SPA reemplaza innerHTML
+   y si los estilos quedaban adentro, el mensaje dejaba de verse al centro. #}
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<script type="application/json" id="andesFlashBoot">{{ messages|tojson }}</script>
+{% endif %}
+{% endwith %}
+<style id="andesFlashStyles">
+.andes-flash-overlay{
+  position:fixed;inset:0;z-index:12000;
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;box-sizing:border-box;
+  pointer-events:auto;
+}
+.andes-flash-overlay[hidden]{display:none !important;}
+.andes-flash-backdrop{
+  position:absolute;inset:0;
+  background:rgba(15,23,42,.42);
+  backdrop-filter:blur(1.5px);
+}
+.andes-flash-panel{
+  position:relative;z-index:1;
+  width:min(440px,100%);
+  background:#fff;
+  border-radius:14px;
+  padding:18px 18px 14px;
+  box-shadow:0 24px 60px rgba(15,23,42,.28);
+  display:grid;gap:8px;
+  animation:andesFlashIn .18s ease-out;
+}
+@keyframes andesFlashIn{
+  from{opacity:0;transform:translateY(8px) scale(.98);}
+  to{opacity:1;transform:none;}
+}
+.andes-flash-item{
+  padding:10px 12px;border-radius:9px;border:1px solid;
+  font-size:13px;font-weight:600;line-height:1.35;text-align:center;
+}
+.andes-flash-item.success{background:#f0fdf4;color:#166534;border-color:#86efac;}
+.andes-flash-item.error{background:#fef2f2;color:#b91c1c;border-color:#fecaca;}
+.andes-flash-item.warning{background:#fffbeb;color:#a16207;border-color:#fde68a;}
+.andes-flash-item.info{background:#eff6ff;color:#1d4ed8;border-color:#93c5fd;}
+.andes-flash-close{
+  margin-top:2px;justify-self:center;
+  border:0;background:transparent;color:#64748b;
+  font-size:11px;font-weight:600;cursor:pointer;padding:4px 8px;border-radius:6px;
+}
+.andes-flash-close:hover{background:#f1f5f9;color:#0f172a;}
+</style>
+<script>
+(function () {
+  'use strict';
+
+  function pinStylesToHead() {
+    var st = document.getElementById('andesFlashStyles');
+    if (st && st.parentNode !== document.head) {
+      document.head.appendChild(st);
+    }
+  }
+  pinStylesToHead();
+
+  if (window.__andesFlashReady) {
+    if (!document.getElementById('andesFlashStyles') && typeof window.__andesFlashEnsureStyles === 'function') {
+      window.__andesFlashEnsureStyles();
+    }
+    var bootDup = document.getElementById('andesFlashBoot');
+    if (bootDup && typeof window.showAndesFlash === 'function') {
+      try {
+        var rawDup = (bootDup.textContent || '').trim();
+        bootDup.parentNode && bootDup.parentNode.removeChild(bootDup);
+        if (rawDup) window.showAndesFlash(JSON.parse(rawDup));
+      } catch (e) {}
+    }
+    if (typeof window.consumeAndesPageMessages === 'function') {
+      window.consumeAndesPageMessages(document.getElementById('appMainContent') || document);
+    }
+    return;
+  }
+  window.__andesFlashReady = true;
+
+  var AUTO_MS = 5000;
+  var overlay = null;
+  var panel = null;
+  var timer = null;
+
+  function ensureStyles() {
+    pinStylesToHead();
+    if (document.getElementById('andesFlashStyles')) return;
+    var st = document.createElement('style');
+    st.id = 'andesFlashStyles';
+    st.textContent =
+      '.andes-flash-overlay{position:fixed;inset:0;z-index:12000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;pointer-events:auto;}' +
+      '.andes-flash-overlay[hidden]{display:none !important;}' +
+      '.andes-flash-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.42);backdrop-filter:blur(1.5px);}' +
+      '.andes-flash-panel{position:relative;z-index:1;width:min(440px,100%);background:#fff;border-radius:14px;padding:18px 18px 14px;box-shadow:0 24px 60px rgba(15,23,42,.28);display:grid;gap:8px;animation:andesFlashIn .18s ease-out;}' +
+      '@keyframes andesFlashIn{from{opacity:0;transform:translateY(8px) scale(.98);}to{opacity:1;transform:none;}}' +
+      '.andes-flash-item{padding:10px 12px;border-radius:9px;border:1px solid;font-size:13px;font-weight:600;line-height:1.35;text-align:center;}' +
+      '.andes-flash-item.success{background:#f0fdf4;color:#166534;border-color:#86efac;}' +
+      '.andes-flash-item.error{background:#fef2f2;color:#b91c1c;border-color:#fecaca;}' +
+      '.andes-flash-item.warning{background:#fffbeb;color:#a16207;border-color:#fde68a;}' +
+      '.andes-flash-item.info{background:#eff6ff;color:#1d4ed8;border-color:#93c5fd;}' +
+      '.andes-flash-close{margin-top:2px;justify-self:center;border:0;background:transparent;color:#64748b;font-size:11px;font-weight:600;cursor:pointer;padding:4px 8px;border-radius:6px;}' +
+      '.andes-flash-close:hover{background:#f1f5f9;color:#0f172a;}';
+    document.head.appendChild(st);
+  }
+  window.__andesFlashEnsureStyles = ensureStyles;
+
+  function ensureDom() {
+    ensureStyles();
+    if (overlay && overlay.isConnected) return overlay;
+    overlay = document.getElementById('andesFlashOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'andesFlashOverlay';
+      overlay.className = 'andes-flash-overlay';
+      overlay.setAttribute('role', 'alertdialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.hidden = true;
+      overlay.innerHTML =
+        '<div class="andes-flash-backdrop" data-flash-dismiss="1"></div>' +
+        '<div class="andes-flash-panel" role="document">' +
+        '<div class="andes-flash-items"></div>' +
+        '<button type="button" class="andes-flash-close" data-flash-dismiss="1">Cerrar</button>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', function (e) {
+        var t = e.target;
+        if (t && t.getAttribute && t.getAttribute('data-flash-dismiss')) {
+          hideFlash();
+        }
+      });
+    }
+    panel = overlay.querySelector('.andes-flash-items');
+    if (!window.__andesFlashEscBound) {
+      window.__andesFlashEscBound = true;
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && overlay && !overlay.hidden) hideFlash();
+      });
+    }
+    return overlay;
+  }
+
+  function hideFlash() {
+    if (timer) {
+      window.clearTimeout(timer);
+      timer = null;
+    }
+    if (!overlay) return;
+    overlay.hidden = true;
+    if (panel) panel.innerHTML = '';
+  }
+
+  function normalizeItems(items) {
+    if (!items) return [];
+    if (typeof items === 'string') return [['info', items]];
+    if (!Array.isArray(items)) return [];
+    return items.map(function (it) {
+      if (Array.isArray(it) && it.length >= 2) return [String(it[0] || 'info'), String(it[1] || '')];
+      if (it && typeof it === 'object') {
+        return [String(it.category || it.cat || 'info'), String(it.message || it.msg || '')];
+      }
+      return ['info', String(it)];
+    }).filter(function (it) { return it[1]; });
+  }
+
+  function showFlash(items, opts) {
+    var list = normalizeItems(items);
+    if (!list.length) return;
+    ensureDom();
+    panel.innerHTML = '';
+    list.forEach(function (pair) {
+      var el = document.createElement('div');
+      el.className = 'andes-flash-item ' + (pair[0] || 'info');
+      el.textContent = pair[1];
+      panel.appendChild(el);
+    });
+    overlay.hidden = false;
+    if (timer) window.clearTimeout(timer);
+    var ms = (opts && opts.ms != null) ? Number(opts.ms) : AUTO_MS;
+    if (ms > 0) {
+      timer = window.setTimeout(hideFlash, ms);
+    }
+  }
+
+  window.showAndesFlash = showFlash;
+  window.hideAndesFlash = hideFlash;
+
+  function boot() {
+    var bootEl = document.getElementById('andesFlashBoot');
+    if (!bootEl) return;
+    var raw = (bootEl.textContent || '').trim();
+    bootEl.parentNode && bootEl.parentNode.removeChild(bootEl);
+    if (!raw) return;
+    try {
+      showFlash(JSON.parse(raw));
+    } catch (e) { /* ignore */ }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
+  document.addEventListener('app:module-loaded', function () {
+    ensureStyles();
+    if (typeof window.consumeAndesPageMessages === 'function') {
+      window.consumeAndesPageMessages(document.getElementById('appMainContent') || document);
+    }
+  });
+})();
+</script>

@@ -326,9 +326,7 @@
     </div>
 </div>
 
-{% if message %}
-<div class="message {{ message.type }}">{{ message.text }}</div>
-{% endif %}
+{% include 'partials/page_message_overlay.html' %}
 
 <div class="form-card form-shell-full recepcion-form-card">
     <h2 class="section-title">Registrar Recepción</h2>

@@ -4076,6 +4076,63 @@ def proveedor_saldo_favor_manual(pid: int):
     return redirect(url_for("ventas.proveedor_historial", pid=pid))
 
 
+@ventas_bp.route("/proveedores/<int:pid>/saldo_favor/<int:mid>/nc", methods=["POST"])
+@login_required
+def proveedor_saldo_favor_actualizar_nc(pid: int, mid: int):
+    """Completa o corrige el N° de nota de crédito en un movimiento ya registrado."""
+    wants_json = (
+        request.is_json
+        or (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
+        or "application/json" in (request.headers.get("Accept") or "")
+    )
+
+    def _fail(msg: str, code: int = 400):
+        if wants_json:
+            return jsonify({"ok": False, "error": msg}), code
+        flash(msg, "error")
+        if code == 404 and "Proveedor" in msg:
+            return redirect(url_for("ventas.proveedores"))
+        return redirect(url_for("ventas.proveedor_historial", pid=pid) + "#proveedor-saldo")
+
+    if not has_permission(session.get("user"), session.get("rol"), "ventas_guardar_documento"):
+        return _fail("Sin permiso para actualizar la nota de crédito.", 403)
+
+    p = db.session.get(Proveedor, pid)
+    if p is None or not p.activo:
+        return _fail("Proveedor no encontrado.", 404)
+
+    mov = db.session.get(ProveedorSaldoFavorMovimiento, mid)
+    if mov is None or int(mov.proveedor_id or 0) != int(pid):
+        return _fail("Movimiento de saldo no encontrado.", 404)
+
+    nnc = (request.form.get("ref_numero_nota_credito") or "").strip()[:100]
+    mov.ref_nota_credito_numero = nnc or None
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("proveedor_saldo_favor actualizar NC")
+        return _fail(f"No se pudo guardar el N° NC: {exc}", 500)
+
+    if wants_json:
+        return jsonify(
+            {
+                "ok": True,
+                "ref_nc": nnc,
+                "message": (
+                    f"N° NC proveedor guardado: {nnc}"
+                    if nnc
+                    else "N° NC proveedor quitado del movimiento."
+                ),
+            }
+        )
+    if nnc:
+        flash(f"N° NC proveedor guardado: {nnc}", "success")
+    else:
+        flash("N° NC proveedor quitado del movimiento.", "success")
+    return redirect(url_for("ventas.proveedor_historial", pid=pid) + "#proveedor-saldo")
+
+
 @ventas_bp.route("/api/proveedor/<int:pid>/saldo_favor", methods=["GET"])
 @login_required
 def api_proveedor_saldo_favor(pid: int):

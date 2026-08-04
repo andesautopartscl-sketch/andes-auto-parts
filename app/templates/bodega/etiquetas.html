@@ -1321,9 +1321,8 @@ html[data-print-mode="thermal"] .barcode img {
     </div>
 </div>
 
-{% if message %}
-<div id="etiquetasServerMessage" class="message {{ message.type }} no-print">{{ message.text }}</div>
-{% endif %}
+{% include 'partials/page_message_overlay.html' %}
+<div id="etiquetasServerMessage" class="message no-print" style="display:none;" aria-hidden="true"></div>
 
 <div class="form-card inputs-card no-print">
     <h2 class="section-title">Generador de Etiquetas</h2>

@@ -267,13 +267,7 @@
     </div>
 </div>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    {% for category, text in messages %}
-      <div class="message {{ category }}">{{ text }}</div>
-    {% endfor %}
-  {% endif %}
-{% endwith %}
+{# Flashes: overlay global en base.html #}
 
 <div class="panel bodegas-panel-nueva" style="margin-bottom:12px;">
     <h2 class="section-title">Nueva bodega</h2>

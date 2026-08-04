@@ -1,0 +1,44 @@
+{# Mensaje de página (dict message={type,text}) → overlay centrado.
+   Usa JSON boot para que también funcione tras inyección SPA (scripts re-ejecutados). #}
+{% if message and message.text %}
+<script type="application/json" class="andes-page-message-boot" id="andesPageMessageBoot">{{ {'type': message.type or 'info', 'text': message.text}|tojson }}</script>
+<script>
+(function () {
+  function showFromBoot() {
+    var boot = document.getElementById('andesPageMessageBoot')
+      || document.querySelector('script.andes-page-message-boot');
+    if (!boot) return false;
+    var raw = (boot.textContent || '').trim();
+    try {
+      if (boot.parentNode) boot.parentNode.removeChild(boot);
+    } catch (e) {}
+    if (!raw) return false;
+    var data = null;
+    try { data = JSON.parse(raw); } catch (e2) { return false; }
+    var cat = (data && data.type) || 'info';
+    var text = (data && data.text) || '';
+    if (!text) return false;
+    if (typeof window.showAndesFlash === 'function') {
+      window.showAndesFlash([[cat, text]]);
+      return true;
+    }
+    var el = document.createElement('div');
+    el.setAttribute('role', 'alert');
+    el.style.cssText = 'position:fixed;left:50%;top:18%;transform:translate(-50%,-50%);z-index:12000;padding:12px 16px;border-radius:10px;background:#fff;border:1px solid #cbd5e1;box-shadow:0 12px 40px rgba(15,23,42,.25);font-size:13px;font-weight:600;max-width:90vw;text-align:center;';
+    el.textContent = text;
+    document.body.appendChild(el);
+    window.setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 5000);
+    return true;
+  }
+  if (typeof window.consumeAndesPageMessages === 'function') {
+    window.consumeAndesPageMessages(document);
+    return;
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', showFromBoot);
+  } else {
+    showFromBoot();
+  }
+})();
+</script>
+{% endif %}

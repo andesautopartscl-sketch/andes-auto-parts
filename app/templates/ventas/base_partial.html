@@ -1,6 +1,6 @@
 {% extends 'base_content.html' %}
 
 {% block content %}
-{% include 'ventas/_flash_messages.html' %}
+{# Flash overlay vive en base.html (fuera de #appMainContent). No re-incluir aquí. #}
 {% block ventas_inner %}{% endblock %}
 {% endblock %}

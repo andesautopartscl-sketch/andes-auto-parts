@@ -1172,9 +1172,7 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
     </div>
 </div>
 
-{% if message %}
-<div class="message {{ message.type }}{% if message.type == 'success' %} ingreso-flash-message{% endif %}" role="alert">{{ message.text }}</div>
-{% endif %}
+{% include 'partials/page_message_overlay.html' %}
 
 <div class="form-card ingreso-form-card">
     <h2 class="section-title">Ingreso ERP de Stock</h2>
@@ -1588,23 +1586,5 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
         </div>
     </div>
 </div>
-{% if message and message.type == 'success' %}
-<script>
-(function () {
-    var el = document.querySelector('.ingreso-flash-message.message.success');
-    if (!el) return;
-    var remove = function () {
-        if (el && el.parentNode) el.parentNode.removeChild(el);
-    };
-    var t = window.setTimeout(remove, 8000);
-    el.style.cursor = 'pointer';
-    el.setAttribute('title', 'Clic para cerrar');
-    el.addEventListener('click', function () {
-        window.clearTimeout(t);
-        remove();
-    });
-})();
-</script>
-{% endif %}
 {% include 'partials/ingreso_saldo_favor_script.html' %}
 {% endblock %}

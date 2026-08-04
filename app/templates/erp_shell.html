@@ -36,18 +36,10 @@
   </nav>
 
   <div class="v-content">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-    <ul class="flash-list">
-      {% for cat, msg in messages %}
-      <li class="flash-msg {{ cat }}">{{ msg }}</li>
-      {% endfor %}
-    </ul>
-    {% endif %}
-    {% endwith %}
     {% block content %}{% endblock %}
   </div>
 </div>
+{% include 'partials/flash_overlay.html' %}
 {% block extra_scripts %}{% endblock %}
 <script>
 (function () {

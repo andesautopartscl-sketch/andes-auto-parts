@@ -578,9 +578,7 @@
     </div>
 </div>
 
-{% if message %}
-<div class="message {{ message.type }}{% if message.type == 'success' %} ajuste-flash-message{% endif %}" role="alert">{{ message.text }}</div>
-{% endif %}
+{% include 'partials/page_message_overlay.html' %}
 
 <div class="form-card ajuste-form-card">
     <h2 class="section-title">Aplicar Ajuste</h2>
@@ -856,24 +854,6 @@
         </table>
     </div>
 </div>
-{% endif %}
-{% if message and message.type == 'success' %}
-<script>
-(function () {
-    var el = document.querySelector('.ajuste-flash-message.message.success');
-    if (!el) return;
-    var remove = function () {
-        if (el && el.parentNode) el.parentNode.removeChild(el);
-    };
-    var t = window.setTimeout(remove, 8000);
-    el.style.cursor = 'pointer';
-    el.setAttribute('title', 'Clic para cerrar');
-    el.addEventListener('click', function () {
-        window.clearTimeout(t);
-        remove();
-    });
-})();
-</script>
 {% endif %}
 <script>
 (function () {

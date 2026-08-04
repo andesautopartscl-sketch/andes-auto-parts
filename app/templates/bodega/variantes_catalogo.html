@@ -540,13 +540,7 @@
     </div>
 </div>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    {% for category, text in messages %}
-    <div class="variantes-flash {{ category }}">{{ text }}</div>
-    {% endfor %}
-  {% endif %}
-{% endwith %}
+{# Flashes: overlay global en base.html #}
 
 <div class="table-card variantes-filters-card">
     <h2 class="section-title">Filtros</h2>
