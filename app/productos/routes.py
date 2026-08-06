@@ -2765,6 +2765,18 @@ def historial_producto(codigo):
     if filtro not in {"todos", "boleta", "factura", "ingreso", "mov_stock", "ajuste", "salida"}:
         filtro = "todos"
 
+    volver_a = (request.args.get("volver_a") or request.args.get("from") or "").strip().lower()
+    volver_pid = 0
+    try:
+        volver_pid = int(request.args.get("pid") or 0)
+    except (TypeError, ValueError):
+        volver_pid = 0
+    volver_url = url_for("productos.buscar", q=normalized)
+    volver_label = "Volver a buscar"
+    if volver_a == "proveedor" and volver_pid > 0:
+        volver_url = url_for("ventas.proveedor_historial", pid=volver_pid) + "#proveedor-homologacion"
+        volver_label = "Volver al proveedor"
+
     perms = get_user_permissions(session.get("user"), session.get("rol"))
     can_open_ingreso = bool(perms.get("bodega_ingreso", False))
     can_open_facturacion = bool(perms.get("mod_ventas", False))
@@ -3021,6 +3033,9 @@ def historial_producto(codigo):
             _partial=_wants_modal_fragment(),
             embed_modal=embed_modal,
             relmap_direct_access=is_superadmin_session(),
+            volver_url=volver_url,
+            volver_label=volver_label,
+            volver_from=volver_a,
         )
     finally:
         sess.close()

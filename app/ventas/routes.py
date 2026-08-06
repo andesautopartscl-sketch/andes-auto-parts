@@ -2079,17 +2079,75 @@ def _build_supplier_history_payload(supplier_id: int) -> tuple[Proveedor | None,
             )
             .all()
         )
+        # Conteos de ingresos reales por código proveedor (líneas con cód. prov. guardado).
+        stats_by_cp: dict[str, dict] = {}
+        stats_q = (
+            db.session.query(
+                func.upper(func.trim(IngresoDocumentoItem.codigo_proveedor)).label("cp"),
+                func.count(IngresoDocumentoItem.id).label("veces"),
+                func.count(func.distinct(IngresoDocumento.id)).label("docs"),
+                func.coalesce(func.sum(IngresoDocumentoItem.cantidad), 0).label("cant"),
+                func.max(IngresoDocumento.fecha_documento).label("ultima"),
+            )
+            .join(
+                IngresoDocumento,
+                IngresoDocumento.id == IngresoDocumentoItem.ingreso_documento_id,
+            )
+            .filter(
+                or_(
+                    IngresoDocumento.proveedor_id == supplier_id,
+                    IngresoDocumento.proveedor_rut == proveedor_rut_norm,
+                )
+            )
+            .filter(or_(IngresoDocumento.anulado.is_(False), IngresoDocumento.anulado.is_(None)))
+            .filter(func.trim(func.coalesce(IngresoDocumentoItem.codigo_proveedor, "")) != "")
+            .group_by(func.upper(func.trim(IngresoDocumentoItem.codigo_proveedor)))
+            .all()
+        )
+        for row in stats_q:
+            cp_key = (row.cp or "").strip().upper()
+            if not cp_key:
+                continue
+            ultima = row.ultima
+            stats_by_cp[cp_key] = {
+                "veces": int(row.veces or 0),
+                "docs": int(row.docs or 0),
+                "cantidad_total": int(row.cant or 0),
+                "ultima_fecha": ultima.isoformat() if hasattr(ultima, "isoformat") else (str(ultima) if ultima else None),
+                "ultima_fecha_label": (
+                    ultima.strftime("%d/%m/%Y") if hasattr(ultima, "strftime") else (str(ultima) if ultima else "—")
+                ),
+            }
+
         for m in map_rows:
             ci = (m.codigo_interno or "").strip().upper()
             cp = (m.codigo_proveedor or "").strip()
+            cp_key = cp.upper()
             upd = m.updated_at.isoformat() if m.updated_at else None
+            st = stats_by_cp.get(cp_key) or {}
             homologaciones.append(
                 {
                     "codigo_proveedor": cp,
                     "codigo_interno": ci,
                     "updated_at": upd,
-                    "updated_at_label": upd[:10] if upd else "—",
+                    "updated_at_label": (
+                        m.updated_at.strftime("%d/%m/%Y") if m.updated_at else "—"
+                    ),
                     "producto_buscar_url": url_for("productos.buscar", q=ci) if ci else None,
+                    "producto_historial_url": (
+                        url_for(
+                            "productos.historial_producto",
+                            codigo=ci,
+                            embed=1,
+                        )
+                        if ci
+                        else None
+                    ),
+                    "veces": int(st.get("veces") or 0),
+                    "docs": int(st.get("docs") or 0),
+                    "cantidad_total": int(st.get("cantidad_total") or 0),
+                    "ultima_fecha": st.get("ultima_fecha"),
+                    "ultima_fecha_label": st.get("ultima_fecha_label") or "—",
                 }
             )
 
@@ -4011,6 +4069,97 @@ def proveedor_historial(pid: int):
         data=payload,
         active_page="proveedores",
         **_base_ctx(),
+    )
+
+
+@ventas_bp.route("/proveedores/<int:pid>/homologacion/historial", methods=["GET"])
+@login_required
+def proveedor_homologacion_historial(pid: int):
+    """Historial de ingresos de bodega para un código proveedor homologado."""
+    proveedor = db.session.get(Proveedor, pid)
+    if proveedor is None or not proveedor.activo:
+        return jsonify({"ok": False, "error": "Proveedor no encontrado."}), 404
+
+    cp_raw = (request.args.get("codigo_proveedor") or "").strip()
+    cp_norm = cp_raw.upper()
+    if not cp_norm:
+        return jsonify({"ok": False, "error": "Falta codigo_proveedor."}), 400
+
+    rut_norm = clean_rut(proveedor.rut or "")
+    map_row = None
+    if rut_norm:
+        map_row = (
+            ProveedorCodigoInterno.query.filter_by(proveedor_rut=rut_norm)
+            .filter(func.upper(func.trim(ProveedorCodigoInterno.codigo_proveedor)) == cp_norm)
+            .first()
+        )
+    codigo_interno = ((map_row.codigo_interno if map_row else "") or "").strip().upper()
+
+    q = (
+        db.session.query(IngresoDocumentoItem, IngresoDocumento)
+        .join(IngresoDocumento, IngresoDocumento.id == IngresoDocumentoItem.ingreso_documento_id)
+        .filter(
+            or_(
+                IngresoDocumento.proveedor_id == pid,
+                IngresoDocumento.proveedor_rut == rut_norm,
+            )
+        )
+        .filter(or_(IngresoDocumento.anulado.is_(False), IngresoDocumento.anulado.is_(None)))
+        .filter(func.upper(func.trim(IngresoDocumentoItem.codigo_proveedor)) == cp_norm)
+        .order_by(IngresoDocumento.fecha_documento.desc(), IngresoDocumento.id.desc(), IngresoDocumentoItem.id.desc())
+        .limit(100)
+    )
+    rows = q.all()
+
+    can_open = has_permission(session.get("user"), session.get("rol"), "bodega_ingreso")
+    ingresos = []
+    cantidad_total = 0
+    docs_seen: set[int] = set()
+    for item, doc in rows:
+        cant = int(getattr(item, "cantidad", 0) or 0)
+        cantidad_total += cant
+        doc_id = int(getattr(doc, "id", 0) or 0)
+        if doc_id:
+            docs_seen.add(doc_id)
+        fecha = getattr(doc, "fecha_documento", None) or getattr(doc, "created_at", None)
+        costo = getattr(item, "valor_neto", None)
+        ingresos.append(
+            {
+                "fecha": fecha.strftime("%d/%m/%Y") if hasattr(fecha, "strftime") else (str(fecha) if fecha else "—"),
+                "numero_documento": (getattr(doc, "numero_documento", None) or "").strip() or f"ING-{doc_id}",
+                "doc_id": doc_id,
+                "marca": (getattr(item, "marca", None) or "").strip() or "—",
+                "bodega": (getattr(item, "bodega", None) or "").strip() or "—",
+                "cantidad": cant,
+                "valor_neto": float(costo) if costo is not None else None,
+                "codigo_interno": (getattr(item, "codigo_producto", None) or "").strip().upper() or codigo_interno,
+                "view_url": (
+                    url_for("bodega.ingreso_ver", doc_id=doc_id, embed=1)
+                    if doc_id > 0 and can_open
+                    else None
+                ),
+            }
+        )
+
+    return jsonify(
+        {
+            "ok": True,
+            "codigo_proveedor": cp_raw,
+            "codigo_interno": codigo_interno,
+            "veces": len(ingresos),
+            "docs": len(docs_seen),
+            "cantidad_total": cantidad_total,
+            "producto_historial_url": (
+                url_for(
+                    "productos.historial_producto",
+                    codigo=codigo_interno,
+                    embed=1,
+                )
+                if codigo_interno
+                else None
+            ),
+            "ingresos": ingresos,
+        }
     )
 
 

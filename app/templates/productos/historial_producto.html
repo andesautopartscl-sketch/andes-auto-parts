@@ -119,6 +119,44 @@
     color:#1d4ed8;
     text-decoration:none;
 }
+.hist-toolbar-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.hist-toolbar-actions .link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.hist-homolog {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    margin: 0 0 10px;
+    font-size: 12px;
+    color: #475569;
+    line-height: 1.45;
+}
+.hist-homolog-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    font-size: 11px;
+    color: #334155;
+    font-weight: 400;
+}
+.hist-homolog-chip strong {
+    color: #0f172a;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
 .hist-embed-link:hover { background:#f8fafc; text-decoration:none; }
 .hist-embed-jump {
     font-size:11px;
@@ -182,9 +220,11 @@
             <h1 class="page-title">Historial de producto</h1>
             <p class="page-subtitle">Codigo: {{ codigo }}</p>
         </div>
-        <div class="topbar-actions">
+        <div class="topbar-actions hist-toolbar-actions">
             <button type="button" class="link-btn hist-relmap-btn" id="btnProductoRelMap" title="Mapa de relaciones del producto">Mapa de relaciones</button>
-            <a class="link-btn" href="{{ url_for('productos.buscar', q=codigo) }}">↩ Volver a buscar</a>
+            <a class="link-btn"
+               href="{{ volver_url|default(url_for('productos.buscar', q=codigo)) }}"
+               {% if volver_from == 'proveedor' %}data-module-url="{{ volver_url }}"{% endif %}>← {{ volver_label|default('Volver a buscar') }}</a>
             <a class="link-btn" href="{{ url_for('productos.ver_producto', codigo=codigo) }}" data-modal-url="{{ url_for('productos.ver_producto', codigo=codigo) }}">Ver detalle</a>
         </div>
     </div>
@@ -272,12 +312,12 @@
                     <input id="historialComprasSearch" class="hist-search" type="search" placeholder="Buscar proveedor, documento, cód. prov., marca...">
                 </div>
                 {% if homologaciones %}
-                <p class="hist-homolog" style="margin:0 0 10px;font-size:12px;color:#475569;line-height:1.45;">
-                    <strong style="color:#0f172a;">Cód. proveedor homologados:</strong>
+                <p class="hist-homolog">
+                    <span style="color:#64748b;">Cód. proveedor homologados:</span>
                     {% for h in homologaciones %}
-                    <span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;">
-                        <strong>{{ h.codigo_proveedor }}</strong>
-                        <span style="color:#64748b;">· {{ h.proveedor }}</span>
+                    <span class="hist-homolog-chip">
+                        {{ h.codigo_proveedor }}
+                        <span style="color:#94a3b8;">· {{ h.proveedor }}</span>
                     </span>
                     {% endfor %}
                 </p>

@@ -361,11 +361,252 @@
         flex-direction: column;
     }
 }
+.homolog-hist-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 12050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+}
+.homolog-hist-modal[hidden] { display: none !important; }
+.homolog-hist-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+}
+.homolog-hist-panel {
+    position: relative;
+    z-index: 1;
+    width: min(760px, 100%);
+    max-height: min(82vh, 740px);
+    overflow: auto;
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 24px 55px rgba(15, 23, 42, 0.24);
+    padding: 16px 18px 18px;
+}
+.homolog-hist-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+.homolog-hist-head h3 {
+    letter-spacing: -0.01em;
+}
+.homolog-hist-x {
+    border: 0;
+    background: transparent;
+    font-size: 22px;
+    line-height: 1;
+    color: #64748b;
+    cursor: pointer;
+    padding: 0 4px;
+}
+.homolog-hist-x:hover { color: #0f172a; }
+.homolog-hist-body table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+.homolog-hist-body th,
+.homolog-hist-body td {
+    padding: 7px 8px;
+    border-bottom: 1px solid #eef2f7;
+    text-align: left;
+}
+.homolog-hist-body th {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    background: #f8fafc;
+}
+.homolog-hist-body tr:hover td {
+    background: #f8fafc;
+}
+.btn.sm.outline.js-homolog-hist:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.homolog-intro {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin: 0 0 8px;
+    padding: 8px 10px;
+    border: 1px solid #e8eef6;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+.homolog-intro-icon {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: grid;
+    place-items: center;
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 600;
+}
+.homolog-intro p {
+    margin: 0;
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.4;
+    max-width: 820px;
+}
+.homolog-toolbar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 8px;
+    padding: 6px 8px;
+    border: 1px solid #eef2f7;
+    border-radius: 8px;
+    background: #fff;
+}
+.homolog-toolbar label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+.homolog-toolbar input[type="search"] {
+    flex: 1;
+    min-width: 180px;
+    max-width: 300px;
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid #dbe3ef;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #0f172a;
+    background: #fff;
+}
+.homolog-toolbar input[type="search"]:focus {
+    outline: none;
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.2);
+}
+#homologCount {
+    margin-left: auto;
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: 500;
+}
+#homologTable {
+    border-collapse: collapse;
+    border-spacing: 0;
+    font-size: 12px;
+}
+#homologTable thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f8fafc;
+    border-bottom: 1px solid #eef2f7;
+    padding: 4px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #64748b;
+}
+#homologTable tbody tr:hover {
+    background: #fafbfc;
+}
+#homologTable td {
+    vertical-align: middle;
+    padding: 3px 6px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.25;
+}
+.homolog-code-prov {
+    font-size: 12px;
+    font-weight: 400;
+    color: #0f172a;
+}
+.homolog-code-int {
+    font-size: 12px;
+    font-weight: 400;
+    color: #0f172a;
+}
+.homolog-sublink {
+    display: inline-flex;
+    margin-top: 1px;
+    font-size: 10px;
+    font-weight: 400;
+    color: #2563eb;
+    text-decoration: none;
+    line-height: 1.2;
+}
+.homolog-sublink:hover { text-decoration: underline; }
+.homolog-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 6px;
+    height: 18px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 500;
+    border: 1px solid transparent;
+}
+.homolog-pill.on {
+    background: #ecfdf5;
+    color: #166534;
+    border-color: #bbf7d0;
+}
+.homolog-pill.off {
+    background: #f8fafc;
+    color: #94a3b8;
+    border-color: #e2e8f0;
+}
+.homolog-meta {
+    display: block;
+    margin-top: 1px;
+    font-size: 10px;
+    color: #94a3b8;
+    font-weight: 400;
+}
+.homolog-hist-btn {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    border: 1px solid #dbe3ef;
+    background: #fff;
+    color: #334155;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+}
+.homolog-hist-btn:hover:not(:disabled) {
+    border-color: #86efac;
+    background: #f0fdf4;
+    color: #166534;
+}
+.homolog-hist-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
 </style>
 {% endblock %}
 
 {% block ventas_inner %}
-<div class="history-shell">
+<div class="history-shell" id="proveedorHistoryRoot"
+     data-homolog-hist-url="{{ url_for('ventas.proveedor_homologacion_historial', pid=proveedor.id) }}">
     <section class="history-hero">
         <div>
             <div class="history-hero-actions">
@@ -612,19 +853,22 @@
         </section>
 
         <section class="history-pane" id="proveedor-homologacion">
-            <p style="margin:0 0 12px;color:#64748b;font-size:13px;max-width:720px;">
-                Equivalencias guardadas al ingresar stock (código del proveedor &rarr; código interno).
-                Varias referencias del proveedor pueden apuntar al mismo código nuestro (ej. 123 y 234 &rarr; 2417).
-                Útil para homologación y revisión de precios con ellos.
-            </p>
+            <div class="homolog-intro">
+                <div class="homolog-intro-icon" aria-hidden="true">≡</div>
+                <p>
+                    Equivalencias guardadas al ingresar stock
+                    (código proveedor → código interno).
+                    Varias referencias del proveedor pueden apuntar al mismo código nuestro.
+                    Acá ves cuántas veces se ingresó cada código y el detalle de cada factura.
+                </p>
+            </div>
             {% if not proveedor.rut %}
             <div class="history-empty">Este proveedor no tiene RUT registrado; no se listan equivalencias (se indexan por RUT).</div>
             {% elif (data.homologaciones|default([]))|length > 0 %}
-            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
-                <label for="homologFilter" class="muted" style="font-size:12px;font-weight:600;">Filtrar</label>
-                <input type="search" id="homologFilter" placeholder="Código proveedor o interno (ej. 2417)" autocomplete="off"
-                       style="flex:1;min-width:200px;max-width:360px;padding:8px 10px;border:1px solid #dbe3ef;border-radius:8px;font-size:13px;">
-                <span class="muted" id="homologCount" style="font-size:12px;"></span>
+            <div class="homolog-toolbar">
+                <label for="homologFilter">Filtrar</label>
+                <input type="search" id="homologFilter" placeholder="Código proveedor o interno (ej. H104900)" autocomplete="off">
+                <span id="homologCount"></span>
             </div>
             <div class="history-table-wrap">
                 <table class="history-table" id="homologTable">
@@ -632,22 +876,46 @@
                         <tr>
                             <th>Código proveedor</th>
                             <th>Código interno</th>
-                            <th>Actualizado</th>
-                            <th>Producto</th>
+                            <th>Ingresos</th>
+                            <th>Cant. total</th>
+                            <th>Última compra</th>
+                            <th>Mapa act.</th>
+                            <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for h in data.homologaciones %}
                         <tr class="homolog-row" data-haystack="{{ (h.codigo_proveedor ~ ' ' ~ h.codigo_interno)|e }}">
-                            <td><strong>{{ h.codigo_proveedor or '—' }}</strong></td>
-                            <td><strong>{{ h.codigo_interno or '—' }}</strong></td>
+                            <td><span class="homolog-code-prov">{{ h.codigo_proveedor or '—' }}</span></td>
+                            <td>
+                                <div class="homolog-code-int">{{ h.codigo_interno or '—' }}</div>
+                                {% if h.producto_historial_url %}
+                                <a class="homolog-sublink"
+                                   href="{{ h.producto_historial_url }}"
+                                   data-modal-url="{{ h.producto_historial_url }}">Historial producto</a>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if h.veces %}
+                                <span class="homolog-pill on">{{ h.veces }} línea{{ 's' if h.veces != 1 else '' }}</span>
+                                {% if h.docs %}
+                                <span class="homolog-meta">{{ h.docs }} documento{{ 's' if h.docs != 1 else '' }}</span>
+                                {% endif %}
+                                {% else %}
+                                <span class="homolog-pill off">Sin ingresos</span>
+                                {% endif %}
+                            </td>
+                            <td>{% if h.cantidad_total %}{{ h.cantidad_total }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                            <td>{{ h.ultima_fecha_label or '—' }}</td>
                             <td>{{ h.updated_at_label }}</td>
                             <td>
-                                {% if h.producto_buscar_url %}
-                                <a href="{{ h.producto_buscar_url }}">Buscar en catálogo</a>
-                                {% else %}
-                                —
-                                {% endif %}
+                                <button type="button"
+                                        class="homolog-hist-btn js-homolog-hist"
+                                        data-cp="{{ h.codigo_proveedor|e }}"
+                                        data-ci="{{ h.codigo_interno|e }}"
+                                        {% if not h.veces %}disabled title="Sin ingresos con este código guardado"{% endif %}>
+                                    Ver historial
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
@@ -655,9 +923,25 @@
                 </table>
             </div>
             {% else %}
-            <div class="history-empty">Aun no hay equivalencias registradas para este RUT. Se crean al confirmar ingresos de bodega con codigo proveedor.</div>
+            <div class="history-empty">Aún no hay equivalencias registradas para este RUT. Se crean al confirmar ingresos de bodega con código proveedor.</div>
             {% endif %}
         </section>
+
+        <div id="homologHistModal" class="homolog-hist-modal" hidden aria-hidden="true">
+            <div class="homolog-hist-backdrop" data-homolog-close="1"></div>
+            <div class="homolog-hist-panel" role="dialog" aria-modal="true" aria-labelledby="homologHistTitle">
+                <div class="homolog-hist-head">
+                    <div>
+                        <h3 id="homologHistTitle" style="margin:0;font-size:15px;">Historial de ingresos</h3>
+                        <p id="homologHistSub" class="muted" style="margin:4px 0 0;font-size:12px;"></p>
+                    </div>
+                    <button type="button" class="homolog-hist-x" data-homolog-close="1" aria-label="Cerrar">&times;</button>
+                </div>
+                <div id="homologHistBody" class="homolog-hist-body">
+                    <p class="muted" style="margin:0;">Cargando…</p>
+                </div>
+            </div>
+        </div>
 
         <section class="history-pane" id="proveedor-trazabilidad">
             {% if data.timeline %}
@@ -714,6 +998,10 @@
         });
         var hashTab = (location.hash || '').replace(/^#/, '');
         if (hashTab) activateTab(hashTab);
+        document.addEventListener('app:module-loaded', function () {
+            var h = (location.hash || '').replace(/^#/, '');
+            if (h) activateTab(h);
+        });
     }
     document.querySelectorAll('[data-href]').forEach(function (row) {
         row.addEventListener('click', function () {
@@ -742,6 +1030,125 @@
         homologFilter.addEventListener('input', applyHomologFilter);
         applyHomologFilter();
     }
+
+    (function homologHistorialModal() {
+        var root = document.getElementById('proveedorHistoryRoot');
+        var modal = document.getElementById('homologHistModal');
+        var body = document.getElementById('homologHistBody');
+        var title = document.getElementById('homologHistTitle');
+        var sub = document.getElementById('homologHistSub');
+        if (!root || !modal || !body) return;
+        var baseUrl = root.getAttribute('data-homolog-hist-url') || '';
+
+        function closeModal() {
+            modal.hidden = true;
+            modal.setAttribute('aria-hidden', 'true');
+            body.innerHTML = '<p class="muted" style="margin:0;">Cargando…</p>';
+        }
+        function openModal() {
+            modal.hidden = false;
+            modal.setAttribute('aria-hidden', 'false');
+        }
+        function money(n) {
+            if (n == null || n === '') return '—';
+            try {
+                return '$' + Number(n).toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            } catch (e) {
+                return String(n);
+            }
+        }
+        function render(data) {
+            if (title) {
+                title.textContent = 'Historial · ' + (data.codigo_proveedor || '');
+            }
+            if (sub) {
+                var bits = [];
+                if (data.codigo_interno) bits.push('Interno ' + data.codigo_interno);
+                bits.push((data.veces || 0) + ' ingreso' + ((data.veces === 1) ? '' : 's'));
+                bits.push((data.docs || 0) + ' documento' + ((data.docs === 1) ? '' : 's'));
+                bits.push('Cant. total ' + (data.cantidad_total || 0));
+                sub.textContent = bits.join(' · ');
+            }
+            var rows = data.ingresos || [];
+            if (!rows.length) {
+                body.innerHTML = '<p class="muted" style="margin:0;">No hay ingresos registrados con este código proveedor.</p>';
+                return;
+            }
+            var html = '<table><thead><tr>' +
+                '<th>Fecha</th><th>Documento</th><th>Marca</th><th>Cant.</th><th>Costo</th><th></th>' +
+                '</tr></thead><tbody>';
+            rows.forEach(function (r) {
+                html += '<tr>';
+                html += '<td>' + (r.fecha || '—') + '</td>';
+                html += '<td>' + (r.numero_documento || '—') + '</td>';
+                html += '<td>' + (r.marca || '—') + '</td>';
+                html += '<td>' + (r.cantidad != null ? r.cantidad : '—') + '</td>';
+                html += '<td>' + money(r.valor_neto) + '</td>';
+                if (r.view_url) {
+                    html += '<td><a href="' + r.view_url + '">Ver ingreso</a></td>';
+                } else {
+                    html += '<td>—</td>';
+                }
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            if (data.producto_historial_url) {
+                html += '<p style="margin:10px 0 0;font-size:11px;"><a href="' +
+                    data.producto_historial_url + '" data-modal-url="' + data.producto_historial_url +
+                    '">Abrir historial del producto ' +
+                    (data.codigo_interno || '') + '</a></p>';
+            }
+            body.innerHTML = html;
+        }
+
+        modal.addEventListener('click', function (e) {
+            var t = e.target;
+            if (t && t.getAttribute && t.getAttribute('data-homolog-close')) closeModal();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && modal && !modal.hidden) closeModal();
+        });
+
+        document.addEventListener('click', function (e) {
+            var a = e.target && e.target.closest ? e.target.closest('[data-modal-url]') : null;
+            if (a && modal && !modal.hidden) closeModal();
+        }, true);
+
+        document.addEventListener('app:module-loaded', function () {
+            closeModal();
+        });
+
+        document.querySelectorAll('.js-homolog-hist').forEach(function (btn) {
+            btn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                if (btn.disabled) return;
+                var cp = btn.getAttribute('data-cp') || '';
+                if (!cp || !baseUrl) return;
+                openModal();
+                if (title) title.textContent = 'Historial · ' + cp;
+                if (sub) sub.textContent = 'Cargando…';
+                body.innerHTML = '<p class="muted" style="margin:0;">Cargando…</p>';
+                var url = baseUrl + (baseUrl.indexOf('?') >= 0 ? '&' : '?') +
+                    'codigo_proveedor=' + encodeURIComponent(cp);
+                fetch(url, {
+                    credentials: 'same-origin',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (j) {
+                        if (!j || !j.ok) {
+                            body.innerHTML = '<p style="margin:0;color:#b91c1c;">No se pudo cargar el historial.</p>';
+                            return;
+                        }
+                        render(j);
+                    })
+                    .catch(function () {
+                        body.innerHTML = '<p style="margin:0;color:#b91c1c;">Error de red.</p>';
+                    });
+            });
+        });
+    })();
 
     document.querySelectorAll('form.js-nc-form').forEach(function (form) {
         form.addEventListener('submit', function (e) {
