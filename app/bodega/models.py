@@ -126,6 +126,8 @@ class IngresoDocumentoItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     ingreso_documento_id = db.Column(db.Integer, nullable=False, index=True)
     codigo_producto = db.Column(db.String(100), nullable=False, index=True)
+    # Código del proveedor en la factura (puede haber varios por mismo código interno).
+    codigo_proveedor = db.Column(db.String(120), default="", index=True)
     descripcion_producto = db.Column(db.String(255), default="")
     marca = db.Column(db.String(120), default="", index=True)
     bodega = db.Column(db.String(120), nullable=False, index=True)

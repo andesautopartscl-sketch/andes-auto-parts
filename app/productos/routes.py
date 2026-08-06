@@ -33,6 +33,7 @@ from app.bodega.models import (
     IngresoDocumentoItem,
     MovimientoStock,
     ProductoVarianteStock,
+    ProveedorCodigoInterno,
 )
 from ..utils.decorators import login_required, admin_required
 from app.utils.permissions import DEFAULT_PERMISSIONS, get_user_permissions
@@ -2857,6 +2858,7 @@ def historial_producto(codigo):
                     "fecha": getattr(doc, "fecha_documento", None) or getattr(doc, "created_at", None),
                     "proveedor": (getattr(doc, "proveedor_nombre", None) or "—").strip() or "—",
                     "numero_documento": (getattr(doc, "numero_documento", None) or "").strip() or "—",
+                    "codigo_proveedor": (getattr(item, "codigo_proveedor", None) or "").strip(),
                     "marca": (getattr(item, "marca", None) or "").strip() or "—",
                     "bodega": (getattr(item, "bodega", None) or "").strip() or "—",
                     "origen_compra": (getattr(item, "origen_compra", None) or "").strip() or "—",
@@ -2877,6 +2879,127 @@ def historial_producto(codigo):
                 }
             )
 
+        # Homologaciones proveedor ↔ este código interno (pueden ser varias marcas/códigos).
+        def _rut_norm_hist(raw: str) -> str:
+            return (
+                (raw or "")
+                .strip()
+                .upper()
+                .replace(".", "")
+                .replace("-", "")
+                .replace(" ", "")
+            )
+
+        homolog_rows = (
+            ProveedorCodigoInterno.query.filter(
+                func.upper(func.trim(ProveedorCodigoInterno.codigo_interno)) == normalized
+            )
+            .order_by(
+                ProveedorCodigoInterno.proveedor_rut.asc(),
+                ProveedorCodigoInterno.codigo_proveedor.asc(),
+            )
+            .limit(100)
+            .all()
+        )
+        homologaciones = []
+        for hk in homolog_rows:
+            homologaciones.append(
+                {
+                    "proveedor_rut": _rut_norm_hist(hk.proveedor_rut or ""),
+                    "codigo_proveedor": (hk.codigo_proveedor or "").strip(),
+                    "updated_at": getattr(hk, "updated_at", None),
+                }
+            )
+        # Completar nombre de proveedor desde últimos ingresos cuando se pueda.
+        if homologaciones:
+            ruts_h = sorted({h["proveedor_rut"] for h in homologaciones if h["proveedor_rut"]})
+            nombre_por_rut: dict[str, str] = {}
+            if ruts_h:
+                docs_nom = (
+                    security_db.session.query(IngresoDocumento)
+                    .filter(IngresoDocumento.proveedor_rut.in_(ruts_h))
+                    .order_by(IngresoDocumento.created_at.desc())
+                    .limit(200)
+                    .all()
+                )
+                for d in docs_nom:
+                    rn = _rut_norm_hist(d.proveedor_rut or "")
+                    if rn and rn not in nombre_por_rut:
+                        nombre_por_rut[rn] = (d.proveedor_nombre or "").strip() or rn
+            for h in homologaciones:
+                h["proveedor"] = nombre_por_rut.get(h["proveedor_rut"] or "", h["proveedor_rut"] or "—")
+
+        # Fallback visual/persistido en compras antiguas sin código en línea.
+        if compras and homologaciones:
+            cps_por_rut: dict[str, list[str]] = {}
+            for h in homologaciones:
+                rn = h["proveedor_rut"] or ""
+                cp = h["codigo_proveedor"] or ""
+                if rn and cp:
+                    bucket = cps_por_rut.setdefault(rn, [])
+                    if cp.upper() not in {x.upper() for x in bucket}:
+                        bucket.append(cp)
+            docs_by_id = {
+                int(getattr(doc, "id", 0) or 0): doc
+                for _, doc in compras_rows
+                if int(getattr(doc, "id", 0) or 0) > 0
+            }
+            # Ordenar candidatos: más reciente primero (homologaciones ya vienen ordenadas por rut+cp;
+            # reordenar por updated_at si existe).
+            for rn in list(cps_por_rut.keys()):
+                related = [h for h in homologaciones if (h["proveedor_rut"] or "") == rn]
+                related.sort(
+                    key=lambda h: h.get("updated_at") or 0,
+                    reverse=True,
+                )
+                cps_por_rut[rn] = []
+                for h in related:
+                    cp = h.get("codigo_proveedor") or ""
+                    if cp and cp.upper() not in {x.upper() for x in cps_por_rut[rn]}:
+                        cps_por_rut[rn].append(cp)
+
+            def _parece_letra(cp: str) -> bool:
+                s = (cp or "").strip().upper()
+                return bool(s and s[:1].isalpha() and any(ch.isdigit() for ch in s))
+
+            usados_por_doc: dict[int, set[str]] = {}
+            for c in compras:
+                if c.get("codigo_proveedor"):
+                    did = int(c.get("doc_id") or 0)
+                    if did:
+                        usados_por_doc.setdefault(did, set()).add(str(c["codigo_proveedor"]).upper())
+            for c in compras:
+                if c.get("codigo_proveedor"):
+                    continue
+                doc = docs_by_id.get(int(c.get("doc_id") or 0))
+                if not doc:
+                    continue
+                rn = _rut_norm_hist(getattr(doc, "proveedor_rut", None) or "")
+                candidatos = cps_por_rut.get(rn) or []
+                if not candidatos:
+                    continue
+                did = int(c.get("doc_id") or 0)
+                usados = usados_por_doc.setdefault(did, set())
+                marca_u = (c.get("marca") or "").strip().upper()
+                cps = [x for x in candidatos if x.upper() not in usados]
+                if not cps:
+                    continue
+                chosen = ""
+                if len(cps) == 1:
+                    chosen = cps[0]
+                else:
+                    letra = [x for x in cps if _parece_letra(x)]
+                    num = [x for x in cps if not _parece_letra(x)]
+                    if marca_u in {"WURTEX", "MOBIS", "WURTH"} and letra:
+                        chosen = letra[0]
+                    elif marca_u in {"STP", "ST"} and num:
+                        chosen = num[0]
+                    else:
+                        chosen = cps[0]
+                if chosen:
+                    c["codigo_proveedor"] = chosen
+                    usados.add(chosen.upper())
+
         puede_ver_finanzas = user_can_view_finanzas(session.get("user"), session.get("rol"))
         if not puede_ver_finanzas:
             compras = [redact_compra_historial_row(c) for c in compras]
@@ -2889,6 +3012,7 @@ def historial_producto(codigo):
             codigo=normalized,
             movimientos=movimientos,
             compras=compras,
+            homologaciones=homologaciones,
             filtro=filtro,
             solo_mov=solo_mov,
             puede_ver_finanzas=puede_ver_finanzas,

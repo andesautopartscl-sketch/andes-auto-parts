@@ -1001,6 +1001,87 @@ def _upsert_mapa_proveedor_codigo(rut: str, codigo_prov_raw: str, codigo_interno
         )
 
 
+def _codigo_proveedor_parece_letra(cp: str) -> bool:
+    """Códigos tipo H104900 / H100630 (letra+dígitos), típicos Wurtex/Mobis en Mundo Repuestos."""
+    s = (cp or "").strip().upper()
+    if not s:
+        return False
+    return bool(s[:1].isalpha() and any(ch.isdigit() for ch in s))
+
+
+def _resolver_codigo_proveedor_desde_candidatos(
+    *,
+    marca: str,
+    candidatos: list[str],
+    usados: set[str] | None = None,
+) -> str:
+    """Elige un cód. proveedor entre varios candidatos (mismo código interno).
+
+    Preferencias:
+    - 1 solo candidato → ese
+    - Marca WURTEX/MOBIS → preferir códigos con letra (H…)
+    - Marca STP (u otras) → preferir códigos numéricos
+    - Si no hay match claro, el más reciente (primer elemento de la lista ordenada)
+    """
+    cps = []
+    seen: set[str] = set()
+    for raw in candidatos or []:
+        cp = (raw or "").strip()
+        if not cp:
+            continue
+        key = cp.upper()
+        if key in seen:
+            continue
+        if usados and key in {u.upper() for u in usados}:
+            continue
+        seen.add(key)
+        cps.append(cp)
+    if not cps:
+        return ""
+    if len(cps) == 1:
+        return cps[0]
+    marca_u = (marca or "").strip().upper()
+    letra = [c for c in cps if _codigo_proveedor_parece_letra(c)]
+    num = [c for c in cps if not _codigo_proveedor_parece_letra(c)]
+    if marca_u in {"WURTEX", "MOBIS", "WURTH"} and letra:
+        return letra[0]
+    if marca_u in {"STP", "ST"} and num:
+        return num[0]
+    if marca_u and letra and not num:
+        return letra[0]
+    if marca_u and num and not letra:
+        return num[0]
+    # Empate: devolver el primero (lista debe venir ordenada por updated_at desc).
+    return cps[0]
+
+
+def _codigos_proveedor_por_interno(
+    rut: str,
+    codigos_internos: list[str] | set[str],
+) -> dict[str, list[str]]:
+    """Mapa codigo_interno → lista de códigos proveedor (más reciente primero)."""
+    rut_n = _normalize_rut(rut)
+    cis = sorted({(c or "").strip().upper() for c in (codigos_internos or []) if (c or "").strip()})
+    out: dict[str, list[str]] = {}
+    if not rut_n or not cis:
+        return out
+    links = (
+        ProveedorCodigoInterno.query.filter_by(proveedor_rut=rut_n)
+        .filter(ProveedorCodigoInterno.codigo_interno.in_(cis))
+        .order_by(ProveedorCodigoInterno.updated_at.desc(), ProveedorCodigoInterno.id.desc())
+        .all()
+    )
+    for lk in links:
+        ci = (lk.codigo_interno or "").strip().upper()
+        cp = (lk.codigo_proveedor or "").strip()
+        if not ci or not cp:
+            continue
+        bucket = out.setdefault(ci, [])
+        if cp.upper() not in {x.upper() for x in bucket}:
+            bucket.append(cp)
+    return out
+
+
 def _parse_valor_neto_chile(raw: str) -> float | None:
     """Parse optional net amount (Chile: miles con punto, decimal con coma). Empty/invalid -> None."""
     s = (raw or "").strip().replace(" ", "")
@@ -2880,10 +2961,14 @@ def ingreso():
                         vn_item = row.get("valor_neto")
                         mg_item = row.get("margen_pct")
                         pv_item = row.get("precio_venta_neto")
+                        codigo_prov_line = _normalize_codigo_proveedor(
+                            row.get("codigo_proveedor") or ""
+                        )
                         db.session.add(
                             IngresoDocumentoItem(
                                 ingreso_documento_id=documento.id,
                                 codigo_producto=codigo,
+                                codigo_proveedor=(codigo_prov_line or "")[:120],
                                 descripcion_producto=(producto.get("descripcion") or "")[:255],
                                 marca=marca,
                                 bodega=bodega,
@@ -3601,7 +3686,7 @@ def ingreso_historial():
         for doc_id, total_neto in sums:
             totales_por_doc[int(doc_id)] = float(total_neto or 0)
 
-        # Referencias de códigos proveedor por documento (vía mapa proveedor<->código interno).
+        # Referencias de códigos proveedor por documento (línea guardada; mapa con heurística).
         rut_por_doc = {int(r.id): _normalize_rut(r.proveedor_rut or "") for r in rows}
         items = (
             IngresoDocumentoItem.query
@@ -3611,24 +3696,15 @@ def ingreso_historial():
         )
         codigos_internos = sorted({((it.codigo_producto or "").strip().upper()) for it in items if (it.codigo_producto or "").strip()})
         ruts = sorted({rut for rut in rut_por_doc.values() if rut})
-        cp_por_rut_ci: dict[tuple[str, str], str] = {}
+        cps_por_rut_ci: dict[tuple[str, str], list[str]] = {}
         if ruts and codigos_internos:
-            links = (
-                ProveedorCodigoInterno.query
-                .filter(ProveedorCodigoInterno.proveedor_rut.in_(ruts))
-                .filter(ProveedorCodigoInterno.codigo_interno.in_(codigos_internos))
-                .order_by(ProveedorCodigoInterno.updated_at.desc(), ProveedorCodigoInterno.id.desc())
-                .all()
-            )
-            for lk in links:
-                rut_n = _normalize_rut(lk.proveedor_rut or "")
-                cod_int = (lk.codigo_interno or "").strip().upper()
-                cod_prov = (lk.codigo_proveedor or "").strip()
-                if rut_n and cod_int and cod_prov and (rut_n, cod_int) not in cp_por_rut_ci:
-                    cp_por_rut_ci[(rut_n, cod_int)] = cod_prov
+            for rut_n in ruts:
+                for ci, cps in _codigos_proveedor_por_interno(rut_n, codigos_internos).items():
+                    cps_por_rut_ci[(rut_n, ci)] = cps
 
         tmp_codigos_doc: dict[int, set[str]] = {}
         seen_ci_por_doc: dict[int, set[str]] = {}
+        usados_por_doc_ci: dict[tuple[int, str], set[str]] = {}
         for it in items:
             doc_id = int(it.ingreso_documento_id or 0)
             rut_n = rut_por_doc.get(doc_id, "")
@@ -3638,9 +3714,28 @@ def ingreso_historial():
                 if cod_int not in seen:
                     seen.add(cod_int)
                     codigos_internos_por_doc.setdefault(doc_id, []).append(cod_int)
-            if not doc_id or not rut_n or not cod_int:
+            if not doc_id or not cod_int:
                 continue
-            cod_prov = cp_por_rut_ci.get((rut_n, cod_int), "").strip()
+            cod_prov = (getattr(it, "codigo_proveedor", None) or "").strip()
+            if not cod_prov and rut_n:
+                key_u = (doc_id, cod_int)
+                usados = usados_por_doc_ci.setdefault(key_u, set())
+                # Sembrar con códigos ya persistidos en el mismo doc/CI.
+                for it2 in items:
+                    if int(it2.ingreso_documento_id or 0) != doc_id:
+                        continue
+                    if (it2.codigo_producto or "").strip().upper() != cod_int:
+                        continue
+                    st2 = (getattr(it2, "codigo_proveedor", None) or "").strip()
+                    if st2:
+                        usados.add(st2.upper())
+                cod_prov = _resolver_codigo_proveedor_desde_candidatos(
+                    marca=(it.marca or ""),
+                    candidatos=cps_por_rut_ci.get((rut_n, cod_int), []),
+                    usados=usados,
+                )
+                if cod_prov:
+                    usados.add(cod_prov.upper())
             if cod_prov:
                 tmp_codigos_doc.setdefault(doc_id, set()).add(cod_prov)
             detalles_items_por_doc.setdefault(doc_id, []).append(
@@ -3784,25 +3879,44 @@ def _ingreso_detalle_contexto(doc: IngresoDocumento, items: list[IngresoDocument
     )
     proveedor_codes: dict[int, str] = {}
     rut_doc = _normalize_rut(doc.proveedor_rut or "")
-    if rut_doc and items:
-        codigos_internos = sorted(
-            {(it.codigo_producto or "").strip().upper() for it in items if (it.codigo_producto or "").strip()}
-        )
-        if codigos_internos:
-            links = (
-                ProveedorCodigoInterno.query
-                .filter_by(proveedor_rut=rut_doc)
-                .filter(ProveedorCodigoInterno.codigo_interno.in_(codigos_internos))
-                .order_by(ProveedorCodigoInterno.updated_at.desc(), ProveedorCodigoInterno.id.desc())
-                .all()
-            )
-            cp_by_codigo: dict[str, str] = {}
-            for lk in links:
-                ci = (lk.codigo_interno or "").strip().upper()
-                if ci and ci not in cp_by_codigo:
-                    cp_by_codigo[ci] = (lk.codigo_proveedor or "").strip()
-            for it in items:
-                proveedor_codes[int(it.id)] = cp_by_codigo.get((it.codigo_producto or "").strip().upper(), "")
+    if items:
+        # Preferir el código guardado en la línea; si falta, resolver desde el mapa
+        # (único, o por marca cuando hay varios: H…→Wurtex/Mobis, numérico→STP).
+        missing: list = []
+        for it in items:
+            stored = (getattr(it, "codigo_proveedor", None) or "").strip()
+            if stored:
+                proveedor_codes[int(it.id)] = stored
+            else:
+                missing.append(it)
+        if rut_doc and missing:
+            cis = {(it.codigo_producto or "").strip().upper() for it in missing if (it.codigo_producto or "").strip()}
+            cps_por_ci = _codigos_proveedor_por_interno(rut_doc, cis)
+            # Agrupar por interno para no reutilizar el mismo cód. prov. en dos líneas.
+            by_ci: dict[str, list] = {}
+            for it in missing:
+                ci = (it.codigo_producto or "").strip().upper()
+                if ci:
+                    by_ci.setdefault(ci, []).append(it)
+            for ci, group in by_ci.items():
+                candidatos = cps_por_ci.get(ci) or []
+                usados: set[str] = set()
+                # También contar códigos ya persistidos en otras líneas del mismo CI.
+                for it0 in items:
+                    if (it0.codigo_producto or "").strip().upper() != ci:
+                        continue
+                    st = (getattr(it0, "codigo_proveedor", None) or "").strip()
+                    if st:
+                        usados.add(st.upper())
+                for it in group:
+                    cp = _resolver_codigo_proveedor_desde_candidatos(
+                        marca=(it.marca or ""),
+                        candidatos=candidatos,
+                        usados=usados,
+                    )
+                    if cp:
+                        proveedor_codes[int(it.id)] = cp
+                        usados.add(cp.upper())
     return {
         "total_neto": float(total_neto or 0),
         "iva_referencia": float(iva_referencia or 0),
@@ -4452,6 +4566,7 @@ def ingreso_editar(doc_id: int):
                     it.nota = nt_new
                     it.descripcion_producto = desc_new
                     it.marca = marca_new
+                    it.codigo_proveedor = (_normalize_codigo_proveedor(cp_new or "") or "")[:120]
                     _upsert_mapa_proveedor_codigo(
                         doc.proveedor_rut or "",
                         cp_new,

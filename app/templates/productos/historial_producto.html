@@ -269,8 +269,19 @@
             <div>
                 <div class="hist-toolbar-2">
                     <h3 class="hist-subtitle">Historial de compras</h3>
-                    <input id="historialComprasSearch" class="hist-search" type="search" placeholder="Buscar proveedor, documento, marca...">
+                    <input id="historialComprasSearch" class="hist-search" type="search" placeholder="Buscar proveedor, documento, cód. prov., marca...">
                 </div>
+                {% if homologaciones %}
+                <p class="hist-homolog" style="margin:0 0 10px;font-size:12px;color:#475569;line-height:1.45;">
+                    <strong style="color:#0f172a;">Cód. proveedor homologados:</strong>
+                    {% for h in homologaciones %}
+                    <span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;">
+                        <strong>{{ h.codigo_proveedor }}</strong>
+                        <span style="color:#64748b;">· {{ h.proveedor }}</span>
+                    </span>
+                    {% endfor %}
+                </p>
+                {% endif %}
                 {% if compras %}
                 <div class="table-wrap">
                     <table class="erp-compact">
@@ -279,6 +290,7 @@
                                 <th>Fecha</th>
                                 <th>Proveedor</th>
                                 <th>Doc</th>
+                                <th>Cód. prov.</th>
                                 <th>Marca</th>
                                 <th>Cant.</th>
                                 {% if puede_ver_finanzas %}
@@ -290,7 +302,7 @@
                         </thead>
                         <tbody id="historialComprasBody">
                             {% for c in compras %}
-                            <tr data-search="{{ (c.proveedor ~ ' ' ~ c.numero_documento ~ ' ' ~ c.marca ~ ' ' ~ c.bodega ~ ' ' ~ c.origen_compra)|lower }}">
+                            <tr data-search="{{ (c.proveedor ~ ' ' ~ c.numero_documento ~ ' ' ~ (c.codigo_proveedor or '') ~ ' ' ~ c.marca ~ ' ' ~ c.bodega ~ ' ' ~ c.origen_compra)|lower }}">
                                 <td>
                                     {% if c.fecha %}{{ c.fecha.strftime('%d/%m/%Y') if c.fecha.strftime else c.fecha }}{% else %}-{% endif %}
                                 </td>
@@ -302,6 +314,7 @@
                                     {{ c.numero_documento }}
                                     {% endif %}
                                 </td>
+                                <td>{{ c.codigo_proveedor or '—' }}</td>
                                 <td>{{ c.marca }}</td>
                                 <td>{{ c.cantidad }}</td>
                                 {% if puede_ver_finanzas %}

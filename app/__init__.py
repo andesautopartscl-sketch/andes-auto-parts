@@ -667,6 +667,12 @@ def create_app():
                 conn.execute(text("ALTER TABLE ingresos_documentos_items ADD COLUMN margen_pct REAL"))
             if ing_items_cols and "precio_venta_neto" not in ing_items_col_names:
                 conn.execute(text("ALTER TABLE ingresos_documentos_items ADD COLUMN precio_venta_neto REAL"))
+            if ing_items_cols and "codigo_proveedor" not in ing_items_col_names:
+                conn.execute(
+                    text(
+                        "ALTER TABLE ingresos_documentos_items ADD COLUMN codigo_proveedor VARCHAR(120) DEFAULT ''"
+                    )
+                )
 
             ing_docs_cols = conn.execute(text("PRAGMA table_info(ingresos_documentos)")).fetchall()
             ing_docs_col_names = {col[1] for col in ing_docs_cols}
