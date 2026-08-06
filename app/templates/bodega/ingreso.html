@@ -976,8 +976,8 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
     color: #b91c1c;
 }
 .ingreso-factura-extracted-title {
-    margin: 0 0 6px;
-    font-size: 13px;
+    margin: 0 0 4px;
+    font-size: 12px;
     color: #0f172a;
 }
 .ingreso-factura-dl {
@@ -1016,46 +1016,69 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
     margin-top: 10px;
 }
 .ingreso-factura-products-wrap {
-    overflow-x: auto;
-    max-height: 320px;
-    overflow-y: auto;
+    overflow-x: hidden;
+    max-height: none;
+    overflow-y: visible;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
+}
+/* Solo con muchos ítems: scroll vertical (sin scrollbar horizontal). */
+.ingreso-factura-products-wrap:has(.ingreso-factura-products-table tbody tr:nth-child(n+8)) {
+    max-height: 280px;
+    overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: #64748b #e2e8f0;
+    scrollbar-gutter: stable;
 }
-.ingreso-factura-products-wrap::-webkit-scrollbar {
-    width: 10px;
+.ingreso-factura-products-wrap:has(.ingreso-factura-products-table tbody tr:nth-child(n+8))::-webkit-scrollbar {
+    width: 8px;
 }
-.ingreso-factura-products-wrap::-webkit-scrollbar-track {
+.ingreso-factura-products-wrap:has(.ingreso-factura-products-table tbody tr:nth-child(n+8))::-webkit-scrollbar-track {
     background: #e2e8f0;
     border-radius: 0 6px 6px 0;
 }
-.ingreso-factura-products-wrap::-webkit-scrollbar-thumb {
+.ingreso-factura-products-wrap:has(.ingreso-factura-products-table tbody tr:nth-child(n+8))::-webkit-scrollbar-thumb {
     background: #64748b;
     border-radius: 4px;
     border: 2px solid #e2e8f0;
 }
-/* Más de 6 ítems: reserva scrollbar visible a la derecha */
-.ingreso-factura-products-wrap:has(.ingreso-factura-products-table tbody tr:nth-child(n+7)) {
-    overflow-y: scroll;
-    scrollbar-gutter: stable;
-}
 .ingreso-factura-products-table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: 11px;
 }
 .ingreso-factura-products-table th,
 .ingreso-factura-products-table td {
-    padding: 5px 8px;
+    padding: 3px 10px;
     text-align: left;
     border-bottom: 1px solid #f1f5f9;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.25;
+}
+.ingreso-factura-products-table th:nth-child(1),
+.ingreso-factura-products-table td:nth-child(1) {
+    width: 48%;
+    padding-left: 8px;
+}
+.ingreso-factura-products-table th:nth-child(2),
+.ingreso-factura-products-table td:nth-child(2) {
+    width: 22%;
+    text-align: right;
+}
+.ingreso-factura-products-table th:nth-child(3),
+.ingreso-factura-products-table td:nth-child(3) {
+    width: 30%;
+    text-align: right;
+    padding-right: 10px;
 }
 .ingreso-factura-products-table th {
     background: #f8fafc;
     color: #64748b;
     font-weight: 600;
+    font-size: 10px;
     position: sticky;
     top: 0;
 }
@@ -1100,7 +1123,7 @@ table.ingreso-items-table td:nth-child(12) .btnRemove {
 }
 .ingreso-product-modal-card.ingreso-factura-modal-card {
     width: 95%;
-    max-width: 500px;
+    max-width: 560px;
     max-height: 95vh;
     overflow-x: hidden;
     overflow-y: auto;

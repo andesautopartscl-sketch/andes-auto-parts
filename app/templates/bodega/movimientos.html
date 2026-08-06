@@ -77,27 +77,130 @@
 .movimientos-historial-card .table-wrap {
     border: 1px solid #e2e8f0;
     border-radius: 10px;
+    overflow-x: auto;
+}
+.movimientos-data-table {
+    width: 100%;
+    min-width: 980px;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 11px;
 }
 .movimientos-data-table thead th {
-    padding: 6px 8px !important;
-    font-size: 10px !important;
+    padding: 4px 6px !important;
+    font-size: 9px !important;
     font-weight: 700;
     letter-spacing: 0.04em;
+    white-space: nowrap;
+    background: #f8fafc;
+    color: #64748b;
 }
 .movimientos-data-table tbody td {
-    padding: 5px 8px !important;
-    font-size: 12px !important;
-    line-height: 1.35;
+    padding: 3px 6px !important;
+    font-size: 11px !important;
+    line-height: 1.25;
     vertical-align: middle;
+    color: #334155;
 }
 .movimientos-data-table tbody tr:hover td {
     background: #fafbfc;
 }
+.movimientos-data-table td,
+.movimientos-data-table th {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.movimientos-data-table td:nth-child(1),
+.movimientos-data-table th:nth-child(1) {
+    width: 78px;
+    white-space: normal;
+    overflow: visible;
+}
+.movimientos-data-table .mov-fecha {
+    display: block;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.2;
+    color: #334155;
+}
+.movimientos-data-table .mov-hora {
+    display: block;
+    white-space: nowrap;
+    font-size: 9px;
+    font-weight: 400;
+    line-height: 1.2;
+    margin-top: 1px;
+    color: #94a3b8;
+}
+.movimientos-data-table td:nth-child(2),
+.movimientos-data-table th:nth-child(2) {
+    width: 88px;
+    white-space: nowrap;
+}
+.movimientos-data-table td:nth-child(3),
+.movimientos-data-table th:nth-child(3) {
+    width: 78px;
+    white-space: nowrap;
+}
+.movimientos-data-table td:nth-child(4),
+.movimientos-data-table th:nth-child(4) {
+    width: 72px;
+    white-space: nowrap;
+}
+.movimientos-data-table td:nth-child(5),
+.movimientos-data-table th:nth-child(5) {
+    width: 72px;
+    white-space: nowrap;
+}
+.movimientos-data-table td:nth-child(6),
+.movimientos-data-table th:nth-child(6) {
+    width: 78px;
+    white-space: nowrap;
+}
+.movimientos-data-table td:nth-child(7),
+.movimientos-data-table th:nth-child(7) {
+    width: 78px;
+    white-space: nowrap;
+}
+.movimientos-data-table td:nth-child(8),
+.movimientos-data-table th:nth-child(8) {
+    width: 58px;
+    text-align: right;
+    white-space: nowrap;
+}
+.movimientos-data-table td:nth-child(9),
+.movimientos-data-table th:nth-child(9) {
+    width: 72px;
+    text-align: right;
+    white-space: nowrap;
+}
+.movimientos-data-table td:nth-child(10),
+.movimientos-data-table th:nth-child(10) {
+    width: 110px;
+    white-space: nowrap;
+}
+.movimientos-data-table td:nth-child(11),
+.movimientos-data-table th:nth-child(11) {
+    width: 88px;
+    white-space: nowrap;
+}
+.movimientos-data-table td:nth-child(12),
+.movimientos-data-table th:nth-child(12) {
+    width: auto;
+    white-space: nowrap;
+}
+.movimientos-data-table tbody td strong {
+    font-weight: 600;
+    font-size: 11px;
+}
 .movimientos-historial-card .badge {
-    padding: 2px 7px !important;
-    font-size: 10px !important;
+    padding: 1px 6px !important;
+    font-size: 9px !important;
     font-weight: 700;
     line-height: 1.2;
+    display: inline-block;
+    white-space: nowrap;
 }
 .movimientos-historial-card .empty-state {
     padding: 14px 16px !important;
@@ -195,7 +298,15 @@
             <tbody>
                 {% for movimiento in movimientos %}
                 <tr>
-                    <td>{{ movimiento.fecha|chile_datetime if movimiento.fecha else '' }}</td>
+                    <td>
+                        {% if movimiento.fecha %}
+                        {% set _dt = movimiento.fecha|chile_datetime %}
+                        <span class="mov-fecha">{{ _dt.split(' ')[0] }}</span>
+                        {% if _dt.split(' ')|length > 1 %}
+                        <span class="mov-hora">{{ _dt.split(' ')[1] }}</span>
+                        {% endif %}
+                        {% endif %}
+                    </td>
                     <td><strong>{{ movimiento.codigo_producto }}</strong></td>
                     <td>{{ movimiento.codigo_proveedor_ref or '—' }}</td>
                     <td>{{ movimiento.marca or '—' }}</td>
