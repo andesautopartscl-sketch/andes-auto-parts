@@ -286,7 +286,8 @@
         </div>
         <div class="form-group">
           <label>Marca</label>
-          <input type="text" name="marca" placeholder="CHERY" autocomplete="off">
+          <input type="text" name="marca" list="vinMarcasList" placeholder="Elegí o escribí (ej. CHERY)" autocomplete="off">
+          <p style="margin:4px 0 0;font-size:10px;color:#94a3b8;line-height:1.3;">Lista del sistema; también podés escribir una marca nueva.</p>
         </div>
         <div class="form-group">
           <label>Modelo (ej. TIGGO 2 PRO 1.0T AUT)</label>
@@ -439,7 +440,7 @@
           </div>
           <div class="form-group">
             <label>Marca</label>
-            <input type="text" name="marca" id="fichaMarca" autocomplete="off">
+            <input type="text" name="marca" id="fichaMarca" list="vinMarcasList" placeholder="Elegí o escribí" autocomplete="off">
           </div>
           <div class="form-group">
             <label>Modelo</label>
@@ -918,4 +919,9 @@
   });
 })();
 </script>
+<datalist id="vinMarcasList">
+  {% for m in marcas_opciones or [] %}
+  <option value="{{ m }}"></option>
+  {% endfor %}
+</datalist>
 {% endblock %}

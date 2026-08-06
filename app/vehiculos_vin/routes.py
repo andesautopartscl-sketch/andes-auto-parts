@@ -36,6 +36,56 @@ vehiculos_vin_bp = Blueprint(
 
 _VIN_CLEAN_RE = re.compile(r"[^A-Za-z0-9]")
 _YEAR_RE = re.compile(r"^(19|20)\d{2}$")
+
+# Marcas frecuentes en parque Andes / OC (orden: más largas primero para matching)
+MARCAS_VIN_REF = (
+    "GREAT WALL",
+    "BRILLIANCE",
+    "DONGFENG",
+    "SSANGYONG",
+    "CHANGAN",
+    "CHERY",
+    "HAVAL",
+    "GEELY",
+    "FOTON",
+    "MAXUS",
+    "JMC",
+    "JAC",
+    "BYD",
+    "FAW",
+    "KYC",
+    "MG",
+    "DFSK",
+    "ZX AUTO",
+    "ZXAUTO",
+)
+
+
+def _marcas_opciones_vin(limit: int = 400) -> list[str]:
+    """Marcas ya usadas en VIN + referencias conocidas (se puede escribir una nueva)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    rows = (
+        db.session.query(VehiculoVin.marca)
+        .filter(VehiculoVin.marca.isnot(None), VehiculoVin.marca != "")
+        .distinct()
+        .order_by(VehiculoVin.marca.asc())
+        .limit(limit)
+        .all()
+    )
+    for (m,) in rows:
+        mu = (m or "").strip().upper()
+        if mu and mu not in seen:
+            seen.add(mu)
+            out.append(mu)
+    for m in MARCAS_VIN_REF:
+        mu = (m or "").strip().upper()
+        if mu and mu not in seen:
+            seen.add(mu)
+            out.append(mu)
+    return out
+
+
 # 1.5 / 2,0 / 1.0T / 1.5TURBO / 1.6L (nunca enteros sueltos: ARRIZO 3, TIGGO 7)
 _CILINDRADA_RE = re.compile(
     r"^(\d+[.,]\d+)\s*(T|TURBO|L|TFSI|TSI|GDI|GTE)?$",
@@ -487,6 +537,7 @@ def index():
         total_activos=total_activos,
         total_registros=total_registros,
         solo_activos=solo_activos,
+        marcas_opciones=_marcas_opciones_vin(),
         active_page="vehiculos_vin",
     )
 
@@ -552,7 +603,7 @@ def nuevo():
                 "message": msg,
                 "id": v.id,
                 "vin": v.vin or v.chasis or "",
-                "etiqueta": v.etiqueta or "",
+                "etiqueta": v.etiqueta(),
             }
         )
     flash(msg, "success")
@@ -575,6 +626,7 @@ def detalle(vid: int):
         imagen_url=_imagen_display_url(v),
         imagenes=_list_imagenes(v),
         imagenes_max=_IMG_GALLERY_MAX,
+        marcas_opciones=_marcas_opciones_vin(),
         active_page="vehiculos_vin",
     )
 

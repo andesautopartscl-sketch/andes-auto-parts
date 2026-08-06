@@ -7,6 +7,7 @@ from typing import Any
 from app.extensions import db
 from app.vehiculos_vin.models import VehiculoVin
 from app.vehiculos_vin.routes import (
+    MARCAS_VIN_REF,
     _build_vehicle_data,
     _find_duplicate,
     desglosar_modelo,
@@ -14,28 +15,8 @@ from app.vehiculos_vin.routes import (
     normalizar_vin,
 )
 
-# Marcas frecuentes en OC / parque Andes (orden: más largas primero)
-_MARCAS_CONOCIDAS = (
-    "GREAT WALL",
-    "BRILLIANCE",
-    "DONGFENG",
-    "SSANGYONG",
-    "CHANGAN",
-    "CHERY",
-    "HAVAL",
-    "GEELY",
-    "FOTON",
-    "MAXUS",
-    "JMC",
-    "JAC",
-    "BYD",
-    "FAW",
-    "KYC",
-    "MG",
-    "DFSK",
-    "ZX AUTO",
-    "ZXAUTO",
-)
+# Alias: mismas marcas de referencia que el datalist de VIN
+_MARCAS_CONOCIDAS = MARCAS_VIN_REF
 
 _VIN_LINE_RE = re.compile(
     r"(?:VIN|CHASIS|CHASSIS|N[°º]?\s*CHASIS|NRO\.?\s*CHASIS)\s*[;:=\-]?\s*"
@@ -168,7 +149,7 @@ def buscar_vehiculo_por_observaciones(observaciones: str | None) -> dict[str, An
         "patente": parsed.get("patente") or "",
         "exists": existing is not None,
         "id": existing.id if existing else None,
-        "etiqueta": existing.etiqueta if existing else "",
+        "etiqueta": existing.etiqueta() if existing else "",
         "patente_existente": (existing.patente or "") if existing else "",
     }
 
