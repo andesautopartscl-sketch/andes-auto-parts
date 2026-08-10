@@ -1,5 +1,5 @@
-﻿/* Andes Mobile PWA — service worker v38 */
-const SW_VERSION = "andes-mobile-v38";
+﻿/* Andes Mobile PWA — service worker v39 */
+const SW_VERSION = "andes-mobile-v39";
 const CACHE_PREFIX = `${SW_VERSION}-`;
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
@@ -278,6 +278,16 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (isHtmlRequest(request) && isMobileScope(url)) {
+    // Ficha de producto / stock cambian seguido: no cachear HTML o la PWA
+    // muestra cantidades viejas (p. ej. stock 2+2 cuando ya hay 9).
+    if (
+      url.pathname.startsWith("/m/producto/") ||
+      url.pathname.startsWith("/m/stock/") ||
+      url.pathname.startsWith("/m/ajustar-stock/")
+    ) {
+      event.respondWith(fetch(request));
+      return;
+    }
     event.respondWith(networkFirstHtml(request));
   }
 });

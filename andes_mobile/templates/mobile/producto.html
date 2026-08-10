@@ -141,19 +141,21 @@
   </section>
   {% endif %}
 
-  <section class="m-section m-accordion" data-accordion>
+  <section class="m-section m-accordion m-accordion--open" data-accordion data-open-default="true">
     <h2 class="m-section-title">Stock</h2>
-    <button type="button" class="m-accordion__header" aria-expanded="false">
+    <button type="button" class="m-accordion__header" aria-expanded="true">
       <span class="m-accordion__title">Stock por bodega</span>
-      <span class="m-accordion__meta">{{ p.ficha_stock.stotal }} u.</span>
+      <span class="m-accordion__meta m-accordion__meta--ok">{{ p.ficha_stock.stotal }} u.</span>
       <span class="m-accordion__chevron" aria-hidden="true">▼</span>
     </button>
     <div class="m-accordion__body">
+      <p class="m-stock-total-line">Total disponible: <strong>{{ p.ficha_stock.stotal }}</strong></p>
       {% for b in p.ficha_stock.bodegas %}
-      <div class="m-accordion m-accordion--nested{% if b.subtotal > 0 %} m-accordion--has-stock m-accordion--open{% endif %}" data-accordion data-open-default="{{ 'true' if b.subtotal > 0 else 'false' }}">
-        <button type="button" class="m-accordion__header m-accordion__header--sub" aria-expanded="{{ 'true' if b.subtotal > 0 else 'false' }}">
+      {% if b.subtotal > 0 %}
+      <div class="m-accordion m-accordion--nested m-accordion--has-stock m-accordion--open" data-accordion data-open-default="true">
+        <button type="button" class="m-accordion__header m-accordion__header--sub" aria-expanded="true">
           <span class="m-accordion__title">{{ b.nombre }}</span>
-          <span class="m-accordion__meta{% if b.subtotal > 0 %} m-accordion__meta--ok{% endif %}">{{ b.subtotal }}</span>
+          <span class="m-accordion__meta m-accordion__meta--ok">{{ b.subtotal }}</span>
           <span class="m-accordion__chevron" aria-hidden="true">▼</span>
         </button>
         <div class="m-accordion__body">
@@ -165,17 +167,17 @@
           </div>
           {% endif %}
           {% endfor %}
-          {% if b.subtotal <= 0 %}
-          <p class="m-accordion__empty">Sin stock</p>
-          {% endif %}
         </div>
       </div>
+      {% endif %}
       {% endfor %}
       {% for o in p.ficha_stock.otras_lineas %}
+      {% if o.stock > 0 %}
       <div class="m-stock-variant m-stock-variant--other">
         <span class="m-stock-variant__marca">{{ o.bodega }} · {{ o.marca }}</span>
         <span class="m-stock-variant__qty">{{ o.stock }}</span>
       </div>
+      {% endif %}
       {% endfor %}
       {% if p.ficha_stock.s6 %}
       <div class="m-stock-variant m-stock-variant--other">
@@ -186,24 +188,24 @@
     </div>
   </section>
 
-  <section class="m-accordion" data-accordion>
-    <button type="button" class="m-accordion__header" aria-expanded="false">
+  <section class="m-accordion m-accordion--open" data-accordion data-open-default="true">
+    <button type="button" class="m-accordion__header" aria-expanded="true">
       <span class="m-accordion__title">Últimos movimientos</span>
-      <span class="m-accordion__meta">{{ p.movimientos | length }}</span>
+      <span class="m-accordion__meta">{{ p.movimientos | length }}{% if p.movimientos_total and p.movimientos_total > (p.movimientos | length) %}/{{ p.movimientos_total }}{% endif %}</span>
       <span class="m-accordion__chevron" aria-hidden="true">▼</span>
     </button>
     <div class="m-accordion__body">
       {% if p.movimientos %}
       <ul class="m-mov-list" id="m-mov-list">
         {% for m in p.movimientos %}
-        <li class="m-mov-item{% if loop.index > 3 %} m-mov-item--extra{% endif %}"{% if loop.index > 3 %} hidden{% endif %}>
-          <span class="m-mov-item__main">{{ m.tipo | capitalize }} · {{ m.cantidad }} u.</span>
-          <span class="m-mov-item__sub">{{ m.bodega }}{% if m.marca %} · {{ m.marca }}{% endif %} · {{ m.fecha }}</span>
+        <li class="m-mov-item{% if loop.index > 8 %} m-mov-item--extra{% endif %}"{% if loop.index > 8 %} hidden{% endif %}>
+          <span class="m-mov-item__main">{{ m.tipo | capitalize }} · {{ m.cantidad }} u.{% if m.marca %} · {{ m.marca }}{% endif %}</span>
+          <span class="m-mov-item__sub">{{ m.fecha }}{% if m.bodega %} · {{ m.bodega }}{% endif %}{% if m.observacion %} · {{ m.observacion[:80] }}{% endif %}</span>
         </li>
         {% endfor %}
       </ul>
-      {% if p.movimientos | length > 3 %}
-      <button type="button" class="m-accordion__more" id="m-mov-more" data-mov-more>Ver más</button>
+      {% if p.movimientos | length > 8 %}
+      <button type="button" class="m-accordion__more" id="m-mov-more" data-mov-more>Ver más movimientos</button>
       {% endif %}
       {% else %}
       <p class="m-accordion__empty">Sin movimientos recientes.</p>

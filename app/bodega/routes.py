@@ -1253,9 +1253,10 @@ def _parse_ingreso_rows() -> tuple[list[dict], list[str]]:
 
 
 def _stock_variantes_por_codigo(codigo: str) -> list[dict]:
+    codigo_u = (codigo or "").strip().upper()
     rows = (
         ProductoVarianteStock.query
-        .filter_by(codigo_producto=codigo.upper())
+        .filter(func.upper(func.trim(ProductoVarianteStock.codigo_producto)) == codigo_u)
         .order_by(
             ProductoVarianteStock.marca.asc(),
             ProductoVarianteStock.bodega.asc(),

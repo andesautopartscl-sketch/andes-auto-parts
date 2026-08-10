@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 
-from flask import abort, current_app, jsonify, redirect, render_template, request, send_from_directory, session, url_for
+from flask import abort, current_app, jsonify, make_response, redirect, render_template, request, send_from_directory, session, url_for
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +227,13 @@ def producto(codigo):
     detalle = mobile_data.producto_detalle(codigo, puede_ver_precio=puede_precio)
     if detalle is None:
         abort(404)
-    return render_template("mobile/producto.html", p=detalle, **_nav_ctx("buscar"))
+    resp = make_response(
+        render_template("mobile/producto.html", p=detalle, **_nav_ctx("buscar"))
+    )
+    # Stock y movimientos no deben quedar en caché del navegador/PWA.
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @mobile_bp.route("/ventas")

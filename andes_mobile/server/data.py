@@ -560,10 +560,13 @@ def producto_detalle(codigo_raw: str, *, puede_ver_precio: bool = True) -> dict 
         .all()
         if (r.codigo_proveedor or "").strip()
     ]
+    mov_q = MovimientoStock.query.filter(
+        func.upper(func.trim(MovimientoStock.codigo_producto)) == codigo
+    )
+    movimientos_total = mov_q.count()
     movs = (
-        MovimientoStock.query.filter(func.upper(MovimientoStock.codigo_producto) == codigo)
-        .order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc())
-        .limit(10)
+        mov_q.order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc())
+        .limit(80)
         .all()
     )
     movimientos = [
@@ -572,7 +575,7 @@ def producto_detalle(codigo_raw: str, *, puede_ver_precio: bool = True) -> dict 
             "cantidad": int(m.cantidad or 0),
             "bodega": (m.bodega or "").strip(),
             "marca": (m.marca or "").strip(),
-            "fecha": m.fecha.strftime("%Y-%m-%d %H:%M") if m.fecha else "",
+            "fecha": m.fecha.strftime("%d/%m/%Y %H:%M") if m.fecha else "",
             "observacion": (m.observacion or "").strip(),
         }
         for m in movs
@@ -625,6 +628,7 @@ def producto_detalle(codigo_raw: str, *, puede_ver_precio: bool = True) -> dict 
         "ficha_stock": ficha_stock,
         "origen": origen,
         "movimientos": movimientos,
+        "movimientos_total": movimientos_total,
         "caracteristicas": _producto_caracteristicas(producto),
     }
 
