@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import sqlite3
 import tempfile
 import zipfile
@@ -408,10 +409,8 @@ def restore_db_from_upload(file_storage) -> BackupResult:
         return BackupResult(success=False, message="No se recibió archivo.", ran_at=ran_at)
 
     suffix = Path(filename).suffix.lower()
-    raw = file_storage.read()
-    if not raw:
-        return BackupResult(success=False, message="Archivo vacío.", ran_at=ran_at)
-    if len(raw) > 200 * 1024 * 1024:
+    content_len = getattr(file_storage, "content_length", None)
+    if content_len is not None and content_len > 200 * 1024 * 1024:
         return BackupResult(success=False, message="Archivo demasiado grande (máx. 200 MB).", ran_at=ran_at)
 
     stamp = datetime.now(CHILE_TZ).strftime("%Y%m%d_%H%M%S")
@@ -421,7 +420,17 @@ def restore_db_from_upload(file_storage) -> BackupResult:
     safety_note = "n/d"
 
     try:
-        incoming.write_bytes(raw)
+        # Guardar a disco por streaming (evita duplicar ~30MB en RAM).
+        try:
+            file_storage.stream.seek(0)
+        except Exception:
+            pass
+        with open(incoming, "wb") as out:
+            shutil.copyfileobj(file_storage.stream, out, length=1024 * 1024)
+        if incoming.stat().st_size < 1024:
+            raise ValueError("Archivo vacío o incompleto.")
+        if incoming.stat().st_size > 200 * 1024 * 1024:
+            raise ValueError("Archivo demasiado grande (máx. 200 MB).")
         if suffix == ".zip":
             with zipfile.ZipFile(incoming, "r") as zf:
                 names = [
@@ -431,22 +440,22 @@ def restore_db_from_upload(file_storage) -> BackupResult:
                 if not names:
                     raise ValueError("El ZIP no contiene ningún archivo .db")
                 chosen = next(
-                    (n for n in names if Path(n).name.lower() == "andes.db"),
+                    (n for n in names if Path(n).name.lower() in {"andes.db", "andes_para_render.db"}),
                     names[0],
                 )
                 with zf.open(chosen) as src, open(restored, "wb") as dst:
-                    dst.write(src.read())
+                    shutil.copyfileobj(src, dst, length=1024 * 1024)
         elif suffix == ".db":
-            restored.write_bytes(raw)
+            shutil.copyfile(incoming, restored)
         else:
             raise ValueError("Sube un archivo .db o un .zip de backup.")
 
         _validate_sqlite_db(restored)
 
-        # Si la DB actual de Render ya está corrupta, no bloquear el restore.
+        # Copia rápida de la previa (sin sqlite.backup: es demasiado lento en Render).
         if db_path.is_file():
             try:
-                _create_db_snapshot(db_path, safety)
+                shutil.copy2(db_path, safety)
                 safety_note = safety.name
             except Exception as snap_exc:
                 logger.warning("No se pudo respaldar la DB previa (se continúa): %s", snap_exc)
@@ -460,26 +469,26 @@ def restore_db_from_upload(file_storage) -> BackupResult:
         except Exception:
             current_app.logger.exception("No se pudieron cerrar conexiones antes del restore")
 
-        # Escribir con API backup a un archivo nuevo y luego renombrar.
         tmp_live = db_path.with_name("andes.db.restoring")
         if tmp_live.exists():
             tmp_live.unlink()
-        src = sqlite3.connect(f"file:{restored.as_posix()}?mode=ro", uri=True, timeout=60)
-        dst = sqlite3.connect(str(tmp_live))
-        try:
-            src.backup(dst)
-            dst.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        finally:
-            dst.close()
-            src.close()
+        shutil.copyfile(restored, tmp_live)
 
         # Quitar WAL/SHM viejos del live para no mezclar con la DB nueva.
-        for side in (db_path.with_suffix(".db-wal"), db_path.with_suffix(".db-shm")):
+        for side in (
+            db_path.with_name("andes.db-wal"),
+            db_path.with_name("andes.db-shm"),
+            db_path.with_suffix(".db-wal"),
+            db_path.with_suffix(".db-shm"),
+        ):
             side.unlink(missing_ok=True)
         if db_path.exists():
             db_path.unlink()
         tmp_live.replace(db_path)
-        for side in (db_path.with_suffix(".db-wal"), db_path.with_suffix(".db-shm")):
+        for side in (
+            db_path.with_name("andes.db-wal"),
+            db_path.with_name("andes.db-shm"),
+        ):
             side.unlink(missing_ok=True)
 
         try:
@@ -488,8 +497,6 @@ def restore_db_from_upload(file_storage) -> BackupResult:
             flask_db.engine.dispose()
         except Exception:
             pass
-
-        _validate_sqlite_db(db_path)
 
         msg = (
             f"Base restaurada desde {filename}. "

@@ -3,7 +3,7 @@ services:
     name: andes-auto-parts
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn wsgi:app
+    startCommand: gunicorn --timeout 180 --graceful-timeout 30 wsgi:app
     healthCheckPath: /login
     disk:
       name: andes-data

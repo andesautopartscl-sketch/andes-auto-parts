@@ -132,14 +132,14 @@
   <div class="backup-status neutral" style="margin-top:8px;">
     <strong>Sincronizar con el PC:</strong>
     la app móvil en Render usa una base distinta a la de tu computador.
-    Si el stock/movimientos del móvil están atrasados, sube aquí
-    <code>C:\AndesAutoParts\data\andes_para_render.db</code>
-    (copia limpia; no subas <code>andes.db</code> mientras el ERP local está abierto: puede salir “malformed”).
+    Preferí subir el ZIP (más liviano):
+    <code>C:\AndesAutoParts\data\andes_para_render.zip</code>
+    — no subas <code>andes.db</code> con el ERP abierto.
     <form id="backupRestoreForm" style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
       <input type="file" name="archivo" id="backupRestoreFile" accept=".db,.zip,application/zip,application/octet-stream" required>
       <button type="submit" class="btn" id="btnRestoreDb">Restaurar base en este servidor</button>
     </form>
-    <p class="backup-subtitle" style="margin-top:8px;">Se intenta guardar una copia previa automáticamente; si la base actual ya está dañada, el restore continúa igual.</p>
+    <p class="backup-subtitle" style="margin-top:8px;">Puede tardar 1–3 min. Si se queda pegado más de 4 min, recarga e intenta con el ZIP.</p>
   </div>
 
   <div class="backup-table-wrap">
@@ -228,17 +228,25 @@
         return;
       }
       btnRestore.disabled = true;
-      msg.textContent = 'Subiendo y restaurando base… (puede tardar un minuto)';
+      msg.textContent = 'Subiendo y restaurando base… (ZIP recomendado; 1–3 min)';
       msg.className = 'backup-msg';
       var fd = new FormData();
       fd.append('archivo', fileInput.files[0]);
+      var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      var hung = setTimeout(function () {
+        msg.textContent = 'Sigue trabajando… si pasa de 4 min, recarga y sube andes_para_render.zip';
+      }, 120000);
+      var kill = setTimeout(function () {
+        if (ctrl) ctrl.abort();
+      }, 240000);
       fetch('{{ url_for("admin.backups_restore") }}', {
         method: 'POST',
         headers: {
           'X-Requested-With': 'XMLHttpRequest',
           'X-CSRF-Token': '{{ csrf_token }}'
         },
-        body: fd
+        body: fd,
+        signal: ctrl ? ctrl.signal : undefined
       })
         .then(function (r) {
           return r.json().then(function (data) { return { ok: r.ok, data: data }; });
@@ -251,10 +259,17 @@
             setTimeout(function () { window.location.reload(); }, 1500);
           }
         })
-        .catch(function () {
-          msg.textContent = 'Error de red al restaurar';
+        .catch(function (err) {
+          var aborted = err && err.name === 'AbortError';
+          msg.textContent = aborted
+            ? 'Timeout: recarga y sube andes_para_render.zip (más liviano).'
+            : 'Error de red al restaurar (¿timeout de Render?). Recarga e intenta con el ZIP.';
           msg.className = 'backup-msg error';
           btnRestore.disabled = false;
+        })
+        .finally(function () {
+          clearTimeout(hung);
+          clearTimeout(kill);
         });
     });
   }
