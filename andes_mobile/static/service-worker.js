@@ -1,5 +1,5 @@
-﻿/* Andes Mobile PWA — service worker v35 */
-const SW_VERSION = "andes-mobile-v35";
+﻿/* Andes Mobile PWA — service worker v36 */
+const SW_VERSION = "andes-mobile-v36";
 const CACHE_PREFIX = `${SW_VERSION}-`;
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
@@ -11,23 +11,8 @@ const CDN_CACHE = `${SW_VERSION}-cdn`;
 const ASSET_V = SW_VERSION.split("-v").pop();
 
 const PRECACHE_URLS = [
-  "/m/",
-  "/m/dashboard",
-  "/m/buscar",
-  "/m/ventas",
-  "/m/clientes",
-  "/m/proveedores",
-  "/m/ingreso-rapido",
-  "/m/etiquetas",
-  "/m/importar-imagenes",
-  "/m/ajustes",
-  "/m/oc-clientes",
-  "/m/oc-clientes/nueva",
-  "/m/escaner",
-  "/m/ingresos",
-  "/m/stock-critico",
-  "/m/reportes",
-  "/m/venta-rapida",
+  // Solo assets estáticos en el install. Las rutas HTML (/m/...) exigen sesión
+  // y, si una falla, Chrome no deja instalar la PWA. El HTML se cachea al navegar.
   "/m/service-worker.js",
   `/static/mobile/mobile.css?v=${ASSET_V}`,
   `/static/mobile/fonts/inter.css?v=${ASSET_V}`,
@@ -197,7 +182,19 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(STATIC_CACHE);
-      await cache.addAll(PRECACHE_URLS);
+      // No usar cache.addAll: si UNA URL falla (ruta con login, 302 raro,
+      // cold start de Render), falla TODO el install del SW y Chrome deja
+      // de ofrecer "Instalar aplicación" / rompe el acceso desde el ícono.
+      await Promise.all(
+        PRECACHE_URLS.map(async (url) => {
+          try {
+            const res = await fetch(url, { credentials: "same-origin" });
+            if (res && res.ok) await cache.put(url, res.clone());
+          } catch (_e) {
+            /* asset opcional en install */
+          }
+        })
+      );
       const cdnCache = await caches.open(CDN_CACHE);
       await Promise.all(
         CDN_ASSETS.map(async (url) => {

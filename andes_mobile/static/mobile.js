@@ -816,13 +816,23 @@
         return !!deferred && !standalone;
       },
       prompt: function () {
-        if (!deferred) return Promise.resolve({ outcome: "unavailable" });
+        if (!deferred) {
+          return Promise.resolve({ outcome: "unavailable" });
+        }
         var ev = deferred;
-        deferred = null;
-        document.dispatchEvent(new CustomEvent("andes:pwa-install-change"));
-        return ev.prompt().then(function () {
-          return ev.userChoice;
-        });
+        return ev
+          .prompt()
+          .then(function () {
+            return ev.userChoice;
+          })
+          .then(function (choice) {
+            deferred = null;
+            document.dispatchEvent(new CustomEvent("andes:pwa-install-change"));
+            return choice || { outcome: "dismissed" };
+          })
+          .catch(function () {
+            return { outcome: "unavailable" };
+          });
       },
     };
 

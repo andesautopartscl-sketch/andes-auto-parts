@@ -206,11 +206,19 @@
         if (!btn._andesBound) {
           btn._andesBound = true;
           btn.addEventListener("click", function () {
+            if (!api.canPrompt()) {
+              showToast("Abre el menú ⋮ de Chrome → Instalar aplicación");
+              return;
+            }
+            btn.disabled = true;
             api.prompt().then(function (choice) {
+              btn.disabled = false;
               if (choice && choice.outcome === "accepted") {
                 showToast("App instalada");
-              } else if (choice && choice.outcome === "unavailable") {
-                showToast("Usa el menú ⋮ → Añadir a pantalla de inicio");
+              } else if (choice && choice.outcome === "dismissed") {
+                showToast("Instalación cancelada");
+              } else {
+                showToast("Abre el menú ⋮ de Chrome → Instalar aplicación");
               }
               refreshInstallUi();
             });
