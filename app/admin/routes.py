@@ -1,4 +1,6 @@
 import logging
+import os
+from hmac import compare_digest
 from flask import Blueprint, request, jsonify, render_template, send_file
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -18,6 +20,21 @@ from ..utils.csrf import validate_csrf_request
 from ..models import Etiqueta
 from app.seguridad.models import Usuario
 from app.import_excel import import_products_from_excel
+
+logger = logging.getLogger(__name__)
+
+
+def _valid_db_sync_token() -> bool:
+    expected = (os.environ.get("ANDES_DB_SYNC_TOKEN") or "").strip()
+    if not expected or len(expected) < 16:
+        return False
+    provided = (
+        (request.headers.get("X-Andes-Sync-Token") or "").strip()
+        or (request.form.get("sync_token") or "").strip()
+    )
+    if not provided:
+        return False
+    return compare_digest(expected, provided)
 
 
 admin_bp = Blueprint("admin", __name__)
@@ -398,4 +415,32 @@ def backups_restore():
         filename=result.filename,
         size_bytes=result.size_bytes,
         ran_at=result.ran_at,
+    ), status
+
+
+@admin_bp.route("/backups/sync", methods=["POST"])
+def backups_sync():
+    """
+    Sync unidireccional PC → Render (sin sesión de usuario).
+
+    Requiere header X-Andes-Sync-Token == ANDES_DB_SYNC_TOKEN.
+    Pensado para el script local cada 15 min; no reemplaza el ERP del PC.
+    """
+    if not _valid_db_sync_token():
+        logger.warning("backups_sync: token inválido o no configurado")
+        return jsonify(success=False, message="No autorizado"), 401
+
+    archivo = request.files.get("archivo") or request.files.get("file")
+    if not archivo or not (archivo.filename or "").strip():
+        return jsonify(success=False, message="Falta archivo .db o .zip"), 400
+
+    result = restore_db_from_upload(archivo)
+    status = 200 if result.success else 400
+    return jsonify(
+        success=result.success,
+        message=result.message,
+        filename=result.filename,
+        size_bytes=result.size_bytes,
+        ran_at=result.ran_at,
+        source="pc_sync",
     ), status

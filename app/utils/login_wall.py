@@ -9,6 +9,8 @@ PUBLIC_AUTH_ENDPOINTS: frozenset[str] = frozenset(
         "auth.session_idle_status",
         "auth.password_reset_request",
         "seguridad.login",
+        # Sync PC → Render autenticado por ANDES_DB_SYNC_TOKEN (sin sesión).
+        "admin.backups_sync",
     }
 )
 _SAFE_NEXT_MAX = 2000

@@ -1484,6 +1484,9 @@ def create_app():
             return None
         if request.path.startswith("/chat/api/messages/media/"):
             return None
+        # Sync automático PC→Render usa token propio, no CSRF de sesión.
+        if request.endpoint == "admin.backups_sync" or (request.path or "").rstrip("/") == "/admin/backups/sync":
+            return None
         if not validate_csrf_request():
             is_ajax = request.is_json or (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
             if is_ajax or request.path.startswith("/chat/api/") or request.path.startswith("/ventas/api/") or request.path.startswith("/seguridad/api/"):

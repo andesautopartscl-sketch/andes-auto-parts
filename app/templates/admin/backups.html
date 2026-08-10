@@ -139,7 +139,11 @@
       <input type="file" name="archivo" id="backupRestoreFile" accept=".db,.zip,application/zip,application/octet-stream" required>
       <button type="submit" class="btn" id="btnRestoreDb">Restaurar base en este servidor</button>
     </form>
-    <p class="backup-subtitle" style="margin-top:8px;">Puede tardar 1–3 min. Si se queda pegado más de 4 min, recarga e intenta con el ZIP.</p>
+    <p class="backup-subtitle" style="margin-top:8px;">
+      Sync automático cada 15 min (PC → Render) con <code>scripts/sync_db_to_render.py</code>.
+      Este formulario queda para forzar una sincronización manual.
+      Si se queda pegado más de 4 min, recarga e intenta con el ZIP.
+    </p>
   </div>
 
   <div class="backup-table-wrap">
