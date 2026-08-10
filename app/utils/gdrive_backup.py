@@ -68,6 +68,23 @@ def get_backup_config() -> dict[str, Any]:
     }
 
 
+def humanize_gdrive_error(exc: BaseException | str) -> str:
+    """Mensaje corto en español para pantallas de backup."""
+    text = str(exc or "").strip()
+    low = text.lower()
+    if "invalid_grant" in low or "token has been expired or revoked" in low:
+        return (
+            "Token de Google Drive vencido o revocado. "
+            "En el PC ejecutá: .venv\\Scripts\\python.exe scripts\\setup_gdrive_token.py "
+            "e iniciá sesión con la cuenta de Drive."
+        )
+    if "token oauth" in low or "credenciales" in low:
+        return text
+    if len(text) > 220:
+        return text[:217] + "…"
+    return text or "Error de Google Drive"
+
+
 def format_size(num_bytes: int) -> str:
     size = float(num_bytes)
     for unit in ("B", "KB", "MB", "GB"):
@@ -112,18 +129,16 @@ def _create_db_snapshot(db_path: Path, dest_db: Path) -> None:
 
 def _build_drive(*, oauth_credentials_path: Path, token_path: Path, interactive: bool) -> Any:
     """Crea servicio Drive API v3 usando token OAuth (usuario)."""
+    from google.auth.exceptions import RefreshError
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
 
     token_path = Path(token_path)
     if not token_path.is_file():
-        if interactive:
-            raise RuntimeError(
-                "Token OAuth no encontrado. Ejecuta: python scripts/setup_gdrive_token.py"
-            )
         raise RuntimeError(
-            "Token OAuth no encontrado. Ejecuta: python scripts/setup_gdrive_token.py"
+            "Token OAuth no encontrado. Ejecuta en el PC: "
+            ".venv\\Scripts\\python.exe scripts\\setup_gdrive_token.py"
         )
 
     creds = Credentials.from_authorized_user_file(
@@ -132,8 +147,21 @@ def _build_drive(*, oauth_credentials_path: Path, token_path: Path, interactive:
     )
 
     if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        token_path.write_text(creds.to_json(), encoding="utf-8")
+        try:
+            creds.refresh(Request())
+            token_path.write_text(creds.to_json(), encoding="utf-8")
+        except RefreshError as exc:
+            raise RuntimeError(
+                "Token de Google Drive vencido o revocado (invalid_grant). "
+                "Reautorizá en el PC con: "
+                ".venv\\Scripts\\python.exe scripts\\setup_gdrive_token.py"
+            ) from exc
+
+    if not creds or not creds.valid:
+        raise RuntimeError(
+            "Credenciales de Google Drive inválidas. Reautorizá con: "
+            ".venv\\Scripts\\python.exe scripts\\setup_gdrive_token.py"
+        )
 
     return build("drive", "v3", credentials=creds, cache_discovery=False)
 
@@ -158,7 +186,11 @@ def list_drive_backups(
         return []
 
     results: list[dict[str, Any]] = []
-    service = _build_drive(oauth_credentials_path=Path("."), token_path=token_path, interactive=False)
+    service = _build_drive(
+        oauth_credentials_path=Path(oauth_credentials_path or cfg["oauth_credentials_path"]),
+        token_path=token_path,
+        interactive=False,
+    )
     query = f"'{folder_id}' in parents and trashed=false and name contains '{BACKUP_NAME_PREFIX}'"
 
     page_token = None
@@ -199,7 +231,11 @@ def download_drive_file(
 ) -> tuple[bytes, str]:
     cfg = get_backup_config()
     token_path = Path(token_path or cfg["token_path"])
-    service = _build_drive(oauth_credentials_path=Path("."), token_path=token_path, interactive=False)
+    service = _build_drive(
+        oauth_credentials_path=Path(oauth_credentials_path or cfg["oauth_credentials_path"]),
+        token_path=token_path,
+        interactive=False,
+    )
 
     meta = service.files().get(fileId=file_id, fields="name").execute()
     filename = meta.get("name") or "backup.zip"

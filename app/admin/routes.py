@@ -11,6 +11,7 @@ from ..utils.decorators import admin_required
 from ..utils.gdrive_backup import (
     download_drive_file,
     get_backup_config,
+    humanize_gdrive_error,
     list_drive_backups,
     load_last_status,
     restore_db_from_upload,
@@ -347,22 +348,49 @@ def generar_hoja_etiquetas(codigo):
 @admin_bp.route("/backups")
 @admin_required
 def backups_view():
-    cfg = get_backup_config()
     backups = []
     list_error = None
+    last_status = None
+    configured = False
     try:
-        backups = list_drive_backups()
+        cfg = get_backup_config()
+        configured = bool(cfg.get("folder_id"))
+        try:
+            last_status = load_last_status()
+        except Exception as exc:
+            logger.warning("backups_view: load_last_status falló: %s", exc)
+            last_status = None
+        try:
+            backups = list_drive_backups()
+        except Exception as exc:
+            list_error = humanize_gdrive_error(exc)
+            logger.warning("backups_view: list_drive_backups falló: %s", exc)
     except Exception as exc:
-        list_error = str(exc)
+        list_error = humanize_gdrive_error(exc)
+        logger.exception("backups_view: error de configuración")
 
-    return render_template(
-        "admin/backups.html",
-        backups=backups,
-        last_status=load_last_status(),
-        list_error=list_error,
-        configured=bool(cfg["folder_id"]),
-        active_page="admin_backups",
-    )
+    if last_status and not last_status.get("success") and last_status.get("message"):
+        last_status = dict(last_status)
+        last_status["message"] = humanize_gdrive_error(last_status["message"])
+
+    try:
+        return render_template(
+            "admin/backups.html",
+            backups=backups or [],
+            last_status=last_status,
+            list_error=list_error,
+            configured=configured,
+            active_page="admin_backups",
+        )
+    except Exception:
+        logger.exception("backups_view: error al renderizar plantilla")
+        return (
+            '<div style="padding:28px 20px;text-align:center;color:#b91c1c;">'
+            "No se pudo cargar Backups Google Drive. Revisá el log del servidor."
+            "</div>",
+            500,
+            {"Content-Type": "text/html; charset=utf-8"},
+        )
 
 
 @admin_bp.route("/backups/run", methods=["POST"])

@@ -1519,12 +1519,21 @@
             }
         });
 
-        // Si navega a otro módulo desde el modal (data-module-url), cerrarlo para no bloquear clicks.
+        // Navegación SPA desde el modal: cerrar y cargar el módulo (sin full page).
         modal.querySelectorAll("a[data-module-url]").forEach(function (a) {
             if (a.dataset.usuariosUiNavBound === "1") return;
             a.dataset.usuariosUiNavBound = "1";
-            a.addEventListener("click", function () {
+            a.addEventListener("click", function (event) {
+                event.preventDefault();
+                event.stopPropagation();
                 closeOptionsModal();
+                var url = (a.getAttribute("data-module-url") || a.getAttribute("href") || "").trim();
+                if (!url || url.charAt(0) === "#") return;
+                if (typeof window._loadModule === "function") {
+                    window._loadModule(url);
+                } else {
+                    window.location.href = url;
+                }
             });
         });
 

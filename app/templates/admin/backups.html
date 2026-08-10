@@ -3,14 +3,21 @@
 
 {% block content %}
 <style>
+  .backup-page {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    box-sizing: border-box;
+  }
   .backup-card {
-    max-width: 1200px;
-    margin: 0 auto;
+    width: 100%;
+    max-width: none;
+    margin: 0;
     background: #fff;
     border: 1px solid var(--line, #e2e8f0);
-    border-radius: 16px;
-    padding: 18px 20px;
-    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-sizing: border-box;
   }
   .backup-header {
     display: flex;
@@ -18,18 +25,24 @@
     justify-content: space-between;
     gap: 12px;
     flex-wrap: wrap;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
+  }
+  .backup-header .page-title {
+    margin: 0;
+    font-size: 1.2rem;
   }
   .backup-subtitle {
-    margin: 6px 0 0;
+    margin: 4px 0 0;
     color: var(--muted, #64748b);
-    font-size: 13px;
+    font-size: 12px;
+    line-height: 1.4;
   }
   .backup-status {
-    border-radius: 12px;
-    padding: 12px 14px;
-    margin-bottom: 16px;
-    font-size: 13px;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 12.5px;
+    line-height: 1.4;
   }
   .backup-status.ok {
     background: #ecfdf3;
@@ -48,54 +61,56 @@
   }
   .backup-actions {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
     align-items: center;
   }
   .backup-table-wrap {
     overflow: auto;
     border: 1px solid #e2e8f0;
-    border-radius: 12px;
+    border-radius: 10px;
   }
   .backup-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 12.5px;
   }
   .backup-table th,
   .backup-table td {
-    padding: 10px 12px;
+    padding: 8px 10px;
     border-bottom: 1px solid #edf2f7;
     text-align: left;
   }
   .backup-table th {
     background: #f8fafc;
-    font-size: 11px;
+    font-size: 10.5px;
     text-transform: uppercase;
     letter-spacing: .04em;
+    color: #64748b;
   }
   .backup-table tr:hover td {
     background: #f8fbff;
   }
   .backup-empty {
-    padding: 18px;
+    padding: 16px;
     color: var(--muted, #64748b);
-    font-size: 13px;
+    font-size: 12.5px;
   }
   .backup-msg {
-    margin-top: 10px;
-    font-size: 13px;
+    margin-top: 8px;
+    font-size: 12.5px;
     min-height: 18px;
   }
   .backup-msg.error { color: #b91c1c; }
   .backup-msg.ok { color: #15803d; }
 </style>
 
+<div class="backup-page">
 <div class="backup-card">
   <div class="backup-header">
     <div>
-      <h1 class="page-title" style="margin:0;">Backups Google Drive</h1>
-      <p class="backup-subtitle">Copias automáticas diarias de la base de datos (02:00 AM). Retención configurable por variable de entorno.</p>
+      <h1 class="page-title">Backups Google Drive</h1>
+      <p class="backup-subtitle">Copias automáticas diarias de la base de datos. Retención configurable por variable de entorno.</p>
     </div>
     <div class="backup-actions">
       <button type="button" class="btn" id="btnBackupNow">Hacer backup ahora</button>
@@ -174,6 +189,7 @@
     <div class="backup-empty">No hay backups en Google Drive todavía.</div>
     {% endif %}
   </div>
+</div>
 </div>
 
 <script>

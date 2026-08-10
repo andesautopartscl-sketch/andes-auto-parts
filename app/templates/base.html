@@ -1137,9 +1137,21 @@ function toggleMenu(id) {
 				window.location.href = res.url;
 				return Promise.reject(new Error('redirect'));
 			}
+			/* 500 del ERP a veces redirige a /inicio-seguro; no inyectar esa pantalla en el panel. */
+			if (res.redirected && res.url.indexOf('/inicio-seguro') !== -1) {
+				return Promise.reject(new Error('Error temporal del servidor'));
+			}
 			if (!res.ok) throw new Error('HTTP ' + res.status);
 			var finalUrl = res.url || '';
 			return res.text().then(function (html) {
+				if (
+					html
+					&& html.indexOf('Ingreso exitoso') !== -1
+					&& html.indexOf('Ir a Buscar Productos') !== -1
+					&& html.indexOf('Ir a Dashboard') !== -1
+				) {
+					return Promise.reject(new Error('Error temporal del servidor'));
+				}
 				return { html: html, finalUrl: finalUrl };
 			});
 		})

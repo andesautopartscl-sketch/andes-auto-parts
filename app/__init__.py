@@ -1644,14 +1644,45 @@ def create_app():
         except Exception:
             pass
         try:
-            if request.path.startswith("/seguridad/api/") or request.path.startswith("/chat/api/") or request.path.startswith("/ventas/api/"):
-                return jsonify(success=False, message="Error interno temporal"), 500
-            if request.is_json:
+            is_xhr = (
+                request.is_json
+                or (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
+                or "/api/" in (request.path or "")
+            )
+            if (
+                request.path.startswith("/seguridad/api/")
+                or request.path.startswith("/chat/api/")
+                or request.path.startswith("/ventas/api/")
+                or is_xhr
+            ):
+                # SPA/AJAX: nunca redirigir a inicio-seguro (se inyecta en el panel y se ve roto).
+                if is_xhr and not (
+                    request.is_json
+                    or request.path.startswith("/seguridad/api/")
+                    or request.path.startswith("/chat/api/")
+                    or request.path.startswith("/ventas/api/")
+                ):
+                    return (
+                        '<div style="padding:28px 20px;text-align:center;color:#b91c1c;">'
+                        "Error temporal al cargar esta pantalla. Probá de nuevo en unos segundos."
+                        "</div>",
+                        500,
+                        {"Content-Type": "text/html; charset=utf-8"},
+                    )
                 return jsonify(success=False, message="Error interno temporal"), 500
             if "user" in session and request.endpoint != "auth.inicio_seguro":
                 path = request.path or ""
                 if path == "/m" or path.startswith("/m/"):
                     return redirect(url_for("mobile.home"))
+                # Nunca mandar /admin/* a inicio-seguro (rompe el SPA con "Ingreso exitoso").
+                if path.startswith("/admin"):
+                    return (
+                        '<div style="padding:28px 20px;text-align:center;color:#b91c1c;">'
+                        "Error temporal en administración. Probá de nuevo."
+                        "</div>",
+                        500,
+                        {"Content-Type": "text/html; charset=utf-8"},
+                    )
                 return redirect(url_for("auth.inicio_seguro"))
             return render_template(
                 "login.html",
