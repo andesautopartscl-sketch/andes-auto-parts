@@ -614,10 +614,13 @@
     }
 
     navigator.serviceWorker.addEventListener("controllerchange", function () {
+      /* Solo recargar si el usuario pidió actualizar (banner). Un reload en el
+         primer control del SW o al instalar la PWA reabría /m/ y acababa en login. */
       if (!reloadPending) {
-        reloadPending = true;
+        logUpdate("controllerchange sin reload (instalación o primer control)");
+        return;
       }
-      logUpdate("controllerchange — recargando");
+      logUpdate("controllerchange — recargando tras actualización pedida");
       window.location.reload();
     });
 

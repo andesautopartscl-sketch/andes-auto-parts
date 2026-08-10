@@ -1,5 +1,5 @@
-﻿/* Andes Mobile PWA — service worker v36 */
-const SW_VERSION = "andes-mobile-v36";
+﻿/* Andes Mobile PWA — service worker v37 */
+const SW_VERSION = "andes-mobile-v37";
 const CACHE_PREFIX = `${SW_VERSION}-`;
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
@@ -206,7 +206,8 @@ self.addEventListener("install", (event) => {
           }
         })
       );
-      self.skipWaiting();
+      // No llamar skipWaiting aquí: al instalar la PWA Chrome activa el SW y,
+      // si forzamos el cambio de controlador, la página se recarga y tira al login.
     })()
   );
 });

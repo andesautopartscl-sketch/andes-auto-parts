@@ -226,9 +226,9 @@
         }
       }
       if (hint) {
-        hint.textContent = api.canPrompt()
-          ? "Toca el botón para instalar Andes en tu pantalla de inicio."
-          : "Si no ves el botón, usa el menú del navegador (pasos de abajo).";
+        hint.innerHTML = api.canPrompt()
+          ? "Opcional: toca el botón para crear el ícono. <strong>No es necesario</strong> para usar la app."
+          : "<strong>No hace falta instalarla.</strong> Úsala desde Chrome; si quieres, guárdala en favoritos.";
       }
     }
     document.addEventListener("andes:pwa-install-change", refreshInstallUi);
