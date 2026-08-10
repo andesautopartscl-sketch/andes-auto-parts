@@ -190,6 +190,43 @@
     var clearBtn = document.getElementById("set-clear-cache");
     if (clearBtn) clearBtn.addEventListener("click", clearCache);
 
+    function refreshInstallUi() {
+      var btn = document.getElementById("set-install-app");
+      var hint = document.getElementById("set-install-hint");
+      var group = document.getElementById("set-install-group");
+      var api = window.AndesPwaInstall;
+      if (!group || !api) return;
+      if (api.isStandalone()) {
+        group.hidden = true;
+        return;
+      }
+      group.hidden = false;
+      if (btn) {
+        btn.hidden = !api.canPrompt();
+        if (!btn._andesBound) {
+          btn._andesBound = true;
+          btn.addEventListener("click", function () {
+            api.prompt().then(function (choice) {
+              if (choice && choice.outcome === "accepted") {
+                showToast("App instalada");
+              } else if (choice && choice.outcome === "unavailable") {
+                showToast("Usa el menú ⋮ → Añadir a pantalla de inicio");
+              }
+              refreshInstallUi();
+            });
+          });
+        }
+      }
+      if (hint) {
+        hint.textContent = api.canPrompt()
+          ? "Toca el botón para instalar Andes en tu pantalla de inicio."
+          : "Si no ves el botón, usa el menú del navegador (pasos de abajo).";
+      }
+    }
+    document.addEventListener("andes:pwa-install-change", refreshInstallUi);
+    refreshInstallUi();
+    setTimeout(refreshInstallUi, 800);
+
     refreshLastSyncLabel();
   });
 })();

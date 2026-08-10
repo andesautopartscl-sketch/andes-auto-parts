@@ -4027,6 +4027,18 @@ body.mobile-app:not(.mobile-app--splash) .mobile-main {
   line-height: 1.45;
 }
 
+.m-settings__steps {
+  margin: 8px 16px 16px;
+  padding-left: 1.25rem;
+  font-size: 0.8125rem;
+  color: var(--andes-gray-700);
+  line-height: 1.55;
+}
+
+.m-settings__steps li + li {
+  margin-top: 0.35rem;
+}
+
 .m-settings__card .m-field {
   padding: 12px 16px 0;
 }

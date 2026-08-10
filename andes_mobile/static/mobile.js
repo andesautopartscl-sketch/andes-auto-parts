@@ -797,8 +797,51 @@
     });
   }
 
+  function initPwaInstall() {
+    /* Captura el evento nativo de Chrome/Android para poder mostrar un botón
+       "Instalar app" (Chrome ya casi no muestra la flecha del navegador). */
+    if (window.__andesPwaInstallInit) return;
+    window.__andesPwaInstallInit = true;
+
+    var deferred = null;
+    var standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true;
+
+    window.AndesPwaInstall = {
+      isStandalone: function () {
+        return standalone;
+      },
+      canPrompt: function () {
+        return !!deferred && !standalone;
+      },
+      prompt: function () {
+        if (!deferred) return Promise.resolve({ outcome: "unavailable" });
+        var ev = deferred;
+        deferred = null;
+        document.dispatchEvent(new CustomEvent("andes:pwa-install-change"));
+        return ev.prompt().then(function () {
+          return ev.userChoice;
+        });
+      },
+    };
+
+    window.addEventListener("beforeinstallprompt", function (e) {
+      e.preventDefault();
+      deferred = e;
+      document.dispatchEvent(new CustomEvent("andes:pwa-install-change"));
+    });
+
+    window.addEventListener("appinstalled", function () {
+      deferred = null;
+      standalone = true;
+      document.dispatchEvent(new CustomEvent("andes:pwa-install-change"));
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     initMobileTheme();
+    initPwaInstall();
     initPwaAutoUpdate();
     initVersionBadge();
     initMasMenu();
