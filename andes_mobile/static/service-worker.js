@@ -1,5 +1,5 @@
-﻿/* Andes Mobile PWA — service worker v33 */
-const SW_VERSION = "andes-mobile-v33";
+﻿/* Andes Mobile PWA — service worker v34 */
+const SW_VERSION = "andes-mobile-v34";
 const CACHE_PREFIX = `${SW_VERSION}-`;
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
@@ -29,32 +29,38 @@ const PRECACHE_URLS = [
   "/m/reportes",
   "/m/venta-rapida",
   "/m/service-worker.js",
-  `/static/mobile/mobile.min.css?v=${ASSET_V}`,
+  `/static/mobile/mobile.css?v=${ASSET_V}`,
   `/static/mobile/fonts/inter.css?v=${ASSET_V}`,
   "/static/mobile/fonts/inter-400.woff2",
   "/static/mobile/fonts/inter-500.woff2",
   "/static/mobile/fonts/inter-600.woff2",
   "/static/mobile/fonts/inter-700.woff2",
-  `/static/mobile/mobile.min.js?v=${ASSET_V}`,
-  `/static/mobile/offline-db.min.js?v=${ASSET_V}`,
-  `/static/mobile/offline-ui.min.js?v=${ASSET_V}`,
-  `/static/mobile/splash.min.js?v=${ASSET_V}`,
+  `/static/mobile/mobile.js?v=${ASSET_V}`,
+  `/static/mobile/offline-db.js?v=${ASSET_V}`,
+  `/static/mobile/offline-ui.js?v=${ASSET_V}`,
+  `/static/mobile/splash.js?v=${ASSET_V}`,
+  // Scripts de módulo. Deben llevar el mismo ?v= que inyectan las plantillas:
+  // la caché indexa por URL completa, así que un sufijo distinto guarda una
+  // entrada que la página nunca pide y el precache queda inservible.
+  // scripts/smoke_rutas_mobile.py verifica que esta lista siga completa.
   `/static/mobile/producto_gallery.js?v=${ASSET_V}`,
   `/static/mobile/producto_accordion.js?v=${ASSET_V}`,
   `/static/mobile/home.js?v=${ASSET_V}`,
   `/static/mobile/oc_clientes.js?v=${ASSET_V}`,
   `/static/mobile/oc_clientes_detalle.js?v=${ASSET_V}`,
+  `/static/mobile/scanner.js?v=${ASSET_V}`,
+  `/static/mobile/ingreso_rapida.js?v=${ASSET_V}`,
+  `/static/mobile/importar_imagenes.js?v=${ASSET_V}`,
+  `/static/mobile/ajustes.js?v=${ASSET_V}`,
+  `/static/mobile/ajuste_stock.js?v=${ASSET_V}`,
+  `/static/mobile/venta_rapida.js?v=${ASSET_V}`,
+  `/static/mobile/lib/html5-qrcode.min.js?v=${ASSET_V}`,
   "/static/mobile/manifest.json",
   "/static/mobile/icons/icon-192.png",
   "/static/mobile/icons/icon-512.png",
   "/static/mobile/icons/icon-192-maskable.png",
   "/static/mobile/icons/icon-512-maskable.png",
   "/static/mobile/icons/apple-touch-icon.png",
-  "/static/mobile/lib/html5-qrcode.min.js",
-  "/static/mobile/scanner.js",
-  "/static/mobile/ingreso_rapida.js",
-  "/static/mobile/importar_imagenes.js",
-  "/static/mobile/ajustes.js",
 ];
 
 const CDN_ASSETS = [];

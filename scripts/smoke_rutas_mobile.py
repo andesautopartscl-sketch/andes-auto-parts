@@ -1,8 +1,13 @@
 """
 Smoke test de la PWA móvil: recorre sus rutas con sesión simulada.
 
-Verifica que todas rendericen 200 y que ningún <script> local quede sin el
-parámetro de versión (?v=), que es lo que invalida la caché del service worker.
+Comprueba tres cosas que fallan en silencio:
+  1. que todas las rutas rendericen 200;
+  2. que ningún asset local se sirva sin el parámetro ?v=, porque sin él una
+     corrección publicada puede no llegar nunca al dispositivo;
+  3. que el service worker precachee exactamente las mismas URLs (con el mismo
+     ?v=) que pide la página, o el precache no sirve de nada.
+
 Uso: python scripts/smoke_rutas_mobile.py
 """
 from __future__ import annotations
@@ -31,8 +36,9 @@ with app.app_context():
     uid, usuario = admin.id, admin.usuario
     rol = admin.rol.nombre if admin.rol else None
 
-fallos = []
-sin_version = []
+fallos: list[tuple[str, str]] = []
+sin_version: list[tuple[str, str]] = []
+assets: set[str] = set()
 with app.test_client() as c:
     with c.session_transaction() as s:
         s["user"] = usuario
@@ -50,20 +56,49 @@ with app.test_client() as c:
         if r.status_code != 200:
             fallos.append((ruta, f"HTTP {r.status_code}"))
             continue
-        # Todo <script src> local debe llevar cache-buster.
-        for src in re.findall(r'<script[^>]+src="(/static/mobile/[^"]+)"', html):
-            if "?v=" not in src:
-                sin_version.append((ruta, src))
+        # Todo .js/.css local debe llevar cache-buster.
+        for ref in re.findall(r'(?:src|href)="(/static/mobile/[^"]+)"', html):
+            if ref.split("?")[0].endswith((".js", ".css")):
+                assets.add(ref)
+                if "?v=" not in ref:
+                    sin_version.append((ruta, ref))
         print(f"  {r.status_code}  {ms:7.0f} ms  {len(html):7d} b  {ruta}")
+
+    # Los assets referenciados deben existir de verdad.
+    for ref in sorted(assets):
+        if c.get(ref).status_code != 200:
+            fallos.append((ref, "asset inexistente"))
+
+    # El service worker debe precachear la URL exacta que pide la página: la
+    # caché indexa por URL completa, así que un ?v= distinto la vuelve inútil.
+    sw = c.get("/m/service-worker.js").get_data(as_text=True)
+    version = re.search(r'SW_VERSION = "andes-mobile-v(\d+)"', sw)
+    version = version.group(1) if version else "?"
+    precache = {
+        ruta.replace("${ASSET_V}", version)
+        for ruta in re.findall(r"[`\"](/static/mobile/[^`\"]+)", sw)
+    }
+    for ref in sorted(assets):
+        if ref not in precache:
+            equivalente = next((p for p in precache if p.split("?")[0] == ref.split("?")[0]), None)
+            motivo = (
+                f"el service worker precachea {equivalente!r} en su lugar"
+                if equivalente
+                else "no está en el precache del service worker"
+            )
+            fallos.append((ref, motivo))
 
 print()
 if sin_version:
-    print("SCRIPTS SIN CACHE-BUSTER:")
-    for ruta, src in sin_version:
-        print(f"  {ruta} -> {src}")
+    print("ASSETS SIN CACHE-BUSTER:")
+    for ruta, ref in sin_version:
+        print(f"  {ruta} -> {ref}")
 if fallos:
     print("FALLOS:")
-    for ruta, err in fallos:
-        print(f"  {ruta}: {err}")
+    for donde, err in fallos:
+        print(f"  {donde}: {err}")
     sys.exit(1)
-print("OK: todas las rutas mobile responden 200 y con assets versionados")
+print(
+    f"OK: {len(RUTAS)} rutas en 200, {len(assets)} assets versionados "
+    f"y alineados con el precache del service worker"
+)

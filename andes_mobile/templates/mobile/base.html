@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='mobile/icons/apple-touch-icon.png') }}">
   <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='mobile/icons/icon-192.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='mobile/fonts/inter.css') }}?v={{ asset_v }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/mobile.min.css') }}?v={{ asset_v }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='mobile/mobile.css') }}?v={{ asset_v }}">
   <script>
   (function () {
     try {
@@ -298,10 +298,10 @@
     </button>
   </nav>
 
-  <script src="{{ url_for('static', filename='mobile/offline-db.min.js') }}?v={{ asset_v }}" defer></script>
-  <script src="{{ url_for('static', filename='mobile/offline-ui.min.js') }}?v={{ asset_v }}" defer></script>
-  <script src="{{ url_for('static', filename='mobile/splash.min.js') }}?v={{ asset_v }}" defer></script>
-  <script src="{{ url_for('static', filename='mobile/mobile.min.js') }}?v={{ asset_v }}" defer></script>
+  <script src="{{ url_for('static', filename='mobile/offline-db.js') }}?v={{ asset_v }}" defer></script>
+  <script src="{{ url_for('static', filename='mobile/offline-ui.js') }}?v={{ asset_v }}" defer></script>
+  <script src="{{ url_for('static', filename='mobile/splash.js') }}?v={{ asset_v }}" defer></script>
+  <script src="{{ url_for('static', filename='mobile/mobile.js') }}?v={{ asset_v }}" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
