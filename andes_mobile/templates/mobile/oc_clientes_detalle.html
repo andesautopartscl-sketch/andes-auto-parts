@@ -1,4 +1,4 @@
-{% extends "mobile/base.html" %}
+﻿{% extends "mobile/base.html" %}
 {% block title %}OC {{ oc.numero_oc }} — Andes Mobile{% endblock %}
 
 {% block content %}
@@ -177,5 +177,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='mobile/oc_clientes_detalle.js') }}" defer></script>
+<script src="{{ url_for('static', filename='mobile/oc_clientes_detalle.js') }}?v={{ asset_v }}" defer></script>
 {% endblock %}

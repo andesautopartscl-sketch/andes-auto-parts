@@ -11,7 +11,7 @@ from app.oc_clientes.models import OC_ESTADOS, OC_ESTADO_LABELS
 from app.seguridad.models import Usuario as UsuarioSistema
 from app.utils.finance_visibility import user_can_view_finanzas
 
-from .bootstrap import mobile_bp
+from .bootstrap import ASSET_VERSION, PWA_VERSION, mobile_bp
 from . import clientes as mobile_clientes
 from . import data as mobile_data
 from . import etiquetas as mobile_etiquetas
@@ -30,6 +30,8 @@ def _mobile_permissions_ctx():
     user = session.get("user")
     rol = session.get("rol")
     return {
+        "pwa_version": PWA_VERSION,
+        "asset_v": ASSET_VERSION,
         "puede_ver_oc_clientes": mobile_oc_clientes.puede_ver(user, rol),
         "puede_mod_oc_clientes": mobile_oc_clientes.puede_modificar(user, rol),
         "puede_etiquetas": mobile_etiquetas.puede_imprimir_etiquetas(user, rol),
@@ -790,7 +792,6 @@ def ajustes():
     return render_template(
         "mobile/ajustes.html",
         usuario_email=email,
-        pwa_version="v2026.07.21-v32",
         **_nav_ctx("mas"),
     )
 

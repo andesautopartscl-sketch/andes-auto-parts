@@ -429,6 +429,23 @@ def _codigos_por_proveedor(term: str) -> list[str]:
     return codes
 
 
+def _stock_disponible_map(codigos: list[str]) -> dict[str, int]:
+    """Stock total por código en una sola consulta (evita un SELECT por resultado)."""
+    limpios = [c for c in {(c or "").strip() for c in codigos} if c]
+    if not limpios:
+        return {}
+    filas = (
+        db.session.query(
+            ProductoVarianteStock.codigo_producto,
+            func.sum(ProductoVarianteStock.stock),
+        )
+        .filter(ProductoVarianteStock.codigo_producto.in_(limpios))
+        .group_by(ProductoVarianteStock.codigo_producto)
+        .all()
+    )
+    return {(codigo or "").strip(): int(total or 0) for codigo, total in filas}
+
+
 def buscar_productos(term: str, limit: int = 30) -> list[dict]:
     """Búsqueda legacy (venta rápida / api/buscar) — delega al ERP _search_products."""
     items = _search_products(term, limit=limit)
@@ -455,9 +472,10 @@ def buscar_productos(term: str, limit: int = 30) -> list[dict]:
                     break
     else:
         enriched = []
+        stock_map = _stock_disponible_map([r.get("codigo") or "" for r in items])
         for row in items:
             codigo = (row.get("codigo") or "").strip()
-            stock = int(get_available_stock(codigo)) if codigo else int(row.get("stock") or 0)
+            stock = stock_map.get(codigo, 0) if codigo else int(row.get("stock") or 0)
             precio = float(row.get("precio") or 0)
             if precio <= 0 and codigo:
                 ref = _ultimo_ingreso_ref(codigo, None, "Bodega 1")

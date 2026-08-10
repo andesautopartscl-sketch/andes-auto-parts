@@ -5729,9 +5729,9 @@
     };
 
     if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", window.initBodegaUI);
+        document.addEventListener("DOMContentLoaded", window.initBodegaUI, { once: true });
     } else {
         window.initBodegaUI();
     }
-    document.addEventListener("app:module-loaded", window.initBodegaUI);
+    window.onModuleLoaded("bodega-ui", window.initBodegaUI);
 })();

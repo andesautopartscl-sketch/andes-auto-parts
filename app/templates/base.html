@@ -467,6 +467,65 @@ body.is-embed-modal #appMainContent {
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/erp_module.css') }}">
 <meta name="csrf-token" content="{{ csrf_token }}">
+<script>
+/* Registro de handlers de 'app:module-loaded' con deduplicación por clave.
+   La navegación SPA reinyecta el HTML del módulo y vuelve a ejecutar sus
+   <script>, así que un addEventListener directo suma una copia por visita.
+   Vive en <head> porque los scripts de los módulos corren antes que el
+   bloque SPA del final del <body> en una carga completa de página. */
+(function () {
+	var registrados = Object.create(null);
+	var addDoc = document.addEventListener.bind(document);
+	window.onModuleLoaded = function (clave, handler) {
+		if (typeof handler !== 'function') return handler;
+		var previo = registrados[clave];
+		if (previo) document.removeEventListener('app:module-loaded', previo);
+		registrados[clave] = handler;
+		addDoc('app:module-loaded', handler);
+		return handler;
+	};
+
+	/* Desmontaje de listeners globales del módulo saliente.
+	   Los fragmentos SPA registran handlers en document/window (keydown, click,
+	   resize...) que sobreviven al reemplazo del HTML: sin esto cada visita a un
+	   módulo deja una copia más y todas se ejecutan en cada tecla o clic.
+	   Se capturan solo los registrados mientras corren los <script> del módulo;
+	   'app:module-loaded' queda fuera porque lo deduplica onModuleLoaded. */
+	var capturando = false;
+	var delModulo = [];
+	var enCurso = [];
+
+	function interceptar(destino) {
+		var original = destino.addEventListener;
+		destino.addEventListener = function (tipo, handler, opciones) {
+			if (capturando && tipo !== 'app:module-loaded' && handler) {
+				enCurso.push([destino, tipo, handler, opciones]);
+			}
+			return original.call(destino, tipo, handler, opciones);
+		};
+	}
+	interceptar(document);
+	interceptar(window);
+
+	window.__andesModuleScripts = {
+		begin: function () {
+			/* Retirar los del módulo anterior justo antes de montar el nuevo. */
+			for (var i = 0; i < delModulo.length; i++) {
+				var r = delModulo[i];
+				try { r[0].removeEventListener(r[1], r[2], r[3]); } catch (e) {}
+			}
+			delModulo = [];
+			enCurso = [];
+			capturando = true;
+		},
+		end: function () {
+			capturando = false;
+			delModulo = enCurso;
+			enCurso = [];
+		},
+	};
+})();
+</script>
 {% block extra_head %}{% endblock %}
 </head>
 <body class="{% if search_lite|default(false) %}search-lite-app {% endif %}{% if embed_modal|default(false) %}is-embed-modal {% endif %}{% block body_class %}{% endblock %}">
@@ -600,9 +659,12 @@ function toggleMenu(id) {
 	var moduleLoadSeq = 0;
 	var moduleLoadAbort = null;
 
-	function executeScripts(container) {
+	/* esModulo: solo la inyección de un módulo completo releva al anterior. Los
+	   modales se cargan dentro del módulo vigente y no deben desmontarlo. */
+	function executeScripts(container, esModulo) {
 		/* Re-execute scripts injected via innerHTML (they don't auto-run) */
 		var scripts = Array.from(container.querySelectorAll('script'));
+		if (esModulo) window.__andesModuleScripts.begin();
 		return scripts.reduce(function (chain, oldScript) {
 			return chain.then(function () {
 				return new Promise(function (resolve) {
@@ -631,7 +693,9 @@ function toggleMenu(id) {
 					}
 				});
 			});
-		}, Promise.resolve());
+		}, Promise.resolve()).then(function () {
+			if (esModulo) window.__andesModuleScripts.end();
+		});
 	}
 
 	window.consumeAndesPageMessages = function (root) {
@@ -732,7 +796,7 @@ function toggleMenu(id) {
 			while (temp.firstChild) {
 				container.appendChild(temp.firstChild);
 			}
-			return executeScripts(container).then(function () {
+			return executeScripts(container, true).then(function () {
 				if (typeof window.consumeAndesPageMessages === 'function') {
 					window.consumeAndesPageMessages(container);
 				}

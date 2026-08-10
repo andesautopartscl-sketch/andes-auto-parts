@@ -1,4 +1,4 @@
-{% extends "mobile/base.html" %}
+﻿{% extends "mobile/base.html" %}
 
 {% block title %}Escáner — Andes Mobile{% endblock %}
 
@@ -87,6 +87,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='mobile/lib/html5-qrcode.min.js') }}"></script>
-<script src="{{ url_for('static', filename='mobile/scanner.js') }}" defer></script>
+<script src="{{ url_for('static', filename='mobile/lib/html5-qrcode.min.js') }}?v={{ asset_v }}"></script>
+<script src="{{ url_for('static', filename='mobile/scanner.js') }}?v={{ asset_v }}" defer></script>
 {% endblock %}

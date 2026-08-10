@@ -46,3 +46,6 @@ app/static/productos_img/
 app/static/productos360/
 app/static/epc_despiece/
 
+
+# Volcado temporal de scripts/smoke_rutas_erp.py
+_js_render/

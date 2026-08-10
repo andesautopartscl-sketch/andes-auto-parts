@@ -863,9 +863,9 @@ console.log('[SII autofill] Script cargado, buscando campos RUT...');
     };
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', boot);
+        document.addEventListener('DOMContentLoaded', boot, { once: true });
     } else {
         boot();
     }
-    document.addEventListener('app:module-loaded', boot);
+    window.onModuleLoaded('sii-autofill', boot);
 })(window);

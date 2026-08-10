@@ -187,39 +187,56 @@
     } catch (_e) {}
   }
 
+  function escapeHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  var proveedorSearchTimer = null;
+
+  function renderProveedores(items) {
+    var list = document.getElementById("ir-proveedores-list");
+    list.innerHTML = items
+      .map(function (p) {
+        return (
+          '<button type="button" class="m-card-select" data-pid="' +
+          escapeHtml(p.id) +
+          '"><span class="m-card-select__title">' +
+          escapeHtml(p.display_name || p.nombre) +
+          '</span><span class="m-card-select__sub">' +
+          escapeHtml(p.rut || "") +
+          "</span></button>"
+        );
+      })
+      .join("");
+    list.querySelectorAll(".m-card-select").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var pid = parseInt(btn.getAttribute("data-pid"), 10);
+        state.proveedor =
+          items.find(function (x) {
+            return x.id === pid;
+          }) || null;
+        saveState();
+        updateProveedorUI();
+      });
+    });
+  }
+
   document.getElementById("ir-proveedor-q").addEventListener("input", function () {
     var q = this.value.trim();
     var list = document.getElementById("ir-proveedores-list");
+    window.clearTimeout(proveedorSearchTimer);
     if (q.length < 2) {
       list.innerHTML = "";
       return;
     }
-    searchProveedores(q).then(function (items) {
-      list.innerHTML = items
-        .map(function (p) {
-          return (
-            '<button type="button" class="m-card-select" data-pid="' +
-            p.id +
-            '"><span class="m-card-select__title">' +
-            (p.display_name || p.nombre) +
-            "</span><span class="m-card-select__sub'>" +
-            (p.rut || "") +
-            "</span></button>"
-          );
-        })
-        .join("");
-      list.querySelectorAll(".m-card-select").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          var pid = parseInt(btn.getAttribute("data-pid"), 10);
-          var p = items.find(function (x) {
-            return x.id === pid;
-          });
-          state.proveedor = p || null;
-          saveState();
-          updateProveedorUI();
-        });
-      });
-    });
+    // Sin debounce se lanzaba una petición por cada tecla pulsada.
+    proveedorSearchTimer = window.setTimeout(function () {
+      searchProveedores(q).then(renderProveedores);
+    }, 280);
   });
 
   document.getElementById("ir-next-1").addEventListener("click", function () {

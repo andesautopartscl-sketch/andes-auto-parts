@@ -1105,17 +1105,13 @@ window._syncBuscarExcelHashModals = function (fromUrl) {
     };
     window.addEventListener('hashchange', window.__buscarExcelHashchangeHandler);
 
-    if (window.__buscarExcelModuleLoadedHandler) {
-        document.removeEventListener('app:module-loaded', window.__buscarExcelModuleLoadedHandler);
-    }
-    window.__buscarExcelModuleLoadedHandler = function (ev) {
+    window.onModuleLoaded('buscar-excel', function (ev) {
         if (!document.getElementById('importModal')) {
             return;
         }
         var url = (ev.detail && ev.detail.url) ? String(ev.detail.url) : '';
         window._syncBuscarExcelHashModals(url);
-    };
-    document.addEventListener('app:module-loaded', window.__buscarExcelModuleLoadedHandler);
+    });
 
     function runInitialHashSync() {
         window._syncBuscarExcelHashModals('');
@@ -1312,7 +1308,7 @@ window._syncBuscarExcelHashModals = function (fromUrl) {
         }
     }
 
-    function onModuleLoaded(ev) {
+    function onBuscarLiveModuleLoaded(ev) {
         var url = (ev && ev.detail && ev.detail.url) ? String(ev.detail.url) : (window.location.pathname + window.location.search);
         if (!isBuscarPath(url)) {
             clearLiveState();
@@ -1321,11 +1317,7 @@ window._syncBuscarExcelHashModals = function (fromUrl) {
         initBuscarLiveSearch();
     }
 
-    if (window.__buscarLiveModuleLoadedHandler) {
-        document.removeEventListener('app:module-loaded', window.__buscarLiveModuleLoadedHandler);
-    }
-    window.__buscarLiveModuleLoadedHandler = onModuleLoaded;
-    document.addEventListener('app:module-loaded', window.__buscarLiveModuleLoadedHandler);
+    window.onModuleLoaded('buscar-live', onBuscarLiveModuleLoaded);
 
     if (!window.__buscarLiveSearchBooted) {
         window.__buscarLiveSearchBooted = true;

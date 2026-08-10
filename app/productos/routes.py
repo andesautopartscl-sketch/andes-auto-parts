@@ -23,8 +23,6 @@ from ..models import (
     ProductoDraft,
     OemDespiece,
 )
-import pandas as pd
-import io
 import os
 import tempfile
 from ..extensions import db as security_db
@@ -37,6 +35,7 @@ from app.bodega.models import (
     ProveedorCodigoInterno,
 )
 from ..utils.decorators import login_required, admin_required
+from app.utils.excel_export import rows_to_xlsx
 from app.utils.permissions import DEFAULT_PERMISSIONS, get_user_permissions
 from app.utils.finance_visibility import redact_compra_historial_row, user_can_view_finanzas
 from ..import_excel import import_products_from_excel
@@ -3117,38 +3116,41 @@ def exportar():
     if not get_user_permissions(session.get("user"), session.get("rol")).get("productos_importar_exportar", False):
         return redirect(url_for("productos.buscar"))
 
-    db = SessionDB()
-    productos = db.query(Producto).filter(Producto.activo.is_(True)).all()
-
     perms = get_user_permissions(session.get("user"), session.get("rol"))
     can_view_precio_mayor = bool(perms.get("ver_precio_mayor", True))
 
-    data = []
-    for p in productos:
-        if p is None:
-            continue
-        row = {
-            "Código": p.codigo or "",
-            "Descripción": p.descripcion or "",
-            "Modelo": p.modelo or "",
-            "Motor": p.motor or "",
-            "Marca": p.marca or "",
-            "Precio Público": p.p_publico or 0,
-            "OEM": p.codigo_oem or "",
-            "Alternativo": p.codigo_alternativo or "",
-            "Homologados": p.homologados or ""
-        }
-        if can_view_precio_mayor:
-            row["Precio Mayor"] = p.prec_mayor or 0
-        data.append(row)
+    # Solo las columnas exportadas: hidratar los ~28k objetos Producto completos
+    # costaba varios segundos para descartar la mayoría de los campos.
+    columnas = [
+        ("Código", Producto.codigo, ""),
+        ("Descripción", Producto.descripcion, ""),
+        ("Modelo", Producto.modelo, ""),
+        ("Motor", Producto.motor, ""),
+        ("Marca", Producto.marca, ""),
+        ("Precio Público", Producto.p_publico, 0),
+        ("OEM", Producto.codigo_oem, ""),
+        ("Alternativo", Producto.codigo_alternativo, ""),
+        ("Homologados", Producto.homologados, ""),
+    ]
+    if can_view_precio_mayor:
+        columnas.append(("Precio Mayor", Producto.prec_mayor, 0))
 
-    db.close()
+    db = SessionDB()
+    try:
+        filas = (
+            db.query(*[col for _, col, _ in columnas])
+            .filter(Producto.activo.is_(True))
+            .all()
+        )
+    finally:
+        db.close()
 
-    df = pd.DataFrame(data)
-
-    output = io.BytesIO()
-    df.to_excel(output, index=False)
-    output.seek(0)
+    output = rows_to_xlsx(
+        [nombre for nombre, _, _ in columnas],
+        filas,
+        sheet_name="Inventario",
+        defaults=[vacio for _, _, vacio in columnas],
+    )
 
     return send_file(
         output,
@@ -3261,17 +3263,18 @@ def exportar_excel_productos():
     filtro = request.args.get('filtro', 'activos')
     columnas_param = request.args.get('columnas', '')
 
+    # (etiqueta, columna, valor por defecto): se consultan solo las seleccionadas.
     COLUMN_MAP = {
-        'codigo':         ('C\u00f3digo',         lambda p: p.codigo or ''),
-        'descripcion':    ('Descripci\u00f3n',    lambda p: p.descripcion or ''),
-        'marca':          ('Marca',          lambda p: p.marca or ''),
-        'modelo':         ('Modelo',         lambda p: p.modelo or ''),
-        'motor':          ('Motor',          lambda p: p.motor or ''),
-        'oem':            ('OEM',            lambda p: p.codigo_oem or ''),
-        'alternativo':    ('Alternativo',    lambda p: p.codigo_alternativo or ''),
-        'precio_publico': ('Precio P\u00fablico', lambda p: p.p_publico or 0),
-        'precio_mayor':   ('Precio Mayor',   lambda p: p.prec_mayor or 0),
-        'homologados':    ('Homologados',    lambda p: p.homologados or ''),
+        'codigo':         ('C\u00f3digo',         Producto.codigo, ''),
+        'descripcion':    ('Descripci\u00f3n',    Producto.descripcion, ''),
+        'marca':          ('Marca',          Producto.marca, ''),
+        'modelo':         ('Modelo',         Producto.modelo, ''),
+        'motor':          ('Motor',          Producto.motor, ''),
+        'oem':            ('OEM',            Producto.codigo_oem, ''),
+        'alternativo':    ('Alternativo',    Producto.codigo_alternativo, ''),
+        'precio_publico': ('Precio P\u00fablico', Producto.p_publico, 0),
+        'precio_mayor':   ('Precio Mayor',   Producto.prec_mayor, 0),
+        'homologados':    ('Homologados',    Producto.homologados, ''),
     }
 
     if columnas_param:
@@ -3282,32 +3285,23 @@ def exportar_excel_productos():
         sel_keys = list(COLUMN_MAP.keys())
 
     db_session = SessionDB()
-    query = db_session.query(Producto)
-    if filtro == 'activos':
-        query = query.filter(Producto.activo.is_(True))
-    elif filtro == 'inactivos':
-        query = query.filter(Producto.activo.is_(False))
-    # filtro == 'todos' -> no filter applied
-    productos = query.all()
+    try:
+        query = db_session.query(*[COLUMN_MAP[k][1] for k in sel_keys])
+        if filtro == 'activos':
+            query = query.filter(Producto.activo.is_(True))
+        elif filtro == 'inactivos':
+            query = query.filter(Producto.activo.is_(False))
+        # filtro == 'todos' -> no filter applied
+        filas = query.all()
+    finally:
+        db_session.close()
 
-    rows = []
-    for p in productos:
-        if p is None:
-            continue
-        row = {}
-        for key in sel_keys:
-            label, getter = COLUMN_MAP[key]
-            row[label] = getter(p)
-        rows.append(row)
-
-    db_session.close()
-
-    headers = [COLUMN_MAP[k][0] for k in sel_keys]
-    df = pd.DataFrame(rows, columns=headers)
-
-    output = io.BytesIO()
-    df.to_excel(output, index=False)
-    output.seek(0)
+    output = rows_to_xlsx(
+        [COLUMN_MAP[k][0] for k in sel_keys],
+        filas,
+        sheet_name="Productos",
+        defaults=[COLUMN_MAP[k][2] for k in sel_keys],
+    )
 
     return send_file(
         output,
@@ -3840,22 +3834,23 @@ def exportar_auditoria_productos():
                 for d in diffs_map.get(e.id, [])
             )
             rows.append(
-                {
-                    "Fecha": e.created_at.strftime("%Y-%m-%d %H:%M:%S") if e.created_at else "",
-                    "Usuario": e.actor or "",
-                    "Accion": e.action or "",
-                    "Modulo": e.modulo or "",
-                    "Codigo": e.producto_codigo or "",
-                    "Path": e.request_path or "",
-                    "IP": e.ip or "",
-                    "Metadata": e.metadata_json or "",
-                    "Cambios": diffs_txt,
-                }
+                (
+                    e.created_at.strftime("%Y-%m-%d %H:%M:%S") if e.created_at else "",
+                    e.actor or "",
+                    e.action or "",
+                    e.modulo or "",
+                    e.producto_codigo or "",
+                    e.request_path or "",
+                    e.ip or "",
+                    e.metadata_json or "",
+                    diffs_txt,
+                )
             )
-        df = pd.DataFrame(rows, columns=["Fecha", "Usuario", "Accion", "Modulo", "Codigo", "Path", "IP", "Metadata", "Cambios"])
-        output = io.BytesIO()
-        df.to_excel(output, index=False)
-        output.seek(0)
+        output = rows_to_xlsx(
+            ["Fecha", "Usuario", "Accion", "Modulo", "Codigo", "Path", "IP", "Metadata", "Cambios"],
+            rows,
+            sheet_name="Auditoria",
+        )
         return send_file(
             output,
             as_attachment=True,

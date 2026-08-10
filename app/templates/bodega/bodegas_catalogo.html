@@ -484,7 +484,7 @@
         }
     }
     bindBodegasCatalogoHelp();
-    document.addEventListener("app:module-loaded", bindBodegasCatalogoHelp);
+    window.onModuleLoaded("bodegas-catalogo-help", bindBodegasCatalogoHelp);
 })();
 </script>
 {% endblock %}

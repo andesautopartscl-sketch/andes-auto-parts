@@ -1,4 +1,4 @@
-{% extends "mobile/base.html" %}
+﻿{% extends "mobile/base.html" %}
 {% block title %}Ingreso rápido — Andes Mobile{% endblock %}
 {% block head_extra %}
 <script>
@@ -71,5 +71,5 @@
 </article>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='mobile/ingreso_rapida.js') }}" defer></script>
+<script src="{{ url_for('static', filename='mobile/ingreso_rapida.js') }}?v={{ asset_v }}" defer></script>
 {% endblock %}

@@ -708,7 +708,7 @@
         }
     }
     bindSalidaHelp();
-    document.addEventListener("app:module-loaded", bindSalidaHelp);
+    window.onModuleLoaded("bodega-salida-help", bindSalidaHelp);
 })();
 </script>
 <script>

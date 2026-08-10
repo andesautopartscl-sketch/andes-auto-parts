@@ -1,4 +1,4 @@
-{% extends "mobile/base.html" %}
+﻿{% extends "mobile/base.html" %}
 {% block title %}Importar imágenes — Andes Mobile{% endblock %}
 {% block head_extra %}
 <script>
@@ -43,5 +43,5 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='mobile/importar_imagenes.js') }}" defer></script>
+<script src="{{ url_for('static', filename='mobile/importar_imagenes.js') }}?v={{ asset_v }}" defer></script>
 {% endblock %}

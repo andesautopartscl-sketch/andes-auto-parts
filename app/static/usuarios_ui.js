@@ -1580,10 +1580,12 @@
         initOptionsUsersModal();
     };
 
-    document.addEventListener("DOMContentLoaded", function () {
-        if (typeof window.initUsuariosUI === "function") window.initUsuariosUI();
-    });
-    document.addEventListener("app:module-loaded", function () {
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", function () {
+            if (typeof window.initUsuariosUI === "function") window.initUsuariosUI();
+        }, { once: true });
+    }
+    window.onModuleLoaded("usuarios-ui", function () {
         if (typeof window.initUsuariosUI === "function") window.initUsuariosUI();
     });
 })();

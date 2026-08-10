@@ -1616,7 +1616,8 @@ function initProductosEditarPage() {
 }
 
 document.addEventListener('DOMContentLoaded', initProductosEditarPage);
-document.addEventListener('app:module-loaded', initProductosEditarPage);
+/* El script se reejecuta en cada carga SPA: quitar el handler anterior evita acumularlos. */
+window.onModuleLoaded('productos-editar', initProductosEditarPage);
 initProductosEditarPage();
 
 (function wirePreciosAyudaDocumentOnce() {

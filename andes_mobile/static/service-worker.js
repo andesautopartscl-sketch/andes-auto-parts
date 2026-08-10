@@ -1,11 +1,14 @@
-/* Andes Mobile PWA — service worker v32 */
-const SW_VERSION = "andes-mobile-v32";
+﻿/* Andes Mobile PWA — service worker v33 */
+const SW_VERSION = "andes-mobile-v33";
 const CACHE_PREFIX = `${SW_VERSION}-`;
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const HTML_CACHE = `${SW_VERSION}-html`;
 const API_DASH_CACHE = `${SW_VERSION}-api-dash`;
 const API_SWR_CACHE = `${SW_VERSION}-api-swr`;
 const CDN_CACHE = `${SW_VERSION}-cdn`;
+// Mismo sufijo ?v= que inyectan las plantillas: si difiere, el service worker
+// precachea una URL distinta de la que pide la página y el precache no sirve.
+const ASSET_V = SW_VERSION.split("-v").pop();
 
 const PRECACHE_URLS = [
   "/m/",
@@ -26,21 +29,21 @@ const PRECACHE_URLS = [
   "/m/reportes",
   "/m/venta-rapida",
   "/m/service-worker.js",
-  "/static/mobile/mobile.min.css?v=32",
-  "/static/mobile/fonts/inter.css?v=32",
+  `/static/mobile/mobile.min.css?v=${ASSET_V}`,
+  `/static/mobile/fonts/inter.css?v=${ASSET_V}`,
   "/static/mobile/fonts/inter-400.woff2",
   "/static/mobile/fonts/inter-500.woff2",
   "/static/mobile/fonts/inter-600.woff2",
   "/static/mobile/fonts/inter-700.woff2",
-  "/static/mobile/mobile.min.js?v=32",
-  "/static/mobile/offline-db.min.js",
-  "/static/mobile/offline-ui.min.js?v=32",
-  "/static/mobile/splash.min.js?v=32",
-  "/static/mobile/producto_gallery.js",
-  "/static/mobile/producto_accordion.js",
-  "/static/mobile/home.js",
-  "/static/mobile/oc_clientes.js",
-  "/static/mobile/oc_clientes_detalle.js",
+  `/static/mobile/mobile.min.js?v=${ASSET_V}`,
+  `/static/mobile/offline-db.min.js?v=${ASSET_V}`,
+  `/static/mobile/offline-ui.min.js?v=${ASSET_V}`,
+  `/static/mobile/splash.min.js?v=${ASSET_V}`,
+  `/static/mobile/producto_gallery.js?v=${ASSET_V}`,
+  `/static/mobile/producto_accordion.js?v=${ASSET_V}`,
+  `/static/mobile/home.js?v=${ASSET_V}`,
+  `/static/mobile/oc_clientes.js?v=${ASSET_V}`,
+  `/static/mobile/oc_clientes_detalle.js?v=${ASSET_V}`,
   "/static/mobile/manifest.json",
   "/static/mobile/icons/icon-192.png",
   "/static/mobile/icons/icon-512.png",

@@ -1,4 +1,4 @@
-{% extends "mobile/base.html" %}
+﻿{% extends "mobile/base.html" %}
 {% block title %}Ajustes — Andes Mobile{% endblock %}
 {% block content %}
 <section class="m-page-head">
@@ -112,5 +112,5 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='mobile/ajustes.js') }}" defer></script>
+<script src="{{ url_for('static', filename='mobile/ajustes.js') }}?v={{ asset_v }}" defer></script>
 {% endblock %}

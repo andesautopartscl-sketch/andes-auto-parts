@@ -1,4 +1,4 @@
-{% extends "mobile/base.html" %}
+﻿{% extends "mobile/base.html" %}
 
 {% block title %}Venta rápida — Andes Mobile{% endblock %}
 
@@ -127,5 +127,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='mobile/venta_rapida.js') }}" defer></script>
+<script src="{{ url_for('static', filename='mobile/venta_rapida.js') }}?v={{ asset_v }}" defer></script>
 {% endblock %}
