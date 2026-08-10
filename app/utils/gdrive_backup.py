@@ -381,6 +381,9 @@ def _validate_sqlite_db(path: Path) -> None:
         if not row:
             raise ValueError("La base no contiene la tabla productos.")
         conn.execute("SELECT COUNT(*) FROM productos").fetchone()
+        check = conn.execute("PRAGMA integrity_check").fetchone()
+        if not check or str(check[0]).lower() != "ok":
+            raise ValueError(f"La base subida está dañada (integrity_check={check}).")
     finally:
         conn.close()
 
@@ -415,6 +418,7 @@ def restore_db_from_upload(file_storage) -> BackupResult:
     incoming = temp_dir / f"restore_upload_{stamp}{suffix or '.bin'}"
     restored = temp_dir / f"restore_candidate_{stamp}.db"
     safety = temp_dir / f"pre_restore_{stamp}.db"
+    safety_note = "n/d"
 
     try:
         incoming.write_bytes(raw)
@@ -439,8 +443,14 @@ def restore_db_from_upload(file_storage) -> BackupResult:
 
         _validate_sqlite_db(restored)
 
+        # Si la DB actual de Render ya está corrupta, no bloquear el restore.
         if db_path.is_file():
-            _create_db_snapshot(db_path, safety)
+            try:
+                _create_db_snapshot(db_path, safety)
+                safety_note = safety.name
+            except Exception as snap_exc:
+                logger.warning("No se pudo respaldar la DB previa (se continúa): %s", snap_exc)
+                safety_note = f"sin copia ({snap_exc})"
 
         try:
             from app.extensions import db as flask_db
@@ -450,13 +460,27 @@ def restore_db_from_upload(file_storage) -> BackupResult:
         except Exception:
             current_app.logger.exception("No se pudieron cerrar conexiones antes del restore")
 
-        tmp_live = db_path.with_suffix(".db.restoring")
+        # Escribir con API backup a un archivo nuevo y luego renombrar.
+        tmp_live = db_path.with_name("andes.db.restoring")
         if tmp_live.exists():
             tmp_live.unlink()
-        restored.replace(tmp_live)
+        src = sqlite3.connect(f"file:{restored.as_posix()}?mode=ro", uri=True, timeout=60)
+        dst = sqlite3.connect(str(tmp_live))
+        try:
+            src.backup(dst)
+            dst.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        finally:
+            dst.close()
+            src.close()
+
+        # Quitar WAL/SHM viejos del live para no mezclar con la DB nueva.
+        for side in (db_path.with_suffix(".db-wal"), db_path.with_suffix(".db-shm")):
+            side.unlink(missing_ok=True)
         if db_path.exists():
             db_path.unlink()
         tmp_live.replace(db_path)
+        for side in (db_path.with_suffix(".db-wal"), db_path.with_suffix(".db-shm")):
+            side.unlink(missing_ok=True)
 
         try:
             from app.extensions import db as flask_db
@@ -465,9 +489,11 @@ def restore_db_from_upload(file_storage) -> BackupResult:
         except Exception:
             pass
 
+        _validate_sqlite_db(db_path)
+
         msg = (
             f"Base restaurada desde {filename}. "
-            f"Copia previa: {safety.name if safety.is_file() else 'n/d'}. "
+            f"Copia previa: {safety_note}. "
             "Recarga el ERP y la app móvil."
         )
         result = BackupResult(
