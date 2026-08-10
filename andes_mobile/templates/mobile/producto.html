@@ -177,6 +177,12 @@
         <span class="m-stock-variant__qty">{{ o.stock }}</span>
       </div>
       {% endfor %}
+      {% if p.ficha_stock.s6 %}
+      <div class="m-stock-variant m-stock-variant--other">
+        <span class="m-stock-variant__marca">En tránsito</span>
+        <span class="m-stock-variant__qty">{{ p.ficha_stock.s6 }}</span>
+      </div>
+      {% endif %}
     </div>
   </section>
 

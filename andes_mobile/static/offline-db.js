@@ -12,7 +12,7 @@
   var META_CATALOG_OFFSET = "catalog_sync_offset";
   var META_CATALOG_TOTAL = "catalog_sync_total";
   var META_CATALOG_LOCK = "catalog_sync_lock";
-  var CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
+  var CATALOG_TTL_MS = 30 * 60 * 1000; // 30 min: el stock no puede quedar 24 h obsoleto
   var CATALOG_PAGE_SIZE = 800;
   var CATALOG_BATCH_SIZE = 200;
   var LOCK_HEARTBEAT_MS = 3000;

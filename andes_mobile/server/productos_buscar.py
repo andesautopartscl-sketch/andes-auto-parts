@@ -449,14 +449,9 @@ def buscar(query: str, *, puede_ver_precio: bool = True, limit: int = 50) -> lis
     top = scored[:limit]
 
     codigos = [(p.codigo or "").strip().upper() for _, _, p, _ in top if p.codigo]
-    stock_map: dict[str, int] = {}
-    if codigos:
-        for row in ProductoVarianteStock.query.filter(
-            func.upper(ProductoVarianteStock.codigo_producto).in_(codigos)
-        ).all():
-            c = (row.codigo_producto or "").strip().upper()
-            stock_map[c] = stock_map.get(c, 0) + int(row.stock or 0)
+    from app.utils.stock_control import get_stock_totals_map
 
+    stock_map = get_stock_totals_map(codigos)
     thumb_map = build_thumb_map([p for _, _, p, _ in top])
 
     out: list[dict] = []

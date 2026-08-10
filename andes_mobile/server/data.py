@@ -431,19 +431,9 @@ def _codigos_por_proveedor(term: str) -> list[str]:
 
 def _stock_disponible_map(codigos: list[str]) -> dict[str, int]:
     """Stock total por código en una sola consulta (evita un SELECT por resultado)."""
-    limpios = [c for c in {(c or "").strip() for c in codigos} if c]
-    if not limpios:
-        return {}
-    filas = (
-        db.session.query(
-            ProductoVarianteStock.codigo_producto,
-            func.sum(ProductoVarianteStock.stock),
-        )
-        .filter(ProductoVarianteStock.codigo_producto.in_(limpios))
-        .group_by(ProductoVarianteStock.codigo_producto)
-        .all()
-    )
-    return {(codigo or "").strip(): int(total or 0) for codigo, total in filas}
+    from app.utils.stock_control import get_stock_totals_map
+
+    return get_stock_totals_map(codigos)
 
 
 def buscar_productos(term: str, limit: int = 30) -> list[dict]:

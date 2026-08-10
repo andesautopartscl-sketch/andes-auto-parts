@@ -2289,12 +2289,14 @@ def _ficha_stock_repuestos(producto: Producto) -> dict:
                     "subtotal": int(sn),
                 }
             )
-        st = sum(stocks) + s6
+        st = sum(stocks)
         return {
             "bodegas": bodegas,
             "otras_lineas": [],
             "s6": s6,
             "otras": 0,
+            # stotal = solo bodegas (variantes). El tránsito va aparte en s6.
+            # Antes se sumaba s6 aquí y el móvil mostraba más stock que el ERP.
             "stotal": st,
         }
 
@@ -2333,7 +2335,7 @@ def _ficha_stock_repuestos(producto: Producto) -> dict:
         for (bk, mk), v in sorted(otras_acc.items(), key=lambda x: (x[0][0], x[0][1]))
     ]
     otras = sum(otras_acc.values())
-    stotal = sum(int(r.stock or 0) for r in rows) + s6
+    stotal = sum(int(r.stock or 0) for r in rows)
 
     return {
         "bodegas": bodegas,
@@ -2372,7 +2374,7 @@ def _ficha_stock_quick(producto: Producto) -> dict:
         "otras_lineas": [],
         "s6": s6,
         "otras": 0,
-        "stotal": sum(stocks) + s6,
+        "stotal": sum(stocks),
         "partial": True,
     }
 

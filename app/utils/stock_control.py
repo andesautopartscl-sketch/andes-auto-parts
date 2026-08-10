@@ -2,13 +2,33 @@
 Stock control utility module for real-time inventory management.
 Handles stock validation, deduction, reversal, and traceability.
 """
+from __future__ import annotations
 
 from datetime import datetime
-from sqlalchemy import text
+from sqlalchemy import func, text
 from app.extensions import db
 from app.bodega.models import ProductoVarianteStock, MovimientoStock, IngresoDocumento, IngresoDocumentoItem
 from app.inventario.models import LabelPrintHistory
 from app.ventas.models import DocumentoVenta, DocumentoVentaItem, NotaCredito, NotaCreditoItem
+
+
+def _norm_codigo(codigo: str | None) -> str:
+    return (codigo or "").strip().upper()
+
+
+def _variant_stock_query(codigo_producto: str, marca: str | None = None, bodega: str | None = None):
+    """Consulta de variantes con código normalizado (evita 0 stock por mayúsculas)."""
+    codigo = _norm_codigo(codigo_producto)
+    if not codigo:
+        return ProductoVarianteStock.query.filter(False)
+    q = ProductoVarianteStock.query.filter(
+        func.upper(func.trim(ProductoVarianteStock.codigo_producto)) == codigo
+    )
+    if marca:
+        q = q.filter(func.upper(func.trim(ProductoVarianteStock.marca)) == marca.strip().upper())
+    if bodega:
+        q = q.filter(func.upper(func.trim(ProductoVarianteStock.bodega)) == bodega.strip().upper())
+    return q
 
 
 # =====================================================
@@ -25,17 +45,25 @@ def get_available_stock(codigo_producto: str, marca: str = None, bodega: str = N
         bodega: Warehouse (optional, returns total if not specified)
     
     Returns:
-        Available quantity in stock
+        Available quantity in stock (suma de productos_variantes_stock; sin tránsito)
     """
-    query = ProductoVarianteStock.query.filter_by(codigo_producto=codigo_producto)
-    
-    if marca:
-        query = query.filter_by(marca=marca)
-    if bodega:
-        query = query.filter_by(bodega=bodega)
-    
-    variants = query.all()
-    return sum(v.stock for v in variants) if variants else 0
+    variants = _variant_stock_query(codigo_producto, marca, bodega).all()
+    return sum(int(v.stock or 0) for v in variants)
+
+
+def get_stock_totals_map(codigos: list[str]) -> dict[str, int]:
+    """Suma de stock por código (UPPER) en una sola consulta. Sin tránsito."""
+    limpios = sorted({_norm_codigo(c) for c in codigos if _norm_codigo(c)})
+    if not limpios:
+        return {}
+    col = func.upper(func.trim(ProductoVarianteStock.codigo_producto))
+    filas = (
+        db.session.query(col, func.sum(ProductoVarianteStock.stock))
+        .filter(col.in_(limpios))
+        .group_by(col)
+        .all()
+    )
+    return {(codigo or "").strip().upper(): int(total or 0) for codigo, total in filas}
 
 
 def get_stock_by_variant(codigo_producto: str) -> list[dict]:
@@ -45,12 +73,12 @@ def get_stock_by_variant(codigo_producto: str) -> list[dict]:
     Returns:
         List of dicts with marca, bodega, stock
     """
-    variants = ProductoVarianteStock.query.filter_by(codigo_producto=codigo_producto).all()
+    variants = _variant_stock_query(codigo_producto).all()
     return [
         {
             "marca": v.marca,
             "bodega": v.bodega,
-            "stock": v.stock,
+            "stock": int(v.stock or 0),
             "id": v.id,
         }
         for v in variants
