@@ -129,6 +129,18 @@
 
   <div id="backupRunMsg" class="backup-msg" aria-live="polite"></div>
 
+  <div class="backup-status neutral" style="margin-top:8px;">
+    <strong>Sincronizar con el PC:</strong>
+    la app móvil en Render usa una base distinta a la de tu computador.
+    Si el stock/movimientos del móvil están atrasados, sube aquí el archivo
+    <code>C:\AndesAutoParts\data\andes.db</code> de tu PC.
+    <form id="backupRestoreForm" style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <input type="file" name="archivo" id="backupRestoreFile" accept=".db,.zip,application/zip,application/octet-stream" required>
+      <button type="submit" class="btn" id="btnRestoreDb">Restaurar base en este servidor</button>
+    </form>
+    <p class="backup-subtitle" style="margin-top:8px;">Se guarda una copia previa automáticamente antes de reemplazar.</p>
+  </div>
+
   <div class="backup-table-wrap">
     {% if backups %}
     <table class="backup-table">
@@ -163,41 +175,88 @@
 (function () {
   var btn = document.getElementById('btnBackupNow');
   var msg = document.getElementById('backupRunMsg');
-  if (!btn) return;
 
-  btn.addEventListener('click', function () {
-    btn.disabled = true;
-    msg.textContent = 'Ejecutando backup…';
-    msg.className = 'backup-msg';
+  if (btn && msg) {
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      msg.textContent = 'Ejecutando backup…';
+      msg.className = 'backup-msg';
 
-    fetch('{{ url_for("admin.backups_run_now") }}', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-CSRF-Token': '{{ csrf_token }}'
-      },
-      body: '{}'
-    })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.success) {
-          msg.textContent = data.message + (data.filename ? ' (' + data.filename + ')' : '');
-          msg.className = 'backup-msg ok';
-          setTimeout(function () { window.location.reload(); }, 1200);
-        } else {
-          msg.textContent = data.message || 'Error al ejecutar backup';
+      fetch('{{ url_for("admin.backups_run_now") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRF-Token': '{{ csrf_token }}'
+        },
+        body: '{}'
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.success) {
+            msg.textContent = data.message + (data.filename ? ' (' + data.filename + ')' : '');
+            msg.className = 'backup-msg ok';
+            setTimeout(function () { window.location.reload(); }, 1200);
+          } else {
+            msg.textContent = data.message || 'Error al ejecutar backup';
+            msg.className = 'backup-msg error';
+          }
+        })
+        .catch(function () {
+          msg.textContent = 'Error de red al ejecutar backup';
           msg.className = 'backup-msg error';
-        }
-      })
-      .catch(function () {
-        msg.textContent = 'Error de red al ejecutar backup';
+        })
+        .finally(function () {
+          btn.disabled = false;
+        });
+    });
+  }
+
+  var form = document.getElementById('backupRestoreForm');
+  var fileInput = document.getElementById('backupRestoreFile');
+  var btnRestore = document.getElementById('btnRestoreDb');
+  if (form && fileInput && btnRestore && msg) {
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      if (!fileInput.files || !fileInput.files.length) {
+        msg.textContent = 'Selecciona andes.db o un ZIP de backup';
         msg.className = 'backup-msg error';
+        return;
+      }
+      if (!window.confirm('Esto reemplaza la base de datos de ESTE servidor (Render) con el archivo de tu PC. ¿Continuar?')) {
+        return;
+      }
+      btnRestore.disabled = true;
+      msg.textContent = 'Subiendo y restaurando base… (puede tardar un minuto)';
+      msg.className = 'backup-msg';
+      var fd = new FormData();
+      fd.append('archivo', fileInput.files[0]);
+      fetch('{{ url_for("admin.backups_restore") }}', {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRF-Token': '{{ csrf_token }}'
+        },
+        body: fd
       })
-      .finally(function () {
-        btn.disabled = false;
-      });
-  });
+        .then(function (r) {
+          return r.json().then(function (data) { return { ok: r.ok, data: data }; });
+        })
+        .then(function (res) {
+          msg.textContent = (res.data && res.data.message) || (res.ok ? 'OK' : 'Error');
+          msg.className = 'backup-msg ' + (res.data && res.data.success ? 'ok' : 'error');
+          btnRestore.disabled = false;
+          if (res.data && res.data.success) {
+            setTimeout(function () { window.location.reload(); }, 1500);
+          }
+        })
+        .catch(function () {
+          msg.textContent = 'Error de red al restaurar';
+          msg.className = 'backup-msg error';
+          btnRestore.disabled = false;
+        });
+    });
+  }
 })();
 </script>
 {% endblock %}

@@ -11,6 +11,7 @@ from ..utils.gdrive_backup import (
     get_backup_config,
     list_drive_backups,
     load_last_status,
+    restore_db_from_upload,
     run_gdrive_backup,
 )
 from ..utils.csrf import validate_csrf_request
@@ -376,3 +377,25 @@ def backups_download(file_id):
         )
     except Exception as exc:
         return jsonify(success=False, message=str(exc)), 500
+
+
+@admin_bp.route("/backups/restore", methods=["POST"])
+@admin_required
+def backups_restore():
+    """Sube la base local (andes.db o zip de backup) al servidor de producción."""
+    if not validate_csrf_request():
+        return jsonify(success=False, message="Token CSRF inválido"), 403
+
+    archivo = request.files.get("archivo") or request.files.get("file")
+    if not archivo or not (archivo.filename or "").strip():
+        return jsonify(success=False, message="Selecciona un archivo .db o .zip"), 400
+
+    result = restore_db_from_upload(archivo)
+    status = 200 if result.success else 400
+    return jsonify(
+        success=result.success,
+        message=result.message,
+        filename=result.filename,
+        size_bytes=result.size_bytes,
+        ran_at=result.ran_at,
+    ), status

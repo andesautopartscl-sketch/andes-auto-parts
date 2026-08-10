@@ -368,3 +368,122 @@ def run_gdrive_backup(*, logger_instance: logging.Logger | None = None) -> Backu
         except PermissionError:
             # Si el SO mantiene el handle un momento, dejamos el zip para limpieza posterior.
             pass
+
+
+def _validate_sqlite_db(path: Path) -> None:
+    if not path.is_file() or path.stat().st_size < 1024:
+        raise ValueError("El archivo no parece una base SQLite válida.")
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=30)
+    try:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='productos'"
+        ).fetchone()
+        if not row:
+            raise ValueError("La base no contiene la tabla productos.")
+        conn.execute("SELECT COUNT(*) FROM productos").fetchone()
+    finally:
+        conn.close()
+
+
+def restore_db_from_upload(file_storage) -> BackupResult:
+    """
+    Reemplaza data/andes.db con un .db o .zip subido (admin).
+
+    El móvil en Render lee el disco persistente, no la base del computador.
+    Esta vía permite sincronizar producción con la DB local actualizada.
+    """
+    from flask import current_app
+
+    cfg = get_backup_config()
+    db_path: Path = cfg["db_path"]
+    temp_dir: Path = cfg["temp_dir"]
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    ran_at = datetime.now(timezone.utc).isoformat()
+
+    filename = (getattr(file_storage, "filename", None) or "").strip()
+    if not filename:
+        return BackupResult(success=False, message="No se recibió archivo.", ran_at=ran_at)
+
+    suffix = Path(filename).suffix.lower()
+    raw = file_storage.read()
+    if not raw:
+        return BackupResult(success=False, message="Archivo vacío.", ran_at=ran_at)
+    if len(raw) > 200 * 1024 * 1024:
+        return BackupResult(success=False, message="Archivo demasiado grande (máx. 200 MB).", ran_at=ran_at)
+
+    stamp = datetime.now(CHILE_TZ).strftime("%Y%m%d_%H%M%S")
+    incoming = temp_dir / f"restore_upload_{stamp}{suffix or '.bin'}"
+    restored = temp_dir / f"restore_candidate_{stamp}.db"
+    safety = temp_dir / f"pre_restore_{stamp}.db"
+
+    try:
+        incoming.write_bytes(raw)
+        if suffix == ".zip":
+            with zipfile.ZipFile(incoming, "r") as zf:
+                names = [
+                    n for n in zf.namelist()
+                    if n.lower().endswith(".db") and not n.endswith("/")
+                ]
+                if not names:
+                    raise ValueError("El ZIP no contiene ningún archivo .db")
+                chosen = next(
+                    (n for n in names if Path(n).name.lower() == "andes.db"),
+                    names[0],
+                )
+                with zf.open(chosen) as src, open(restored, "wb") as dst:
+                    dst.write(src.read())
+        elif suffix == ".db":
+            restored.write_bytes(raw)
+        else:
+            raise ValueError("Sube un archivo .db o un .zip de backup.")
+
+        _validate_sqlite_db(restored)
+
+        if db_path.is_file():
+            _create_db_snapshot(db_path, safety)
+
+        try:
+            from app.extensions import db as flask_db
+
+            flask_db.session.remove()
+            flask_db.engine.dispose()
+        except Exception:
+            current_app.logger.exception("No se pudieron cerrar conexiones antes del restore")
+
+        tmp_live = db_path.with_suffix(".db.restoring")
+        if tmp_live.exists():
+            tmp_live.unlink()
+        restored.replace(tmp_live)
+        if db_path.exists():
+            db_path.unlink()
+        tmp_live.replace(db_path)
+
+        try:
+            from app.extensions import db as flask_db
+
+            flask_db.engine.dispose()
+        except Exception:
+            pass
+
+        msg = (
+            f"Base restaurada desde {filename}. "
+            f"Copia previa: {safety.name if safety.is_file() else 'n/d'}. "
+            "Recarga el ERP y la app móvil."
+        )
+        result = BackupResult(
+            success=True,
+            message=msg,
+            filename=filename,
+            size_bytes=db_path.stat().st_size if db_path.is_file() else 0,
+            ran_at=ran_at,
+        )
+        _save_status(cfg["status_path"], result)
+        return result
+    except Exception as exc:
+        logger.exception("Error al restaurar base de datos: %s", exc)
+        result = BackupResult(success=False, message=str(exc), ran_at=ran_at)
+        _save_status(cfg["status_path"], result)
+        return result
+    finally:
+        incoming.unlink(missing_ok=True)
+        restored.unlink(missing_ok=True)
