@@ -1,3 +1,4 @@
+import logging
 from flask import render_template, request, redirect, session, jsonify, current_app, url_for, send_file, flash
 from sqlalchemy import func, or_
 from . import seguridad_bp
@@ -35,6 +36,8 @@ from collections import Counter
 from pathlib import Path
 import json
 import re
+
+logger = logging.getLogger(__name__)
 
 
 # =====================================================
@@ -235,56 +238,13 @@ def _serialize_user_permission_payload(user: Usuario) -> dict:
 @seguridad_bp.route("/login2", methods=["GET", "POST"])
 @limiter.limit("10 per minute", methods=["POST"])
 def login():
-    error = None
+    """
+    Ruta de login heredada, conservada solo para no romper enlaces guardados.
 
-    if request.method == "POST":
-
-        username = request.form.get("username")
-        password = request.form.get("password")
-
-        user = Usuario.query.filter_by(usuario=username).first() if username else None
-
-        if user and user.activo:
-            if user.bloqueado_seguridad:
-                error = "Usuario bloqueado por seguridad. El administrador debe desbloquear tu cuenta."
-                return render_template("seguridad/login.html", error=error)
-
-            if check_password_hash(user.password_hash, password or ""):
-                # Misma forma de sesión que auth.login: permisos, idle timeout, decoradores
-                session["user"] = user.usuario
-                session["rol"] = user.rol.nombre if user.rol else ""
-                session["usuario_id"] = user.id
-                session["usuario_nombre"] = user.nombre
-                if user.rol:
-                    session["usuario_rol"] = user.rol.nombre
-                rotate_csrf_token()
-
-                user.ultimo_acceso = datetime.utcnow()
-                user.ultimo_ingreso = datetime.utcnow()
-                user.last_seen = datetime.utcnow()
-                user.en_linea = True
-                user.intentos_fallidos = 0
-                user.bloqueado_seguridad = False
-                user.bloqueado_at = None
-                db.session.commit()
-
-                return redirect(url_for("productos.buscar"))
-            user.intentos_fallidos = int(user.intentos_fallidos or 0) + 1
-            if user.intentos_fallidos >= 3:
-                user.bloqueado_seguridad = True
-                user.bloqueado_at = datetime.utcnow()
-                user.en_linea = False
-            db.session.commit()
-            if user.bloqueado_seguridad:
-                error = "Cuenta bloqueada por 3 intentos fallidos. Solicita desbloqueo al administrador."
-                return render_template("seguridad/login.html", error=error)
-        else:
-            pass
-
-        if error is None:
-            error = "Usuario o contraseña incorrectos"
-
-    return render_template("seguridad/login.html", error=error)
+    Autenticaba por su cuenta, saltándose el bloqueo por IP y la auditoría de
+    `auth.login`, así que ahora delega en el login principal.
+    """
+    return redirect(url_for("auth.login"))
 
 
 # -----------------------------
@@ -589,11 +549,9 @@ def usuarios():
 def api_usuarios():
     if not has_permission(session.get("user"), session.get("rol"), "seguridad_gestion_usuarios"):
         return jsonify({"success": False, "error": "Permiso denegado"}), 403
-    print("\n" + "="*60)
-    print("[API] /usuarios CALLED")
-    print("="*60)
-    print(f"[SEGURIDAD API] SQLALCHEMY_DATABASE_URI: {current_app.config.get('SQLALCHEMY_DATABASE_URI', '(not configured)')}")
-
+    logger.debug("\n" + "="*60)
+    logger.debug("[API] /usuarios CALLED")
+    logger.debug("="*60)
     usuarios = Usuario.query.all()
     current_user_id, current_username, superadmin_count = _get_delete_context()
 
@@ -606,7 +564,7 @@ def api_usuarios():
         fecha_creacion_fmt = format_utc_to_chile(u.fecha_creacion)
         fecha_nacimiento_fmt = u.fecha_nacimiento.strftime("%d-%m-%Y") if u.fecha_nacimiento else "-"
         
-        print(f"[API] {u.usuario}: ultimo_ingreso = {u.ultimo_ingreso} -> formatted: {ultimo_ingreso_fmt}")
+        logger.debug(f"[API] {u.usuario}: ultimo_ingreso = {u.ultimo_ingreso} -> formatted: {ultimo_ingreso_fmt}")
 
         can_delete, delete_reason = _can_delete_user(
             u,
@@ -656,8 +614,8 @@ def api_usuarios():
             "has_foto": user_has_photo(u),
         })
 
-    print(f"[API] Returning {len(data)} usuarios")
-    print("="*60 + "\n")
+    logger.debug(f"[API] Returning {len(data)} usuarios")
+    logger.debug("="*60 + "\n")
     return jsonify(data)
 
 
@@ -786,7 +744,7 @@ def api_crear_usuario():
 
     except Exception as e:
         db.session.rollback()
-        print("ERROR REAL:", e)
+        logger.exception("Error en seguridad: %s", e)
         return jsonify({"success": False, "error": str(e)}), 500
 
 # -----------------------------
@@ -883,7 +841,7 @@ def api_eliminar_usuario(id):
 @admin_required
 def api_roles():
     """Obtener lista de roles para selects"""
-    print("Obteniendo lista de roles...")
+    logger.debug("Obteniendo lista de roles...")
 
     roles = Rol.query.order_by(Rol.nivel.asc(), Rol.nombre.asc()).all()
 
@@ -896,7 +854,7 @@ def api_roles():
             "descripcion": rol.descripcion or ""
         })
 
-    print(f"{len(data)} roles encontrados")
+    logger.debug(f"{len(data)} roles encontrados")
     return jsonify(data)
 
 
@@ -914,12 +872,12 @@ def api_obtener_usuario(id):
     if not has_permission(session.get("user"), session.get("rol"), "seguridad_gestion_usuarios"):
         return jsonify({"success": False, "error": "Permiso denegado"}), 403
     """Obtener datos de un usuario para editarlo"""
-    print(f"Obteniendo usuario ID: {id}")
+    logger.debug(f"Obteniendo usuario ID: {id}")
     
     user = Usuario.query.get(id)
     
     if not user:
-        print(f"Usuario ID {id} no encontrado")
+        logger.debug(f"Usuario ID {id} no encontrado")
         return jsonify({"success": False, "error": "Usuario no encontrado"}), 404
     
     # Format dates
@@ -958,7 +916,7 @@ def api_obtener_usuario(id):
     data["foto_url"] = user_photo_url(user)
     data["has_foto"] = user_has_photo(user)
     
-    print(f"Usuario encontrado: {user.usuario}")
+    logger.debug(f"Usuario encontrado: {user.usuario}")
     return jsonify({"success": True, "data": data})
 
 
@@ -1017,37 +975,37 @@ def api_editar_usuario(id):
     if not has_permission(session.get("user"), session.get("rol"), "seguridad_gestion_permisos"):
         return jsonify({"success": False, "error": "Permiso denegado"}), 403
     """Editar datos de un usuario"""
-    print(f"Editando usuario ID: {id}")
+    logger.debug(f"Editando usuario ID: {id}")
     
     user = Usuario.query.get(id)
     
     if not user:
-        print(f"Usuario ID {id} no encontrado")
+        logger.debug(f"Usuario ID {id} no encontrado")
         return jsonify({"success": False, "error": "Usuario no encontrado"}), 404
     
     try:
         data = request.get_json()
         
-        print(f"Datos recibidos: {list(data.keys())}")
+        logger.debug(f"Datos recibidos: {list(data.keys())}")
         
         # Proteger superadmin
         if user.usuario == "albert" and "usuario" in data and data["usuario"] != "albert":
-            print("Intento de cambiar nombre del superadmin bloqueado")
+            logger.debug("Intento de cambiar nombre del superadmin bloqueado")
             return jsonify({"success": False, "error": "No se puede modificar al superadmin"})
         
         # Actualizar campos básicos
         if "nombre" in data and data["nombre"]:
             user.nombre = data["nombre"]
-            print(f"   - nombre: {data['nombre']}")
+            logger.debug(f"   - nombre: {data['nombre']}")
         
         if "usuario" in data and data["usuario"]:
             # Verificar que el nuevo usuario no exista
             existing = Usuario.query.filter_by(usuario=data["usuario"]).first()
             if existing and existing.id != id:
-                print(f"El usuario {data['usuario']} ya existe")
+                logger.debug(f"El usuario {data['usuario']} ya existe")
                 return jsonify({"success": False, "error": "El usuario ya existe"}), 400
             user.usuario = data["usuario"]
-            print(f"   - usuario: {data['usuario']}")
+            logger.debug(f"   - usuario: {data['usuario']}")
         
         # Actualizar campos nuevos
         if "correo" in data and data["correo"]:
@@ -1058,7 +1016,7 @@ def api_editar_usuario(id):
             if existing_email and existing_email.id != id:
                 return jsonify({"success": False, "error": "El correo ya existe"}), 400
             user.correo = data["correo"]
-            print(f"   - correo: {data['correo']}")
+            logger.debug(f"   - correo: {data['correo']}")
         elif "correo" in data and data["correo"] == "":
             user.correo = None
         
@@ -1066,26 +1024,26 @@ def api_editar_usuario(id):
             if not validar_telefono(data["telefono"]):
                 return jsonify({"success": False, "error": "Teléfono inválido"}), 400
             user.telefono = data["telefono"]
-            print(f"   - telefono: {data['telefono']}")
+            logger.debug(f"   - telefono: {data['telefono']}")
         elif "telefono" in data and data["telefono"] == "":
             user.telefono = None
         
         if any(k in data for k in ("direccion", "comuna", "ciudad", "region")):
             user.direccion = _compose_address_from_payload(data, fallback=user.direccion)
-            print(f"   - direccion: {user.direccion}")
+            logger.debug(f"   - direccion: {user.direccion}")
         
         if "genero" in data:
             if data["genero"] and data["genero"] not in ["Masculino", "Femenino"]:
                 return jsonify({"success": False, "error": "Género inválido"}), 400
             user.genero = data["genero"] if data["genero"] else None
-            print(f"   - genero: {user.genero}")
+            logger.debug(f"   - genero: {user.genero}")
         
         if "fecha_nacimiento" in data and data["fecha_nacimiento"]:
             try:
                 from datetime import datetime as dt
                 fecha = dt.strptime(data["fecha_nacimiento"], "%Y-%m-%d").date()
                 user.fecha_nacimiento = fecha
-                print(f"   - fecha_nacimiento: {fecha}")
+                logger.debug(f"   - fecha_nacimiento: {fecha}")
             except ValueError:
                 return jsonify({"success": False, "error": "Fecha inválida (formato: YYYY-MM-DD)"}), 400
         elif "fecha_nacimiento" in data and data["fecha_nacimiento"] == "":
@@ -1104,21 +1062,21 @@ def api_editar_usuario(id):
             if existing_rut and existing_rut.id != id:
                 return jsonify({"success": False, "error": "El RUT ya existe"}), 400
             user.rut = normalized_rut
-            print(f"   - rut: {normalized_rut}")
+            logger.debug(f"   - rut: {normalized_rut}")
         elif "rut" in data and data["rut"] == "":
             user.rut = None
         
         if "rol_id" in data:
             user.rol_id = int(data["rol_id"])
-            print(f"   - rol_id: {data['rol_id']}")
+            logger.debug(f"   - rol_id: {data['rol_id']}")
         
         if "password" in data and data["password"]:
             user.password_hash = generate_password_hash(data["password"])
-            print(f"   - password: ***")
+            logger.debug(f"   - password: ***")
         
         if "activo" in data:
             user.activo = bool(data["activo"])
-            print(f"   - activo: {user.activo}")
+            logger.debug(f"   - activo: {user.activo}")
 
         if "permisos" in data and isinstance(data["permisos"], dict):
             perm_payload = data["permisos"] or {}
@@ -1183,12 +1141,12 @@ def api_editar_usuario(id):
                 perfil.comision_pct = cp
         
         db.session.commit()
-        print(f"Usuario {user.usuario} actualizado correctamente")
+        logger.debug(f"Usuario {user.usuario} actualizado correctamente")
         
         return jsonify({"success": True, "message": "Usuario actualizado correctamente"})
     
     except Exception as e:
-        print(f"Error al editar usuario: {e}")
+        logger.warning(f"Error al editar usuario: {e}")
         import traceback
         traceback.print_exc()
         db.session.rollback()

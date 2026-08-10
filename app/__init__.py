@@ -56,6 +56,7 @@ from app.utils.csrf import get_csrf_token, validate_csrf_request
 from app.utils.format_currency_cl import format_precio_publico_con_iva
 from app.utils.product_image_url import product_image_src
 from app.utils.cloudinary_static_map import static_or_cloud
+from app.utils.highlight import highlight_match
 from app.utils.http_security import apply_security_headers
 from app.utils.login_wall import is_logged_in_session, is_public_auth_route, safe_next_path
 from app.utils.permissions import ALL_PERMISSION_KEYS, DEFAULT_PERMISSIONS, get_user_permissions
@@ -264,6 +265,8 @@ def create_app():
     app.jinja_env.filters["format_precio_publico_con_iva"] = format_precio_publico_con_iva
     app.jinja_env.filters["product_image_src"] = product_image_src
     app.jinja_env.filters["static_or_cloud"] = static_or_cloud
+    # Global: buscar.html lo usa desde productos y desde admin.
+    app.jinja_env.globals["highlight_match"] = highlight_match
     log_runtime_startup_info(app)
     from app.utils.load_env import log_sii_env_startup
 
@@ -361,7 +364,7 @@ def create_app():
         app.register_blueprint(oc_clientes_bp)
         app.register_blueprint(mobile_bp)
 
-    print(app.url_map)
+    app.logger.debug("Rutas registradas:\n%s", app.url_map)
 
     # ===============================
     # CREAR TABLAS SEGURIDAD
@@ -588,6 +591,20 @@ def create_app():
                 text(
                     "CREATE INDEX IF NOT EXISTS idx_producto_imagenes_codigo "
                     "ON producto_imagenes(producto_codigo)"
+                )
+            )
+            # Resolución del último ingreso por variante (ventas y edición de productos).
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_ing_items_codigo_bodega_marca "
+                    "ON ingresos_documentos_items(codigo_producto, bodega, marca)"
+                )
+            )
+            # Miniaturas por OEM compartido en listados de búsqueda.
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_productos_activo_oem "
+                    "ON productos(ACTIVO, [CODIGO OEM])"
                 )
             )
             pi_cols = conn.execute(text("PRAGMA table_info(producto_imagenes)")).fetchall()
@@ -1649,16 +1666,15 @@ def create_app():
 
     try:
         from app.models import engine
-        from app.utils.fts_productos import fts_create_table, fts_rebuild
+        from app.utils.fts_productos import fts_ensure_current
 
         with engine.begin() as conn:
-            fts_create_table(conn)
-            count = conn.execute(text("SELECT COUNT(*) FROM productos_fts")).scalar()
-            if count == 0:
-                n = fts_rebuild(conn)
-                app.logger.info("FTS5 productos: índice construido con %s filas", n)
-            else:
-                app.logger.info("FTS5 productos: índice existente con %s filas", count)
+            count, rebuilt = fts_ensure_current(conn)
+            app.logger.info(
+                "FTS5 productos: índice %s con %s filas",
+                "reconstruido" if rebuilt else "existente",
+                count,
+            )
     except Exception as exc:
         app.logger.warning("FTS5 productos: no se pudo inicializar: %s", exc)
 

@@ -40,11 +40,14 @@ from app import create_app
 
 app = create_app()
 
-print("DB ACTUAL:", app.config["SQLALCHEMY_DATABASE_URI"])
+app.logger.info("Base de datos: %s", app.config["SQLALCHEMY_DATABASE_URI"])
 
 if __name__ == "__main__":
+    # El debugger de Werkzeug ejecuta código arbitrario desde el navegador:
+    # solo se activa pidiéndolo de forma explícita.
+    debug = (os.environ.get("ANDES_DEBUG") or "").strip().lower() in {"1", "true", "yes"}
     app.run(
-    host="127.0.0.1",
-    port=5000,
-    debug=True
-)
+        host=os.environ.get("ANDES_HOST", "127.0.0.1"),
+        port=int(os.environ.get("ANDES_PORT", "5000")),
+        debug=debug,
+    )

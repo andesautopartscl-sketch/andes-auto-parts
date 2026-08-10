@@ -1,3 +1,4 @@
+import logging
 from flask import Blueprint, request, jsonify, render_template, send_file
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -70,12 +71,12 @@ def importar_excel():
 # BUSCAR PRODUCTOS + USUARIOS
 # ===============================
 
+ADMIN_BUSCAR_MAX = 500
+
+
 @admin_bp.route("/buscar")
 @admin_required
 def buscar():
-
-    print("🔥 RUTA /admin/buscar EJECUTADA 🔥")
-
     termino = request.args.get("q", "").strip()
 
     # Use a distinct name so the imported Flask-SQLAlchemy 'db' is not shadowed.
@@ -95,11 +96,12 @@ def buscar():
                 Producto.modelo.contains(termino)
             )
 
-        productos = query.all()
-        productos = [p for p in productos if p is not None]
-        for p in productos:
-            if not (p.codigo or "").strip():
-                print("Producto sin código detectado")
+        # Sin tope, esta vista cargaba el catálogo entero (~28k filas) en memoria.
+        productos = [
+            p
+            for p in query.order_by(Producto.codigo.asc()).limit(ADMIN_BUSCAR_MAX).all()
+            if p is not None
+        ]
 
         # ===============================
         # USUARIOS (DESDE SEGURIDAD) — use the Flask-SQLAlchemy 'db', not sess
@@ -116,11 +118,10 @@ def buscar():
         # ===============================
         # DEBUG REAL
         # ===============================
-        print("👥 USUARIOS LISTA:", usuarios)
-        print("📊 TOTAL USUARIOS:", len(usuarios))
+        logger.debug("Usuarios cargados: %s", len(usuarios))
 
-    except Exception as e:
-        print("❌ ERROR EN BUSCAR:", e)
+    except Exception:
+        logger.exception("Error en /admin/buscar")
         productos = []
         usuarios = []
 
@@ -218,6 +219,8 @@ import barcode
 from barcode.writer import ImageWriter
 import io
 import base64
+
+logger = logging.getLogger(__name__)
 
 @admin_bp.route("/producto/<codigo>/etiqueta")
 @admin_required

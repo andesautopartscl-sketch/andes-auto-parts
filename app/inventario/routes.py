@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for
@@ -10,6 +11,8 @@ from app.utils.decorators import login_required
 from app.utils.permissions import has_permission
 from app.bodega.models import MovimientoStock, ProductoVarianteStock
 from .models import LabelPrintHistory, TransferenciaStock
+
+logger = logging.getLogger(__name__)
 
 inventario_bp = Blueprint(
     "inventario", __name__, url_prefix="/inventario",
@@ -290,23 +293,23 @@ def labels_history_register():
     labels = payload.get("labels") or []
     reference = (payload.get("document_reference") or "").strip()[:120]
 
-    print(f"[LABEL_HISTORY] Received {len(labels)} labels for registration")
-    print(f"[LABEL_HISTORY] Payload: {payload}")
+    logger.debug(f"[LABEL_HISTORY] Received {len(labels)} labels for registration")
+    logger.debug(f"[LABEL_HISTORY] Payload: {payload}")
 
     if not isinstance(labels, list) or not labels:
-        print("[LABEL_HISTORY] ERROR: No labels in payload")
+        logger.warning("[LABEL_HISTORY] ERROR: No labels in payload")
         return jsonify({"ok": False, "error": "No se recibieron etiquetas para registrar"}), 400
 
     aggregated: dict[int, dict] = {}
     for label in labels:
         codigo = (label.get("codigo") or "").strip().upper()
         if not codigo:
-            print(f"[LABEL_HISTORY] Skipping label with empty codigo")
+            logger.debug(f"[LABEL_HISTORY] Skipping label with empty codigo")
             continue
         
         product_id, product_name = _resolve_product_by_code(codigo)
         if not product_id:
-            print(f"[LABEL_HISTORY] WARNING: Could not resolve product '{codigo}'")
+            logger.warning(f"[LABEL_HISTORY] WARNING: Could not resolve product '{codigo}'")
             continue
 
         qty = int(label.get("cantidad") or 1)
@@ -321,10 +324,10 @@ def labels_history_register():
         else:
             entry["quantity"] += qty
 
-        print(f"[LABEL_HISTORY] Processed '{codigo}': product_id={product_id}, qty={qty}")
+        logger.debug(f"[LABEL_HISTORY] Processed '{codigo}': product_id={product_id}, qty={qty}")
 
     if not aggregated:
-        print("[LABEL_HISTORY] ERROR: No aggregated records after processing")
+        logger.warning("[LABEL_HISTORY] ERROR: No aggregated records after processing")
         return jsonify({"ok": False, "error": "No fue posible mapear etiquetas a productos"}), 400
 
     user_id = _current_user()
@@ -343,12 +346,12 @@ def labels_history_register():
             )
             db.session.add(record)
             saved_count += 1
-            print(f"[LABEL_HISTORY] Added record: product_id={product_id}, qty={item['quantity']}, user={user_id}")
+            logger.debug(f"[LABEL_HISTORY] Added record: product_id={product_id}, qty={item['quantity']}, user={user_id}")
 
         db.session.commit()
-        print(f"[LABEL_HISTORY] SUCCESS: Committed {saved_count} records to database")
+        logger.debug(f"[LABEL_HISTORY] SUCCESS: Committed {saved_count} records to database")
         return jsonify({"ok": True, "saved": saved_count})
     except Exception as exc:
         db.session.rollback()
-        print(f"[LABEL_HISTORY] EXCEPTION: {exc}")
+        logger.warning(f"[LABEL_HISTORY] EXCEPTION: {exc}")
         return jsonify({"ok": False, "error": str(exc)}), 500

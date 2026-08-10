@@ -8,7 +8,7 @@ from urllib.parse import quote
 import os
 import sys
 
-from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask import Blueprint, current_app, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
 from sqlalchemy import func, or_, text
 from werkzeug.security import check_password_hash
 
@@ -2397,6 +2397,60 @@ def _product_variants_map(codigos: list[str]) -> dict[str, list[dict]]:
     return variant_map
 
 
+def _clave_ingreso_ref(codigo: str, marca, bodega, origen) -> tuple[str, str, str, str]:
+    """Clave de agrupación equivalente a los filtros de `_ultimo_ingreso_ref`."""
+    return (
+        (codigo or "").strip().upper(),
+        (marca or "").strip().upper(),
+        (bodega or "").strip() or "Bodega 1",
+        _normalize_origen_compra(origen),
+    )
+
+
+def _prefetch_ingreso_ref(codigos: list[str]) -> None:
+    """
+    Precarga ingresos y variantes de varios productos en dos consultas.
+
+    `_ultimo_ingreso_ref` hacía hasta 3 consultas por variante de stock: en un
+    listado de búsqueda eso suponía más de cien consultas por petición.
+    """
+    codes = sorted({(c or "").strip().upper() for c in codigos if (c or "").strip()})
+    if not codes:
+        return
+
+    items: dict[tuple, list] = {}
+    filas = (
+        db.session.query(IngresoDocumentoItem, IngresoDocumento.created_at)
+        .join(
+            IngresoDocumento,
+            IngresoDocumento.id == IngresoDocumentoItem.ingreso_documento_id,
+        )
+        .filter(func.upper(IngresoDocumentoItem.codigo_producto).in_(codes))
+        .all()
+    )
+    for item, created_at in filas:
+        clave = _clave_ingreso_ref(
+            item.codigo_producto, item.marca, item.bodega, item.origen_compra
+        )
+        items.setdefault(clave, []).append((created_at, item.id, item))
+    for lista in items.values():
+        # Mismo orden que la consulta original: el ingreso más reciente primero.
+        lista.sort(key=lambda t: (t[0] or datetime.min, t[1]), reverse=True)
+
+    variantes: dict[tuple, object] = {}
+    for v in (
+        db.session.query(ProductoVarianteStock)
+        .filter(func.upper(ProductoVarianteStock.codigo_producto).in_(codes))
+        .all()
+    ):
+        variantes[
+            _clave_ingreso_ref(v.codigo_producto, v.marca, v.bodega, v.origen_compra)
+        ] = v
+
+    g._ingreso_ref_items = items
+    g._ingreso_ref_variantes = variantes
+
+
 def _ultimo_ingreso_ref(codigo: str, marca: str | None, bodega: str | None, origen_compra: str | None = None) -> dict | None:
     """
     Referencia comercial para ventas basada en ingresos ERP.
@@ -2414,27 +2468,13 @@ def _ultimo_ingreso_ref(codigo: str, marca: str | None, bodega: str | None, orig
     bodega_n = (bodega or "").strip() or "Bodega 1"
     origen_n = _normalize_origen_compra(origen_compra)
 
-    q = (
-        db.session.query(IngresoDocumentoItem)
-        .join(IngresoDocumento, IngresoDocumento.id == IngresoDocumentoItem.ingreso_documento_id)
-        .filter(func.upper(IngresoDocumentoItem.codigo_producto) == code)
-        .filter(IngresoDocumentoItem.bodega == bodega_n)
-        .filter(IngresoDocumentoItem.origen_compra == origen_n)
-    )
-    if marca_n:
-        q = q.filter(func.upper(func.trim(IngresoDocumentoItem.marca)) == marca_n)
-    else:
-        q = q.filter(
-            or_(
-                IngresoDocumentoItem.marca.is_(None),
-                IngresoDocumentoItem.marca == "",
-                func.upper(func.trim(IngresoDocumentoItem.marca)) == "",
-            )
-        )
+    clave = (code, marca_n, bodega_n, origen_n)
+    precargado = getattr(g, "_ingreso_ref_items", None)
 
-    rows = q.all()
-    if not rows:
-        v = (
+    def _variante():
+        if precargado is not None:
+            return getattr(g, "_ingreso_ref_variantes", {}).get(clave)
+        return (
             db.session.query(ProductoVarianteStock)
             .filter_by(
                 codigo_producto=code,
@@ -2444,6 +2484,32 @@ def _ultimo_ingreso_ref(codigo: str, marca: str | None, bodega: str | None, orig
             )
             .first()
         )
+
+    q = None
+    if precargado is not None:
+        rows = [item for _, _, item in precargado.get(clave, [])]
+    else:
+        q = (
+            db.session.query(IngresoDocumentoItem)
+            .join(IngresoDocumento, IngresoDocumento.id == IngresoDocumentoItem.ingreso_documento_id)
+            .filter(func.upper(IngresoDocumentoItem.codigo_producto) == code)
+            .filter(IngresoDocumentoItem.bodega == bodega_n)
+            .filter(IngresoDocumentoItem.origen_compra == origen_n)
+        )
+        if marca_n:
+            q = q.filter(func.upper(func.trim(IngresoDocumentoItem.marca)) == marca_n)
+        else:
+            q = q.filter(
+                or_(
+                    IngresoDocumentoItem.marca.is_(None),
+                    IngresoDocumentoItem.marca == "",
+                    func.upper(func.trim(IngresoDocumentoItem.marca)) == "",
+                )
+            )
+        rows = q.all()
+
+    if not rows:
+        v = _variante()
         om = getattr(v, "margen_override_pct", None) if v else None
         op = getattr(v, "precio_publico_neto_override", None) if v else None
         if om is None and op is None:
@@ -2460,7 +2526,12 @@ def _ultimo_ingreso_ref(codigo: str, marca: str | None, bodega: str | None, orig
             total_vn += qty * vn
     costo_u = (total_vn / total_qty) if total_qty > 0 and total_vn > 0 else None
 
-    item = q.order_by(IngresoDocumento.created_at.desc(), IngresoDocumentoItem.id.desc()).first()
+    if q is None:
+        item = rows[0]
+    else:
+        item = q.order_by(
+            IngresoDocumento.created_at.desc(), IngresoDocumentoItem.id.desc()
+        ).first()
     pv = item.precio_venta_neto if item is not None else None
     mg = item.margen_pct if item is not None else None
     precio_sug: float | None = None
@@ -2477,16 +2548,7 @@ def _ultimo_ingreso_ref(codigo: str, marca: str | None, bodega: str | None, orig
         "margen_registrado_pct": float(mg) if mg is not None else None,
         "origen_compra": origen_n,
     }
-    v = (
-        db.session.query(ProductoVarianteStock)
-        .filter_by(
-            codigo_producto=code,
-            marca=marca_n,
-            bodega=bodega_n,
-            origen_compra=origen_n,
-        )
-        .first()
-    )
+    v = _variante()
     om = getattr(v, "margen_override_pct", None) if v else None
     op = getattr(v, "precio_publico_neto_override", None) if v else None
     return merge_ingreso_ref_variante_overrides(ref, om, op)
@@ -2738,6 +2800,7 @@ def _search_products(term: str, limit: int = 60) -> list[dict]:
 
     codes = [(row.get("codigo") or "").strip().upper() for row in rows if row.get("codigo")]
     variant_map = _product_variants_map(codes)
+    _prefetch_ingreso_ref(codes)
 
     results = []
     for row in rows:

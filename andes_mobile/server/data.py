@@ -660,9 +660,12 @@ def catalogo_completo() -> list[dict]:
                     "stock": int(row.stock or 0),
                 }
             )
+    thumb_map = mobile_productos_buscar.build_thumb_map(productos)
     out: list[dict] = []
     for producto in productos:
-        item = mobile_productos_buscar.catalogo_item(producto, stock_map, puede_ver_precio=True)
+        item = mobile_productos_buscar.catalogo_item(
+            producto, stock_map, puede_ver_precio=True, thumb_map=thumb_map
+        )
         if item:
             out.append(item)
     return out
@@ -697,9 +700,12 @@ def catalogo_pagina(offset: int = 0, limit: int = 1500) -> tuple[list[dict], int
                     "stock": int(row.stock or 0),
                 }
             )
+    thumb_map = mobile_productos_buscar.build_thumb_map(productos)
     out: list[dict] = []
     for producto in productos:
-        item = mobile_productos_buscar.catalogo_item(producto, stock_map, puede_ver_precio=True)
+        item = mobile_productos_buscar.catalogo_item(
+            producto, stock_map, puede_ver_precio=True, thumb_map=thumb_map
+        )
         if item:
             out.append(item)
     return out, total

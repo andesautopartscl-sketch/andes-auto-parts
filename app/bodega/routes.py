@@ -1,3 +1,4 @@
+import logging
 import base64
 import io
 import json
@@ -42,6 +43,8 @@ from . import variantes_ops
 from .ingreso_pdf import build_ingreso_detalle_pdf
 from .marcas_ref_cl import MARCAS_REF_AUTOMOTRIZ_CL
 from app.inventario.models import LabelPrintHistory, TransferenciaStock
+
+logger = logging.getLogger(__name__)
 
 
 bodega_bp = Blueprint("bodega", __name__, url_prefix="/bodega")
@@ -2315,14 +2318,14 @@ def _registrar_historial_etiquetas(labels: list[dict]) -> tuple[bool, str | None
     ]
 
     try:
-        print(f"[BODEGA_LABEL_HISTORY] Attempting to save {len(items)} record(s)")
+        logger.debug(f"[BODEGA_LABEL_HISTORY] Attempting to save {len(items)} record(s)")
         db.session.add_all(items)
         db.session.commit()
-        print("[BODEGA_LABEL_HISTORY] Commit successful")
+        logger.debug("[BODEGA_LABEL_HISTORY] Commit successful")
         return True, None
     except Exception as exc:
         db.session.rollback()
-        print(f"[BODEGA_LABEL_HISTORY] Commit failed: {exc}")
+        logger.warning(f"[BODEGA_LABEL_HISTORY] Commit failed: {exc}")
         return False, str(exc)
 
 
@@ -2332,7 +2335,7 @@ def etiquetas_historial_register():
     payload = request.get_json(silent=True) or {}
     labels = payload.get("labels") or []
 
-    print(f"[BODEGA_LABEL_HISTORY] Register endpoint payload labels: {len(labels) if isinstance(labels, list) else 'invalid'}")
+    logger.debug(f"[BODEGA_LABEL_HISTORY] Register endpoint payload labels: {len(labels) if isinstance(labels, list) else 'invalid'}")
 
     if not isinstance(labels, list) or not labels:
         return jsonify({"ok": False, "error": "No se recibieron etiquetas para registrar"}), 400

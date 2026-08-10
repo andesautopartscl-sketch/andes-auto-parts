@@ -1,3 +1,4 @@
+import logging
 from flask import Blueprint, render_template, request, redirect, url_for, session, current_app, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime
@@ -21,6 +22,8 @@ from app.seguridad.ip_acceso import (
     login_audit_detalle,
 )
 from app.extensions import limiter
+
+logger = logging.getLogger(__name__)
 
 
 auth_bp = Blueprint("auth", __name__)
@@ -126,9 +129,6 @@ def login():
             username = request.form.get("username")
             password = request.form.get("password")
 
-            db_uri = current_app.config.get("SQLALCHEMY_DATABASE_URI", "(not configured)")
-            print(f"[AUTH LOGIN] SQLALCHEMY_DATABASE_URI: {db_uri}")
-
             # Unified auth source: same table/model used by /seguridad/api/usuarios
             user = UsuarioSistema.query.filter_by(usuario=username).first()
             password_ok = False
@@ -169,12 +169,12 @@ def login():
                 rotate_csrf_token()
 
                 # Update timestamps using the same SQLAlchemy session queried by API routes.
-                print("\n" + "="*70)
-                print(f"[LOGIN] SUCCESSFUL: {username}")
-                print("="*70)
+                logger.debug("\n" + "="*70)
+                logger.debug(f"[LOGIN] SUCCESSFUL: {username}")
+                logger.debug("="*70)
                 
                 try:
-                    print(f"[LOGIN] Updating timestamps for user: {username}")
+                    logger.debug(f"[LOGIN] Updating timestamps for user: {username}")
 
                     now = datetime.utcnow()
                     user.ultimo_acceso = now
@@ -191,16 +191,16 @@ def login():
                     user_after = UsuarioSistema.query.filter_by(usuario=username).first()
                     persisted_ultimo_ingreso = user_after.ultimo_ingreso if user_after else None
                     
-                    print(f"[LOGIN] Database updated successfully")
-                    print(f"   - ultimo_acceso: SET to current timestamp")
-                    print(f"   - ultimo_ingreso: SET to current timestamp")
-                    print(f"   - persisted ultimo_ingreso after re-query: {persisted_ultimo_ingreso}")
-                    print("="*70 + "\n")
+                    logger.debug(f"[LOGIN] Database updated successfully")
+                    logger.debug(f"   - ultimo_acceso: SET to current timestamp")
+                    logger.debug(f"   - ultimo_ingreso: SET to current timestamp")
+                    logger.debug(f"   - persisted ultimo_ingreso after re-query: {persisted_ultimo_ingreso}")
+                    logger.debug("="*70 + "\n")
 
                 except Exception as e:
                     db.session.rollback()
-                    print(f"[LOGIN][ERROR] Error updating timestamps: {e}")
-                    print("="*70 + "\n")
+                    logger.warning(f"[LOGIN][ERROR] Error updating timestamps: {e}")
+                    logger.debug("="*70 + "\n")
 
                 _audit_login(
                     "login",
@@ -280,7 +280,7 @@ def login():
         return render_template("login.html", error=error, next_url=next_url)
     except Exception as exc:
         db.session.rollback()
-        print("[AUTH LOGIN][FATAL]", exc)
+        logger.exception("[AUTH LOGIN][FATAL] %s", exc)
         traceback.print_exc()
         return render_template(
             "login.html",

@@ -1,3 +1,4 @@
+﻿import logging
 from flask import Blueprint, current_app, render_template, request, session, send_file, jsonify, make_response, url_for, redirect
 from datetime import datetime, timedelta
 import re
@@ -86,6 +87,8 @@ from ..utils.product_image_url import (
     product_image_src,
     static_filename_from_ref,
 )
+
+logger = logging.getLogger(__name__)
 
 
 productos_bp = Blueprint("productos", __name__)
@@ -1107,23 +1110,6 @@ def buscar():
             (p.stock_transito or 0)
         )
 
-    def highlight_match(value, term):
-        text_value = "" if value is None else str(value)
-        search_term = (term or "").strip()
-        if not search_term:
-            return escape(text_value)
-
-        # Mismos separadores que la búsqueda (comas, ;)
-        tokens = [re.escape(t) for t in re.split(r"[\s,;]+", search_term.lower()) if t]
-        if not tokens:
-            return escape(text_value)
-
-        pattern = re.compile("(" + "|".join(tokens) + ")", re.IGNORECASE)
-        escaped_value = escape(text_value)
-        # Un solo \1: doble backslash producía el texto literal "\1" en pantalla.
-        highlighted = pattern.sub(r"<mark>\1</mark>", str(escaped_value))
-        return Markup(highlighted)
-
     try:
         sess = SessionDB()
         online_users = _online_users()
@@ -1225,27 +1211,28 @@ def buscar():
 
                 _fts_used = False
                 try:
-                    from app.utils.fts_productos import fts_match_query
+                    from app.utils.fts_productos import (
+                        fts_count,
+                        fts_match_query,
+                        fts_search_codes,
+                    )
 
                     fts_terms = fts_match_query(palabras)
                     if fts_terms.strip():
-                        fts_rows = sess.execute(
-                            text(
-                                "SELECT codigo FROM productos_fts "
-                                "WHERE blob MATCH :q ORDER BY rank"
-                            ),
-                            {"q": fts_terms},
-                        ).fetchall()
-                        codigos_fts = [r[0] for r in fts_rows]
-                        if codigos_fts:
-                            total_count = len(codigos_fts)
+                        # Contar y paginar dentro de SQLite: traer todos los códigos
+                        # coincidentes a Python costaba O(n) por pulsación.
+                        total_count = fts_count(sess, fts_terms)
+                        if total_count:
                             total_pages = max(
                                 1, (total_count + per_page - 1) // per_page
                             )
                             page = max(1, min(page, total_pages))
-                            page_codes = codigos_fts[
-                                (page - 1) * per_page : page * per_page
-                            ]
+                            page_codes = fts_search_codes(
+                                sess,
+                                fts_terms,
+                                limit=per_page,
+                                offset=(page - 1) * per_page,
+                            )
                             prods_dict = {
                                 p.codigo: p
                                 for p in _producto_q(sess)
@@ -1258,7 +1245,9 @@ def buscar():
                             ]
                             _fts_used = True
                 except Exception:
-                    pass
+                    current_app.logger.exception(
+                        "FTS: búsqueda degradada a LIKE para %r", termino
+                    )
 
                 if not _fts_used:
                     if len(palabras) == 1:
@@ -1368,7 +1357,7 @@ def buscar():
 
         for p in productos:
             if not (p.codigo or "").strip():
-                print("Producto sin código detectado")
+                logger.debug("Producto sin código detectado")
 
         sin_precio_cat = [
             (p.codigo or "").strip().upper()
@@ -1430,12 +1419,11 @@ def buscar():
             session=session,
             stock_total=stock_total,
             variant_map=variant_map,
-            highlight_match=highlight_match,
             online_users=online_users,
             active_page="productos_buscar",
         )
     except Exception as exc:
-        print("ERROR EN BUSCAR:", exc)
+        logger.exception("Error en /buscar: %s", exc)
         try:
             current_app.logger.exception(
                 "Búsqueda productos falló en %.3fs | término=%r",
@@ -1455,7 +1443,6 @@ def buscar():
             session=session,
             stock_total=stock_total,
             variant_map=variant_map,
-            highlight_match=highlight_match,
             online_users=online_users,
             active_page="productos_buscar",
         )
@@ -2087,16 +2074,17 @@ def guardar_edicion():
         sess.commit()
         try:
             from app.models import engine
-            from app.utils.fts_productos import fts_blob_de_producto, fts_delete, fts_upsert
+            from app.utils.fts_productos import fts_delete, fts_upsert_producto
 
             with engine.begin() as conn:
-                codigo_fts = (producto.codigo or "").strip()
                 if activo_val:
-                    fts_upsert(conn, codigo_fts, fts_blob_de_producto(producto))
+                    fts_upsert_producto(conn, producto)
                 else:
-                    fts_delete(conn, codigo_fts)
+                    fts_delete(conn, (producto.codigo or "").strip())
         except Exception:
-            pass
+            current_app.logger.exception(
+                "FTS: no se pudo reindexar %s tras guardar", producto.codigo
+            )
         try:
             sess.refresh(producto)
             _auto_asignar_categoria_si_vacio(sess, producto)
@@ -2146,7 +2134,7 @@ def desactivar_producto():
             with engine.begin() as conn:
                 fts_delete(conn, codigo)
         except Exception:
-            pass
+            current_app.logger.exception("FTS: no se pudo desindexar %s", codigo)
         return jsonify({"success": True, "message": "Producto desactivado correctamente"})
     except Exception as exc:
         sess.rollback()
@@ -2218,12 +2206,12 @@ def reactivar_producto():
         sess.commit()
         try:
             from app.models import engine
-            from app.utils.fts_productos import fts_blob_de_producto, fts_upsert
+            from app.utils.fts_productos import fts_upsert_producto
 
             with engine.begin() as conn:
-                fts_upsert(conn, codigo, fts_blob_de_producto(producto))
+                fts_upsert_producto(conn, producto)
         except Exception:
-            pass
+            current_app.logger.exception("FTS: no se pudo reindexar %s al reactivar", codigo)
         return jsonify({"success": True, "message": "Producto reactivado correctamente"})
     except Exception as exc:
         sess.rollback()
@@ -2262,7 +2250,7 @@ def reactivar_todos():
             with engine.begin() as conn:
                 fts_rebuild(conn)
         except Exception:
-            pass
+            current_app.logger.exception("FTS: falló la reconstrucción tras reactivar todos")
         return jsonify({"success": True, "reactivados": count,
                         "message": f"{count} productos reactivados correctamente"})
     except Exception as exc:
@@ -3224,12 +3212,11 @@ def importar_excel_productos():
         summary = import_products_from_excel(tmp_path, batch_size=2000)
         try:
             from app.models import engine
-            from app.utils.fts_productos import fts_create_table, fts_rebuild
+            from app.utils.fts_productos import fts_rebuild
             with engine.begin() as conn:
-                fts_create_table(conn)
                 fts_rebuild(conn)
         except Exception:
-            pass
+            current_app.logger.exception("FTS: falló la reconstrucción tras importar Excel")
         errors_count = summary.get("errors_count", len(summary.get("errors", [])))
         msg = "Importacion completada"
         notes = summary.get("import_notes") or []
@@ -3467,12 +3454,12 @@ def crear_producto():
         sess.commit()
         try:
             from app.models import engine
-            from app.utils.fts_productos import fts_blob_de_producto, fts_upsert
+            from app.utils.fts_productos import fts_upsert_producto
 
             with engine.begin() as conn:
-                fts_upsert(conn, codigo, fts_blob_de_producto(p))
+                fts_upsert_producto(conn, p)
         except Exception:
-            pass
+            current_app.logger.exception("FTS: no se pudo indexar el producto nuevo %s", codigo)
         return jsonify({"success": True, "message": f"Producto {codigo} creado correctamente"})
     except Exception as exc:
         sess.rollback()
@@ -4671,28 +4658,26 @@ def importar_imagenes_cloudinary_subir_uno():
                 fname,
                 tb,
             )
+            # El traceback queda en el log del servidor, no en la respuesta.
             return jsonify(
                 {
                     "ok": False,
                     "success": False,
                     "error": str(exc),
                     "mensaje": str(exc),
-                    "traceback": tb,
                     "estado": "error",
                 }
             ), 500
         finally:
             sess.close()
     except Exception as e:
-        tb = traceback.format_exc()
-        log.error("subir-uno: error fatal\n%s", tb)
+        log.error("subir-uno: error fatal\n%s", traceback.format_exc())
         return jsonify(
             {
                 "ok": False,
                 "success": False,
                 "mensaje": str(e),
                 "error": str(e),
-                "traceback": tb,
                 "estado": "error",
             }
         ), 500

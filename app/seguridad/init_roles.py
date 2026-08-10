@@ -1,5 +1,8 @@
+import logging
 from app.extensions import db
 from app.seguridad.models import Rol
+
+logger = logging.getLogger(__name__)
 
 def crear_roles():
 
@@ -30,4 +33,4 @@ def crear_roles():
 
     db.session.commit()
 
-    print("Roles iniciales creados")
+    logger.debug("Roles iniciales creados")

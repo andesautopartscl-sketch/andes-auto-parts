@@ -275,6 +275,8 @@ def list_cloudinary_product_urls_by_storage_key(
                 urls.append(url)
     except Exception:
         logger.exception("list_cloudinary_product_urls_by_storage_key failed for %s", key)
+        # Cachear también el fallo: si no, cada reintento repite la llamada de red.
+        _CLOUDINARY_PRODUCT_LIST_CACHE[key] = (now, [])
         return []
 
     _CLOUDINARY_PRODUCT_LIST_CACHE[key] = (now, urls)
