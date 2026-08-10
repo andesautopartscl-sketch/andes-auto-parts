@@ -33,6 +33,11 @@ data/gdrive_token.json
 data/google_service_account.json
 data/.flask_secret_key
 data/gdrive_backup_status.json
+data/andes_para_render.db
+data/andes_para_render.zip
+data/sync_to_render_state.json
+data/sync_to_render.lock
+_prep_db_upload.py
 
 # Local logs and debug scratch
 logs/
