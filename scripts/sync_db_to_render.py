@@ -31,13 +31,32 @@ os.environ["ANDES_SKIP_AUTO_CREATE_APP"] = "1"
 
 from app.utils.load_env import load_project_dotenv  # noqa: E402
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger("sync_db_to_render")
-
 STATE_PATH = ROOT / "data" / "sync_to_render_state.json"
 LOCK_PATH = ROOT / "data" / "sync_to_render.lock"
 DB_PATH = ROOT / "data" / "andes.db"
+LOG_PATH = ROOT / "logs" / "sync_to_render.log"
 DEFAULT_URL = "https://andes-auto-parts.onrender.com/admin/backups/sync"
+
+
+def _setup_logging() -> logging.Logger:
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(logging.INFO)
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    fh = logging.FileHandler(LOG_PATH, encoding="utf-8")
+    fh.setFormatter(fmt)
+    root_logger.addHandler(fh)
+    # Si hay consola (python.exe), también mostrar; pythonw no tiene stdout útil.
+    if sys.stdout and getattr(sys.stdout, "isatty", lambda: False)():
+        sh = logging.StreamHandler(sys.stdout)
+        sh.setFormatter(fmt)
+        root_logger.addHandler(sh)
+    return logging.getLogger("sync_db_to_render")
+
+
+logger = _setup_logging()
+
 
 
 def _fingerprint() -> dict:
