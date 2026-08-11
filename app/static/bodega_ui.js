@@ -205,8 +205,14 @@
             });
             document.addEventListener("keydown", onKey, true);
             setTimeout(function () {
-                if (showAuth && userInp) userInp.focus();
-                else {
+                if (showAuth && userInp) {
+                    var defaultUser = (options.defaultUser || "").trim();
+                    if (defaultUser && !(userInp.value || "").trim()) {
+                        userInp.value = defaultUser;
+                    }
+                    if ((userInp.value || "").trim() && passInp) passInp.focus();
+                    else userInp.focus();
+                } else {
                     var okBtn = card.querySelector(".bodega-confirm-btn.ok");
                     if (okBtn) okBtn.focus();
                 }
@@ -301,6 +307,71 @@
             }
 
             runConfirm(null);
+        });
+    }
+
+    function bindAjusteFormSpaSubmit(form) {
+        if (!form || form.dataset.bodegaSpaSubmitBound === "1") {
+            return;
+        }
+        form.dataset.bodegaSpaSubmitBound = "1";
+        form.addEventListener("submit", function (ev) {
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            var sub = ev.submitter;
+            var method = (
+                (sub && sub.getAttribute("formmethod")) ||
+                form.getAttribute("method") ||
+                "get"
+            ).toLowerCase();
+            if (method === "get") {
+                proceedBodegaFormSubmit(form, sub);
+                return;
+            }
+
+            var motivoSel = form.querySelector("#observacion_motivo");
+            var motivo = motivoSel ? (motivoSel.value || "").trim() : "";
+            var motivoInc = (form.getAttribute("data-motivo-incorporacion") || "Incorporación a producto").trim();
+            if (motivo === motivoInc) {
+                var destInp = form.querySelector("#codigo_destino");
+                var dest = destInp ? (destInp.value || "").trim() : "";
+                if (!dest) {
+                    if (destInp) {
+                        destInp.setCustomValidity("Debés indicar el código destino para Incorporación a producto.");
+                        destInp.reportValidity();
+                        destInp.focus();
+                    }
+                    return;
+                }
+                if (destInp) destInp.setCustomValidity("");
+            }
+
+            var motivoVenta = (form.getAttribute("data-motivo-venta") || "Venta").trim();
+            var motivoDev = (form.getAttribute("data-motivo-devolucion") || "Devolución venta").trim();
+            var puedeVenta = form.getAttribute("data-puede-venta") === "1";
+            var esVentaOp = puedeVenta && (motivo === motivoVenta || motivo === motivoDev);
+
+            if (!esVentaOp) {
+                proceedBodegaFormSubmit(form, sub);
+                return;
+            }
+
+            bodegaConfirm(
+                "Confirmá usuario y clave para registrar Venta o Devolución venta.",
+                {
+                    title: "Autorizar venta operativa",
+                    okLabel: "Autorizar y aplicar",
+                    cancelLabel: "Cancelar",
+                    eyebrow: "Bodega · Ajuste",
+                    authOnly: true,
+                    defaultUser: form.getAttribute("data-session-user") || ""
+                }
+            ).then(function (authResult) {
+                if (!authResult || typeof authResult !== "object") return;
+                setOrCreateHiddenInput(form, "auth_user", authResult.authUser || "");
+                setOrCreateHiddenInput(form, "auth_password", authResult.authPassword || "");
+                proceedBodegaFormSubmit(form, sub);
+            });
         });
     }
 
@@ -5099,6 +5170,8 @@
             if (tdAct) {
                 tdAct.textContent = "—";
             }
+            clone.removeAttribute("data-precio-con-iva");
+            clone.removeAttribute("data-precio-neto");
             body.appendChild(clone);
             bindRemove(clone);
         });
@@ -5288,7 +5361,7 @@
         initAjusteProductSearch(form);
         initAjusteAutoConsult(form);
         initAjusteMultiRows(form);
-        bindBodegaFormSpaSubmit(form);
+        bindAjusteFormSpaSubmit(form);
     }
 
     function initSalidaAutoConsult(form) {

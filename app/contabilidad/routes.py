@@ -16,7 +16,7 @@ from app.seguridad.models import Usuario
 from app.utils.decorators import login_required, permission_required
 from app.utils.permissions import has_permission
 from app.utils.rut_utils import clean_rut, format_rut
-from app.ventas.models import DocumentoVenta
+from app.ventas.models import DocumentoVenta, DocumentoVentaItem
 from .models import CuentaContable, EmisorContable, MovimientoContable, TIPOS_CUENTA
 from .emisores_service import (
     backfill_emisores_desde_movimientos,
@@ -44,6 +44,112 @@ finanzas_bp = Blueprint(
 
 def _current_user() -> str:
     return session.get("user") or "sistema"
+
+
+def _costo_unitario_desde_ingresos(
+    codigo: str,
+    marca: str | None = None,
+    bodega: str | None = None,
+    *,
+    cache: dict | None = None,
+) -> float | None:
+    """Costo neto unitario desde ingresos (promedio ponderado). Prioriza misma marca/bodega."""
+    code = (codigo or "").strip().upper()
+    if not code:
+        return None
+    marca_n = (marca or "").strip().upper()
+    bodega_n = (bodega or "").strip()
+    cache_key = (code, marca_n, bodega_n)
+    if cache is not None and cache_key in cache:
+        return cache[cache_key]
+
+    q = (
+        IngresoDocumentoItem.query.filter(
+            func.upper(func.trim(IngresoDocumentoItem.codigo_producto)) == code,
+            IngresoDocumentoItem.valor_neto.isnot(None),
+            IngresoDocumentoItem.valor_neto > 0,
+            IngresoDocumentoItem.cantidad > 0,
+        )
+        .order_by(IngresoDocumentoItem.id.desc())
+        .limit(80)
+    )
+    items = q.all()
+    if marca_n:
+        con_marca = [
+            it for it in items if (it.marca or "").strip().upper() == marca_n
+        ]
+        if con_marca:
+            items = con_marca
+    if bodega_n:
+        con_bodega = [
+            it for it in items if (it.bodega or "").strip() == bodega_n
+        ]
+        if con_bodega:
+            items = con_bodega
+
+    total_qty = 0
+    total_val = 0.0
+    for it in items:
+        qty = int(it.cantidad or 0)
+        vn = float(it.valor_neto or 0)
+        if qty > 0 and vn > 0:
+            total_qty += qty
+            total_val += vn * qty
+    result = round(total_val / total_qty, 2) if total_qty > 0 and total_val > 0 else None
+    if cache is not None:
+        cache[cache_key] = result
+    return result
+
+
+def _enrich_venta_operativa_row(m: MovimientoStock, *, costo_cache: dict | None = None) -> dict:
+    """Arma fila de gestión: venta, costo y ganancia (neto)."""
+    qty = abs(int(m.cantidad or 0))
+    bruto = float(m.total_neto) if m.total_neto is not None else (
+        qty * float(m.precio_venta_neto or 0)
+    )
+    is_dev = (m.motivo_codigo or "") == "devolucion_venta" or int(m.cantidad or 0) > 0
+    sign = -1.0 if is_dev else 1.0
+    venta_neto = round(sign * bruto, 2)
+    costo_u = _costo_unitario_desde_ingresos(
+        m.codigo_producto or "",
+        m.marca,
+        m.bodega,
+        cache=costo_cache,
+    )
+    costo_total = round(sign * (float(costo_u) * qty), 2) if costo_u is not None and qty else None
+    ganancia = round(venta_neto - costo_total, 2) if costo_total is not None else None
+    margen_pct = None
+    if ganancia is not None and abs(venta_neto) > 0.009:
+        margen_pct = round(100.0 * ganancia / abs(venta_neto), 1)
+    iva_rate = 0.19
+    iva = round(venta_neto * iva_rate, 2)
+    total = round(venta_neto + iva, 2)
+    return {
+        "mov": m,
+        "fecha": m.fecha,
+        "is_dev": is_dev,
+        "tipo": "DEVOLUCION_AJUSTE" if is_dev else "VENTA_AJUSTE",
+        "documento": (m.ref_sii or f"AJ-{m.id}"),
+        "codigo": m.codigo_producto or "",
+        "marca": m.marca or "",
+        "bodega": m.bodega or "",
+        "cantidad": qty,
+        "cantidad_signed": int(sign * qty),
+        "precio_venta_neto": float(m.precio_venta_neto) if m.precio_venta_neto is not None else None,
+        "venta_neto": venta_neto,
+        "costo_unitario": costo_u,
+        "costo_neto": costo_total,
+        "ganancia_neta": ganancia,
+        "margen_pct": margen_pct,
+        "iva": iva,
+        "total": total,
+        "usuario": m.usuario or "",
+        "observacion": m.observacion or "",
+        "ref_sii": m.ref_sii or "",
+        "detalle": f"{m.codigo_producto}"
+        + (f" · {m.marca}" if m.marca else "")
+        + (f" · {qty} u." if qty else ""),
+    }
 
 
 def _validar_autorizacion_edicion_movimiento(
@@ -741,35 +847,22 @@ def libro_ventas():
         .limit(400)
         .all()
     )
+    costo_cache: dict = {}
     operativas = []
     op_neto = 0.0
+    op_costo = 0.0
+    op_ganancia = 0.0
     for m in ops_raw:
-        qty = abs(int(m.cantidad or 0))
-        bruto = float(m.total_neto) if m.total_neto is not None else (
-            qty * float(m.precio_venta_neto or 0)
-        )
-        is_dev = (m.motivo_codigo or "") == "devolucion_venta" or int(m.cantidad or 0) > 0
-        sign = -1.0 if is_dev else 1.0
-        neto = round(sign * bruto, 2)
-        iva = round(neto * iva_rate, 2)
-        total = round(neto + iva, 2)
-        op_neto += neto
-        operativas.append(
-            {
-                "fecha": m.fecha,
-                "tipo": "DEVOLUCION_AJUSTE" if is_dev else "VENTA_AJUSTE",
-                "documento": (m.ref_sii or f"AJ-{m.id}"),
-                "detalle": f"{m.codigo_producto}"
-                + (f" · {m.marca}" if m.marca else "")
-                + (f" · {qty} u." if qty else ""),
-                "neto": neto,
-                "iva": iva,
-                "total": total,
-                "usuario": m.usuario or "",
-            }
-        )
+        row = _enrich_venta_operativa_row(m, costo_cache=costo_cache)
+        op_neto += float(row["venta_neto"] or 0)
+        if row["costo_neto"] is not None:
+            op_costo += float(row["costo_neto"])
+        if row["ganancia_neta"] is not None:
+            op_ganancia += float(row["ganancia_neta"])
+        operativas.append(row)
     op_iva = round(op_neto * iva_rate, 2)
     op_total = round(op_neto + op_iva, 2)
+    op_margen_pct = round(100.0 * op_ganancia / abs(op_neto), 1) if abs(op_neto) > 0.009 else None
 
     return render_template(
         "contabilidad/libro_ventas.html",
@@ -778,6 +871,9 @@ def libro_ventas():
         op_neto=op_neto,
         op_iva=op_iva,
         op_total=op_total,
+        op_costo=op_costo,
+        op_ganancia=op_ganancia,
+        op_margen_pct=op_margen_pct,
         active_page="contabilidad_libro_ventas",
     )
 
@@ -861,31 +957,41 @@ def ventas_operativas():
     if usuario:
         q = q.filter(MovimientoStock.usuario.ilike(f"%{usuario}%"))
 
-    rows = q.order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc()).limit(2000).all()
+    rows_raw = q.order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc()).limit(2000).all()
+
+    costo_cache: dict = {}
+    rows = [_enrich_venta_operativa_row(r, costo_cache=costo_cache) for r in rows_raw]
 
     unidades_venta = 0
     unidades_dev = 0
     total_ventas = 0.0
     total_devs = 0.0
-    for r in rows:
-        qty = abs(int(r.cantidad or 0))
-        bruto = float(r.total_neto) if r.total_neto is not None else qty * float(r.precio_venta_neto or 0)
-        is_dev = (r.motivo_codigo or "") == "devolucion_venta" or int(r.cantidad or 0) > 0
-        if is_dev:
+    total_costo = 0.0
+    total_ganancia = 0.0
+    n_con_costo = 0
+    for row in rows:
+        qty = int(row["cantidad"] or 0)
+        if row["is_dev"]:
             unidades_dev += qty
-            total_devs += bruto
+            total_devs += abs(float(row["venta_neto"] or 0))
         else:
             unidades_venta += qty
-            total_ventas += bruto
+            total_ventas += abs(float(row["venta_neto"] or 0))
+        if row["costo_neto"] is not None:
+            total_costo += float(row["costo_neto"])
+            n_con_costo += 1
+        if row["ganancia_neta"] is not None:
+            total_ganancia += float(row["ganancia_neta"])
     unidades = unidades_venta - unidades_dev
     total_neto = total_ventas - total_devs
     n_mov = len(rows)
-    ticket_prom = (total_ventas / max(1, sum(1 for r in rows if int(r.cantidad or 0) < 0))) if rows else 0.0
+    ticket_prom = (total_ventas / max(1, sum(1 for r in rows if not r["is_dev"]))) if rows else 0.0
     iva_rate = 0.19
     total_iva = round(total_neto * iva_rate, 2)
     total_con_iva = round(total_neto + total_iva, 2)
+    margen_pct = round(100.0 * total_ganancia / abs(total_neto), 1) if abs(total_neto) > 0.009 else None
 
-    refs = [r.ref_sii for r in rows if (r.ref_sii or "").strip()]
+    refs = [r["ref_sii"] for r in rows if (r["ref_sii"] or "").strip()]
     matches_sii = _match_docs_sii_por_refs(refs)
 
     timeline = []
@@ -922,27 +1028,34 @@ def ventas_operativas():
                 "bodega",
                 "cantidad",
                 "precio_neto_u",
-                "total_neto",
+                "venta_neto",
+                "costo_unitario",
+                "costo_neto",
+                "ganancia_neta",
+                "margen_pct",
                 "ref_sii",
                 "usuario",
                 "observacion",
             ]
         )
         for r in rows:
-            is_dev = (r.motivo_codigo or "") == "devolucion_venta" or int(r.cantidad or 0) > 0
             writer.writerow(
                 [
-                    r.fecha.isoformat(sep=" ", timespec="minutes") if r.fecha else "",
-                    "devolucion" if is_dev else "venta",
-                    r.codigo_producto or "",
-                    r.marca or "",
-                    r.bodega or "",
-                    abs(int(r.cantidad or 0)) * (-1 if is_dev else 1),
-                    r.precio_venta_neto if r.precio_venta_neto is not None else "",
-                    (float(r.total_neto or 0) * (-1 if is_dev else 1)) if r.total_neto is not None else "",
-                    r.ref_sii or "",
-                    r.usuario or "",
-                    r.observacion or "",
+                    r["fecha"].isoformat(sep=" ", timespec="minutes") if r["fecha"] else "",
+                    "devolucion" if r["is_dev"] else "venta",
+                    r["codigo"],
+                    r["marca"],
+                    r["bodega"],
+                    r["cantidad_signed"],
+                    r["precio_venta_neto"] if r["precio_venta_neto"] is not None else "",
+                    r["venta_neto"],
+                    r["costo_unitario"] if r["costo_unitario"] is not None else "",
+                    r["costo_neto"] if r["costo_neto"] is not None else "",
+                    r["ganancia_neta"] if r["ganancia_neta"] is not None else "",
+                    r["margen_pct"] if r["margen_pct"] is not None else "",
+                    r["ref_sii"],
+                    r["usuario"],
+                    r["observacion"],
                 ]
             )
         resp = Response(buf.getvalue(), mimetype="text/csv; charset=utf-8")
@@ -962,6 +1075,10 @@ def ventas_operativas():
         total_devs=total_devs,
         total_iva=total_iva,
         total_con_iva=total_con_iva,
+        total_costo=total_costo,
+        total_ganancia=total_ganancia,
+        margen_pct=margen_pct,
+        n_con_costo=n_con_costo,
         n_mov=n_mov,
         ticket_prom=ticket_prom,
         filtros={
@@ -973,6 +1090,206 @@ def ventas_operativas():
             "usuario": usuario,
         },
         active_page="contabilidad_ventas_operativas",
+    )
+
+
+@contabilidad_bp.route("/cierre-mensual", methods=["GET"])
+@login_required
+@permission_required("ver_finanzas")
+def cierre_mensual():
+    """Resumen de gestión: compras vs ventas ERP vs ventas operativas (solo lectura)."""
+    today = date.today()
+    desde = _parse_date_arg(request.args.get("desde", ""), today.replace(day=1))
+    hasta = _parse_date_arg(request.args.get("hasta", ""), today)
+    if not desde:
+        desde = today.replace(day=1)
+    if not hasta:
+        hasta = today
+
+    # ── Compras (ingresos no anulados) ──
+    compras_q = IngresoDocumento.query.filter(
+        or_(IngresoDocumento.anulado.is_(False), IngresoDocumento.anulado.is_(None)),
+        IngresoDocumento.fecha_documento >= desde,
+        IngresoDocumento.fecha_documento <= hasta,
+    )
+    compras_docs = compras_q.order_by(
+        IngresoDocumento.fecha_documento.desc(), IngresoDocumento.id.desc()
+    ).limit(2000).all()
+    compra_ids = [d.id for d in compras_docs]
+    neto_por_compra: dict[int, float] = defaultdict(float)
+    if compra_ids:
+        # valor_neto en ingreso es unitario → costo doc = sum(vn × cantidad)
+        for rid, vn, qty in (
+            db.session.query(
+                IngresoDocumentoItem.ingreso_documento_id,
+                IngresoDocumentoItem.valor_neto,
+                IngresoDocumentoItem.cantidad,
+            )
+            .filter(IngresoDocumentoItem.ingreso_documento_id.in_(compra_ids))
+            .all()
+        ):
+            try:
+                neto_por_compra[int(rid)] += float(vn or 0) * max(0, int(qty or 0))
+            except (TypeError, ValueError):
+                continue
+
+    compras_neto = 0.0
+    compras_iva = 0.0
+    compras_total = 0.0
+    compras_lista = []
+    for doc in compras_docs:
+        neto_v, iva_v, total_v = _totales_libro_compra_ingreso(
+            doc, float(neto_por_compra.get(doc.id, 0.0))
+        )
+        compras_neto += neto_v
+        compras_iva += iva_v
+        compras_total += total_v
+        if len(compras_lista) < 12:
+            compras_lista.append(
+                {
+                    "fecha": doc.fecha_documento,
+                    "numero": doc.numero_documento or f"ING-{doc.id}",
+                    "proveedor": doc.proveedor_nombre or "—",
+                    "neto": neto_v,
+                    "iva": iva_v,
+                    "total": total_v,
+                }
+            )
+
+    # ── Ventas ERP (factura / boleta) ──
+    erp_docs = (
+        DocumentoVenta.query.filter(
+            DocumentoVenta.tipo.in_(("factura", "boleta")),
+            DocumentoVenta.status != "anulada",
+            func.date(DocumentoVenta.fecha_documento) >= desde,
+            func.date(DocumentoVenta.fecha_documento) <= hasta,
+        )
+        .order_by(DocumentoVenta.fecha_documento.desc(), DocumentoVenta.id.desc())
+        .limit(2000)
+        .all()
+    )
+    erp_neto = sum(float(d.subtotal or 0) for d in erp_docs)
+    erp_iva = sum(float(d.impuesto or 0) for d in erp_docs)
+    erp_total = sum(float(d.total or 0) for d in erp_docs)
+    erp_lista = [
+        {
+            "fecha": d.fecha_documento,
+            "tipo": d.tipo or "",
+            "numero": d.numero or f"DOC-{d.id}",
+            "cliente": d.cliente_nombre or "—",
+            "neto": float(d.subtotal or 0),
+            "iva": float(d.impuesto or 0),
+            "total": float(d.total or 0),
+        }
+        for d in erp_docs[:12]
+    ]
+
+    # Costo estimado ERP (por líneas del período)
+    erp_doc_ids = [d.id for d in erp_docs]
+    costo_cache: dict = {}
+    erp_costo = 0.0
+    erp_costo_cubierto = 0.0
+    if erp_doc_ids:
+        lineas = (
+            db.session.query(
+                DocumentoVentaItem.codigo_producto,
+                DocumentoVentaItem.cantidad,
+                DocumentoVentaItem.subtotal,
+            )
+            .filter(DocumentoVentaItem.documento_id.in_(erp_doc_ids))
+            .all()
+        )
+        for codigo, qty_raw, _sub in lineas:
+            qty = abs(int(qty_raw or 0))
+            if qty <= 0:
+                continue
+            cu = _costo_unitario_desde_ingresos(codigo or "", cache=costo_cache)
+            if cu is not None:
+                erp_costo += float(cu) * qty
+                erp_costo_cubierto += 1
+    erp_costo = round(erp_costo, 2)
+    erp_ganancia = round(erp_neto - erp_costo, 2) if erp_costo_cubierto > 0 else None
+    erp_margen_pct = (
+        round(100.0 * erp_ganancia / abs(erp_neto), 1)
+        if erp_ganancia is not None and abs(erp_neto) > 0.009
+        else None
+    )
+
+    # ── Ventas operativas (ajustes) ──
+    ops_raw = (
+        MovimientoStock.query.filter(
+            MovimientoStock.es_venta_operativa.is_(True),
+            MovimientoStock.tipo == "ajuste",
+            func.date(MovimientoStock.fecha) >= desde,
+            func.date(MovimientoStock.fecha) <= hasta,
+        )
+        .order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc())
+        .limit(2000)
+        .all()
+    )
+    ops_rows = [_enrich_venta_operativa_row(m, costo_cache=costo_cache) for m in ops_raw]
+    ops_venta = sum(float(r["venta_neto"] or 0) for r in ops_rows)
+    ops_costo = sum(float(r["costo_neto"] or 0) for r in ops_rows if r["costo_neto"] is not None)
+    ops_ganancia = sum(
+        float(r["ganancia_neta"] or 0) for r in ops_rows if r["ganancia_neta"] is not None
+    )
+    ops_margen_pct = (
+        round(100.0 * ops_ganancia / abs(ops_venta), 1) if abs(ops_venta) > 0.009 else None
+    )
+    ops_lista = ops_rows[:12]
+
+    # ── Resumen combinado ──
+    venta_neta_total = round(erp_neto + ops_venta, 2)
+    costo_vendido = round(erp_costo + ops_costo, 2)
+    ganancia_total = None
+    if erp_ganancia is not None or any(r["ganancia_neta"] is not None for r in ops_rows):
+        g_erp = erp_ganancia if erp_ganancia is not None else 0.0
+        ganancia_total = round(g_erp + ops_ganancia, 2)
+    margen_total_pct = (
+        round(100.0 * ganancia_total / abs(venta_neta_total), 1)
+        if ganancia_total is not None and abs(venta_neta_total) > 0.009
+        else None
+    )
+
+    return render_template(
+        "contabilidad/cierre_mensual.html",
+        filtros={
+            "desde": desde.isoformat(),
+            "hasta": hasta.isoformat(),
+        },
+        compras={
+            "n": len(compras_docs),
+            "neto": round(compras_neto, 2),
+            "iva": round(compras_iva, 2),
+            "total": round(compras_total, 2),
+            "lista": compras_lista,
+        },
+        erp={
+            "n": len(erp_docs),
+            "neto": round(erp_neto, 2),
+            "iva": round(erp_iva, 2),
+            "total": round(erp_total, 2),
+            "costo": erp_costo,
+            "ganancia": erp_ganancia,
+            "margen_pct": erp_margen_pct,
+            "lista": erp_lista,
+        },
+        ops={
+            "n": len(ops_rows),
+            "venta": round(ops_venta, 2),
+            "costo": round(ops_costo, 2),
+            "ganancia": round(ops_ganancia, 2),
+            "margen_pct": ops_margen_pct,
+            "lista": ops_lista,
+        },
+        resumen={
+            "venta_neta": venta_neta_total,
+            "costo_vendido": costo_vendido,
+            "ganancia": ganancia_total,
+            "margen_pct": margen_total_pct,
+            "compras_neto": round(compras_neto, 2),
+        },
+        active_page="contabilidad_cierre_mensual",
     )
 
 

@@ -3,44 +3,119 @@
 
 {% block content %}
 <style>
-.vo-page { font-size: 12.5px; color: #334155; }
+.vo-page { font-size: 12px; color: #334155; }
+.vo-page .topbar { margin-bottom: 6px; align-items: center; }
+.vo-page .page-title { font-size: 1.12rem; margin: 0 0 1px; line-height: 1.15; }
+.vo-page .page-subtitle { margin: 0; font-size: 11px; color: #94a3b8; }
+.vo-page .topbar-actions .link-btn { font-size: 10.5px; padding: 3px 8px; border-radius: 6px; }
 .vo-note {
-  margin: 0 0 12px; padding: 8px 10px; border-radius: 8px;
-  background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: 12px; line-height: 1.4;
+  margin: 0 0 8px; padding: 5px 9px; border-radius: 7px;
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: 11px; line-height: 1.35;
 }
 .vo-filters {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px;
-  margin: 0 0 12px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px 8px;
+  margin: 0 0 8px; padding: 7px 9px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  align-items: end;
 }
-.vo-filters label { display:block; font-size: 10.5px; font-weight: 600; color: #64748b; margin-bottom: 3px; }
-.vo-filters input { width: 100%; min-height: 30px; padding: 4px 8px; border-radius: 8px; border: 1px solid #cbd5e1; box-sizing: border-box; }
-.vo-filters .vo-actions { display:flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.vo-filters label { display:block; font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px; }
+.vo-filters input {
+  width: 100%; min-height: 28px; padding: 3px 7px; border-radius: 7px;
+  border: 1px solid #cbd5e1; box-sizing: border-box; font-size: 11.5px;
+}
+.vo-filters .vo-actions { display:flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.vo-filters .btn, .vo-filters .link-btn { min-height: 28px; font-size: 11.5px; padding: 3px 9px; }
 .vo-kpi {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
 }
 .vo-kpi-card {
-  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  padding: 6px 8px;
 }
-.vo-kpi-card .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; }
-.vo-kpi-card .val { font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 2px; }
-.vo-table-wrap { overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; }
-.vo-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.vo-table th, .vo-table td { padding: 7px 8px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: top; }
-.vo-table th { background: #f8fafc; font-size: 10px; text-transform: uppercase; color: #64748b; letter-spacing: .03em; white-space: nowrap; }
-.vo-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vo-kpi-card .lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #94a3b8;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.vo-kpi-card .val {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 2px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.vo-kpi-card .val .pct {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-left: 2px;
+}
+.vo-table-wrap {
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+  max-height: calc(100vh - 270px);
+  width: 100%;
+}
+.vo-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+  table-layout: fixed;
+}
+.vo-table th, .vo-table td {
+  padding: 8px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vo-table th {
+  background: #f8fafc; font-size: 9.5px; text-transform: uppercase; color: #64748b;
+  letter-spacing: .03em; position: sticky; top: 0; z-index: 1;
+}
+.vo-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.vo-table .col-fecha { width: 9%; }
+.vo-table .col-tipo { width: 6%; }
+.vo-table .col-codigo { width: 9%; }
+.vo-table .col-marca { width: 10%; }
+.vo-table .col-bodega { width: 8%; }
+.vo-table .col-cant { width: 5%; }
+.vo-table .col-venta { width: 9%; }
+.vo-table .col-costo { width: 9%; }
+.vo-table .col-gan { width: 11%; }
+.vo-table .col-ref { width: 7%; }
+.vo-table .col-user { width: 8%; }
+.vo-table .col-obs { width: 9%; }
 .vo-chip {
-  display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700;
+  display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700;
 }
 .vo-chip.venta { background: #ecfdf5; color: #047857; }
 .vo-chip.ingreso { background: #eff6ff; color: #1d4ed8; }
 .vo-chip.ajuste { background: #fff7ed; color: #c2410c; }
 .vo-chip.devolucion { background: #fef2f2; color: #b91c1c; }
-.vo-timeline { margin-top: 16px; }
-.vo-match { font-size: 10.5px; color: #2563eb; }
-.vo-empty { padding: 18px; color: #64748b; }
+.vo-timeline { margin-top: 10px; }
+.vo-timeline .section-title { font-size: 13px !important; margin: 0 0 5px !important; }
+.vo-match { font-size: 10px; color: #2563eb; }
+.vo-empty { padding: 14px; color: #64748b; }
+.vo-pos { color: #047857 !important; }
+.vo-neg { color: #b91c1c !important; }
+.vo-gan-sub { font-size: 10px; font-weight: 600; color: #64748b; margin-left: 3px; }
 </style>
 
-<div class="vo-page contab-compact">
+<div class="vo-page contab-compact" data-vo-ui="cards-compact-v2">
   <div class="topbar">
     <div>
       <h1 class="page-title">Ventas operativas</h1>
@@ -49,13 +124,14 @@
     <div class="topbar-actions">
       <a class="link-btn" href="{{ url_for('contabilidad.libro_ventas') }}" data-module-url="{{ url_for('contabilidad.libro_ventas') }}">Libro ventas ERP</a>
       <a class="link-btn" href="{{ url_for('bodega.reclasificar_ventas') }}" data-module-url="{{ url_for('bodega.reclasificar_ventas') }}">Reclasificar ajustes</a>
+      <a class="link-btn" href="{{ url_for('bodega.desmarcar_ventas') }}" data-module-url="{{ url_for('bodega.desmarcar_ventas') }}">Quitar de ventas</a>
       <a class="link-btn" href="{{ url_for('bodega.ajuste') }}" data-module-url="{{ url_for('bodega.ajuste') }}">Nuevo ajuste</a>
     </div>
   </div>
 
   <p class="vo-note">
-    Informe de gestión. <strong>No sustituye</strong> el libro de ventas del SII ni el IVA.
-    Las boletas/facturas se siguen emitiendo fuera del ERP; acá solo trazás stock vendido vía ajuste.
+    Informe de gestión. <strong>Costo</strong> = V. neto de ingresos (misma marca/bodega si existe).
+    <strong>Ganancia</strong> = venta neta − costo. No sustituye el libro del SII ni el IVA.
   </p>
 
   <form class="vo-filters" method="get">
@@ -112,6 +188,16 @@
       <div class="val">${{ '{:,.0f}'.format(total_neto).replace(',', '.') }}</div>
     </div>
     <div class="vo-kpi-card">
+      <div class="lbl">Costo (compra)</div>
+      <div class="val">${{ '{:,.0f}'.format(total_costo or 0).replace(',', '.') }}</div>
+    </div>
+    <div class="vo-kpi-card">
+      <div class="lbl">Ganancia neta</div>
+      <div class="val {% if (total_ganancia or 0) < 0 %}vo-neg{% else %}vo-pos{% endif %}">
+        ${{ '{:,.0f}'.format(total_ganancia or 0).replace(',', '.') }}{% if margen_pct is not none %}<span class="pct">{{ margen_pct }}%</span>{% endif %}
+      </div>
+    </div>
+    <div class="vo-kpi-card">
       <div class="lbl">IVA 19% est.</div>
       <div class="val">${{ '{:,.0f}'.format(total_iva).replace(',', '.') }}</div>
     </div>
@@ -126,42 +212,39 @@
     <table class="vo-table">
       <thead>
         <tr>
-          <th>Fecha</th>
-          <th>Tipo</th>
-          <th>Código</th>
-          <th>Marca</th>
-          <th>Bodega</th>
-          <th class="num">Cant.</th>
-          <th class="num">P. neto u.</th>
-          <th class="num">Total neto</th>
-          <th>Ref. SII</th>
-          <th>Usuario</th>
-          <th>Observación</th>
+          <th class="col-fecha">Fecha</th>
+          <th class="col-tipo">Tipo</th>
+          <th class="col-codigo">Código</th>
+          <th class="col-marca">Marca</th>
+          <th class="col-bodega">Bodega</th>
+          <th class="col-cant num">Cant.</th>
+          <th class="col-venta num">Venta</th>
+          <th class="col-costo num">Costo</th>
+          <th class="col-gan num">Ganancia</th>
+          <th class="col-ref">Ref.</th>
+          <th class="col-user">Usuario</th>
+          <th class="col-obs">Obs.</th>
         </tr>
       </thead>
       <tbody>
         {% for r in rows %}
-        {% set is_dev = (r.motivo_codigo == 'devolucion_venta') or (r.cantidad and r.cantidad > 0) %}
         <tr>
-          <td style="white-space:nowrap;">{{ r.fecha|chile_datetime if r.fecha else '—' }}</td>
-          <td><span class="vo-chip {{ 'devolucion' if is_dev else 'venta' }}">{{ 'DEVOLUCIÓN' if is_dev else 'VENTA' }}</span></td>
-          <td><strong>{{ r.codigo_producto }}</strong></td>
-          <td>{{ r.marca or '—' }}</td>
-          <td>{{ r.bodega or '—' }}</td>
-          <td class="num">{{ '-' if is_dev else '' }}{{ r.cantidad|abs }}</td>
-          <td class="num">{% if r.precio_venta_neto is not none %}${{ '{:,.0f}'.format(r.precio_venta_neto).replace(',', '.') }}{% else %}—{% endif %}</td>
-          <td class="num">{% if r.total_neto is not none %}${{ '{:,.0f}'.format((r.total_neto|float) * (-1 if is_dev else 1)).replace(',', '.') }}{% else %}—{% endif %}</td>
-          <td>
-            {% if r.ref_sii %}
-              {{ r.ref_sii }}
-              {% set hits = matches_sii.get(r.ref_sii) or [] %}
-              {% if hits %}
-              <div class="vo-match">Cruce ERP: {{ hits[0].tipo }} {{ hits[0].numero }}</div>
-              {% endif %}
-            {% else %}—{% endif %}
+          <td class="col-fecha" title="{{ r.fecha.strftime('%d/%m/%Y %H:%M') if r.fecha else '' }}">{{ r.fecha.strftime('%d/%m %H:%M') if r.fecha else '—' }}</td>
+          <td class="col-tipo"><span class="vo-chip {{ 'devolucion' if r.is_dev else 'venta' }}">{{ 'DEV' if r.is_dev else 'VTA' }}</span></td>
+          <td class="col-codigo" title="{{ r.codigo }}"><strong>{{ r.codigo }}</strong></td>
+          <td class="col-marca" title="{{ r.marca or '' }}">{{ r.marca or '—' }}</td>
+          <td class="col-bodega" title="{{ r.bodega or '' }}">{{ r.bodega or '—' }}</td>
+          <td class="col-cant num">{{ r.cantidad_signed }}</td>
+          <td class="col-venta num">${{ '{:,.0f}'.format(r.venta_neto).replace(',', '.') }}</td>
+          <td class="col-costo num">{% if r.costo_neto is not none %}${{ '{:,.0f}'.format(r.costo_neto).replace(',', '.') }}{% else %}—{% endif %}</td>
+          <td class="col-gan num {% if r.ganancia_neta is not none and r.ganancia_neta < 0 %}vo-neg{% elif r.ganancia_neta is not none %}vo-pos{% endif %}">
+            {% if r.ganancia_neta is not none %}${{ '{:,.0f}'.format(r.ganancia_neta).replace(',', '.') }}{% if r.margen_pct is not none %}<span class="vo-gan-sub">{{ r.margen_pct }}%</span>{% endif %}{% else %}—{% endif %}
           </td>
-          <td>{{ r.usuario or '—' }}</td>
-          <td>{{ r.observacion or '—' }}</td>
+          <td class="col-ref" title="{{ r.ref_sii or '' }}">
+            {% if r.ref_sii %}{{ r.ref_sii }}{% else %}—{% endif %}
+          </td>
+          <td class="col-user" title="{{ r.usuario or '' }}">{{ r.usuario or '—' }}</td>
+          <td class="col-obs" title="{{ r.observacion or '' }}">{{ r.observacion or '—' }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -173,9 +256,8 @@
 
   {% if timeline %}
   <div class="vo-timeline">
-    <h2 class="section-title" style="font-size:15px;margin:0 0 8px;">Timeline {{ filtros.codigo }}</h2>
-    <p class="page-subtitle" style="margin:0 0 8px;">Ingresos vs ventas-ajuste vs otros movimientos (últimos 120).</p>
-    <div class="vo-table-wrap">
+    <h2 class="section-title">Timeline {{ filtros.codigo }}</h2>
+    <div class="vo-table-wrap" style="max-height: 200px;">
       <table class="vo-table">
         <thead>
           <tr>
@@ -191,12 +273,12 @@
           {% for item in timeline %}
           {% set m = item.mov %}
           <tr>
-            <td style="white-space:nowrap;">{{ m.fecha|chile_datetime if m.fecha else '—' }}</td>
-            <td><span class="vo-chip {{ item.kind }}">{{ item.kind|upper }}</span> · {{ m.tipo }}</td>
+            <td style="white-space:nowrap;">{{ m.fecha.strftime('%d/%m/%Y %H:%M') if m.fecha else '—' }}</td>
+            <td><span class="vo-chip {{ item.kind }}">{{ item.kind|upper }}</span></td>
             <td class="num">{{ m.cantidad }}</td>
             <td>{{ m.marca or '—' }} / {{ m.bodega or '—' }}</td>
             <td class="num">{% if m.es_venta_operativa and m.total_neto is not none %}${{ '{:,.0f}'.format(m.total_neto).replace(',', '.') }}{% else %}—{% endif %}</td>
-            <td>{{ m.observacion or '—' }}</td>
+            <td class="vo-obs" title="{{ m.observacion or '' }}">{{ m.observacion or '—' }}</td>
           </tr>
           {% endfor %}
         </tbody>

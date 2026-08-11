@@ -1332,18 +1332,41 @@ def _stock_variantes_por_codigo(codigo: str) -> list[dict]:
         )
         .all()
     )
-    return [
-        {
-            "id": row.id,
-            "codigo": row.codigo_producto,
-            "marca": row.marca,
-            "proveedor": row.proveedor or "",
-            "bodega": row.bodega,
-            "origen_compra": _normalize_origen_compra(getattr(row, "origen_compra", None)),
-            "stock": int(row.stock or 0),
-        }
-        for row in rows
-    ]
+    prod = _producto_por_codigo(codigo_u)
+    try:
+        pv_catalogo = float((prod or {}).get("precio_publico") or 0) or None
+        if pv_catalogo is not None and pv_catalogo <= 0:
+            pv_catalogo = None
+    except (TypeError, ValueError):
+        pv_catalogo = None
+    out: list[dict] = []
+    for row in rows:
+        pv = None
+        op = getattr(row, "precio_publico_neto_override", None)
+        if op is not None:
+            try:
+                pv_f = float(op)
+                if pv_f > 0:
+                    pv = round(pv_f, 2)
+            except (TypeError, ValueError):
+                pv = None
+        if pv is None:
+            pv = round(float(pv_catalogo), 2) if pv_catalogo else None
+        precio_con_iva = round(float(pv) * 1.19, 0) if pv is not None else None
+        out.append(
+            {
+                "id": row.id,
+                "codigo": row.codigo_producto,
+                "marca": row.marca,
+                "proveedor": row.proveedor or "",
+                "bodega": row.bodega,
+                "origen_compra": _normalize_origen_compra(getattr(row, "origen_compra", None)),
+                "stock": int(row.stock or 0),
+                "precio_venta_neto": pv,
+                "precio_venta_con_iva": int(precio_con_iva) if precio_con_iva is not None else None,
+            }
+        )
+    return out
 
 
 def _sincronizar_stock_base_desde_variantes(codigo: str) -> None:
@@ -1863,7 +1886,7 @@ def _ajuste_lineas_con_stock_actual(
         (
             _normalize_brand(v.get("marca") or ""),
             _normalize_origen_compra(v.get("origen_compra")),
-        ): int(v.get("stock") or 0)
+        ): v
         for v in (variantes_bodega or [])
     }
     out: list[dict] = []
@@ -1871,12 +1894,15 @@ def _ajuste_lineas_con_stock_actual(
         m = _normalize_brand(row.get("marca") or "")
         origen = _normalize_origen_compra(row.get("origen_compra"))
         key = (m, origen)
+        v = by_key.get(key) if m and key in by_key else None
         out.append(
             {
                 "marca": row.get("marca") or "",
                 "origen_compra": origen,
                 "nuevo_stock": row.get("nuevo_stock") or "",
-                "stock_actual": by_key.get(key) if m and key in by_key else None,
+                "stock_actual": int(v.get("stock") or 0) if v is not None else None,
+                "precio_venta_neto": (v or {}).get("precio_venta_neto"),
+                "precio_venta_con_iva": (v or {}).get("precio_venta_con_iva"),
             }
         )
     return out
@@ -5955,6 +5981,128 @@ def reclasificar_ventas():
                 "hasta": hasta_raw,
                 "solo_con_precio": "1" if solo_con_precio else "",
                 "solo_conteo": "1" if solo_conteo else "",
+            },
+        ),
+    )
+
+
+def _desmarcar_movimiento_venta_operativa(mv: MovimientoStock, *, actor: str, now: datetime) -> None:
+    """Quita marca de venta operativa; no altera cantidad ni stock."""
+    ref = (mv.ref_sii or "").strip()
+    mv.es_venta_operativa = False
+    if (mv.motivo_codigo or "") in {"venta", "devolucion_venta"}:
+        mv.motivo_codigo = None
+    mv.precio_venta_neto = None
+    mv.total_neto = None
+    mv.ref_sii = ""
+    tag = f"[Quitado de venta operativa por {actor}"
+    if ref:
+        tag += f"; ref era {ref}"
+    tag += "]"
+    obs = (mv.observacion or "").strip()
+    mv.observacion = f"{obs} {tag}".strip()[:255]
+    mv.reclasificado_at = now
+    mv.reclasificado_por = actor
+
+
+@bodega_bp.route("/desmarcar-ventas", methods=["GET", "POST"])
+@admin_required
+def desmarcar_ventas():
+    """Quita venta/devolución operativa de ajustes ya marcados (sin mover stock)."""
+    if not _puede_ajuste_venta_operativa():
+        return _deny_bodega_perm(
+            "No tenés activada la gestión de venta operativa. Pedí activarla en Seguridad."
+        )
+    if request.method == "POST" and not has_permission(session.get("user"), session.get("rol"), "bodega_ajuste"):
+        return _deny_bodega_perm("No tienes permiso para desmarcar ventas operativas.")
+
+    codigo = (request.values.get("codigo") or "").strip().upper()
+    desde_raw = (request.values.get("desde") or "").strip()
+    hasta_raw = (request.values.get("hasta") or "").strip()
+    message = None
+
+    def _parse_d(raw: str):
+        if not raw:
+            return None
+        try:
+            return date.fromisoformat(raw[:10])
+        except ValueError:
+            return None
+
+    desde = _parse_d(desde_raw)
+    hasta = _parse_d(hasta_raw)
+
+    q = MovimientoStock.query.filter(
+        MovimientoStock.tipo == "ajuste",
+        MovimientoStock.es_venta_operativa.is_(True),
+    )
+    if codigo:
+        q = q.filter(MovimientoStock.codigo_producto.ilike(f"%{codigo}%"))
+    if desde:
+        q = q.filter(func.date(MovimientoStock.fecha) >= desde)
+    if hasta:
+        q = q.filter(func.date(MovimientoStock.fecha) <= hasta)
+
+    candidatos = q.order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc()).limit(500).all()
+
+    if request.method == "POST":
+        ids_raw = request.form.getlist("mov_id")
+        ids = []
+        for x in ids_raw:
+            try:
+                ids.append(int(x))
+            except (TypeError, ValueError):
+                continue
+        auth_ok, auth_err, auth_usuario_obj = _validar_autorizacion_venta_operativa(
+            request.form.get("auth_usuario") or "",
+            request.form.get("auth_password") or "",
+        )
+        if not ids:
+            message = {"type": "error", "text": "Seleccioná al menos un movimiento para quitar de ventas."}
+        elif not auth_ok:
+            message = {"type": "error", "text": auth_err}
+        else:
+            actor = (auth_usuario_obj.usuario if auth_usuario_obj else None) or (
+                (session.get("user") or "sistema").strip() or "sistema"
+            )
+            now = datetime.utcnow()
+            updated = 0
+            try:
+                rows = (
+                    MovimientoStock.query.filter(
+                        MovimientoStock.id.in_(ids),
+                        MovimientoStock.tipo == "ajuste",
+                        MovimientoStock.es_venta_operativa.is_(True),
+                    )
+                    .all()
+                )
+                for mv in rows:
+                    _desmarcar_movimiento_venta_operativa(mv, actor=actor, now=now)
+                    updated += 1
+                db.session.commit()
+                skipped = len(ids) - updated
+                message = {
+                    "type": "success",
+                    "text": (
+                        f"Quitados {updated} movimiento(s) de ventas operativas. El stock no cambió."
+                        + (f" {skipped} omitido(s)." if skipped else "")
+                    ),
+                }
+                candidatos = q.order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc()).limit(500).all()
+            except Exception as exc:
+                db.session.rollback()
+                message = {"type": "error", "text": f"No se pudo desmarcar: {exc}"}
+
+    return render_template(
+        "bodega/desmarcar_ventas.html",
+        **_base_context(
+            "desmarcar_ventas",
+            candidatos=candidatos,
+            message=message,
+            filtros={
+                "codigo": codigo,
+                "desde": desde_raw,
+                "hasta": hasta_raw,
             },
         ),
     )

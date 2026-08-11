@@ -633,6 +633,9 @@ html {
 				<a class="{% if active_page == 'reclasificar_ventas' %}nav-active{% endif %}"
 				   href="{{ url_for('bodega.reclasificar_ventas') }}"
 				   data-module-url="{{ url_for('bodega.reclasificar_ventas') }}">🏷️ Reclasificar → venta</a>
+				<a class="{% if active_page == 'desmarcar_ventas' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.desmarcar_ventas') }}"
+				   data-module-url="{{ url_for('bodega.desmarcar_ventas') }}">↩️ Quitar de ventas</a>
 				{% endif %}
 				<a class="{% if active_page == 'movimientos' %}nav-active{% endif %}"
 				   href="{{ url_for('bodega.movimientos') }}"
@@ -680,6 +683,9 @@ html {
 				<a class="{% if active_page == 'contabilidad_libro_ventas' %}nav-active{% endif %}"
 				   href="{{ url_for('contabilidad.libro_ventas') }}"
 				   data-module-url="{{ url_for('contabilidad.libro_ventas') }}">📄 Libro de ventas</a>
+				<a class="{% if active_page == 'contabilidad_cierre_mensual' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.cierre_mensual') }}"
+				   data-module-url="{{ url_for('contabilidad.cierre_mensual') }}">📅 Cierre mensual</a>
 				<a class="{% if active_page == 'contabilidad_ventas_operativas' %}nav-active{% endif %}"
 				   href="{{ url_for('contabilidad.ventas_operativas') }}"
 				   data-module-url="{{ url_for('contabilidad.ventas_operativas') }}">🧾 Ventas operativas</a>
@@ -768,6 +774,8 @@ html {
 				   data-module-url="{{ url_for('informes.ventas_periodo') }}">📅 Ventas por período</a>
 				<a href="{{ url_for('contabilidad.ventas_operativas') }}"
 				   data-module-url="{{ url_for('contabilidad.ventas_operativas') }}">🧾 Ventas operativas (ajuste)</a>
+				<a href="{{ url_for('contabilidad.cierre_mensual') }}"
+				   data-module-url="{{ url_for('contabilidad.cierre_mensual') }}">📅 Cierre mensual</a>
 				<a href="{{ url_for('informes.ventas_cliente') }}"
 				   data-module-url="{{ url_for('informes.ventas_cliente') }}">👤 Ventas por cliente</a>
 				<a href="{{ url_for('informes.utilidad_margen') }}"

@@ -203,6 +203,10 @@ def create_app():
     if not app.logger.handlers:
         logging.basicConfig(level=logging.INFO)
 
+    # Sin debug, Flask cachea Jinja: sin esto los .html no se ven al editar (p. ej. Ventas operativas).
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
+    app.jinja_env.auto_reload = True
+
     # UI móvil separada (andes_mobile/ o C:\App movil andes): solo /m/ y /static/mobile/*.
     from jinja2 import ChoiceLoader, FileSystemLoader
 

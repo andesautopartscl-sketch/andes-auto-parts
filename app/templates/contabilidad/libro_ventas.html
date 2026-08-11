@@ -22,6 +22,7 @@
 		<div class="topbar-actions">
 			<a class="link-btn" href="{{ url_for('contabilidad.ventas_operativas') }}" data-module-url="{{ url_for('contabilidad.ventas_operativas') }}">🧾 Ventas operativas</a>
 			<a class="link-btn" href="{{ url_for('bodega.reclasificar_ventas') }}" data-module-url="{{ url_for('bodega.reclasificar_ventas') }}">Reclasificar ajustes</a>
+			<a class="link-btn" href="{{ url_for('bodega.desmarcar_ventas') }}" data-module-url="{{ url_for('bodega.desmarcar_ventas') }}">Quitar de ventas</a>
 			<a class="link-btn" href="{{ url_for('contabilidad.cuentas_por_cobrar') }}">💳 Cuentas por cobrar</a>
 			<a class="link-btn" href="{{ url_for('contabilidad.iva') }}">🧮 IVA</a>
 		</div>
@@ -62,10 +63,13 @@
 	<h2 class="lv-section-title">Ventas operativas (ajustes de stock)</h2>
 	<p class="lv-op-note">
 		Gestión interna: ventas y devoluciones hechas por ajuste (motivo Venta / Devolución venta).
-		IVA 19% estimado sobre el neto. <strong>No sustituye</strong> el libro ni los DTE del SII.
+		Costo desde ingresos (V. neto). Ganancia = venta neta − costo. IVA 19% estimado sobre el neto.
+		<strong>No sustituye</strong> el libro ni los DTE del SII.
 	</p>
 	<div class="lv-kpi">
-		<span>Neto operativo: <strong>${{ '{:,.0f}'.format(op_neto or 0).replace(',', '.') }}</strong></span>
+		<span>Venta neta: <strong>${{ '{:,.0f}'.format(op_neto or 0).replace(',', '.') }}</strong></span>
+		<span>Costo: <strong>${{ '{:,.0f}'.format(op_costo or 0).replace(',', '.') }}</strong></span>
+		<span>Ganancia: <strong>${{ '{:,.0f}'.format(op_ganancia or 0).replace(',', '.') }}</strong>{% if op_margen_pct is not none %} ({{ op_margen_pct }}%){% endif %}</span>
 		<span>IVA est.: <strong>${{ '{:,.0f}'.format(op_iva or 0).replace(',', '.') }}</strong></span>
 		<span>Total c/ IVA: <strong>${{ '{:,.0f}'.format(op_total or 0).replace(',', '.') }}</strong></span>
 	</div>
@@ -77,7 +81,9 @@
 					<th>Tipo</th>
 					<th>Documento / Ref.</th>
 					<th>Detalle</th>
-					<th>Neto</th>
+					<th>Venta neta</th>
+					<th>Costo</th>
+					<th>Ganancia</th>
 					<th>IVA 19%</th>
 					<th>Total</th>
 				</tr>
@@ -89,12 +95,14 @@
 					<td>{{ o.tipo }}</td>
 					<td>{{ o.documento }}</td>
 					<td>{{ o.detalle }}{% if o.usuario %} · {{ o.usuario }}{% endif %}</td>
-					<td>${{ '{:,.0f}'.format(o.neto).replace(',', '.') }}</td>
+					<td>${{ '{:,.0f}'.format(o.venta_neto).replace(',', '.') }}</td>
+					<td>{% if o.costo_neto is not none %}${{ '{:,.0f}'.format(o.costo_neto).replace(',', '.') }}{% else %}—{% endif %}</td>
+					<td>{% if o.ganancia_neta is not none %}${{ '{:,.0f}'.format(o.ganancia_neta).replace(',', '.') }}{% if o.margen_pct is not none %} <span style="color:#64748b;font-size:11px;">({{ o.margen_pct }}%)</span>{% endif %}{% else %}—{% endif %}</td>
 					<td>${{ '{:,.0f}'.format(o.iva).replace(',', '.') }}</td>
 					<td>${{ '{:,.0f}'.format(o.total).replace(',', '.') }}</td>
 				</tr>
 				{% else %}
-				<tr><td class="lv-empty" colspan="7">Sin ventas operativas aún. Usá motivo Venta en Ajuste, o reclasificá “Conteo físico”.</td></tr>
+				<tr><td class="lv-empty" colspan="9">Sin ventas operativas aún. Usá motivo Venta en Ajuste, o reclasificá “Conteo físico”.</td></tr>
 				{% endfor %}
 			</tbody>
 		</table>

@@ -1,0 +1,205 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+{% block title %}Quitar de ventas operativas | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<style>
+.dv-page { font-size: 11px; color: #334155; }
+.dv-page .topbar { margin-bottom: 6px; align-items: center; }
+.dv-page .page-title { font-size: 1.05rem; margin: 0 0 1px; line-height: 1.15; }
+.dv-page .page-subtitle { margin: 0; font-size: 10.5px; color: #94a3b8; }
+.dv-page .topbar-actions .link-btn { font-size: 10px; padding: 2px 7px; border-radius: 6px; }
+.dv-note {
+  margin: 0 0 8px; padding: 4px 8px; border-radius: 7px;
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: 10.5px; line-height: 1.35;
+}
+.dv-filters {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px 8px;
+  margin: 0 0 8px; padding: 7px 9px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  align-items: end;
+}
+.dv-filters label { display:block; font-size: 9.5px; font-weight: 600; color: #64748b; margin-bottom: 2px; }
+.dv-filters input[type="text"], .dv-filters input[type="date"] {
+  width: 100%; min-height: 26px; padding: 2px 6px; border-radius: 6px;
+  border: 1px solid #cbd5e1; box-sizing: border-box; font-size: 11px;
+}
+.dv-filters .dv-filter-actions { display:flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.dv-filters .btn, .dv-filters .link-btn { min-height: 26px; font-size: 11px; padding: 2px 8px; }
+.dv-table-wrap {
+  overflow: auto; border: 1px solid #e2e8f0; border-radius: 9px; background: #fff;
+  max-height: calc(100vh - 290px);
+}
+.dv-table { width: 100%; border-collapse: collapse; font-size: 10.5px; table-layout: fixed; }
+.dv-table th, .dv-table td {
+  padding: 4px 6px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: middle;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dv-table th {
+  background: #f8fafc; font-size: 9px; text-transform: uppercase; color: #64748b;
+  letter-spacing: .03em; position: sticky; top: 0; z-index: 1;
+}
+.dv-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.dv-table .col-check { width: 28px; }
+.dv-table .col-fecha { width: 11%; }
+.dv-table .col-tipo { width: 6%; }
+.dv-table .col-codigo { width: 9%; }
+.dv-table .col-marca { width: 10%; }
+.dv-table .col-bodega { width: 9%; }
+.dv-table .col-cant { width: 6%; }
+.dv-table .col-total { width: 9%; }
+.dv-table .col-ref { width: 8%; }
+.dv-table .col-user { width: 9%; }
+.dv-table .col-obs { width: 17%; }
+.dv-actions {
+  display:flex; gap: 6px; flex-wrap: wrap; align-items: flex-end; margin: 0 0 8px;
+}
+.dv-auth {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-end;
+  padding: 5px 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 7px;
+}
+.dv-auth label { display:block; font-size: 9.5px; font-weight: 600; color: #64748b; margin-bottom: 2px; }
+.dv-auth input {
+  min-height: 26px; min-width: 110px; padding: 2px 6px; border-radius: 6px;
+  border: 1px solid #cbd5e1; box-sizing: border-box; font-size: 11px;
+}
+.dv-actions .btn, .dv-actions .link-btn { min-height: 26px; font-size: 11px; padding: 2px 8px; }
+.dv-empty { padding: 12px; color: #64748b; font-size: 11px; }
+.dv-chip {
+  display: inline-block; padding: 1px 5px; border-radius: 999px; font-size: 9px; font-weight: 700;
+}
+.dv-chip.venta { background: #ecfdf5; color: #047857; }
+.dv-chip.devolucion { background: #fef2f2; color: #b91c1c; }
+.message { padding: 5px 9px; border-radius: 7px; margin-bottom: 8px; font-size: 12px; }
+.message.success { background: #ecfdf5; border: 1px solid #86efac; color: #166534; }
+.message.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+</style>
+
+<div class="dv-page">
+  <div class="topbar">
+    <div>
+      <h1 class="page-title">Quitar de ventas operativas</h1>
+      <p class="page-subtitle">Desmarcá un ajuste mal clasificado. No vuelve a mover stock.</p>
+    </div>
+    <div class="topbar-actions">
+      <a class="link-btn" href="{{ url_for('contabilidad.ventas_operativas') }}" data-module-url="{{ url_for('contabilidad.ventas_operativas') }}">Ventas operativas</a>
+      <a class="link-btn" href="{{ url_for('bodega.reclasificar_ventas') }}" data-module-url="{{ url_for('bodega.reclasificar_ventas') }}">Reclasificar → venta</a>
+      <a class="link-btn" href="{{ url_for('bodega.ajuste') }}" data-module-url="{{ url_for('bodega.ajuste') }}">Ajuste</a>
+    </div>
+  </div>
+
+  <p class="dv-note">
+    Si marcaste <strong>Venta</strong> o <strong>Devolución</strong> por error, acá lo sacás del informe.
+    El stock <strong>no se restaura</strong>; si también falló la cantidad, corregí con otro ajuste.
+  </p>
+
+  {% if message %}
+  <div class="message {{ message.type }}">{{ message.text }}</div>
+  {% endif %}
+
+  <form class="dv-filters" method="get">
+    <div>
+      <label for="dv-codigo">Código</label>
+      <input id="dv-codigo" name="codigo" value="{{ filtros.codigo }}" placeholder="Ej: JS605" autocomplete="off">
+    </div>
+    <div>
+      <label for="dv-desde">Desde</label>
+      <input id="dv-desde" type="date" name="desde" value="{{ filtros.desde }}">
+    </div>
+    <div>
+      <label for="dv-hasta">Hasta</label>
+      <input id="dv-hasta" type="date" name="hasta" value="{{ filtros.hasta }}">
+    </div>
+    <div class="dv-filter-actions">
+      <button type="submit" class="btn btn-primary">Buscar</button>
+      <a class="link-btn" href="{{ url_for('bodega.desmarcar_ventas') }}">Limpiar</a>
+    </div>
+  </form>
+
+  <form method="post" id="dvForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="codigo" value="{{ filtros.codigo }}">
+    <input type="hidden" name="desde" value="{{ filtros.desde }}">
+    <input type="hidden" name="hasta" value="{{ filtros.hasta }}">
+
+    <div class="dv-actions">
+      <div class="dv-auth">
+        <div>
+          <label for="dv-auth-user">Usuario autorización *</label>
+          <input id="dv-auth-user" name="auth_usuario" autocomplete="username" required>
+        </div>
+        <div>
+          <label for="dv-auth-pass">Clave *</label>
+          <input id="dv-auth-pass" type="password" name="auth_password" autocomplete="current-password" required>
+        </div>
+      </div>
+      <button type="button" class="btn outline" id="dvSelectAll">Seleccionar visibles</button>
+      <button type="submit" class="btn btn-primary" id="dvSubmit">Quitar de ventas</button>
+    </div>
+
+    <div class="dv-table-wrap">
+      {% if candidatos %}
+      <table class="dv-table">
+        <thead>
+          <tr>
+            <th class="col-check"></th>
+            <th class="col-fecha">Fecha</th>
+            <th class="col-tipo">Tipo</th>
+            <th class="col-codigo">Código</th>
+            <th class="col-marca">Marca</th>
+            <th class="col-bodega">Bodega</th>
+            <th class="col-cant num">Cant.</th>
+            <th class="col-total num">Total neto</th>
+            <th class="col-ref">Ref.</th>
+            <th class="col-user">Usuario</th>
+            <th class="col-obs">Obs.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in candidatos %}
+          {% set is_dev = (m.motivo_codigo or '') == 'devolucion_venta' or (m.cantidad or 0) > 0 %}
+          <tr>
+            <td class="col-check"><input type="checkbox" name="mov_id" value="{{ m.id }}" class="dv-check"></td>
+            <td class="col-fecha" title="{{ m.fecha|chile_datetime if m.fecha else '' }}">{{ m.fecha.strftime('%d/%m %H:%M') if m.fecha else '—' }}</td>
+            <td class="col-tipo"><span class="dv-chip {{ 'devolucion' if is_dev else 'venta' }}">{{ 'DEV' if is_dev else 'VTA' }}</span></td>
+            <td class="col-codigo" title="{{ m.codigo_producto }}"><strong>{{ m.codigo_producto }}</strong></td>
+            <td class="col-marca" title="{{ m.marca or '' }}">{{ m.marca or '—' }}</td>
+            <td class="col-bodega" title="{{ m.bodega or '' }}">{{ m.bodega or '—' }}</td>
+            <td class="col-cant num">{{ m.cantidad }}</td>
+            <td class="col-total num">{% if m.total_neto is not none %}${{ '{:,.0f}'.format(m.total_neto).replace(',', '.') }}{% else %}—{% endif %}</td>
+            <td class="col-ref" title="{{ m.ref_sii or '' }}">{{ m.ref_sii or '—' }}</td>
+            <td class="col-user" title="{{ m.usuario or '' }}">{{ m.usuario or '—' }}</td>
+            <td class="col-obs" title="{{ m.observacion or '' }}">{{ m.observacion or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="dv-empty">No hay ventas/devoluciones operativas con estos filtros.</div>
+      {% endif %}
+    </div>
+  </form>
+</div>
+<script>
+(function () {
+  var btn = document.getElementById('dvSelectAll');
+  if (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.dv-check').forEach(function (c) { c.checked = true; });
+    });
+  }
+  var form = document.getElementById('dvForm');
+  if (form) {
+    form.addEventListener('submit', function (ev) {
+      var n = form.querySelectorAll('.dv-check:checked').length;
+      if (!n) {
+        ev.preventDefault();
+        alert('Seleccioná al menos un movimiento.');
+        return;
+      }
+      if (!confirm('¿Quitar ' + n + ' movimiento(s) de ventas operativas?\nEl stock no cambia.')) {
+        ev.preventDefault();
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

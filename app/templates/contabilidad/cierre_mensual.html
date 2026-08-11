@@ -1,0 +1,210 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Cierre mensual | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<style>
+.cm-page { font-size: 11.5px; color: #334155; }
+.cm-page .topbar { margin-bottom: 6px; align-items: center; }
+.cm-page .page-title { font-size: 1.05rem; margin: 0; line-height: 1.2; }
+.cm-page .page-subtitle { display: none; }
+.cm-page .topbar-actions .link-btn { font-size: 10px; padding: 2px 7px; border-radius: 6px; }
+.cm-note {
+  margin: 0 0 6px; padding: 4px 8px; border-radius: 6px;
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: 10.5px; line-height: 1.3;
+}
+.cm-filters {
+  display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: end;
+  margin: 0 0 8px; padding: 6px 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+}
+.cm-filters label { display:block; font-size: 9.5px; font-weight: 600; color: #64748b; margin-bottom: 1px; }
+.cm-filters input {
+  width: 118px; min-height: 26px; padding: 2px 6px; border-radius: 6px;
+  border: 1px solid #cbd5e1; box-sizing: border-box; font-size: 11px;
+}
+.cm-filters .cm-actions { display:flex; gap: 6px; align-items: center; }
+.cm-filters .btn, .cm-filters .link-btn { min-height: 26px; font-size: 11px; padding: 2px 8px; }
+.cm-kpi {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px;
+}
+@media (max-width: 980px) {
+  .cm-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.cm-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px;
+}
+.cm-card .title {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  color: #64748b; margin-bottom: 3px;
+}
+.cm-card .row { display:flex; justify-content: space-between; gap: 6px; margin: 0; line-height: 1.35; font-size: 11px; }
+.cm-card .row .k { color: #94a3b8; }
+.cm-card .row .v { font-weight: 700; color: #0f172a; font-variant-numeric: tabular-nums; }
+.cm-card.resumen { border-color: #bfdbfe; background: #f8fbff; }
+.cm-card.resumen .title { color: #1d4ed8; }
+.cm-grid3 {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;
+}
+@media (max-width: 980px) {
+  .cm-grid3 { grid-template-columns: 1fr; }
+}
+.cm-block { min-width: 0; }
+.cm-section-title {
+  font-size: 10.5px; font-weight: 700; margin: 0 0 3px; color: #475569;
+  text-transform: uppercase; letter-spacing: .03em;
+}
+.cm-table-wrap {
+  overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; max-height: 168px;
+}
+.cm-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+.cm-table th, .cm-table td { padding: 3px 5px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: top; }
+.cm-table th {
+  background: #f8fafc; font-size: 9px; text-transform: uppercase; color: #64748b;
+  letter-spacing: .02em; white-space: nowrap; position: sticky; top: 0;
+}
+.cm-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cm-empty { padding: 8px; color: #64748b; font-size: 11px; }
+.cm-pos { color: #047857; }
+.cm-neg { color: #b91c1c; }
+.cm-muted { color: #94a3b8; font-weight: 500; }
+</style>
+
+<div class="cm-page contab-compact">
+  <div class="topbar">
+    <div>
+      <h1 class="page-title">Cierre mensual</h1>
+      <p class="page-subtitle">Compras vs ventas</p>
+    </div>
+    <div class="topbar-actions">
+      <a class="link-btn" href="{{ url_for('contabilidad.libro_compras', desde=filtros.desde, hasta=filtros.hasta) }}"
+         data-module-url="{{ url_for('contabilidad.libro_compras', desde=filtros.desde, hasta=filtros.hasta) }}">Compras</a>
+      <a class="link-btn" href="{{ url_for('contabilidad.ventas_operativas', desde=filtros.desde, hasta=filtros.hasta) }}"
+         data-module-url="{{ url_for('contabilidad.ventas_operativas', desde=filtros.desde, hasta=filtros.hasta) }}">Operativas</a>
+      <a class="link-btn" href="{{ url_for('informes.ventas_periodo', desde=filtros.desde, hasta=filtros.hasta) }}"
+         data-module-url="{{ url_for('informes.ventas_periodo', desde=filtros.desde, hasta=filtros.hasta) }}">ERP</a>
+    </div>
+  </div>
+
+  <p class="cm-note">Gestión: compras vs ERP vs operativas. Costo/ganancia estimados. No sustituye SII.</p>
+
+  <form class="cm-filters" method="get">
+    <div>
+      <label for="cm-desde">Desde</label>
+      <input id="cm-desde" type="date" name="desde" value="{{ filtros.desde }}">
+    </div>
+    <div>
+      <label for="cm-hasta">Hasta</label>
+      <input id="cm-hasta" type="date" name="hasta" value="{{ filtros.hasta }}">
+    </div>
+    <div class="cm-actions">
+      <button type="submit" class="btn btn-primary">Filtrar</button>
+      <a class="link-btn" href="{{ url_for('contabilidad.cierre_mensual') }}">Mes</a>
+    </div>
+  </form>
+
+  <div class="cm-kpi">
+    <div class="cm-card">
+      <div class="title">Compras · {{ compras.n }}</div>
+      <div class="row"><span class="k">Neto</span><span class="v">${{ '{:,.0f}'.format(compras.neto).replace(',', '.') }}</span></div>
+      <div class="row"><span class="k">Total</span><span class="v">${{ '{:,.0f}'.format(compras.total).replace(',', '.') }}</span></div>
+    </div>
+    <div class="cm-card">
+      <div class="title">ERP · {{ erp.n }}</div>
+      <div class="row"><span class="k">Neto</span><span class="v">${{ '{:,.0f}'.format(erp.neto).replace(',', '.') }}</span></div>
+      <div class="row"><span class="k">Ganancia</span>
+        <span class="v {% if erp.ganancia is not none and erp.ganancia < 0 %}cm-neg{% elif erp.ganancia is not none %}cm-pos{% endif %}">
+          {% if erp.ganancia is not none %}${{ '{:,.0f}'.format(erp.ganancia).replace(',', '.') }}{% if erp.margen_pct is not none %}<span class="cm-muted"> {{ erp.margen_pct }}%</span>{% endif %}{% else %}—{% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="cm-card">
+      <div class="title">Operativas · {{ ops.n }}</div>
+      <div class="row"><span class="k">Venta</span><span class="v">${{ '{:,.0f}'.format(ops.venta).replace(',', '.') }}</span></div>
+      <div class="row"><span class="k">Ganancia</span>
+        <span class="v {% if ops.ganancia < 0 %}cm-neg{% else %}cm-pos{% endif %}">
+          ${{ '{:,.0f}'.format(ops.ganancia).replace(',', '.') }}{% if ops.margen_pct is not none %}<span class="cm-muted"> {{ ops.margen_pct }}%</span>{% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="cm-card resumen">
+      <div class="title">Resumen</div>
+      <div class="row"><span class="k">Compras</span><span class="v">${{ '{:,.0f}'.format(resumen.compras_neto).replace(',', '.') }}</span></div>
+      <div class="row"><span class="k">Ventas</span><span class="v">${{ '{:,.0f}'.format(resumen.venta_neta).replace(',', '.') }}</span></div>
+      <div class="row"><span class="k">Ganancia</span>
+        <span class="v {% if resumen.ganancia is not none and resumen.ganancia < 0 %}cm-neg{% elif resumen.ganancia is not none %}cm-pos{% endif %}">
+          {% if resumen.ganancia is not none %}${{ '{:,.0f}'.format(resumen.ganancia).replace(',', '.') }}{% if resumen.margen_pct is not none %}<span class="cm-muted"> {{ resumen.margen_pct }}%</span>{% endif %}{% else %}—{% endif %}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cm-grid3">
+    <div class="cm-block">
+      <h2 class="cm-section-title">Compras</h2>
+      <div class="cm-table-wrap">
+        {% if compras.lista %}
+        <table class="cm-table">
+          <thead><tr><th>Fecha</th><th>Doc</th><th class="num">Neto</th></tr></thead>
+          <tbody>
+            {% for c in compras.lista[:6] %}
+            <tr>
+              <td>{{ c.fecha.strftime('%d/%m') if c.fecha else '—' }}</td>
+              <td title="{{ c.proveedor }}">{{ c.numero }}</td>
+              <td class="num">${{ '{:,.0f}'.format(c.neto).replace(',', '.') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="cm-empty">Sin compras.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="cm-block">
+      <h2 class="cm-section-title">Ventas ERP</h2>
+      <div class="cm-table-wrap">
+        {% if erp.lista %}
+        <table class="cm-table">
+          <thead><tr><th>Fecha</th><th>Doc</th><th class="num">Neto</th></tr></thead>
+          <tbody>
+            {% for e in erp.lista[:6] %}
+            <tr>
+              <td>{{ e.fecha.strftime('%d/%m') if e.fecha else '—' }}</td>
+              <td title="{{ e.cliente }}">{{ e.numero }}</td>
+              <td class="num">${{ '{:,.0f}'.format(e.neto).replace(',', '.') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="cm-empty">Sin ERP.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="cm-block">
+      <h2 class="cm-section-title">Operativas</h2>
+      <div class="cm-table-wrap">
+        {% if ops.lista %}
+        <table class="cm-table">
+          <thead><tr><th>Fecha</th><th>Detalle</th><th class="num">Gan.</th></tr></thead>
+          <tbody>
+            {% for o in ops.lista[:6] %}
+            <tr>
+              <td>{{ o.fecha.strftime('%d/%m') if o.fecha else '—' }}</td>
+              <td title="{{ o.detalle }}">{{ o.codigo }}{% if o.is_dev %} · DEV{% endif %}</td>
+              <td class="num {% if o.ganancia_neta is not none and o.ganancia_neta < 0 %}cm-neg{% elif o.ganancia_neta is not none %}cm-pos{% endif %}">
+                {% if o.ganancia_neta is not none %}${{ '{:,.0f}'.format(o.ganancia_neta).replace(',', '.') }}{% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="cm-empty">Sin operativas.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
