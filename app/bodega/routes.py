@@ -166,8 +166,12 @@ INGRESO_METODOS_PAGO_OPCIONES = [
 ]
 
 MOTIVO_INCORPORACION = "Incorporación a producto"
+MOTIVO_VENTA = "Venta"
+MOTIVO_DEVOLUCION_VENTA = "Devolución venta"
 
 AJUSTE_OBSERVACION_OPCIONES = [
+    MOTIVO_VENTA,
+    MOTIVO_DEVOLUCION_VENTA,
     "Conteo físico",
     "Diferencia de inventario",
     "Merma / daño",
@@ -178,6 +182,20 @@ AJUSTE_OBSERVACION_OPCIONES = [
     "Reclasificación interna",
     MOTIVO_INCORPORACION,
 ]
+
+_MOTIVO_CODIGO_MAP = {
+    MOTIVO_VENTA: "venta",
+    MOTIVO_DEVOLUCION_VENTA: "devolucion_venta",
+    "Conteo físico": "conteo",
+    "Diferencia de inventario": "diferencia",
+    "Merma / daño": "merma",
+    "Corrección administrativa": "correccion",
+    "Regularización por recepción": "reg_recepcion",
+    "Regularización por despacho": "reg_despacho",
+    "Ajuste por auditoría": "auditoria",
+    "Reclasificación interna": "reclasificacion",
+    MOTIVO_INCORPORACION: "incorporacion",
+}
 
 SALIDA_MOTIVO_OPCIONES = [
     "Salida general",
@@ -243,6 +261,56 @@ def _qty_devuelta_por_item_ingreso(
 
 def _es_motivo_incorporacion(motivo: str | None) -> bool:
     return (motivo or "").strip() == MOTIVO_INCORPORACION
+
+
+def _es_motivo_venta(motivo: str | None) -> bool:
+    return (motivo or "").strip() == MOTIVO_VENTA
+
+
+def _es_motivo_devolucion_venta(motivo: str | None) -> bool:
+    return (motivo or "").strip() == MOTIVO_DEVOLUCION_VENTA
+
+
+def _es_flujo_venta_operativa(motivo: str | None) -> bool:
+    return _es_motivo_venta(motivo) or _es_motivo_devolucion_venta(motivo)
+
+
+def _motivo_codigo_from_label(motivo: str | None) -> str | None:
+    label = (motivo or "").strip()
+    if not label:
+        return None
+    return _MOTIVO_CODIGO_MAP.get(label) or label.lower().replace(" ", "_")[:40]
+
+
+def _venta_operativa_kwargs(
+    *,
+    es_venta: bool,
+    es_devolucion: bool,
+    delta: int,
+    precio: float | None,
+    ref_sii: str,
+    motivo_codigo: str | None,
+) -> dict:
+    """Arma kwargs de marca venta/devolución para un delta de ajuste."""
+    if es_venta and delta < 0 and precio is not None and float(precio) > 0:
+        return {
+            "es_venta_operativa": True,
+            "motivo_codigo": motivo_codigo or "venta",
+            "precio_venta_neto": float(precio),
+            "total_neto": round(float(precio) * abs(int(delta)), 2),
+            "ref_sii": ref_sii,
+        }
+    if es_devolucion and delta > 0 and precio is not None and float(precio) > 0:
+        return {
+            "es_venta_operativa": True,
+            "motivo_codigo": motivo_codigo or "devolucion_venta",
+            "precio_venta_neto": float(precio),
+            "total_neto": round(float(precio) * abs(int(delta)), 2),
+            "ref_sii": ref_sii,
+        }
+    if motivo_codigo:
+        return {"motivo_codigo": motivo_codigo}
+    return {}
 
 
 def _ingreso_items_costo(
@@ -1540,8 +1608,19 @@ def _registrar_movimiento(
     bodega: str | None = None,
     origen_compra: str = ORIGEN_COMPRA_DEFAULT,
     ingreso_documento_id: int | None = None,
+    *,
+    es_venta_operativa: bool = False,
+    motivo_codigo: str | None = None,
+    precio_venta_neto: float | None = None,
+    total_neto: float | None = None,
+    ref_sii: str | None = None,
 ) -> None:
     codigo_up = codigo.upper()
+    qty_abs = abs(int(cantidad or 0))
+    precio = float(precio_venta_neto) if precio_venta_neto is not None else None
+    total = float(total_neto) if total_neto is not None else None
+    if es_venta_operativa and total is None and precio is not None and qty_abs:
+        total = round(precio * qty_abs, 2)
     db.session.add(
         MovimientoStock(
             codigo_producto=codigo_up,
@@ -1554,6 +1633,11 @@ def _registrar_movimiento(
             origen_compra=_normalize_origen_compra(origen_compra),
             ingreso_documento_id=ingreso_documento_id,
             observacion=observacion[:255] if observacion else None,
+            es_venta_operativa=bool(es_venta_operativa),
+            motivo_codigo=(motivo_codigo or None),
+            precio_venta_neto=precio,
+            total_neto=total,
+            ref_sii=(ref_sii or "").strip()[:80],
         )
     )
     # Auditoría en la misma sesión que el movimiento (un solo commit al final).
@@ -1580,6 +1664,11 @@ def _registrar_movimiento(
                 "bodega": bodega,
                 "origen_compra": _normalize_origen_compra(origen_compra),
                 "proveedor": proveedor,
+                "es_venta_operativa": bool(es_venta_operativa),
+                "motivo_codigo": motivo_codigo,
+                "precio_venta_neto": precio,
+                "total_neto": total,
+                "ref_sii": (ref_sii or "").strip()[:80] or None,
                 "observacion": observacion,
             }
             meta_text = json.dumps(metadata, ensure_ascii=False, default=str)
@@ -1641,6 +1730,12 @@ def _aplicar_movimiento_stock(
     proveedor: str | None = None,
     marca: str | None = None,
     bodega: str | None = None,
+    *,
+    es_venta_operativa: bool = False,
+    motivo_codigo: str | None = None,
+    precio_venta_neto: float | None = None,
+    total_neto: float | None = None,
+    ref_sii: str | None = None,
 ) -> None:
     _actualizar_stock(codigo, nuevo_stock)
     _registrar_movimiento(
@@ -1651,6 +1746,11 @@ def _aplicar_movimiento_stock(
         proveedor=proveedor,
         marca=marca,
         bodega=bodega,
+        es_venta_operativa=es_venta_operativa,
+        motivo_codigo=motivo_codigo,
+        precio_venta_neto=precio_venta_neto,
+        total_neto=total_neto,
+        ref_sii=ref_sii,
     )
     db.session.commit()
 
@@ -1667,6 +1767,11 @@ def _aplicar_movimiento_variante(
     nuevo_stock_variante: int | None = None,
     *,
     commit: bool = True,
+    es_venta_operativa: bool = False,
+    motivo_codigo: str | None = None,
+    precio_venta_neto: float | None = None,
+    total_neto: float | None = None,
+    ref_sii: str | None = None,
 ) -> int:
     variante = _obtener_o_crear_variante(codigo, marca, bodega, origen_compra=origen_compra, proveedor=proveedor)
     stock_anterior = int(variante.stock or 0)
@@ -1691,6 +1796,11 @@ def _aplicar_movimiento_variante(
         marca=marca,
         bodega=bodega,
         origen_compra=origen_compra,
+        es_venta_operativa=es_venta_operativa,
+        motivo_codigo=motivo_codigo,
+        precio_venta_neto=precio_venta_neto,
+        total_neto=total_neto,
+        ref_sii=ref_sii,
     )
     if commit:
         db.session.commit()
@@ -1950,6 +2060,49 @@ def _validar_autorizacion_variantes(username: str, password: str) -> tuple[bool,
     rol_name = (u.rol.nombre if getattr(u, "rol", None) and u.rol.nombre else "") or ""
     if not has_permission(u.usuario, rol_name, "bodega_variantes_gestionar"):
         return False, "El usuario no tiene permiso para gestionar variantes de stock.", None
+    return True, "", u
+
+
+PERM_AJUSTE_VENTA_OPERATIVA = "bodega_ajuste_venta_operativa"
+
+
+def _puede_ajuste_venta_operativa(username: str | None = None, role_name: str | None = None) -> bool:
+    user = (username if username is not None else session.get("user")) or ""
+    rol = (role_name if role_name is not None else session.get("rol")) or ""
+    return has_permission(user, rol, PERM_AJUSTE_VENTA_OPERATIVA)
+
+
+def _opciones_motivo_ajuste(*, puede_venta_operativa: bool) -> list[str]:
+    if puede_venta_operativa:
+        return list(AJUSTE_OBSERVACION_OPCIONES)
+    return [m for m in AJUSTE_OBSERVACION_OPCIONES if m not in (MOTIVO_VENTA, MOTIVO_DEVOLUCION_VENTA)]
+
+
+def _validar_autorizacion_venta_operativa(username: str, password: str) -> tuple[bool, str, Usuario | None]:
+    """Usuario + clave para autorizar Venta / Devolución venta desde ajuste."""
+    user_name = (username or "").strip()
+    raw_pass = password or ""
+    if not user_name or not raw_pass:
+        return False, "Debes ingresar usuario y contraseña para autorizar la venta operativa.", None
+
+    u = Usuario.query.filter_by(usuario=user_name).first()
+    if u is None:
+        return False, "Usuario de autorización no válido.", None
+    if not bool(u.activo):
+        return False, "El usuario de autorización está inactivo.", None
+    if bool(getattr(u, "bloqueado_seguridad", False)):
+        return False, "El usuario de autorización está bloqueado.", None
+
+    try:
+        ok = check_password_hash(u.password_hash or "", raw_pass)
+    except Exception:
+        ok = False
+    if not ok:
+        return False, "Contraseña de autorización incorrecta.", None
+
+    rol_name = (u.rol.nombre if getattr(u, "rol", None) and u.rol.nombre else "") or ""
+    if not has_permission(u.usuario, rol_name, PERM_AJUSTE_VENTA_OPERATIVA):
+        return False, "El usuario no tiene activada la venta/devolución operativa en ajuste.", None
     return True, "", u
 
 
@@ -5062,6 +5215,12 @@ def ajuste():
         obs_motivo = (request.form.get("observacion_motivo") or "").strip()
         obs_detalle = (request.form.get("observacion_detalle") or "").strip()
         obs_compuesta = f"{obs_motivo}. {obs_detalle}" if obs_motivo and obs_detalle else (obs_motivo or obs_detalle)
+        precio_venta_raw = (
+            (request.form.get("precio_venta_con_iva") or request.form.get("precio_venta_neto") or "")
+        ).strip()
+        precio_bruto = _parse_valor_neto_chile(precio_venta_raw) if precio_venta_raw else None
+        # UI pide precio cobrado con IVA; se guarda neto (/1.19) para libro operativo.
+        precio_venta_val = round(float(precio_bruto) / 1.19, 2) if precio_bruto is not None else None
         form_data = {
             "codigo": (request.form.get("codigo") or "").strip().upper(),
             "marca": _normalize_brand(request.form.get("marca") or ""),
@@ -5071,6 +5230,9 @@ def ajuste():
             "observacion_detalle": obs_detalle[:255],
             "observacion": obs_compuesta[:255],
             "codigo_destino": (request.form.get("codigo_destino") or "").strip().upper(),
+            "precio_venta_con_iva": precio_venta_raw,
+            "precio_venta_neto_val": precio_venta_val,
+            "ref_sii": (request.form.get("ref_sii") or "").strip()[:80],
             "ajuste_lineas": _form_data_lineas_ajuste(request.form),
         }
     else:
@@ -5089,6 +5251,11 @@ def ajuste():
             "observacion_detalle": obs_detalle[:255],
             "observacion": obs_compuesta[:255],
             "codigo_destino": (request.args.get("codigo_destino") or "").strip().upper(),
+            "precio_venta_con_iva": (
+                request.args.get("precio_venta_con_iva") or request.args.get("precio_venta_neto") or ""
+            ).strip(),
+            "precio_venta_neto_val": None,
+            "ref_sii": (request.args.get("ref_sii") or "").strip()[:80],
             "ajuste_lineas": [],
         }
 
@@ -5133,6 +5300,25 @@ def ajuste():
     if request.method == "POST":
         multipost = request.form.get("ajuste_multivariante") == "1"
         nuevo_stock = _parse_int(form_data["nuevo_stock"], allow_zero=True)
+        es_venta = _es_motivo_venta(form_data.get("observacion_motivo"))
+        es_devolucion = _es_motivo_devolucion_venta(form_data.get("observacion_motivo"))
+        es_flujo_venta = es_venta or es_devolucion
+        motivo_codigo = _motivo_codigo_from_label(form_data.get("observacion_motivo"))
+        precio_venta = form_data.get("precio_venta_neto_val")
+        ref_sii = (form_data.get("ref_sii") or "").strip()[:80]
+        auth_user = (request.form.get("auth_user") or "").strip()
+        auth_password = request.form.get("auth_password") or ""
+        auth_ok, auth_err, auth_usuario_obj = (False, "", None)
+        if es_flujo_venta:
+            auth_ok, auth_err, auth_usuario_obj = _validar_autorizacion_venta_operativa(
+                auth_user, auth_password
+            )
+            if auth_ok and auth_usuario_obj is not None:
+                tag = f" Autorizado por {auth_usuario_obj.usuario}."
+                cur = (form_data.get("observacion") or "").strip()
+                if "Autorizado por" not in cur:
+                    sep = "" if not cur or cur.endswith(".") else "."
+                    form_data["observacion"] = f"{cur}{sep}{tag}".strip()[:255]
         codigo_destino, err_dest = _validar_codigo_destino_incorporacion(
             form_data.get("observacion_motivo"),
             form_data["codigo"],
@@ -5142,6 +5328,23 @@ def ajuste():
             message = {"type": "error", "text": "Debes ingresar un codigo de producto."}
         elif not (form_data.get("observacion_motivo") or "").strip():
             message = {"type": "error", "text": "Debes seleccionar el motivo del ajuste."}
+        elif es_flujo_venta and not _puede_ajuste_venta_operativa():
+            message = {
+                "type": "error",
+                "text": "No tenés activada la opción de Venta/Devolución operativa. Pedí activarla en Seguridad.",
+            }
+        elif es_flujo_venta and not auth_ok:
+            message = {"type": "error", "text": auth_err or "Autorización de venta operativa inválida."}
+        elif es_flujo_venta and _es_motivo_incorporacion(form_data.get("observacion_motivo")):
+            message = {"type": "error", "text": "Venta/Devolución e Incorporación no se pueden combinar."}
+        elif es_flujo_venta and (precio_venta is None or float(precio_venta) <= 0):
+            message = {
+                "type": "error",
+                "text": (
+                    "Con motivo Venta o Devolución venta debés indicar el precio unitario con IVA "
+                    "(mayor a 0)."
+                ),
+            }
         elif err_dest:
             message = {"type": "error", "text": err_dest}
         elif multipost:
@@ -5185,6 +5388,32 @@ def ajuste():
                                     "type": "error",
                                     "text": "No hay cambios para aplicar en ninguna variante.",
                                 }
+                            elif es_venta and any(d > 0 for _, _, _, _, d in cambios):
+                                message = {
+                                    "type": "error",
+                                    "text": (
+                                        "Con motivo Venta solo podés bajar stock "
+                                        "(no aumentes cantidades en ninguna fila)."
+                                    ),
+                                }
+                            elif es_venta and not any(d < 0 for _, _, _, _, d in cambios):
+                                message = {
+                                    "type": "error",
+                                    "text": "Con motivo Venta debés bajar al menos una unidad de stock.",
+                                }
+                            elif es_devolucion and any(d < 0 for _, _, _, _, d in cambios):
+                                message = {
+                                    "type": "error",
+                                    "text": (
+                                        "Con Devolución venta solo podés subir stock "
+                                        "(devolución del cliente)."
+                                    ),
+                                }
+                            elif es_devolucion and not any(d > 0 for _, _, _, _, d in cambios):
+                                message = {
+                                    "type": "error",
+                                    "text": "Con Devolución venta debés subir al menos una unidad de stock.",
+                                }
                             else:
                                 qty_baja = sum(-d for _, _, _, _, d in cambios if d < 0)
                                 if codigo_destino and qty_baja <= 0:
@@ -5224,6 +5453,14 @@ def ajuste():
                                             codigo_destino if delta < 0 else None,
                                             prorrateo if delta < 0 else None,
                                         )
+                                        venta_kw = _venta_operativa_kwargs(
+                                            es_venta=es_venta,
+                                            es_devolucion=es_devolucion,
+                                            delta=delta,
+                                            precio=precio_venta,
+                                            ref_sii=ref_sii,
+                                            motivo_codigo=motivo_codigo,
+                                        )
                                         _aplicar_movimiento_variante(
                                             form_data["codigo"],
                                             "ajuste",
@@ -5234,6 +5471,7 @@ def ajuste():
                                             origen_compra=origen,
                                             nuevo_stock_variante=int(nuevo_s),
                                             commit=False,
+                                            **venta_kw,
                                         )
                                     db.session.commit()
                                     producto = _producto_por_codigo(form_data["codigo"])
@@ -5247,6 +5485,26 @@ def ajuste():
                                         if prorrateo and prorrateo.get("mensaje")
                                         else ""
                                     )
+                                    if es_venta:
+                                        unidades = sum(-d for _, _, _, _, d in cambios if d < 0)
+                                        extra = (
+                                            f" Venta operativa: {unidades} u. × "
+                                            f"${float(precio_venta):,.0f}".replace(",", ".")
+                                            + f" = ${float(precio_venta) * unidades:,.0f}".replace(",", ".")
+                                            + "."
+                                            + (f" Ref SII: {ref_sii}." if ref_sii else "")
+                                            + extra
+                                        )
+                                    elif es_devolucion:
+                                        unidades = sum(d for _, _, _, _, d in cambios if d > 0)
+                                        extra = (
+                                            f" Devolución venta: +{unidades} u. (resta del libro operativo) × "
+                                            f"${float(precio_venta):,.0f}".replace(",", ".")
+                                            + f" = ${float(precio_venta) * unidades:,.0f}".replace(",", ".")
+                                            + "."
+                                            + (f" Ref SII: {ref_sii}." if ref_sii else "")
+                                            + extra
+                                        )
                                     message = {
                                         "type": "success",
                                         "text": (
@@ -5283,6 +5541,26 @@ def ajuste():
                             delta = int(nuevo_stock) - stock_anterior
                             if delta == 0:
                                 message = {"type": "error", "text": "No hay cambios para aplicar en la variante seleccionada."}
+                            elif es_venta and delta > 0:
+                                message = {
+                                    "type": "error",
+                                    "text": "Con motivo Venta solo podés bajar stock (nuevo stock menor al actual).",
+                                }
+                            elif es_venta and delta >= 0:
+                                message = {
+                                    "type": "error",
+                                    "text": "Con motivo Venta debés bajar al menos una unidad de stock.",
+                                }
+                            elif es_devolucion and delta < 0:
+                                message = {
+                                    "type": "error",
+                                    "text": "Con Devolución venta solo podés subir stock (nuevo stock mayor al actual).",
+                                }
+                            elif es_devolucion and delta <= 0:
+                                message = {
+                                    "type": "error",
+                                    "text": "Con Devolución venta debés subir al menos una unidad de stock.",
+                                }
                             elif codigo_destino and delta >= 0:
                                 message = {
                                     "type": "error",
@@ -5314,6 +5592,14 @@ def ajuste():
                                     codigo_destino,
                                     prorrateo,
                                 )
+                                venta_kw = _venta_operativa_kwargs(
+                                    es_venta=es_venta,
+                                    es_devolucion=es_devolucion,
+                                    delta=delta,
+                                    precio=precio_venta,
+                                    ref_sii=ref_sii,
+                                    motivo_codigo=motivo_codigo,
+                                )
                                 _aplicar_movimiento_variante(
                                     form_data["codigo"],
                                     "ajuste",
@@ -5322,6 +5608,7 @@ def ajuste():
                                     marca=form_data["marca"],
                                     bodega=form_data["bodega"],
                                     nuevo_stock_variante=int(nuevo_stock),
+                                    **venta_kw,
                                 )
                                 producto = _producto_por_codigo(form_data["codigo"])
                                 variantes_disponibles = _stock_variantes_por_codigo(form_data["codigo"])
@@ -5330,6 +5617,24 @@ def ajuste():
                                     if prorrateo and prorrateo.get("mensaje")
                                     else ""
                                 )
+                                if es_venta:
+                                    extra = (
+                                        f" Venta operativa: {abs(delta)} u. × "
+                                        f"${float(precio_venta):,.0f}".replace(",", ".")
+                                        + f" = ${float(precio_venta) * abs(delta):,.0f}".replace(",", ".")
+                                        + "."
+                                        + (f" Ref SII: {ref_sii}." if ref_sii else "")
+                                        + extra
+                                    )
+                                elif es_devolucion:
+                                    extra = (
+                                        f" Devolución venta: +{abs(delta)} u. (resta del libro operativo) × "
+                                        f"${float(precio_venta):,.0f}".replace(",", ".")
+                                        + f" = ${float(precio_venta) * abs(delta):,.0f}".replace(",", ".")
+                                        + "."
+                                        + (f" Ref SII: {ref_sii}." if ref_sii else "")
+                                        + extra
+                                    )
                                 message = {
                                     "type": "success",
                                     "text": (
@@ -5342,6 +5647,26 @@ def ajuste():
                         delta = nuevo_stock - stock_anterior
                         if delta == 0:
                             message = {"type": "error", "text": "No hay cambios para aplicar en el stock."}
+                        elif es_venta and delta > 0:
+                            message = {
+                                "type": "error",
+                                "text": "Con motivo Venta solo podés bajar stock (nuevo stock menor al actual).",
+                            }
+                        elif es_venta and delta >= 0:
+                            message = {
+                                "type": "error",
+                                "text": "Con motivo Venta debés bajar al menos una unidad de stock.",
+                            }
+                        elif es_devolucion and delta < 0:
+                            message = {
+                                "type": "error",
+                                "text": "Con Devolución venta solo podés subir stock (nuevo stock mayor al actual).",
+                            }
+                        elif es_devolucion and delta <= 0:
+                            message = {
+                                "type": "error",
+                                "text": "Con Devolución venta debés subir al menos una unidad de stock.",
+                            }
                         elif codigo_destino and delta >= 0:
                             message = {
                                 "type": "error",
@@ -5370,12 +5695,21 @@ def ajuste():
                                 codigo_destino,
                                 prorrateo,
                             )
+                            venta_kw = _venta_operativa_kwargs(
+                                es_venta=es_venta,
+                                es_devolucion=es_devolucion,
+                                delta=delta,
+                                precio=precio_venta,
+                                ref_sii=ref_sii,
+                                motivo_codigo=motivo_codigo,
+                            )
                             _aplicar_movimiento_stock(
                                 form_data["codigo"],
                                 "ajuste",
                                 delta,
                                 nuevo_stock,
                                 observacion,
+                                **venta_kw,
                             )
                             producto = _producto_por_codigo(form_data["codigo"])
                             extra = (
@@ -5383,6 +5717,24 @@ def ajuste():
                                 if prorrateo and prorrateo.get("mensaje")
                                 else ""
                             )
+                            if es_venta:
+                                extra = (
+                                    f" Venta operativa: {abs(delta)} u. × "
+                                    f"${float(precio_venta):,.0f}".replace(",", ".")
+                                    + f" = ${float(precio_venta) * abs(delta):,.0f}".replace(",", ".")
+                                    + "."
+                                    + (f" Ref SII: {ref_sii}." if ref_sii else "")
+                                    + extra
+                                )
+                            elif es_devolucion:
+                                extra = (
+                                    f" Devolución venta: +{abs(delta)} u. (resta del libro operativo) × "
+                                    f"${float(precio_venta):,.0f}".replace(",", ".")
+                                    + f" = ${float(precio_venta) * abs(delta):,.0f}".replace(",", ".")
+                                    + "."
+                                    + (f" Ref SII: {ref_sii}." if ref_sii else "")
+                                    + extra
+                                )
                             message = {
                                 "type": "success",
                                 "text": f"Ajuste aplicado correctamente. Stock actual: {nuevo_stock}.{extra}",
@@ -5401,6 +5753,9 @@ def ajuste():
                 "observacion_detalle": "",
                 "observacion": "",
                 "codigo_destino": "",
+                "precio_venta_con_iva": "",
+                "precio_venta_neto_val": None,
+                "ref_sii": "",
                 "ajuste_lineas": [],
             }
             producto = None
@@ -5434,6 +5789,7 @@ def ajuste():
     ajuste_lineas_ui = _ajuste_lineas_con_stock_actual(
         form_data.get("ajuste_lineas") or [], variantes_bodega
     )
+    puede_venta_operativa = _puede_ajuste_venta_operativa()
 
     return render_template(
         "bodega/ajuste.html",
@@ -5450,9 +5806,156 @@ def ajuste():
             stock_contexto_actual=stock_contexto_actual,
             stock_suma_variantes_bodega=stock_suma_variantes_bodega,
             stock_suma_variantes_total=stock_suma_variantes_total,
-            ajuste_observacion_opciones=AJUSTE_OBSERVACION_OPCIONES,
+            ajuste_observacion_opciones=_opciones_motivo_ajuste(
+                puede_venta_operativa=puede_venta_operativa
+            ),
+            puede_venta_operativa=puede_venta_operativa,
             motivo_incorporacion=MOTIVO_INCORPORACION,
+            motivo_venta=MOTIVO_VENTA,
+            motivo_devolucion_venta=MOTIVO_DEVOLUCION_VENTA,
             origen_compra_opciones=ORIGEN_COMPRA_OPCIONES,
+        ),
+    )
+
+
+@bodega_bp.route("/reclasificar-ventas", methods=["GET", "POST"])
+@admin_required
+def reclasificar_ventas():
+    """Marca ajustes históricos negativos como venta operativa (sin mover stock)."""
+    if not _puede_ajuste_venta_operativa():
+        return _deny_bodega_perm(
+            "No tenés activada la reclasificación a venta operativa. Pedí activarla en Seguridad."
+        )
+    if request.method == "POST" and not has_permission(session.get("user"), session.get("rol"), "bodega_ajuste"):
+        return _deny_bodega_perm("No tienes permiso para reclasificar ajustes.")
+
+    codigo = (request.values.get("codigo") or "").strip().upper()
+    desde_raw = (request.values.get("desde") or "").strip()
+    hasta_raw = (request.values.get("hasta") or "").strip()
+    solo_con_precio = (request.values.get("solo_con_precio") or "").strip() in {"1", "on", "true", "yes"}
+    solo_conteo = (request.values.get("solo_conteo") or "").strip() in {"1", "on", "true", "yes"}
+    # Por defecto en GET sin params: sugerir conteo físico (candidatos típicos de ventas viejas)
+    if request.method == "GET" and not request.args:
+        solo_conteo = True
+    message = None
+
+    def _parse_d(raw: str):
+        if not raw:
+            return None
+        try:
+            return date.fromisoformat(raw[:10])
+        except ValueError:
+            return None
+
+    desde = _parse_d(desde_raw)
+    hasta = _parse_d(hasta_raw)
+
+    q = MovimientoStock.query.filter(
+        MovimientoStock.tipo == "ajuste",
+        MovimientoStock.cantidad < 0,
+        or_(
+            MovimientoStock.es_venta_operativa.is_(False),
+            MovimientoStock.es_venta_operativa.is_(None),
+        ),
+    )
+    if codigo:
+        q = q.filter(MovimientoStock.codigo_producto.ilike(f"%{codigo}%"))
+    if desde:
+        q = q.filter(func.date(MovimientoStock.fecha) >= desde)
+    if hasta:
+        q = q.filter(func.date(MovimientoStock.fecha) <= hasta)
+    if solo_con_precio:
+        q = q.filter(MovimientoStock.precio_venta_neto.isnot(None), MovimientoStock.precio_venta_neto > 0)
+    if solo_conteo:
+        q = q.filter(MovimientoStock.observacion.ilike("%conteo físico%"))
+
+    candidatos = q.order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc()).limit(500).all()
+
+    if request.method == "POST":
+        ids_raw = request.form.getlist("mov_id")
+        precio_default_raw = (request.form.get("precio_default") or "").strip()
+        ref_default = (request.form.get("ref_sii_default") or "").strip()[:80]
+        precio_default = _parse_valor_neto_chile(precio_default_raw) if precio_default_raw else None
+        ids = []
+        for x in ids_raw:
+            try:
+                ids.append(int(x))
+            except (TypeError, ValueError):
+                continue
+        if not ids:
+            message = {"type": "error", "text": "Seleccioná al menos un ajuste para reclasificar."}
+        else:
+            actor = (session.get("user") or "sistema").strip() or "sistema"
+            now = datetime.utcnow()
+            updated = 0
+            try:
+                rows = (
+                    MovimientoStock.query.filter(
+                        MovimientoStock.id.in_(ids),
+                        MovimientoStock.tipo == "ajuste",
+                        MovimientoStock.cantidad < 0,
+                    )
+                    .all()
+                )
+                for mv in rows:
+                    if mv.es_venta_operativa:
+                        continue
+                    precio = mv.precio_venta_neto
+                    row_precio_raw = (request.form.get(f"precio_mov_{mv.id}") or "").strip()
+                    row_precio = _parse_valor_neto_chile(row_precio_raw) if row_precio_raw else None
+                    if row_precio is not None and float(row_precio) > 0:
+                        precio = row_precio
+                    if precio is None or float(precio) <= 0:
+                        precio = precio_default
+                    if precio is None or float(precio) <= 0:
+                        continue
+                    qty = abs(int(mv.cantidad or 0))
+                    mv.es_venta_operativa = True
+                    mv.motivo_codigo = "venta"
+                    mv.precio_venta_neto = float(precio)
+                    mv.total_neto = round(float(precio) * qty, 2)
+                    row_ref = (request.form.get(f"ref_mov_{mv.id}") or "").strip()[:80]
+                    if row_ref:
+                        mv.ref_sii = row_ref
+                    elif ref_default and not (mv.ref_sii or "").strip():
+                        mv.ref_sii = ref_default
+                    # Prefijo estable en observación si aún no dice Venta
+                    obs = (mv.observacion or "").strip()
+                    if obs and not obs.upper().startswith("VENTA"):
+                        mv.observacion = f"Venta. {obs}"[:255]
+                    elif not obs:
+                        mv.observacion = "Venta (reclasificado)"
+                    mv.reclasificado_at = now
+                    mv.reclasificado_por = actor
+                    updated += 1
+                db.session.commit()
+                skipped = len(ids) - updated
+                message = {
+                    "type": "success",
+                    "text": (
+                        f"Reclasificados {updated} ajuste(s) como venta operativa."
+                        + (f" {skipped} omitido(s) (sin precio o ya marcados)." if skipped else "")
+                    ),
+                }
+                # refresh list
+                candidatos = q.order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc()).limit(500).all()
+            except Exception as exc:
+                db.session.rollback()
+                message = {"type": "error", "text": f"No se pudo reclasificar: {exc}"}
+
+    return render_template(
+        "bodega/reclasificar_ventas.html",
+        **_base_context(
+            "reclasificar_ventas",
+            candidatos=candidatos,
+            message=message,
+            filtros={
+                "codigo": codigo,
+                "desde": desde_raw,
+                "hasta": hasta_raw,
+                "solo_con_precio": "1" if solo_con_precio else "",
+                "solo_conteo": "1" if solo_conteo else "",
+            },
         ),
     )
 

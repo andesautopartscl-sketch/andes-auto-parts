@@ -81,7 +81,8 @@
     margin: 0;
 }
 /* .field { display:flex } en bodega anula el atributo HTML hidden */
-#ajusteIncorporacionWrap[hidden] {
+#ajusteIncorporacionWrap[hidden],
+#ajusteVentaWrap[hidden] {
     display: none !important;
 }
 .ajuste-marca-hint {
@@ -563,6 +564,61 @@
     min-height: 30px;
     margin-top: 2px;
 }
+.ajuste-auth-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.45);
+    padding: 16px;
+}
+.ajuste-auth-modal.open {
+    display: flex;
+}
+.ajuste-auth-card {
+    width: min(420px, 100%);
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px 18px;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.28);
+}
+.ajuste-auth-title {
+    margin: 0 0 4px;
+    font-size: 15px;
+    color: #0f172a;
+}
+.ajuste-auth-sub {
+    margin: 0 0 12px;
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.35;
+}
+.ajuste-auth-grid {
+    display: grid;
+    gap: 8px;
+}
+.ajuste-auth-grid .field label {
+    font-size: 11px;
+}
+.ajuste-auth-grid input {
+    width: 100%;
+    min-height: 34px;
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+.ajuste-auth-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+}
+.ajuste-auth-actions .btn {
+    min-height: 34px;
+}
 </style>
 {% endblock %}
 
@@ -585,7 +641,11 @@
     <form method="post" id="ajusteForm"
           data-marcas-url="{{ url_for('bodega.ajuste_marcas_sugeridas') }}"
           data-consult-url="{{ url_for('bodega.ajuste') }}"
-          data-product-search-url="{{ url_for('ventas.api_productos_search') }}">
+          data-product-search-url="{{ url_for('ventas.api_productos_search') }}"
+          data-puede-venta="{{ 1 if puede_venta_operativa else 0 }}"
+          data-session-user="{{ session.get('user') or '' }}">
+        <input type="hidden" name="auth_user" id="ajusteAuthUserHidden" value="">
+        <input type="hidden" name="auth_password" id="ajusteAuthPassHidden" value="">
         <div class="form-grid">
             <div class="field">
                 <label for="codigo">Código del producto</label>
@@ -683,6 +743,26 @@
                     {% endfor %}
                 </select>
             </div>
+            <div class="field field-full" id="ajusteVentaWrap" hidden>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div>
+                        <label for="precio_venta_con_iva">Precio unitario con IVA *</label>
+                        <input id="precio_venta_con_iva" name="precio_venta_con_iva" inputmode="decimal"
+                               value="{{ form_data.precio_venta_con_iva or '' }}"
+                               placeholder="Ej: 14875" autocomplete="off">
+                    </div>
+                    <div>
+                        <label for="ref_sii">Ref. boleta/factura SII (opcional)</label>
+                        <input id="ref_sii" name="ref_sii" maxlength="80"
+                               value="{{ form_data.ref_sii or '' }}"
+                               placeholder="Ej: Boleta 12345" autocomplete="off">
+                    </div>
+                </div>
+                <p class="ajuste-marca-hint" id="ajusteVentaHint" style="margin-top:6px;">
+                    Ingresá el precio real cobrado (con IVA). Sin N° de boleta igual podés guardar.
+                    El libro operativo separa neto + IVA 19%.
+                </p>
+            </div>
             <div class="field field-full" id="ajusteIncorporacionWrap" hidden>
                 <label for="codigo_destino">Código destino (incorporación) *</label>
                 <input id="codigo_destino" name="codigo_destino" maxlength="100"
@@ -742,6 +822,17 @@
                 {% endif %}
 
                 <div class="ajuste-help-section">
+                    <h4 class="ajuste-help-section-title">Venta / Devolución</h4>
+                    <ul class="ajuste-help-list">
+                        <li>Al elegir <strong>Venta</strong> o <strong>Devolución venta</strong> aparecen precio y ref. SII.</li>
+                        <li>Al aplicar, pedimos <strong>usuario y clave</strong> de quien tiene la opción activada.</li>
+                        <li><strong>Precio</strong>: el valor real cobrado <strong>con IVA</strong> (el sistema calcula el neto para el libro).</li>
+                        <li><strong>Ref. boleta/factura</strong>: opcional; sin número igual se guarda.</li>
+                        <li><strong>Venta</strong>: bajá stock → suma al libro operativo. <strong>Devolución</strong>: subí stock → resta.</li>
+                    </ul>
+                </div>
+
+                <div class="ajuste-help-section">
                     <h4 class="ajuste-help-section-title">Incorporación a producto</h4>
                     <ul class="ajuste-help-list">
                         <li>Elegí motivo <strong>Incorporación a producto</strong> y el <strong>código destino</strong> (ej. AR240RC).</li>
@@ -755,6 +846,32 @@
         </div>
     </form>
 </div>
+
+{% if puede_venta_operativa %}
+<div id="ajusteAuthModal" class="ajuste-auth-modal" aria-hidden="true">
+    <div class="ajuste-auth-card" role="dialog" aria-modal="true" aria-labelledby="ajusteAuthTitle">
+        <h3 id="ajusteAuthTitle" class="ajuste-auth-title">Autorizar venta operativa</h3>
+        <p class="ajuste-auth-sub" id="ajusteAuthSub">Confirmá usuario y clave para registrar Venta o Devolución venta.</p>
+        <form id="ajusteAuthForm" onsubmit="return false;">
+            <div class="ajuste-auth-grid">
+                <div class="field" style="margin:0;">
+                    <label for="ajusteAuthUser">Usuario</label>
+                    <input id="ajusteAuthUser" type="text" required autocomplete="username"
+                           value="{{ session.get('user') or '' }}">
+                </div>
+                <div class="field" style="margin:0;">
+                    <label for="ajusteAuthPass">Contraseña</label>
+                    <input id="ajusteAuthPass" type="password" required autocomplete="current-password">
+                </div>
+            </div>
+            <div class="ajuste-auth-actions">
+                <button type="button" class="btn" id="ajusteAuthCancel">Cancelar</button>
+                <button type="submit" class="btn btn-primary" id="ajusteAuthConfirm">Autorizar y aplicar</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
 
 <div id="ajusteProductModal" class="ingreso-product-modal" aria-hidden="true">
     <div class="ingreso-product-modal-card" role="dialog" aria-modal="true" aria-labelledby="ajusteProductModalTitle">
@@ -858,9 +975,14 @@
 <script>
 (function () {
     var MOTIVO_INC = {{ (motivo_incorporacion or 'Incorporación a producto') | tojson }};
+    var MOTIVO_VENTA = {{ (motivo_venta or 'Venta') | tojson }};
+    var MOTIVO_DEV = {{ (motivo_devolucion_venta or 'Devolución venta') | tojson }};
     var previewUrl = {{ url_for('bodega.api_incorporacion_preview') | tojson }};
     var motivoSel = document.getElementById('observacion_motivo');
     var wrap = document.getElementById('ajusteIncorporacionWrap');
+    var ventaWrap = document.getElementById('ajusteVentaWrap');
+    var ventaHint = document.getElementById('ajusteVentaHint');
+    var precioVentaInp = document.getElementById('precio_venta_con_iva');
     var destInp = document.getElementById('codigo_destino');
     var hint = document.getElementById('ajusteIncorporacionHint');
     var codigoInp = document.getElementById('codigo');
@@ -868,6 +990,24 @@
     var bodegaSel = document.getElementById('bodega');
     var nuevoStockInp = document.getElementById('nuevo_stock');
     var previewTimer = null;
+
+    function toggleVenta() {
+        if (!motivoSel || !ventaWrap) return;
+        var v = motivoSel.value;
+        var on = (v === MOTIVO_VENTA || v === MOTIVO_DEV);
+        ventaWrap.hidden = !on;
+        if (precioVentaInp) {
+            if (on) precioVentaInp.setAttribute('required', 'required');
+            else precioVentaInp.removeAttribute('required');
+        }
+        if (ventaHint) {
+            if (v === MOTIVO_DEV) {
+                ventaHint.textContent = 'Devolución venta: subí el stock. Precio = el cobrado con IVA en la venta. Sin N° de boleta igual se guarda. Se resta del libro operativo.';
+            } else {
+                ventaHint.textContent = 'Venta: bajá stock e ingresá el precio cobrado con IVA. Sin N° de boleta igual se guarda. El libro operativo separa neto + IVA 19%.';
+            }
+        }
+    }
 
     function stockActualContexto() {
         var meta = document.querySelector('.ajuste-stock-meta-line strong:last-child');
@@ -999,8 +1139,12 @@
     }
 
     if (motivoSel) {
-        motivoSel.addEventListener('change', toggleInc);
+        motivoSel.addEventListener('change', function () {
+            toggleInc();
+            toggleVenta();
+        });
         toggleInc();
+        toggleVenta();
     }
     if (destInp) {
         destInp.addEventListener('input', function () {
@@ -1017,6 +1161,73 @@
     });
 
     var form = document.getElementById('ajusteForm');
+    var authModal = document.getElementById('ajusteAuthModal');
+    var authForm = document.getElementById('ajusteAuthForm');
+    var authUser = document.getElementById('ajusteAuthUser');
+    var authPass = document.getElementById('ajusteAuthPass');
+    var authCancel = document.getElementById('ajusteAuthCancel');
+    var authUserHidden = document.getElementById('ajusteAuthUserHidden');
+    var authPassHidden = document.getElementById('ajusteAuthPassHidden');
+    var authReady = false;
+
+    function closeAuthModal() {
+        if (!authModal) return;
+        authModal.classList.remove('open');
+        authModal.setAttribute('aria-hidden', 'true');
+        if (authPass) authPass.value = '';
+    }
+
+    function openAuthModal() {
+        if (!authModal) return;
+        authModal.classList.add('open');
+        authModal.setAttribute('aria-hidden', 'false');
+        if (authUser && !(authUser.value || '').trim() && form) {
+            authUser.value = form.getAttribute('data-session-user') || '';
+        }
+        window.setTimeout(function () {
+            if (authPass) authPass.focus();
+            else if (authUser) authUser.focus();
+        }, 30);
+    }
+
+    function isMotivoVentaOperativa() {
+        if (!motivoSel) return false;
+        var v = motivoSel.value;
+        return v === MOTIVO_VENTA || v === MOTIVO_DEV;
+    }
+
+    if (authCancel) authCancel.addEventListener('click', function () {
+        authReady = false;
+        closeAuthModal();
+    });
+    if (authModal) {
+        authModal.addEventListener('click', function (ev) {
+            if (ev.target === authModal) {
+                authReady = false;
+                closeAuthModal();
+            }
+        });
+    }
+    if (authForm) {
+        authForm.addEventListener('submit', function (ev) {
+            ev.preventDefault();
+            if (!form || !authUser || !authPass) return;
+            var u = (authUser.value || '').trim();
+            var p = authPass.value || '';
+            if (!u || !p) {
+                if (!u && authUser) authUser.focus();
+                else if (authPass) authPass.focus();
+                return;
+            }
+            if (authUserHidden) authUserHidden.value = u;
+            if (authPassHidden) authPassHidden.value = p;
+            authReady = true;
+            closeAuthModal();
+            if (typeof form.requestSubmit === 'function') form.requestSubmit();
+            else form.submit();
+        });
+    }
+
     if (form) {
         form.addEventListener('submit', function (ev) {
             var submitter = ev.submitter;
@@ -1025,7 +1236,15 @@
             if (!validarDestinoObligatorio()) {
                 ev.preventDefault();
                 ev.stopPropagation();
+                return;
             }
+            if (isMotivoVentaOperativa() && form.getAttribute('data-puede-venta') === '1' && !authReady) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                openAuthModal();
+                return;
+            }
+            authReady = false;
         });
     }
 })();

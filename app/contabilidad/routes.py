@@ -10,12 +10,13 @@ from flask import Blueprint, flash, jsonify, redirect, render_template, request,
 from sqlalchemy import and_, func, or_
 from werkzeug.security import check_password_hash
 
-from app.bodega.models import IngresoDocumento, IngresoDocumentoItem
+from app.bodega.models import IngresoDocumento, IngresoDocumentoItem, MovimientoStock
 from app.extensions import db
 from app.seguridad.models import Usuario
 from app.utils.decorators import login_required, permission_required
 from app.utils.permissions import has_permission
 from app.utils.rut_utils import clean_rut, format_rut
+from app.ventas.models import DocumentoVenta
 from .models import CuentaContable, EmisorContable, MovimientoContable, TIPOS_CUENTA
 from .emisores_service import (
     backfill_emisores_desde_movimientos,
@@ -29,7 +30,6 @@ from .emisores_service import (
     validate_emisor_form,
 )
 from app.ventas.routes import _chile_regions, _load_chile_geo, METODO_PAGO_LABELS, METODO_PAGO_OPTIONS
-from app.ventas.models import DocumentoVenta
 
 contabilidad_bp = Blueprint(
     "contabilidad", __name__, url_prefix="/contabilidad",
@@ -730,10 +730,249 @@ def libro_ventas():
         .limit(300)
         .all()
     )
+
+    iva_rate = 0.19
+    ops_raw = (
+        MovimientoStock.query.filter(
+            MovimientoStock.es_venta_operativa.is_(True),
+            MovimientoStock.tipo == "ajuste",
+        )
+        .order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc())
+        .limit(400)
+        .all()
+    )
+    operativas = []
+    op_neto = 0.0
+    for m in ops_raw:
+        qty = abs(int(m.cantidad or 0))
+        bruto = float(m.total_neto) if m.total_neto is not None else (
+            qty * float(m.precio_venta_neto or 0)
+        )
+        is_dev = (m.motivo_codigo or "") == "devolucion_venta" or int(m.cantidad or 0) > 0
+        sign = -1.0 if is_dev else 1.0
+        neto = round(sign * bruto, 2)
+        iva = round(neto * iva_rate, 2)
+        total = round(neto + iva, 2)
+        op_neto += neto
+        operativas.append(
+            {
+                "fecha": m.fecha,
+                "tipo": "DEVOLUCION_AJUSTE" if is_dev else "VENTA_AJUSTE",
+                "documento": (m.ref_sii or f"AJ-{m.id}"),
+                "detalle": f"{m.codigo_producto}"
+                + (f" · {m.marca}" if m.marca else "")
+                + (f" · {qty} u." if qty else ""),
+                "neto": neto,
+                "iva": iva,
+                "total": total,
+                "usuario": m.usuario or "",
+            }
+        )
+    op_iva = round(op_neto * iva_rate, 2)
+    op_total = round(op_neto + op_iva, 2)
+
     return render_template(
         "contabilidad/libro_ventas.html",
         documentos=docs,
+        operativas=operativas,
+        op_neto=op_neto,
+        op_iva=op_iva,
+        op_total=op_total,
         active_page="contabilidad_libro_ventas",
+    )
+
+
+def _parse_date_arg(raw: str, fallback: date | None = None) -> date | None:
+    text = (raw or "").strip()
+    if not text:
+        return fallback
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return fallback
+
+
+def _match_docs_sii_por_refs(refs: list[str]) -> dict[str, list[dict]]:
+    """Cruce liviano: ref_sii ↔ número de DocumentoVenta (ERP), si existe."""
+    cleaned = sorted({(r or "").strip() for r in refs if (r or "").strip()})
+    if not cleaned:
+        return {}
+    out: dict[str, list[dict]] = {r: [] for r in cleaned}
+    # Buscar coincidencias parciales por número
+    q = DocumentoVenta.query.filter(
+        DocumentoVenta.numero.isnot(None),
+        DocumentoVenta.numero != "",
+    )
+    # Limitar: solo docs cuyo número aparece en alguna ref
+    clauses = []
+    for ref in cleaned[:80]:
+        clauses.append(DocumentoVenta.numero.ilike(f"%{ref}%"))
+        if hasattr(DocumentoVenta, "numero_oc_cliente"):
+            clauses.append(DocumentoVenta.numero_oc_cliente.ilike(f"%{ref}%"))
+    if not clauses:
+        return out
+    docs = q.filter(or_(*clauses)).order_by(DocumentoVenta.fecha_documento.desc()).limit(200).all()
+    for d in docs:
+        num = (d.numero or "").strip().upper()
+        oc = (getattr(d, "numero_oc_cliente", None) or "").strip().upper()
+        for ref in cleaned:
+            ru = ref.upper()
+            if (num and (ru in num or num in ru)) or (oc and (ru in oc or oc in ru)):
+                out[ref].append(
+                    {
+                        "id": d.id,
+                        "tipo": d.tipo,
+                        "numero": d.numero,
+                        "fecha": d.fecha_documento.isoformat() if d.fecha_documento else None,
+                        "total": float(d.total or 0),
+                    }
+                )
+    return out
+
+
+@contabilidad_bp.route("/ventas-operativas", methods=["GET"])
+@login_required
+@permission_required("ver_finanzas")
+def ventas_operativas():
+    """Informe de gestión: ajustes marcados como venta (no sustituye libro SII)."""
+    today = date.today()
+    desde = _parse_date_arg(request.args.get("desde", ""), today.replace(day=1))
+    hasta = _parse_date_arg(request.args.get("hasta", ""), today)
+    codigo = (request.args.get("codigo") or "").strip().upper()
+    marca = (request.args.get("marca") or "").strip()
+    bodega = (request.args.get("bodega") or "").strip()
+    usuario = (request.args.get("usuario") or "").strip()
+    export = (request.args.get("export") or "").strip().lower()
+
+    q = MovimientoStock.query.filter(
+        MovimientoStock.es_venta_operativa.is_(True),
+        MovimientoStock.tipo == "ajuste",
+    )
+    if desde:
+        q = q.filter(func.date(MovimientoStock.fecha) >= desde)
+    if hasta:
+        q = q.filter(func.date(MovimientoStock.fecha) <= hasta)
+    if codigo:
+        q = q.filter(MovimientoStock.codigo_producto.ilike(f"%{codigo}%"))
+    if marca:
+        q = q.filter(MovimientoStock.marca.ilike(f"%{marca}%"))
+    if bodega:
+        q = q.filter(MovimientoStock.bodega.ilike(f"%{bodega}%"))
+    if usuario:
+        q = q.filter(MovimientoStock.usuario.ilike(f"%{usuario}%"))
+
+    rows = q.order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc()).limit(2000).all()
+
+    unidades_venta = 0
+    unidades_dev = 0
+    total_ventas = 0.0
+    total_devs = 0.0
+    for r in rows:
+        qty = abs(int(r.cantidad or 0))
+        bruto = float(r.total_neto) if r.total_neto is not None else qty * float(r.precio_venta_neto or 0)
+        is_dev = (r.motivo_codigo or "") == "devolucion_venta" or int(r.cantidad or 0) > 0
+        if is_dev:
+            unidades_dev += qty
+            total_devs += bruto
+        else:
+            unidades_venta += qty
+            total_ventas += bruto
+    unidades = unidades_venta - unidades_dev
+    total_neto = total_ventas - total_devs
+    n_mov = len(rows)
+    ticket_prom = (total_ventas / max(1, sum(1 for r in rows if int(r.cantidad or 0) < 0))) if rows else 0.0
+    iva_rate = 0.19
+    total_iva = round(total_neto * iva_rate, 2)
+    total_con_iva = round(total_neto + total_iva, 2)
+
+    refs = [r.ref_sii for r in rows if (r.ref_sii or "").strip()]
+    matches_sii = _match_docs_sii_por_refs(refs)
+
+    timeline = []
+    if codigo and len(codigo) >= 2:
+        tl_q = (
+            MovimientoStock.query.filter(MovimientoStock.codigo_producto == codigo)
+            .order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc())
+            .limit(120)
+            .all()
+        )
+        for m in tl_q:
+            kind = "otro"
+            if m.es_venta_operativa and (m.motivo_codigo or "") == "devolucion_venta":
+                kind = "devolucion"
+            elif m.es_venta_operativa and int(m.cantidad or 0) < 0:
+                kind = "venta"
+            elif m.es_venta_operativa and int(m.cantidad or 0) > 0:
+                kind = "devolucion"
+            elif (m.tipo or "") == "ingreso" or int(m.cantidad or 0) > 0:
+                kind = "ingreso"
+            elif (m.tipo or "") == "ajuste":
+                kind = "ajuste"
+            timeline.append({"mov": m, "kind": kind})
+
+    if export == "csv":
+        buf = io.StringIO()
+        writer = csv.writer(buf, delimiter=";")
+        writer.writerow(
+            [
+                "fecha",
+                "tipo",
+                "codigo",
+                "marca",
+                "bodega",
+                "cantidad",
+                "precio_neto_u",
+                "total_neto",
+                "ref_sii",
+                "usuario",
+                "observacion",
+            ]
+        )
+        for r in rows:
+            is_dev = (r.motivo_codigo or "") == "devolucion_venta" or int(r.cantidad or 0) > 0
+            writer.writerow(
+                [
+                    r.fecha.isoformat(sep=" ", timespec="minutes") if r.fecha else "",
+                    "devolucion" if is_dev else "venta",
+                    r.codigo_producto or "",
+                    r.marca or "",
+                    r.bodega or "",
+                    abs(int(r.cantidad or 0)) * (-1 if is_dev else 1),
+                    r.precio_venta_neto if r.precio_venta_neto is not None else "",
+                    (float(r.total_neto or 0) * (-1 if is_dev else 1)) if r.total_neto is not None else "",
+                    r.ref_sii or "",
+                    r.usuario or "",
+                    r.observacion or "",
+                ]
+            )
+        resp = Response(buf.getvalue(), mimetype="text/csv; charset=utf-8")
+        resp.headers["Content-Disposition"] = "attachment; filename=ventas_operativas.csv"
+        return resp
+
+    return render_template(
+        "contabilidad/ventas_operativas.html",
+        rows=rows,
+        timeline=timeline,
+        matches_sii=matches_sii,
+        unidades=unidades,
+        unidades_venta=unidades_venta,
+        unidades_dev=unidades_dev,
+        total_neto=total_neto,
+        total_ventas=total_ventas,
+        total_devs=total_devs,
+        total_iva=total_iva,
+        total_con_iva=total_con_iva,
+        n_mov=n_mov,
+        ticket_prom=ticket_prom,
+        filtros={
+            "desde": desde.isoformat() if desde else "",
+            "hasta": hasta.isoformat() if hasta else "",
+            "codigo": codigo,
+            "marca": marca,
+            "bodega": bodega,
+            "usuario": usuario,
+        },
+        active_page="contabilidad_ventas_operativas",
     )
 
 

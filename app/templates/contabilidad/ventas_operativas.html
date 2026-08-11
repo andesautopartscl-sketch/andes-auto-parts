@@ -1,0 +1,208 @@
+{% extends 'base_content.html' if _partial else 'base.html' %}
+{% block title %}Ventas operativas | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<style>
+.vo-page { font-size: 12.5px; color: #334155; }
+.vo-note {
+  margin: 0 0 12px; padding: 8px 10px; border-radius: 8px;
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: 12px; line-height: 1.4;
+}
+.vo-filters {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px;
+  margin: 0 0 12px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+}
+.vo-filters label { display:block; font-size: 10.5px; font-weight: 600; color: #64748b; margin-bottom: 3px; }
+.vo-filters input { width: 100%; min-height: 30px; padding: 4px 8px; border-radius: 8px; border: 1px solid #cbd5e1; box-sizing: border-box; }
+.vo-filters .vo-actions { display:flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.vo-kpi {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px;
+}
+.vo-kpi-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px;
+}
+.vo-kpi-card .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; }
+.vo-kpi-card .val { font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 2px; }
+.vo-table-wrap { overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; }
+.vo-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.vo-table th, .vo-table td { padding: 7px 8px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: top; }
+.vo-table th { background: #f8fafc; font-size: 10px; text-transform: uppercase; color: #64748b; letter-spacing: .03em; white-space: nowrap; }
+.vo-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vo-chip {
+  display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700;
+}
+.vo-chip.venta { background: #ecfdf5; color: #047857; }
+.vo-chip.ingreso { background: #eff6ff; color: #1d4ed8; }
+.vo-chip.ajuste { background: #fff7ed; color: #c2410c; }
+.vo-chip.devolucion { background: #fef2f2; color: #b91c1c; }
+.vo-timeline { margin-top: 16px; }
+.vo-match { font-size: 10.5px; color: #2563eb; }
+.vo-empty { padding: 18px; color: #64748b; }
+</style>
+
+<div class="vo-page contab-compact">
+  <div class="topbar">
+    <div>
+      <h1 class="page-title">Ventas operativas</h1>
+      <p class="page-subtitle">Ajustes de stock marcados como venta (gestión interna)</p>
+    </div>
+    <div class="topbar-actions">
+      <a class="link-btn" href="{{ url_for('contabilidad.libro_ventas') }}" data-module-url="{{ url_for('contabilidad.libro_ventas') }}">Libro ventas ERP</a>
+      <a class="link-btn" href="{{ url_for('bodega.reclasificar_ventas') }}" data-module-url="{{ url_for('bodega.reclasificar_ventas') }}">Reclasificar ajustes</a>
+      <a class="link-btn" href="{{ url_for('bodega.ajuste') }}" data-module-url="{{ url_for('bodega.ajuste') }}">Nuevo ajuste</a>
+    </div>
+  </div>
+
+  <p class="vo-note">
+    Informe de gestión. <strong>No sustituye</strong> el libro de ventas del SII ni el IVA.
+    Las boletas/facturas se siguen emitiendo fuera del ERP; acá solo trazás stock vendido vía ajuste.
+  </p>
+
+  <form class="vo-filters" method="get">
+    <div>
+      <label for="vo-desde">Desde</label>
+      <input id="vo-desde" type="date" name="desde" value="{{ filtros.desde }}">
+    </div>
+    <div>
+      <label for="vo-hasta">Hasta</label>
+      <input id="vo-hasta" type="date" name="hasta" value="{{ filtros.hasta }}">
+    </div>
+    <div>
+      <label for="vo-codigo">Código</label>
+      <input id="vo-codigo" name="codigo" value="{{ filtros.codigo }}" placeholder="Ej: JS605" autocomplete="off">
+    </div>
+    <div>
+      <label for="vo-marca">Marca</label>
+      <input id="vo-marca" name="marca" value="{{ filtros.marca }}" autocomplete="off">
+    </div>
+    <div>
+      <label for="vo-bodega">Bodega</label>
+      <input id="vo-bodega" name="bodega" value="{{ filtros.bodega }}" autocomplete="off">
+    </div>
+    <div>
+      <label for="vo-usuario">Usuario</label>
+      <input id="vo-usuario" name="usuario" value="{{ filtros.usuario }}" autocomplete="off">
+    </div>
+    <div class="vo-actions">
+      <button type="submit" class="btn btn-primary">Filtrar</button>
+      <a class="link-btn" href="{{ url_for('contabilidad.ventas_operativas') }}">Limpiar</a>
+      <button type="submit" class="btn outline" name="export" value="csv">CSV</button>
+    </div>
+  </form>
+
+  <div class="vo-kpi">
+    <div class="vo-kpi-card">
+      <div class="lbl">Movimientos</div>
+      <div class="val">{{ n_mov }}</div>
+    </div>
+    <div class="vo-kpi-card">
+      <div class="lbl">U. vendidas</div>
+      <div class="val">{{ unidades_venta }}</div>
+    </div>
+    <div class="vo-kpi-card">
+      <div class="lbl">U. devueltas</div>
+      <div class="val">{{ unidades_dev }}</div>
+    </div>
+    <div class="vo-kpi-card">
+      <div class="lbl">U. netas</div>
+      <div class="val">{{ unidades }}</div>
+    </div>
+    <div class="vo-kpi-card">
+      <div class="lbl">Neto (ventas − devol.)</div>
+      <div class="val">${{ '{:,.0f}'.format(total_neto).replace(',', '.') }}</div>
+    </div>
+    <div class="vo-kpi-card">
+      <div class="lbl">IVA 19% est.</div>
+      <div class="val">${{ '{:,.0f}'.format(total_iva).replace(',', '.') }}</div>
+    </div>
+    <div class="vo-kpi-card">
+      <div class="lbl">Total c/ IVA</div>
+      <div class="val">${{ '{:,.0f}'.format(total_con_iva).replace(',', '.') }}</div>
+    </div>
+  </div>
+
+  <div class="vo-table-wrap">
+    {% if rows %}
+    <table class="vo-table">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Tipo</th>
+          <th>Código</th>
+          <th>Marca</th>
+          <th>Bodega</th>
+          <th class="num">Cant.</th>
+          <th class="num">P. neto u.</th>
+          <th class="num">Total neto</th>
+          <th>Ref. SII</th>
+          <th>Usuario</th>
+          <th>Observación</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        {% set is_dev = (r.motivo_codigo == 'devolucion_venta') or (r.cantidad and r.cantidad > 0) %}
+        <tr>
+          <td style="white-space:nowrap;">{{ r.fecha|chile_datetime if r.fecha else '—' }}</td>
+          <td><span class="vo-chip {{ 'devolucion' if is_dev else 'venta' }}">{{ 'DEVOLUCIÓN' if is_dev else 'VENTA' }}</span></td>
+          <td><strong>{{ r.codigo_producto }}</strong></td>
+          <td>{{ r.marca or '—' }}</td>
+          <td>{{ r.bodega or '—' }}</td>
+          <td class="num">{{ '-' if is_dev else '' }}{{ r.cantidad|abs }}</td>
+          <td class="num">{% if r.precio_venta_neto is not none %}${{ '{:,.0f}'.format(r.precio_venta_neto).replace(',', '.') }}{% else %}—{% endif %}</td>
+          <td class="num">{% if r.total_neto is not none %}${{ '{:,.0f}'.format((r.total_neto|float) * (-1 if is_dev else 1)).replace(',', '.') }}{% else %}—{% endif %}</td>
+          <td>
+            {% if r.ref_sii %}
+              {{ r.ref_sii }}
+              {% set hits = matches_sii.get(r.ref_sii) or [] %}
+              {% if hits %}
+              <div class="vo-match">Cruce ERP: {{ hits[0].tipo }} {{ hits[0].numero }}</div>
+              {% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ r.usuario or '—' }}</td>
+          <td>{{ r.observacion or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="vo-empty">No hay ventas operativas con estos filtros. Usá motivo <strong>Venta</strong> en Ajuste de stock, o reclasificá ajustes históricos.</div>
+    {% endif %}
+  </div>
+
+  {% if timeline %}
+  <div class="vo-timeline">
+    <h2 class="section-title" style="font-size:15px;margin:0 0 8px;">Timeline {{ filtros.codigo }}</h2>
+    <p class="page-subtitle" style="margin:0 0 8px;">Ingresos vs ventas-ajuste vs otros movimientos (últimos 120).</p>
+    <div class="vo-table-wrap">
+      <table class="vo-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Tipo</th>
+            <th class="num">Cant.</th>
+            <th>Marca / Bodega</th>
+            <th class="num">Total venta</th>
+            <th>Obs.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in timeline %}
+          {% set m = item.mov %}
+          <tr>
+            <td style="white-space:nowrap;">{{ m.fecha|chile_datetime if m.fecha else '—' }}</td>
+            <td><span class="vo-chip {{ item.kind }}">{{ item.kind|upper }}</span> · {{ m.tipo }}</td>
+            <td class="num">{{ m.cantidad }}</td>
+            <td>{{ m.marca or '—' }} / {{ m.bodega or '—' }}</td>
+            <td class="num">{% if m.es_venta_operativa and m.total_neto is not none %}${{ '{:,.0f}'.format(m.total_neto).replace(',', '.') }}{% else %}—{% endif %}</td>
+            <td>{{ m.observacion or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

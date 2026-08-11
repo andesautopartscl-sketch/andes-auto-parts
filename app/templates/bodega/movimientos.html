@@ -312,10 +312,21 @@
                     <td>{{ movimiento.marca or '—' }}</td>
                     <td>{{ movimiento.bodega or '—' }}</td>
                     <td>{{ (movimiento.origen_compra or 'nacional')|capitalize }}</td>
-                    <td><span class="badge {{ movimiento.tipo }}">{{ movimiento.tipo|upper }}</span></td>
+                    <td>
+                      <span class="badge {{ movimiento.tipo }}">{{ movimiento.tipo|upper }}</span>
+                      {% if movimiento.es_venta_operativa %}
+                      {% if movimiento.motivo_codigo == 'devolucion_venta' or (movimiento.cantidad and movimiento.cantidad > 0) %}
+                      <span class="badge" style="background:#fef2f2;color:#b91c1c;margin-left:4px;">DEVOL.</span>
+                      {% else %}
+                      <span class="badge" style="background:#ecfdf5;color:#047857;margin-left:4px;">VENTA</span>
+                      {% endif %}
+                      {% endif %}
+                    </td>
                     <td>{{ movimiento.cantidad }}</td>
                     <td>
-                        {% if movimiento.valor_neto_ref is defined and movimiento.valor_neto_ref is not none %}
+                        {% if movimiento.es_venta_operativa and movimiento.precio_venta_neto is not none %}
+                        ${{ '{:,.0f}'.format(movimiento.precio_venta_neto).replace(',', '.') }}
+                        {% elif movimiento.valor_neto_ref is defined and movimiento.valor_neto_ref is not none %}
                         ${{ '{:,.0f}'.format(movimiento.valor_neto_ref).replace(',', '.') }}
                         {% else %}
                         —

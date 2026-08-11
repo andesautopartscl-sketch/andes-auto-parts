@@ -636,6 +636,35 @@ def create_app():
                 conn.execute(text("ALTER TABLE movimientos_stock ADD COLUMN bodega VARCHAR(120)"))
             if movimientos_cols and "ingreso_documento_id" not in movimientos_col_names:
                 conn.execute(text("ALTER TABLE movimientos_stock ADD COLUMN ingreso_documento_id INTEGER"))
+            # Ventas operativas vía ajuste
+            movimientos_cols = conn.execute(text("PRAGMA table_info(movimientos_stock)")).fetchall()
+            movimientos_col_names = {col[1] for col in movimientos_cols}
+            if movimientos_cols and "es_venta_operativa" not in movimientos_col_names:
+                conn.execute(text("ALTER TABLE movimientos_stock ADD COLUMN es_venta_operativa BOOLEAN DEFAULT 0"))
+            if movimientos_cols and "motivo_codigo" not in movimientos_col_names:
+                conn.execute(text("ALTER TABLE movimientos_stock ADD COLUMN motivo_codigo VARCHAR(40)"))
+            if movimientos_cols and "precio_venta_neto" not in movimientos_col_names:
+                conn.execute(text("ALTER TABLE movimientos_stock ADD COLUMN precio_venta_neto REAL"))
+            if movimientos_cols and "total_neto" not in movimientos_col_names:
+                conn.execute(text("ALTER TABLE movimientos_stock ADD COLUMN total_neto REAL"))
+            if movimientos_cols and "ref_sii" not in movimientos_col_names:
+                conn.execute(text("ALTER TABLE movimientos_stock ADD COLUMN ref_sii VARCHAR(80) DEFAULT ''"))
+            if movimientos_cols and "reclasificado_at" not in movimientos_col_names:
+                conn.execute(text("ALTER TABLE movimientos_stock ADD COLUMN reclasificado_at DATETIME"))
+            if movimientos_cols and "reclasificado_por" not in movimientos_col_names:
+                conn.execute(text("ALTER TABLE movimientos_stock ADD COLUMN reclasificado_por VARCHAR(100) DEFAULT ''"))
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_mov_venta_op_fecha "
+                    "ON movimientos_stock(es_venta_operativa, fecha)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_mov_codigo_fecha "
+                    "ON movimientos_stock(codigo_producto, fecha)"
+                )
+            )
 
             conn.execute(
                 text(

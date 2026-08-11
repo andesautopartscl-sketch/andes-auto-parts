@@ -47,6 +47,7 @@ PERMISSION_CATALOG: list[dict] = [
             {"key": "bodega_ingreso", "label": "Registrar ingreso de stock"},
             {"key": "bodega_salida", "label": "Registrar salida de stock"},
             {"key": "bodega_ajuste", "label": "Registrar ajustes de stock"},
+            {"key": "bodega_ajuste_venta_operativa", "label": "Venta/devolución operativa en ajuste (activar + autorizar)"},
             {"key": "bodega_variantes_gestionar", "label": "Gestionar variantes de stock (crear/editar/eliminar con autorización)"},
             {"key": "bodega_picking", "label": "Gestionar picking de venta"},
             {"key": "bodega_etiquetas", "label": "Imprimir y gestionar etiquetas"},

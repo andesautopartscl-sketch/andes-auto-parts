@@ -50,6 +50,14 @@ class MovimientoStock(db.Model):
     origen_compra = db.Column(db.String(20), nullable=False, default="nacional", index=True)
     ingreso_documento_id = db.Column(db.Integer, index=True)
     observacion = db.Column(db.String(255))
+    # Ventas operativas vía ajuste (gestión; no reemplaza libro SII)
+    es_venta_operativa = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    motivo_codigo = db.Column(db.String(40), index=True)
+    precio_venta_neto = db.Column(db.Float, nullable=True)
+    total_neto = db.Column(db.Float, nullable=True)
+    ref_sii = db.Column(db.String(80), default="")
+    reclasificado_at = db.Column(db.DateTime, nullable=True)
+    reclasificado_por = db.Column(db.String(100), default="")
 
 
 class ProductoVarianteStock(db.Model):

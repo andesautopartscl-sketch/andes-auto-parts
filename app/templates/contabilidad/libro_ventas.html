@@ -2,6 +2,17 @@
 {% block title %}Libro de Ventas | Andes Auto Parts{% endblock %}
 
 {% block content %}
+<style>
+.lv-op-note {
+  margin: 0 0 10px; padding: 8px 10px; border-radius: 8px;
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: 12px; line-height: 1.4;
+}
+.lv-section-title { font-size: 14px; font-weight: 700; margin: 16px 0 8px; color: #0f172a; }
+.lv-kpi { display:flex; gap:10px; flex-wrap:wrap; margin: 0 0 10px; font-size: 12px; color: #475569; }
+.lv-kpi strong { color: #0f172a; }
+.lv-table tr.lv-dev td { background: #fff5f5; }
+.lv-table tr.lv-venta-op td { background: #f0fdf4; }
+</style>
 <div class="contab-compact">
 	<div class="topbar">
 		<div>
@@ -9,11 +20,14 @@
 			<p class="page-subtitle">Libro de ventas</p>
 		</div>
 		<div class="topbar-actions">
+			<a class="link-btn" href="{{ url_for('contabilidad.ventas_operativas') }}" data-module-url="{{ url_for('contabilidad.ventas_operativas') }}">🧾 Ventas operativas</a>
+			<a class="link-btn" href="{{ url_for('bodega.reclasificar_ventas') }}" data-module-url="{{ url_for('bodega.reclasificar_ventas') }}">Reclasificar ajustes</a>
 			<a class="link-btn" href="{{ url_for('contabilidad.cuentas_por_cobrar') }}">💳 Cuentas por cobrar</a>
 			<a class="link-btn" href="{{ url_for('contabilidad.iva') }}">🧮 IVA</a>
 		</div>
 	</div>
 
+	<h2 class="lv-section-title">Documentos ERP (OV / factura / boleta)</h2>
 	<div class="lv-table-wrap">
 		<table class="lv-table lv-money-tail3 lv-muted-col2">
 			<thead>
@@ -39,7 +53,48 @@
 					<td>${{ '{:,.0f}'.format(d.total or 0).replace(',', '.') }}</td>
 				</tr>
 				{% else %}
-				<tr><td class="lv-empty" colspan="7">Sin registros en libro de ventas.</td></tr>
+				<tr><td class="lv-empty" colspan="7">Sin registros ERP en libro de ventas.</td></tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+
+	<h2 class="lv-section-title">Ventas operativas (ajustes de stock)</h2>
+	<p class="lv-op-note">
+		Gestión interna: ventas y devoluciones hechas por ajuste (motivo Venta / Devolución venta).
+		IVA 19% estimado sobre el neto. <strong>No sustituye</strong> el libro ni los DTE del SII.
+	</p>
+	<div class="lv-kpi">
+		<span>Neto operativo: <strong>${{ '{:,.0f}'.format(op_neto or 0).replace(',', '.') }}</strong></span>
+		<span>IVA est.: <strong>${{ '{:,.0f}'.format(op_iva or 0).replace(',', '.') }}</strong></span>
+		<span>Total c/ IVA: <strong>${{ '{:,.0f}'.format(op_total or 0).replace(',', '.') }}</strong></span>
+	</div>
+	<div class="lv-table-wrap">
+		<table class="lv-table lv-money-tail3 lv-muted-col2">
+			<thead>
+				<tr>
+					<th>Fecha</th>
+					<th>Tipo</th>
+					<th>Documento / Ref.</th>
+					<th>Detalle</th>
+					<th>Neto</th>
+					<th>IVA 19%</th>
+					<th>Total</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for o in operativas or [] %}
+				<tr class="{{ 'lv-dev' if o.tipo == 'DEVOLUCION_AJUSTE' else 'lv-venta-op' }}">
+					<td>{{ o.fecha.strftime('%d/%m/%Y') if o.fecha else '-' }}</td>
+					<td>{{ o.tipo }}</td>
+					<td>{{ o.documento }}</td>
+					<td>{{ o.detalle }}{% if o.usuario %} · {{ o.usuario }}{% endif %}</td>
+					<td>${{ '{:,.0f}'.format(o.neto).replace(',', '.') }}</td>
+					<td>${{ '{:,.0f}'.format(o.iva).replace(',', '.') }}</td>
+					<td>${{ '{:,.0f}'.format(o.total).replace(',', '.') }}</td>
+				</tr>
+				{% else %}
+				<tr><td class="lv-empty" colspan="7">Sin ventas operativas aún. Usá motivo Venta en Ajuste, o reclasificá “Conteo físico”.</td></tr>
 				{% endfor %}
 			</tbody>
 		</table>

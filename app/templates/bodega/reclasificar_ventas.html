@@ -1,0 +1,154 @@
+{% extends 'bodega/base_content.html' if _partial else 'bodega/base.html' %}
+{% block title %}Reclasificar ajustes como venta | Andes Auto Parts{% endblock %}
+
+{% block content %}
+<style>
+.rv-page { font-size: 12.5px; color: #334155; }
+.rv-note {
+  margin: 0 0 12px; padding: 8px 10px; border-radius: 8px;
+  background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; font-size: 12px; line-height: 1.4;
+}
+.rv-filters {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px;
+  margin: 0 0 12px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+}
+.rv-filters label { display:block; font-size: 10.5px; font-weight: 600; color: #64748b; margin-bottom: 3px; }
+.rv-filters input[type="text"], .rv-filters input[type="date"], .rv-filters input[type="number"] {
+  width: 100%; min-height: 30px; padding: 4px 8px; border-radius: 8px; border: 1px solid #cbd5e1; box-sizing: border-box;
+}
+.rv-table-wrap { overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; }
+.rv-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.rv-table th, .rv-table td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: middle; }
+.rv-table th { background: #f8fafc; font-size: 10px; text-transform: uppercase; color: #64748b; }
+.rv-table .num { text-align: right; white-space: nowrap; }
+.rv-table input[type="text"], .rv-table input[type="number"] {
+  width: 100%; min-width: 80px; min-height: 28px; padding: 3px 6px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box; font-size: 12px;
+}
+.rv-actions { display:flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+.rv-empty { padding: 18px; color: #64748b; }
+.message { padding: 8px 10px; border-radius: 8px; margin-bottom: 10px; font-size: 12.5px; }
+.message.success { background: #ecfdf5; border: 1px solid #86efac; color: #166534; }
+.message.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+</style>
+
+<div class="rv-page">
+  <div class="topbar">
+    <div>
+      <h1 class="page-title">Reclasificar ajustes → Venta</h1>
+      <p class="page-subtitle">Marcá ajustes negativos históricos como venta operativa. No vuelve a mover stock.</p>
+    </div>
+    <div class="topbar-actions">
+      <a class="link-btn" href="{{ url_for('contabilidad.ventas_operativas') }}" data-module-url="{{ url_for('contabilidad.ventas_operativas') }}">Ver ventas operativas</a>
+      <a class="link-btn" href="{{ url_for('bodega.ajuste') }}" data-module-url="{{ url_for('bodega.ajuste') }}">Ajuste de stock</a>
+    </div>
+  </div>
+
+  <p class="rv-note">
+    Solo aparecen ajustes con cantidad negativa que aún no están marcados como venta.
+    Indicá un <strong>precio neto unitario</strong> (por fila o precio por defecto) para poder reclasificar.
+  </p>
+
+  {% if message %}
+  <div class="message {{ message.type }}">{{ message.text }}</div>
+  {% endif %}
+
+  <form class="rv-filters" method="get">
+    <div>
+      <label for="rv-codigo">Código</label>
+      <input id="rv-codigo" name="codigo" value="{{ filtros.codigo }}" placeholder="Ej: JS605" autocomplete="off">
+    </div>
+    <div>
+      <label for="rv-desde">Desde</label>
+      <input id="rv-desde" type="date" name="desde" value="{{ filtros.desde }}">
+    </div>
+    <div>
+      <label for="rv-hasta">Hasta</label>
+      <input id="rv-hasta" type="date" name="hasta" value="{{ filtros.hasta }}">
+    </div>
+    <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:6px;font-weight:500;color:#334155;margin:0 0 4px;">
+        <input type="checkbox" name="solo_conteo" value="1" {% if filtros.solo_conteo %}checked{% endif %}>
+        Solo “Conteo físico”
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:500;color:#334155;margin:0 0 4px;">
+        <input type="checkbox" name="solo_con_precio" value="1" {% if filtros.solo_con_precio %}checked{% endif %}>
+        Solo con precio ya cargado
+      </label>
+      <button type="submit" class="btn btn-primary">Buscar</button>
+      <a class="link-btn" href="{{ url_for('bodega.reclasificar_ventas') }}?solo_conteo=0">Ver todos</a>
+    </div>
+  </form>
+
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="codigo" value="{{ filtros.codigo }}">
+    <input type="hidden" name="desde" value="{{ filtros.desde }}">
+    <input type="hidden" name="hasta" value="{{ filtros.hasta }}">
+    {% if filtros.solo_con_precio %}<input type="hidden" name="solo_con_precio" value="1">{% endif %}
+    {% if filtros.solo_conteo %}<input type="hidden" name="solo_conteo" value="1">{% endif %}
+
+    <div class="rv-actions">
+      <div>
+        <label for="precio_default" style="font-size:11px;font-weight:600;color:#64748b;">Precio neto default</label><br>
+        <input id="precio_default" name="precio_default" placeholder="Aplicar a filas sin precio" style="min-width:140px;min-height:30px;padding:4px 8px;border-radius:8px;border:1px solid #cbd5e1;">
+      </div>
+      <div>
+        <label for="ref_sii_default" style="font-size:11px;font-weight:600;color:#64748b;">Ref. SII default</label><br>
+        <input id="ref_sii_default" name="ref_sii_default" placeholder="Opcional" style="min-width:140px;min-height:30px;padding:4px 8px;border-radius:8px;border:1px solid #cbd5e1;">
+      </div>
+      <button type="button" class="btn outline" id="rvSelectAll">Seleccionar visibles</button>
+      <button type="submit" class="btn btn-primary">Reclasificar seleccionados</button>
+    </div>
+
+    <div class="rv-table-wrap">
+      {% if candidatos %}
+      <table class="rv-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Fecha</th>
+            <th>Código</th>
+            <th>Marca</th>
+            <th>Bodega</th>
+            <th class="num">Cant.</th>
+            <th>Precio neto u.</th>
+            <th>Ref. SII</th>
+            <th>Observación</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in candidatos %}
+          <tr>
+            <td><input type="checkbox" name="mov_id" value="{{ m.id }}" class="rv-check"></td>
+            <td style="white-space:nowrap;">{{ m.fecha|chile_datetime if m.fecha else '—' }}</td>
+            <td><strong>{{ m.codigo_producto }}</strong></td>
+            <td>{{ m.marca or '—' }}</td>
+            <td>{{ m.bodega or '—' }}</td>
+            <td class="num">{{ m.cantidad }}</td>
+            <td>
+              <input type="text" name="precio_mov_{{ m.id }}" value="{% if m.precio_venta_neto is not none %}{{ m.precio_venta_neto }}{% endif %}" placeholder="Precio" inputmode="decimal">
+            </td>
+            <td>
+              <input type="text" name="ref_mov_{{ m.id }}" value="{{ m.ref_sii or '' }}" placeholder="Boleta/Factura" maxlength="80">
+            </td>
+            <td>{{ m.observacion or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="rv-empty">No hay ajustes negativos pendientes de reclasificar con estos filtros.</div>
+      {% endif %}
+    </div>
+  </form>
+</div>
+<script>
+(function () {
+  var btn = document.getElementById('rvSelectAll');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    document.querySelectorAll('.rv-check').forEach(function (c) { c.checked = true; });
+  });
+})();
+</script>
+{% endblock %}

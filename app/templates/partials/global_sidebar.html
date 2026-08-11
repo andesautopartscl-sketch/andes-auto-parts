@@ -9,6 +9,7 @@
 {% set puede_mod_productos = (user_permissions.mod_productos if user_permissions is defined else True) %}
 {% set puede_mod_ventas = (user_permissions.mod_ventas if user_permissions is defined else True) %}
 {% set puede_mod_bodega = (user_permissions.mod_bodega if user_permissions is defined else True) %}
+{% set puede_ajuste_venta_operativa = (user_permissions.bodega_ajuste_venta_operativa if user_permissions is defined else ('superadmin' in rol_actual)) %}
 {% set puede_mod_finanzas = (user_permissions.mod_finanzas if user_permissions is defined else puede_ver_finanzas) %}
 {% set puede_mod_informes = (user_permissions.mod_informes if user_permissions is defined else True) %}
 {% set puede_mod_rrhh = (user_permissions.mod_rrhh if user_permissions is defined else False) %}
@@ -628,6 +629,11 @@ html {
 				<a class="{% if active_page == 'ajuste' %}nav-active{% endif %}"
 				   href="{{ url_for('bodega.ajuste') }}"
 				   data-module-url="{{ url_for('bodega.ajuste') }}">🧮 Ajuste de stock</a>
+				{% if puede_ajuste_venta_operativa %}
+				<a class="{% if active_page == 'reclasificar_ventas' %}nav-active{% endif %}"
+				   href="{{ url_for('bodega.reclasificar_ventas') }}"
+				   data-module-url="{{ url_for('bodega.reclasificar_ventas') }}">🏷️ Reclasificar → venta</a>
+				{% endif %}
 				<a class="{% if active_page == 'movimientos' %}nav-active{% endif %}"
 				   href="{{ url_for('bodega.movimientos') }}"
 				   data-module-url="{{ url_for('bodega.movimientos') }}">📊 Movimientos de stock</a>
@@ -674,6 +680,9 @@ html {
 				<a class="{% if active_page == 'contabilidad_libro_ventas' %}nav-active{% endif %}"
 				   href="{{ url_for('contabilidad.libro_ventas') }}"
 				   data-module-url="{{ url_for('contabilidad.libro_ventas') }}">📄 Libro de ventas</a>
+				<a class="{% if active_page == 'contabilidad_ventas_operativas' %}nav-active{% endif %}"
+				   href="{{ url_for('contabilidad.ventas_operativas') }}"
+				   data-module-url="{{ url_for('contabilidad.ventas_operativas') }}">🧾 Ventas operativas</a>
 				<a class="{% if active_page == 'contabilidad_libro_compras' %}nav-active{% endif %}"
 				   href="{{ url_for('contabilidad.libro_compras') }}"
 				   data-module-url="{{ url_for('contabilidad.libro_compras') }}">🛍 Libro de compras</a>
@@ -757,6 +766,8 @@ html {
 				   data-module-url="{{ url_for('informes.index') }}">🗂 Centro de informes</a>
 				<a href="{{ url_for('informes.ventas_periodo') }}"
 				   data-module-url="{{ url_for('informes.ventas_periodo') }}">📅 Ventas por período</a>
+				<a href="{{ url_for('contabilidad.ventas_operativas') }}"
+				   data-module-url="{{ url_for('contabilidad.ventas_operativas') }}">🧾 Ventas operativas (ajuste)</a>
 				<a href="{{ url_for('informes.ventas_cliente') }}"
 				   data-module-url="{{ url_for('informes.ventas_cliente') }}">👤 Ventas por cliente</a>
 				<a href="{{ url_for('informes.utilidad_margen') }}"
