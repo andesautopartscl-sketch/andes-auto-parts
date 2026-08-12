@@ -26,6 +26,7 @@ from app.utils.finance_visibility import user_can_view_finanzas
 from app.utils.permissions import has_permission
 from app.utils.phone_format import phone_to_compact_e164
 from app.utils.rut_utils import clean_rut, format_rut, is_valid_rut, display_tax_id
+from app.utils.datetime_utils import chile_day_end_exclusive_utc, chile_day_start_utc
 
 from .models import (
     CatalogoBodega,
@@ -5887,9 +5888,9 @@ def reclasificar_ventas():
     if codigo:
         q = q.filter(MovimientoStock.codigo_producto.ilike(f"%{codigo}%"))
     if desde:
-        q = q.filter(func.date(MovimientoStock.fecha) >= desde)
+        q = q.filter(MovimientoStock.fecha >= chile_day_start_utc(desde))
     if hasta:
-        q = q.filter(func.date(MovimientoStock.fecha) <= hasta)
+        q = q.filter(MovimientoStock.fecha < chile_day_end_exclusive_utc(hasta))
     if solo_con_precio:
         q = q.filter(MovimientoStock.precio_venta_neto.isnot(None), MovimientoStock.precio_venta_neto > 0)
     if solo_conteo:
@@ -6039,9 +6040,9 @@ def desmarcar_ventas():
     if codigo:
         q = q.filter(MovimientoStock.codigo_producto.ilike(f"%{codigo}%"))
     if desde:
-        q = q.filter(func.date(MovimientoStock.fecha) >= desde)
+        q = q.filter(MovimientoStock.fecha >= chile_day_start_utc(desde))
     if hasta:
-        q = q.filter(func.date(MovimientoStock.fecha) <= hasta)
+        q = q.filter(MovimientoStock.fecha < chile_day_end_exclusive_utc(hasta))
 
     candidatos = q.order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc()).limit(500).all()
 

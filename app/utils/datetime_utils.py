@@ -69,6 +69,19 @@ def chile_today_str(fmt: str = "%Y-%m-%d") -> str:
     return chile_today().strftime(fmt)
 
 
+def chile_day_start_utc(d: date) -> datetime:
+    """Inicio del día civil Chile (00:00) como UTC naive para filtrar columnas DB."""
+    local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=CHILE_TZ)
+    return local.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def chile_day_end_exclusive_utc(d: date) -> datetime:
+    """Fin exclusivo del día civil Chile (00:00 del día siguiente) como UTC naive."""
+    from datetime import timedelta
+
+    return chile_day_start_utc(d + timedelta(days=1))
+
+
 def utcnow_naive() -> datetime:
     """UTC naive para columnas DateTime de la DB (misma convención histórica)."""
     return datetime.now(timezone.utc).replace(tzinfo=None)

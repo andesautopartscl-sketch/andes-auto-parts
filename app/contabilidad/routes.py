@@ -13,6 +13,13 @@ from werkzeug.security import check_password_hash
 from app.bodega.models import IngresoDocumento, IngresoDocumentoItem, MovimientoStock
 from app.extensions import db
 from app.seguridad.models import Usuario
+from app.utils.datetime_utils import (
+    chile_day_end_exclusive_utc,
+    chile_day_start_utc,
+    chile_today,
+    format_utc_to_chile,
+    utc_to_chile,
+)
 from app.utils.decorators import login_required, permission_required
 from app.utils.permissions import has_permission
 from app.utils.rut_utils import clean_rut, format_rut
@@ -124,9 +131,13 @@ def _enrich_venta_operativa_row(m: MovimientoStock, *, costo_cache: dict | None 
     iva_rate = 0.19
     iva = round(venta_neto * iva_rate, 2)
     total = round(venta_neto + iva, 2)
+    fecha_local = utc_to_chile(m.fecha) if m.fecha else None
     return {
         "mov": m,
         "fecha": m.fecha,
+        "fecha_local": fecha_local,
+        "fecha_short": fecha_local.strftime("%d/%m %H:%M") if fecha_local else None,
+        "fecha_title": format_utc_to_chile(m.fecha, default="") if m.fecha else "",
         "is_dev": is_dev,
         "tipo": "DEVOLUCION_AJUSTE" if is_dev else "VENTA_AJUSTE",
         "documento": (m.ref_sii or f"AJ-{m.id}"),
@@ -931,7 +942,7 @@ def _match_docs_sii_por_refs(refs: list[str]) -> dict[str, list[dict]]:
 @permission_required("ver_finanzas")
 def ventas_operativas():
     """Informe de gestión: ajustes marcados como venta (no sustituye libro SII)."""
-    today = date.today()
+    today = chile_today()
     desde = _parse_date_arg(request.args.get("desde", ""), today.replace(day=1))
     hasta = _parse_date_arg(request.args.get("hasta", ""), today)
     codigo = (request.args.get("codigo") or "").strip().upper()
@@ -944,10 +955,11 @@ def ventas_operativas():
         MovimientoStock.es_venta_operativa.is_(True),
         MovimientoStock.tipo == "ajuste",
     )
+    # fecha en DB es UTC; filtrar por día civil Chile (evita perder ventas nocturnas).
     if desde:
-        q = q.filter(func.date(MovimientoStock.fecha) >= desde)
+        q = q.filter(MovimientoStock.fecha >= chile_day_start_utc(desde))
     if hasta:
-        q = q.filter(func.date(MovimientoStock.fecha) <= hasta)
+        q = q.filter(MovimientoStock.fecha < chile_day_end_exclusive_utc(hasta))
     if codigo:
         q = q.filter(MovimientoStock.codigo_producto.ilike(f"%{codigo}%"))
     if marca:
@@ -1041,7 +1053,7 @@ def ventas_operativas():
         for r in rows:
             writer.writerow(
                 [
-                    r["fecha"].isoformat(sep=" ", timespec="minutes") if r["fecha"] else "",
+                    format_utc_to_chile(r["fecha"], default="") if r["fecha"] else "",
                     "devolucion" if r["is_dev"] else "venta",
                     r["codigo"],
                     r["marca"],
@@ -1098,7 +1110,7 @@ def ventas_operativas():
 @permission_required("ver_finanzas")
 def cierre_mensual():
     """Resumen de gestión: compras vs ventas ERP vs ventas operativas (solo lectura)."""
-    today = date.today()
+    today = chile_today()
     desde = _parse_date_arg(request.args.get("desde", ""), today.replace(day=1))
     hasta = _parse_date_arg(request.args.get("hasta", ""), today)
     if not desde:
@@ -1220,8 +1232,8 @@ def cierre_mensual():
         MovimientoStock.query.filter(
             MovimientoStock.es_venta_operativa.is_(True),
             MovimientoStock.tipo == "ajuste",
-            func.date(MovimientoStock.fecha) >= desde,
-            func.date(MovimientoStock.fecha) <= hasta,
+            MovimientoStock.fecha >= chile_day_start_utc(desde),
+            MovimientoStock.fecha < chile_day_end_exclusive_utc(hasta),
         )
         .order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc())
         .limit(2000)

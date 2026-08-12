@@ -229,7 +229,7 @@
       <tbody>
         {% for r in rows %}
         <tr>
-          <td class="col-fecha" title="{{ r.fecha.strftime('%d/%m/%Y %H:%M') if r.fecha else '' }}">{{ r.fecha.strftime('%d/%m %H:%M') if r.fecha else '—' }}</td>
+          <td class="col-fecha" title="{{ r.fecha_title or '' }}">{{ r.fecha_short or '—' }}</td>
           <td class="col-tipo"><span class="vo-chip {{ 'devolucion' if r.is_dev else 'venta' }}">{{ 'DEV' if r.is_dev else 'VTA' }}</span></td>
           <td class="col-codigo" title="{{ r.codigo }}"><strong>{{ r.codigo }}</strong></td>
           <td class="col-marca" title="{{ r.marca or '' }}">{{ r.marca or '—' }}</td>
@@ -273,7 +273,7 @@
           {% for item in timeline %}
           {% set m = item.mov %}
           <tr>
-            <td style="white-space:nowrap;">{{ m.fecha.strftime('%d/%m/%Y %H:%M') if m.fecha else '—' }}</td>
+            <td style="white-space:nowrap;">{{ m.fecha|chile_datetime if m.fecha else '—' }}</td>
             <td><span class="vo-chip {{ item.kind }}">{{ item.kind|upper }}</span></td>
             <td class="num">{{ m.cantidad }}</td>
             <td>{{ m.marca or '—' }} / {{ m.bodega or '—' }}</td>

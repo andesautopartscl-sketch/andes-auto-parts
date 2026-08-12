@@ -191,7 +191,7 @@
           <tbody>
             {% for o in ops.lista[:6] %}
             <tr>
-              <td>{{ o.fecha.strftime('%d/%m') if o.fecha else '—' }}</td>
+              <td>{{ o.fecha_short.split(' ')[0] if o.fecha_short else '—' }}</td>
               <td title="{{ o.detalle }}">{{ o.codigo }}{% if o.is_dev %} · DEV{% endif %}</td>
               <td class="num {% if o.ganancia_neta is not none and o.ganancia_neta < 0 %}cm-neg{% elif o.ganancia_neta is not none %}cm-pos{% endif %}">
                 {% if o.ganancia_neta is not none %}${{ '{:,.0f}'.format(o.ganancia_neta).replace(',', '.') }}{% else %}—{% endif %}
