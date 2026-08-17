@@ -360,8 +360,17 @@
             {% for m in movimientos %}
             <tr>
               <td>
-                <span class="contab-fecha-hora" title="{% if m.created_at %}Registrado el {{ m.created_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}">
-                  {{ m.fecha.strftime('%d/%m/%Y') }}{% if m.created_at %}<span class="contab-fecha-hora__hora">{{ m.created_at.strftime('%H:%M') }}</span>{% endif %}
+                {% set f = m.fecha %}
+                {% set hora_txt = none %}
+                {% if f is not none and f.strftime is defined %}
+                  {% if f.hour is defined and (f.hour or f.minute or f.second) %}
+                    {% set hora_txt = '%02d:%02d'|format(f.hour, f.minute) %}
+                  {% elif m.created_at %}
+                    {% set hora_txt = (m.created_at|chile_datetime)[-5:] %}
+                  {% endif %}
+                {% endif %}
+                <span class="contab-fecha-hora" title="{% if hora_txt %}{{ f.strftime('%d/%m/%Y') if f and f.strftime is defined else '' }} {{ hora_txt }}{% endif %}">
+                  {% if f and f.strftime is defined %}{{ f.strftime('%d/%m/%Y') }}{% else %}—{% endif %}{% if hora_txt %}<span class="contab-fecha-hora__hora">{{ hora_txt }}</span>{% endif %}
                 </span>
               </td>
               <td><strong>{{ m.cuenta.codigo if m.cuenta else '?' }}</strong> — {{ m.cuenta.nombre if m.cuenta else '—' }}</td>
@@ -380,7 +389,8 @@
                 <button type="button"
                         class="btn btn-secondary btn-editar-mov"
                         data-mid="{{ m.id }}"
-                        data-fecha="{{ m.fecha.isoformat() if m.fecha else '' }}"
+                        data-fecha="{% if m.fecha %}{{ m.fecha.strftime('%Y-%m-%d') }}{% endif %}"
+                        data-hora="{% if m.fecha and m.fecha.hour is defined and (m.fecha.hour or m.fecha.minute or m.fecha.second) %}{{ '%02d:%02d'|format(m.fecha.hour, m.fecha.minute) }}{% elif m.created_at %}{{ (m.created_at|chile_datetime)[-5:] }}{% endif %}"
                         data-cuenta-id="{{ m.cuenta_id or '' }}"
                         data-tipo="{{ m.tipo or 'debe' }}"
                         data-monto="{{ m.monto or '' }}"
@@ -413,13 +423,17 @@
         <div class="contab-modal-grid">
           <div class="contab-modal-row-equal">
             <div class="form-group">
-              <label>Fecha</label>
-              <input type="date" name="fecha" required>
+              <label for="movFecha">Fecha</label>
+              <input id="movFecha" type="date" name="fecha" required>
             </div>
             <div class="form-group">
-              <label>Referencia</label>
-              <input type="text" name="documento_ref" placeholder="N° factura, boleta o interno" maxlength="60">
+              <label for="movHora">Hora</label>
+              <input id="movHora" type="time" name="hora" required title="Se completa sola; podés cambiarla si el movimiento fue en otro momento">
             </div>
+          </div>
+          <div class="form-group">
+            <label>Referencia</label>
+            <input type="text" name="documento_ref" placeholder="N° factura, boleta o interno" maxlength="60">
           </div>
           <div class="contab-emisor-block">
             <div class="contab-modal-row-equal">
@@ -796,6 +810,11 @@
       if (el) el.value = value == null ? '' : String(value);
     };
     setVal('fecha', data.fecha || '');
+    setVal('hora', data.hora || '');
+    if (!(data.hora || '').trim()) {
+      const d = new Date();
+      setVal('hora', String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'));
+    }
     setVal('documento_ref', data.documentoRef || '');
     setVal('emisor_nombre', data.emisorNombre || '');
     setVal('emisor_rut', data.emisorRut || '');
@@ -817,10 +836,14 @@
     closeDescMenu();
     closeAyuda();
     setMovMode('nuevo');
+    const d = new Date();
     const fechaInput = modal.querySelector('[name="fecha"]');
+    const horaInput = modal.querySelector('[name="hora"]');
     if (fechaInput) {
-      const d = new Date();
       fechaInput.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    if (horaInput) {
+      horaInput.value = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
     }
   }
 
@@ -840,6 +863,7 @@
       mid: btn.getAttribute('data-mid') || '',
       editUrl: btn.getAttribute('data-edit-url') || '',
       fecha: btn.getAttribute('data-fecha') || '',
+      hora: btn.getAttribute('data-hora') || '',
       cuentaId: btn.getAttribute('data-cuenta-id') || '',
       tipo: btn.getAttribute('data-tipo') || 'debe',
       monto: btn.getAttribute('data-monto') || '',

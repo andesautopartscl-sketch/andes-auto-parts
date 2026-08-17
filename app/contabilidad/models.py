@@ -26,7 +26,7 @@ class MovimientoContable(db.Model):
     __tablename__ = "movimientos_contables"
 
     id = db.Column(db.Integer, primary_key=True)
-    fecha = db.Column(db.Date, nullable=False, index=True)
+    fecha = db.Column(db.DateTime, nullable=False, index=True)
     cuenta_id = db.Column(
         db.Integer, db.ForeignKey("cuentas_contables.id"), nullable=False, index=True
     )

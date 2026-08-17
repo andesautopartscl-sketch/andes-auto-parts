@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import io
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from types import SimpleNamespace
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for, Response
@@ -18,6 +18,7 @@ from app.utils.datetime_utils import (
     chile_day_start_utc,
     chile_today,
     format_utc_to_chile,
+    now_chile,
     utc_to_chile,
 )
 from app.utils.decorators import login_required, permission_required
@@ -205,6 +206,7 @@ def _parse_movimiento_form(form) -> tuple[dict | None, str | None]:
     emisor_rut_cr = clean_rut(emisor_rut_raw)
     emisor_rut = (format_rut(emisor_rut_cr) or emisor_rut_cr)[:24] if emisor_rut_cr else ""
     fecha_str = (form.get("fecha") or "").strip()
+    hora_str = (form.get("hora") or "").strip()
 
     if not cuenta_id or not cuenta_id.isdigit():
         return None, "Cuenta inválida."
@@ -221,12 +223,25 @@ def _parse_movimiento_form(form) -> tuple[dict | None, str | None]:
     if cuenta is None:
         return None, "Cuenta no encontrada."
 
-    fecha = date.today()
+    now = now_chile().replace(tzinfo=None)
+    dia = chile_today()
     if fecha_str:
         try:
-            fecha = date.fromisoformat(fecha_str)
+            dia = date.fromisoformat(fecha_str[:10])
         except ValueError:
             pass
+
+    hh, mm, ss = now.hour, now.minute, now.second
+    if hora_str:
+        for fmt in ("%H:%M:%S", "%H:%M"):
+            try:
+                t = datetime.strptime(hora_str, fmt).time()
+                hh, mm, ss = t.hour, t.minute, t.second
+                break
+            except ValueError:
+                continue
+
+    fecha = datetime(dia.year, dia.month, dia.day, hh, mm, ss, microsecond=0)
 
     return {
         "fecha": fecha,
@@ -488,18 +503,22 @@ def api_libro_diario():
     q = MovimientoContable.query.order_by(MovimientoContable.fecha, MovimientoContable.id)
     if desde_str:
         try:
-            q = q.filter(MovimientoContable.fecha >= date.fromisoformat(desde_str))
+            d0 = date.fromisoformat(desde_str[:10])
+            q = q.filter(MovimientoContable.fecha >= datetime.combine(d0, time.min))
         except ValueError:
             pass
     if hasta_str:
         try:
-            q = q.filter(MovimientoContable.fecha <= date.fromisoformat(hasta_str))
+            d1 = date.fromisoformat(hasta_str[:10])
+            q = q.filter(
+                MovimientoContable.fecha < datetime.combine(d1, time.min) + timedelta(days=1)
+            )
         except ValueError:
             pass
     movs = q.all()
     return jsonify([{
         "id": m.id,
-        "fecha": m.fecha.isoformat(),
+        "fecha": m.fecha.isoformat() if m.fecha else None,
         "cuenta_codigo": m.cuenta.codigo if m.cuenta else "",
         "cuenta_nombre": m.cuenta.nombre if m.cuenta else "",
         "tipo": m.tipo,
