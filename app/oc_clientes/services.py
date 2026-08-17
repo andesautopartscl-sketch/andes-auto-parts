@@ -677,7 +677,7 @@ def historial_cobros_mes(
             {
                 "pago_key": f"pago_{p.id}",
                 "es_conjunto": False,
-                "fecha_pago": fp.strftime("%d/%m/%Y") if fp else "—",
+                "fecha_pago": fp.strftime("%d/%m/%Y %H:%M") if fp else "—",
                 "fecha_pago_sort": fp.isoformat() if fp else "",
                 "metodo_pago": p.metodo_pago or "",
                 "referencia_pago": (p.referencia_pago or "").strip(),
@@ -715,7 +715,7 @@ def historial_cobros_mes(
             {
                 "pago_key": key,
                 "es_conjunto": bool((first.pago_grupo_id or "").strip()),
-                "fecha_pago": fp.strftime("%d/%m/%Y") if fp else "—",
+                "fecha_pago": fp.strftime("%d/%m/%Y %H:%M") if fp else "—",
                 "fecha_pago_sort": fp.isoformat() if fp else "",
                 "metodo_pago": first.metodo_pago or "",
                 "referencia_pago": (first.referencia_pago or "").strip(),

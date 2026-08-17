@@ -84,6 +84,10 @@
                     <input id="ocPagoFecha" name="fecha_pago" type="date" required>
                 </div>
                 <div>
+                    <label for="ocPagoHora">Hora *</label>
+                    <input id="ocPagoHora" name="hora_pago" type="time" required title="Se completa sola; podés cambiarla si el pago fue en otro momento">
+                </div>
+                <div>
                     <label for="ocPagoMetodo">Método *</label>
                     <select id="ocPagoMetodo" name="metodo_pago" required>
                         {% for val, lab in metodo_pago_options %}
@@ -95,7 +99,7 @@
                     <label for="ocPagoMonto">Monto recibido *</label>
                     <input id="ocPagoMonto" name="monto_recibido" type="number" min="1" step="1" required>
                 </div>
-                <div>
+                <div class="full">
                     <label for="ocPagoRef">Referencia / comprobante</label>
                     <input id="ocPagoRef" name="referencia_pago" maxlength="120" placeholder="Ej. transferencia bancaria">
                 </div>
@@ -133,13 +137,22 @@
     var sumaEl = document.getElementById('ocPagoSuma');
     var montoInput = document.getElementById('ocPagoMonto');
     var fechaInput = document.getElementById('ocPagoFecha');
+    var horaInput = document.getElementById('ocPagoHora');
     if (!bar || !modal || !form || !rowsEl) return;
 
     function todayIso() {
         var d = new Date();
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
-    if (fechaInput && !fechaInput.value) fechaInput.value = todayIso();
+    function nowTimeIso() {
+        var d = new Date();
+        return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+    function syncFechaHoraAhora() {
+        if (fechaInput) fechaInput.value = todayIso();
+        if (horaInput) horaInput.value = nowTimeIso();
+    }
+    syncFechaHoraAhora();
 
     function fmt(n) {
         return '$' + Math.round(n).toLocaleString('es-CL');
@@ -192,6 +205,7 @@
         });
         sumaEl.textContent = fmt(sum);
         if (montoInput) montoInput.value = String(Math.round(sum));
+        syncFechaHoraAhora();
         modal.classList.add('open');
         modal.setAttribute('aria-hidden', 'false');
         var firstFact = rowsEl.querySelector('input[name^="numero_factura_"]');

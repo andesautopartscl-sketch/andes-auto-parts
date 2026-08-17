@@ -238,7 +238,7 @@
                 </div>
                 <div class="oc-meta-item">
                     <dt>Fecha pago{% if pago_parcial %} (último){% endif %}</dt>
-                    <dd>{{ oc.fecha_pago.strftime('%d/%m/%Y') if oc.fecha_pago else '—' }}</dd>
+                    <dd>{{ oc.fecha_pago.strftime('%d/%m/%Y %H:%M') if oc.fecha_pago else '—' }}</dd>
                 </div>
                 <div class="oc-meta-item">
                     <dt>Método pago</dt>
@@ -477,8 +477,16 @@
             <input id="numero_factura" name="numero_factura" required maxlength="60" autocomplete="off" placeholder="Ej. 12345">
             <label for="referencia_pago">N° comprobante de pago</label>
             <input id="referencia_pago" name="referencia_pago" maxlength="120" autocomplete="off" placeholder="Ej. transferencia, voucher, operación">
-            <label for="fecha_pago">Fecha pago</label>
-            <input id="fecha_pago" name="fecha_pago" type="date" required>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div>
+                    <label for="fecha_pago">Fecha pago *</label>
+                    <input id="fecha_pago" name="fecha_pago" type="date" required>
+                </div>
+                <div>
+                    <label for="hora_pago">Hora *</label>
+                    <input id="hora_pago" name="hora_pago" type="time" required title="Se completa sola; podés cambiarla si el pago fue en otro momento">
+                </div>
+            </div>
             <label for="metodo_pago">Método de pago</label>
             <select id="metodo_pago" name="metodo_pago" required>
                 {% for val, lab in metodo_pago_options %}
@@ -511,7 +519,9 @@
         return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
     }
     var fp = document.getElementById('fecha_pago');
+    var hp = document.getElementById('hora_pago');
     if (fp && !fp.value) fp.value = todayIso();
+    if (hp && !hp.value) hp.value = nowTimeIso();
     var fe = document.getElementById('fecha_entrega_real');
     if (fe && !fe.value) fe.value = todayIso();
     var he = document.getElementById('hora_entrega_real');
@@ -523,6 +533,10 @@
         if (id === 'modalEntregar') {
             if (fe) fe.value = todayIso();
             if (he) he.value = nowTimeIso();
+        }
+        if (id === 'modalPago') {
+            if (fp) fp.value = todayIso();
+            if (hp) hp.value = nowTimeIso();
         }
         m.classList.add('open');
     }

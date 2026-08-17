@@ -932,6 +932,7 @@ def registrar_pago(oid: int):
     fecha_pago = _parse_date_with_time_from_default(
         (request.form.get("fecha_pago") or "").strip(),
         now,
+        time_value=(request.form.get("hora_pago") or "").strip() or None,
     ) or now
     metodo = (request.form.get("metodo_pago") or "").strip().lower()
     referencia = (request.form.get("referencia_pago") or "").strip()
@@ -989,6 +990,7 @@ def registrar_pago_multiple():
     fecha_pago = _parse_date_with_time_from_default(
         (request.form.get("fecha_pago") or "").strip(),
         now,
+        time_value=(request.form.get("hora_pago") or "").strip() or None,
     ) or now
     metodo = (request.form.get("metodo_pago") or "").strip().lower()
     referencia = (request.form.get("referencia_pago") or "").strip()
