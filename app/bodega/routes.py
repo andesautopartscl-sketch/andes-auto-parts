@@ -25,7 +25,7 @@ from app.utils.codigo_matcher import aplicar_fuzzy_a_productos
 from app.utils.finance_visibility import user_can_view_finanzas
 from app.utils.permissions import has_permission
 from app.utils.phone_format import phone_to_compact_e164
-from app.utils.rut_utils import clean_rut, format_rut, is_valid_rut, display_tax_id
+from app.utils.rut_utils import clean_rut, format_rut, is_valid_rut, display_tax_id, normalize_foreign_tax_id
 from app.utils.datetime_utils import chile_day_end_exclusive_utc, chile_day_start_utc
 
 from .models import (
@@ -831,6 +831,32 @@ def _normalize_rut(raw: str) -> str:
     return clean_rut(raw)
 
 
+def _proveedor_key_for_codigo_map(raw: str) -> str:
+    """Clave estable para mapa cód. proveedor → interno (RUT CL o ID fiscal extranjero)."""
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    if _is_valid_rut(text):
+        return _normalize_rut(text)
+    foreign = normalize_foreign_tax_id(text)
+    return foreign or text.upper()[:40]
+
+
+def _proveedor_keys_for_codigo_lookup(raw: str) -> list[str]:
+    """Variantes de clave (incluye mapas viejos guardados con clean_rut sin letras)."""
+    keys: list[str] = []
+    primary = _proveedor_key_for_codigo_map(raw)
+    if primary:
+        keys.append(primary)
+    chile_clean = _normalize_rut(raw)
+    if chile_clean and chile_clean not in keys:
+        keys.append(chile_clean)
+    foreign = normalize_foreign_tax_id(raw)
+    if foreign and foreign not in keys:
+        keys.append(foreign)
+    return keys
+
+
 def _ingreso_numero_documento_duplicado(
     rut: str,
     numero_documento: str,
@@ -1054,19 +1080,28 @@ def _merge_ingreso_rows(rows: list[dict]) -> list[dict]:
 
 def _upsert_mapa_proveedor_codigo(rut: str, codigo_prov_raw: str, codigo_interno: str) -> None:
     """Guarda o actualiza el vínculo código proveedor → código interno para futuras facturas."""
-    rut_n = _normalize_rut(rut)
+    key = _proveedor_key_for_codigo_map(rut)
     cp = _normalize_codigo_proveedor(codigo_prov_raw)
     ci = (codigo_interno or "").strip().upper()
-    if not rut_n or not cp or not ci:
+    if not key or not cp or not ci:
         return
-    row = ProveedorCodigoInterno.query.filter_by(proveedor_rut=rut_n, codigo_proveedor=cp).first()
+    keys = _proveedor_keys_for_codigo_lookup(rut)
+    row = (
+        ProveedorCodigoInterno.query.filter(
+            ProveedorCodigoInterno.proveedor_rut.in_(keys),
+            ProveedorCodigoInterno.codigo_proveedor == cp,
+        )
+        .order_by(ProveedorCodigoInterno.updated_at.desc(), ProveedorCodigoInterno.id.desc())
+        .first()
+    )
     if row:
+        row.proveedor_rut = key
         row.codigo_interno = ci
         row.updated_at = datetime.utcnow()
     else:
         db.session.add(
             ProveedorCodigoInterno(
-                proveedor_rut=rut_n,
+                proveedor_rut=key,
                 codigo_proveedor=cp,
                 codigo_interno=ci,
             )
@@ -1132,13 +1167,13 @@ def _codigos_proveedor_por_interno(
     codigos_internos: list[str] | set[str],
 ) -> dict[str, list[str]]:
     """Mapa codigo_interno → lista de códigos proveedor (más reciente primero)."""
-    rut_n = _normalize_rut(rut)
+    keys = _proveedor_keys_for_codigo_lookup(rut)
     cis = sorted({(c or "").strip().upper() for c in (codigos_internos or []) if (c or "").strip()})
     out: dict[str, list[str]] = {}
-    if not rut_n or not cis:
+    if not keys or not cis:
         return out
     links = (
-        ProveedorCodigoInterno.query.filter_by(proveedor_rut=rut_n)
+        ProveedorCodigoInterno.query.filter(ProveedorCodigoInterno.proveedor_rut.in_(keys))
         .filter(ProveedorCodigoInterno.codigo_interno.in_(cis))
         .order_by(ProveedorCodigoInterno.updated_at.desc(), ProveedorCodigoInterno.id.desc())
         .all()
@@ -2884,8 +2919,6 @@ def ingreso():
         else "",
     }
     if form_data["supplier_extranjero"]:
-        from app.utils.rut_utils import normalize_foreign_tax_id
-
         # Conservar USCC / ID extranjero; no usar clean_rut chileno.
         form_data["supplier_rut"] = normalize_foreign_tax_id(
             request.form.get("supplier_rut") or ""
@@ -3326,18 +3359,80 @@ def ingreso():
     )
 
 
+def _resolver_codigo_interno_por_proveedor(
+    rut_raw: str, codigo_prov_raw: str
+) -> tuple[str | None, str | None]:
+    """
+    Resuelve (código interno, código proveedor canónico).
+    1) Match exacto del cód. proveedor.
+    2) Si no hay, prefijo único para ese proveedor (ej. 602002159 → 602002159AA).
+    """
+    keys = _proveedor_keys_for_codigo_lookup(rut_raw)
+    cp = _normalize_codigo_proveedor(codigo_prov_raw)
+    if not keys or not cp:
+        return None, None
+
+    exact = (
+        ProveedorCodigoInterno.query.filter(
+            ProveedorCodigoInterno.proveedor_rut.in_(keys),
+            ProveedorCodigoInterno.codigo_proveedor == cp,
+        )
+        .order_by(ProveedorCodigoInterno.updated_at.desc(), ProveedorCodigoInterno.id.desc())
+        .first()
+    )
+    if exact and (exact.codigo_interno or "").strip():
+        return (exact.codigo_interno or "").strip().upper(), (exact.codigo_proveedor or "").strip()
+
+    # Prefijo: solo si hay un único código distinto que empieza con lo tipeado.
+    candidatos = (
+        ProveedorCodigoInterno.query.filter(
+            ProveedorCodigoInterno.proveedor_rut.in_(keys),
+            ProveedorCodigoInterno.codigo_proveedor.ilike(f"{cp}%"),
+        )
+        .order_by(ProveedorCodigoInterno.updated_at.desc(), ProveedorCodigoInterno.id.desc())
+        .limit(50)
+        .all()
+    )
+    unicos: dict[str, ProveedorCodigoInterno] = {}
+    for row in candidatos:
+        cp_u = (row.codigo_proveedor or "").strip().upper()
+        if not cp_u or not (row.codigo_interno or "").strip():
+            continue
+        if cp_u not in unicos:
+            unicos[cp_u] = row
+    if len(unicos) != 1:
+        return None, None
+    row = next(iter(unicos.values()))
+    return (row.codigo_interno or "").strip().upper(), (row.codigo_proveedor or "").strip()
+
+
 @bodega_bp.route("/ingreso/codigo_interno_por_proveedor", methods=["GET"])
 @admin_required
 def ingreso_codigo_interno_por_proveedor():
-    """Devuelve el último código interno guardado para (proveedor RUT, código proveedor)."""
-    rut = _normalize_rut(request.args.get("rut") or "")
+    """Devuelve el código interno guardado para (proveedor, código proveedor)."""
+    keys = _proveedor_keys_for_codigo_lookup(request.args.get("rut") or "")
     cp = _normalize_codigo_proveedor(request.args.get("codigo_proveedor") or "")
-    if not rut or not _is_valid_rut(rut):
-        return jsonify({"ok": False, "error": "rut_invalido", "codigo_interno": None}), 400
+    if not keys:
+        return jsonify(
+            {
+                "ok": False,
+                "error": "proveedor_invalido",
+                "codigo_interno": None,
+                "codigo_proveedor": None,
+            }
+        ), 400
     if not cp:
-        return jsonify({"ok": True, "codigo_interno": None})
-    row = ProveedorCodigoInterno.query.filter_by(proveedor_rut=rut, codigo_proveedor=cp).first()
-    return jsonify({"ok": True, "codigo_interno": row.codigo_interno if row else None})
+        return jsonify({"ok": True, "codigo_interno": None, "codigo_proveedor": None})
+    ci, cp_match = _resolver_codigo_interno_por_proveedor(
+        request.args.get("rut") or "", cp
+    )
+    return jsonify(
+        {
+            "ok": True,
+            "codigo_interno": ci,
+            "codigo_proveedor": cp_match,
+        }
+    )
 
 
 def _ajuste_marcas_desde_bd(limit: int = 500) -> list[str]:

@@ -73,13 +73,13 @@ def _can_modify() -> bool:
     return has_permission(session.get("user"), session.get("rol"), "mod_oc_clientes")
 
 
-def _validar_autorizacion_anulacion_oc(
-    username: str, password: str
+def _validar_autorizacion_mod_oc(
+    username: str, password: str, *, accion: str = "la operación"
 ) -> tuple[bool, str, Usuario | None]:
     user_name = (username or "").strip()
     raw_pass = password or ""
     if not user_name or not raw_pass:
-        return False, "Debe ingresar usuario y contraseña para autorizar la anulación.", None
+        return False, f"Debe ingresar usuario y contraseña para autorizar {accion}.", None
 
     u = Usuario.query.filter_by(usuario=user_name).first()
     if u is None:
@@ -98,8 +98,14 @@ def _validar_autorizacion_anulacion_oc(
 
     rol_name = (u.rol.nombre if getattr(u, "rol", None) and u.rol.nombre else "") or ""
     if not has_permission(u.usuario, rol_name, "mod_oc_clientes"):
-        return False, "El usuario no tiene permiso para anular OC de clientes.", None
+        return False, f"El usuario no tiene permiso para {accion} en OC de clientes.", None
     return True, "", u
+
+
+def _validar_autorizacion_anulacion_oc(
+    username: str, password: str
+) -> tuple[bool, str, Usuario | None]:
+    return _validar_autorizacion_mod_oc(username, password, accion="la anulación")
 
 
 def _redirect_back(oid: int):
@@ -1071,6 +1077,15 @@ def reactivar(oid: int):
     if (oc.estado or "") != "anulada":
         flash("Solo se pueden reactivar OC anuladas.", "error")
         return redirect(url_for("oc_clientes.detalle", oid=oid))
+
+    auth_user = (request.form.get("auth_user") or "").strip()
+    auth_pass = request.form.get("auth_password") or ""
+    auth_ok, auth_err, _auth_actor = _validar_autorizacion_mod_oc(
+        auth_user, auth_pass, accion="la reactivación"
+    )
+    if not auth_ok:
+        flash(auth_err, "error")
+        return _redirect_back(oid)
 
     oc.estado = "recibida"
     oc.updated_at = datetime.utcnow()

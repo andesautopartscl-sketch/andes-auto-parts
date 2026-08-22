@@ -245,10 +245,9 @@
                                     {% elif f.oc.estado == 'entregada' %}
                                     <button type="button" class="btn sm primary btn-oc-pago-uno">Pago</button>
                                     {% elif f.oc.estado == 'anulada' %}
-                                    <form method="post" action="{{ url_for('oc_clientes.reactivar', oid=f.oc.id) }}" onsubmit="return confirm('¿Reactivar la OC {{ f.oc.numero_oc }}?');">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                        <button type="submit" class="btn sm primary">Reactivar</button>
-                                    </form>
+                                    <button type="button" class="btn sm primary btn-oc-reactivar"
+                                            data-oc-num="{{ f.oc.numero_oc }}"
+                                            data-reactivar-url="{{ url_for('oc_clientes.reactivar', oid=f.oc.id) }}">Reactivar</button>
                                     {% endif %}
                                 {% endif %}
                             </div>
@@ -266,5 +265,6 @@
 {% include 'oc_clientes/_cobrado_mes_modal.html' %}
 {% if puede_modificar %}
 {% include 'oc_clientes/_anular_modal.html' %}
+{% include 'oc_clientes/_reactivar_modal.html' %}
 {% endif %}
 {% endblock %}

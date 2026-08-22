@@ -1821,19 +1821,28 @@
                         encodeURIComponent(rut) +
                         "&codigo_proveedor=" +
                         encodeURIComponent(cp),
-                    { headers: { "X-Requested-With": "XMLHttpRequest" } }
+                    {
+                        credentials: "same-origin",
+                        headers: { "X-Requested-With": "XMLHttpRequest" },
+                    }
                 )
                     .then(function (res) {
-                        return res.json();
+                        return res.json().then(function (data) {
+                            return { okHttp: res.ok, data: data };
+                        });
                     })
-                    .then(function (data) {
-                        if (!data || !data.ok || !data.codigo_interno) {
+                    .then(function (pack) {
+                        var data = pack && pack.data;
+                        if (!pack.okHttp || !data || !data.ok || !data.codigo_interno) {
                             return;
                         }
                         if ((inpCode.value || "").trim()) {
                             return;
                         }
-                        inpCode.value = data.codigo_interno;
+                        inpCode.value = String(data.codigo_interno).trim();
+                        if (data.codigo_proveedor) {
+                            inpProv.value = String(data.codigo_proveedor).trim();
+                        }
                         setCodigoInternoValidState(row, true, "");
                         scheduleMarcasFetch(row);
                     })
@@ -1847,6 +1856,7 @@
             }
             inpProv.addEventListener("input", debounceProv);
             inpProv.addEventListener("blur", tryMap);
+            inpProv.addEventListener("change", tryMap);
         }
 
         function parseChileFloat(s) {
