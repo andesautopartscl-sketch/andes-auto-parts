@@ -3,72 +3,138 @@
 
 {% block content %}
 <style>
-.dv-page { font-size: 11px; color: #334155; }
-.dv-page .topbar { margin-bottom: 6px; align-items: center; }
-.dv-page .page-title { font-size: 1.05rem; margin: 0 0 1px; line-height: 1.15; }
-.dv-page .page-subtitle { margin: 0; font-size: 10.5px; color: #94a3b8; }
-.dv-page .topbar-actions .link-btn { font-size: 10px; padding: 2px 7px; border-radius: 6px; }
-.dv-note {
-  margin: 0 0 8px; padding: 4px 8px; border-radius: 7px;
-  background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: 10.5px; line-height: 1.35;
+.dv-page { font-size: 10px; color: #334155; }
+.dv-page .topbar { margin-bottom: 4px; align-items: center; gap: 6px; }
+.dv-page .page-title { font-size: 0.98rem; margin: 0; line-height: 1.15; }
+.dv-page .page-subtitle { margin: 0; font-size: 9.5px; color: #94a3b8; }
+.dv-page .topbar-actions .link-btn { font-size: 9.5px; padding: 2px 6px; border-radius: 5px; }
+.dv-title-row {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
 }
+.dv-help-wrap { position: relative; display: inline-flex; }
+.dv-help-btn {
+  width: 18px; height: 18px; padding: 0; border-radius: 999px;
+  border: 1px solid #cbd5e1; background: #f8fafc; color: #64748b;
+  font-size: 11px; font-weight: 700; line-height: 1; cursor: pointer;
+}
+.dv-help-btn:hover, .dv-help-btn[aria-expanded="true"] {
+  background: #eff6ff; border-color: #93c5fd; color: #1d4ed8;
+}
+.dv-help-panel {
+  display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
+  width: min(340px, 78vw); padding: 8px 10px; border-radius: 8px;
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+  font-size: 11px; line-height: 1.4; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+.dv-help-panel.open { display: block; }
 .dv-filters {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px 8px;
-  margin: 0 0 8px; padding: 7px 9px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  display: grid; grid-template-columns: minmax(100px, 140px) repeat(2, minmax(110px, 130px)) auto;
+  gap: 4px 6px;
+  margin: 0 0 5px; padding: 5px 7px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 7px;
   align-items: end;
 }
-.dv-filters label { display:block; font-size: 9.5px; font-weight: 600; color: #64748b; margin-bottom: 2px; }
-.dv-filters input[type="text"], .dv-filters input[type="date"] {
-  width: 100%; min-height: 26px; padding: 2px 6px; border-radius: 6px;
-  border: 1px solid #cbd5e1; box-sizing: border-box; font-size: 11px;
+.dv-filters label { display:block; font-size: 9px; font-weight: 600; color: #64748b; margin-bottom: 1px; }
+.dv-page .dv-filters input:not([type="hidden"]),
+.dv-page .dv-filters input[type="text"],
+.dv-page .dv-filters input[type="date"],
+.dv-page #dv-codigo {
+  width: 100% !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
+  padding: 0 5px !important;
+  border-radius: 5px !important;
+  border: 1px solid #cbd5e1 !important;
+  box-sizing: border-box !important;
+  font-size: 10.5px !important;
+  line-height: 22px !important;
 }
-.dv-filters .dv-filter-actions { display:flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.dv-filters .btn, .dv-filters .link-btn { min-height: 26px; font-size: 11px; padding: 2px 8px; }
+.dv-filters .dv-filter-actions { display:flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.dv-filters .btn, .dv-filters .link-btn { height: 24px; min-height: 24px; font-size: 10.5px; padding: 0 7px; }
 .dv-table-wrap {
-  overflow: auto; border: 1px solid #e2e8f0; border-radius: 9px; background: #fff;
-  max-height: calc(100vh - 290px);
+  overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff;
+  max-height: calc(100vh - 260px);
 }
-.dv-table { width: 100%; border-collapse: collapse; font-size: 10.5px; table-layout: fixed; }
-.dv-table th, .dv-table td {
-  padding: 4px 6px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: middle;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.dv-page .dv-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  font-size: 11px !important;
+  table-layout: fixed !important;
 }
-.dv-table th {
-  background: #f8fafc; font-size: 9px; text-transform: uppercase; color: #64748b;
-  letter-spacing: .03em; position: sticky; top: 0; z-index: 1;
+.dv-page .dv-table th,
+.dv-page .dv-table td {
+  padding: 4px 6px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  text-align: left !important;
+  vertical-align: middle !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  line-height: 1.3 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
 }
-.dv-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-.dv-table .col-check { width: 28px; }
-.dv-table .col-fecha { width: 11%; }
-.dv-table .col-tipo { width: 6%; }
+.dv-page .dv-table th {
+  background: #f8fafc !important;
+  font-size: 9.5px !important;
+  text-transform: uppercase !important;
+  color: #64748b !important;
+  letter-spacing: .03em !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 1 !important;
+  font-weight: 600 !important;
+}
+.dv-page .dv-table td strong,
+.dv-page .dv-table .col-codigo {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+.dv-page .dv-table .num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.dv-table .col-check { width: 26px; }
+.dv-table .col-fecha { width: 10%; }
+.dv-table .col-tipo { width: 5%; }
 .dv-table .col-codigo { width: 9%; }
 .dv-table .col-marca { width: 10%; }
-.dv-table .col-bodega { width: 9%; }
-.dv-table .col-cant { width: 6%; }
+.dv-table .col-bodega { width: 8%; }
+.dv-table .col-cant { width: 5%; }
 .dv-table .col-total { width: 9%; }
-.dv-table .col-ref { width: 8%; }
+.dv-table .col-ref { width: 7%; }
 .dv-table .col-user { width: 9%; }
-.dv-table .col-obs { width: 17%; }
+.dv-table .col-obs { width: 18%; }
 .dv-actions {
-  display:flex; gap: 6px; flex-wrap: wrap; align-items: flex-end; margin: 0 0 8px;
+  display:flex; gap: 4px; flex-wrap: wrap; align-items: flex-end; margin: 0 0 5px;
 }
 .dv-auth {
-  display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-end;
-  padding: 5px 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 7px;
+  display: flex; gap: 4px; flex-wrap: wrap; align-items: flex-end;
+  padding: 4px 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
 }
-.dv-auth label { display:block; font-size: 9.5px; font-weight: 600; color: #64748b; margin-bottom: 2px; }
-.dv-auth input {
-  min-height: 26px; min-width: 110px; padding: 2px 6px; border-radius: 6px;
-  border: 1px solid #cbd5e1; box-sizing: border-box; font-size: 11px;
+.dv-auth label { display:block; font-size: 9px; font-weight: 600; color: #64748b; margin-bottom: 1px; }
+.dv-page .dv-auth input {
+  height: 24px !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
+  min-width: 100px;
+  padding: 0 5px !important;
+  border-radius: 5px !important;
+  border: 1px solid #cbd5e1 !important;
+  box-sizing: border-box !important;
+  font-size: 10.5px !important;
+  line-height: 22px !important;
 }
-.dv-actions .btn, .dv-actions .link-btn { min-height: 26px; font-size: 11px; padding: 2px 8px; }
-.dv-empty { padding: 12px; color: #64748b; font-size: 11px; }
-.dv-chip {
-  display: inline-block; padding: 1px 5px; border-radius: 999px; font-size: 9px; font-weight: 700;
+.dv-actions .btn, .dv-actions .link-btn { min-height: 24px; font-size: 10.5px; padding: 2px 7px; }
+.dv-empty { padding: 10px; color: #64748b; font-size: 11px; }
+.dv-page .dv-chip {
+  display: inline-block !important;
+  padding: 1px 5px !important;
+  border-radius: 999px !important;
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
 }
 .dv-chip.venta { background: #ecfdf5; color: #047857; }
 .dv-chip.devolucion { background: #fef2f2; color: #b91c1c; }
-.message { padding: 5px 9px; border-radius: 7px; margin-bottom: 8px; font-size: 12px; }
+.message { padding: 4px 7px; border-radius: 6px; margin-bottom: 5px; font-size: 11px; }
 .message.success { background: #ecfdf5; border: 1px solid #86efac; color: #166534; }
 .message.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
 </style>
@@ -76,7 +142,16 @@
 <div class="dv-page">
   <div class="topbar">
     <div>
-      <h1 class="page-title">Quitar de ventas operativas</h1>
+      <div class="dv-title-row">
+        <h1 class="page-title">Quitar de ventas operativas</h1>
+        <div class="dv-help-wrap">
+          <button type="button" class="dv-help-btn" id="dvHelpBtn" title="Ayuda" aria-label="Ayuda" aria-expanded="false" aria-controls="dvHelpPanel">?</button>
+          <div class="dv-help-panel" id="dvHelpPanel" role="region" aria-live="polite">
+            Si marcaste <strong>Venta</strong> o <strong>Devolución</strong> por error, acá lo sacás del informe.
+            El stock <strong>no se restaura</strong>; si también falló la cantidad, corregí con otro ajuste.
+          </div>
+        </div>
+      </div>
       <p class="page-subtitle">Desmarcá un ajuste mal clasificado. No vuelve a mover stock.</p>
     </div>
     <div class="topbar-actions">
@@ -86,11 +161,6 @@
     </div>
   </div>
 
-  <p class="dv-note">
-    Si marcaste <strong>Venta</strong> o <strong>Devolución</strong> por error, acá lo sacás del informe.
-    El stock <strong>no se restaura</strong>; si también falló la cantidad, corregí con otro ajuste.
-  </p>
-
   {% if message %}
   <div class="message {{ message.type }}">{{ message.text }}</div>
   {% endif %}
@@ -98,7 +168,7 @@
   <form class="dv-filters" method="get">
     <div>
       <label for="dv-codigo">Código</label>
-      <input id="dv-codigo" name="codigo" value="{{ filtros.codigo }}" placeholder="Ej: JS605" autocomplete="off">
+      <input id="dv-codigo" type="text" name="codigo" value="{{ filtros.codigo }}" placeholder="Ej: JS605" autocomplete="off">
     </div>
     <div>
       <label for="dv-desde">Desde</label>
@@ -147,7 +217,7 @@
             <th class="col-marca">Marca</th>
             <th class="col-bodega">Bodega</th>
             <th class="col-cant num">Cant.</th>
-            <th class="col-total num">Total neto</th>
+            <th class="col-total num">Venta neto</th>
             <th class="col-ref">Ref.</th>
             <th class="col-user">Usuario</th>
             <th class="col-obs">Obs.</th>
@@ -158,7 +228,7 @@
           {% set is_dev = (m.motivo_codigo or '') == 'devolucion_venta' or (m.cantidad or 0) > 0 %}
           <tr>
             <td class="col-check"><input type="checkbox" name="mov_id" value="{{ m.id }}" class="dv-check"></td>
-            <td class="col-fecha" title="{{ m.fecha|chile_datetime if m.fecha else '' }}">{{ m.fecha.strftime('%d/%m %H:%M') if m.fecha else '—' }}</td>
+            <td class="col-fecha" title="{{ m.fecha|chile_datetime if m.fecha else '' }}">{% if m.fecha %}{{ (m.fecha|chile_datetime).replace('-', '/')[0:5] }} {{ (m.fecha|chile_datetime)[-5:] }}{% else %}—{% endif %}</td>
             <td class="col-tipo"><span class="dv-chip {{ 'devolucion' if is_dev else 'venta' }}">{{ 'DEV' if is_dev else 'VTA' }}</span></td>
             <td class="col-codigo" title="{{ m.codigo_producto }}"><strong>{{ m.codigo_producto }}</strong></td>
             <td class="col-marca" title="{{ m.marca or '' }}">{{ m.marca or '—' }}</td>
@@ -198,6 +268,37 @@
       if (!confirm('¿Quitar ' + n + ' movimiento(s) de ventas operativas?\nEl stock no cambia.')) {
         ev.preventDefault();
       }
+    });
+  }
+
+  var helpBtn = document.getElementById('dvHelpBtn');
+  var helpPanel = document.getElementById('dvHelpPanel');
+  function closeHelp() {
+    if (!helpPanel || !helpBtn) return;
+    helpPanel.classList.remove('open');
+    helpBtn.setAttribute('aria-expanded', 'false');
+  }
+  function toggleHelp() {
+    if (!helpPanel || !helpBtn) return;
+    if (helpPanel.classList.contains('open')) closeHelp();
+    else {
+      helpPanel.classList.add('open');
+      helpBtn.setAttribute('aria-expanded', 'true');
+    }
+  }
+  if (helpBtn && helpPanel) {
+    helpBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleHelp();
+    });
+    document.addEventListener('click', function (e) {
+      if (!helpPanel.classList.contains('open')) return;
+      if (helpPanel.contains(e.target) || helpBtn.contains(e.target)) return;
+      closeHelp();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeHelp();
     });
   }
 })();

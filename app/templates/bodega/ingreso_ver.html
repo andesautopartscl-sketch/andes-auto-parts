@@ -310,6 +310,41 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     background: #065f46;
     border-color: #065f46;
 }
+.ing-credito-modal__card--alert {
+    width: min(400px, 100%);
+    text-align: left;
+}
+.ing-credito-modal__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    margin-bottom: 10px;
+    border-radius: 999px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #b45309;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+}
+.ing-credito-modal__title--alert {
+    color: #92400e;
+}
+.ing-credito-modal__note--alert {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+}
+.ing-credito-modal__btn--alert {
+    border: 1px solid #d97706;
+    background: #d97706;
+    color: #fff;
+}
+.ing-credito-modal__btn--alert:hover {
+    filter: brightness(1.05);
+}
 .ing-ver-section-head {
     display: flex;
     align-items: baseline;
@@ -743,8 +778,73 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     </div>
 </div>
 
+<div id="ingresoAlertModal" class="ing-credito-modal" aria-hidden="true">
+    <div class="ing-credito-modal__card ing-credito-modal__card--alert" role="dialog" aria-modal="true" aria-labelledby="ingresoAlertTitle">
+        <div class="ing-credito-modal__icon" aria-hidden="true">!</div>
+        <h3 id="ingresoAlertTitle" class="ing-credito-modal__title ing-credito-modal__title--alert">Revisá el formulario</h3>
+        <p class="ing-credito-modal__text" id="ingresoAlertText"></p>
+        <p class="ing-credito-modal__note ing-credito-modal__note--alert" id="ingresoAlertHint" hidden></p>
+        <div class="ing-credito-modal__actions">
+            <button type="button" class="ing-credito-modal__btn ing-credito-modal__btn--alert" id="ingresoAlertOk">Aceptar</button>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
+    var alertModal = document.getElementById('ingresoAlertModal');
+    var alertText = document.getElementById('ingresoAlertText');
+    var alertHint = document.getElementById('ingresoAlertHint');
+    var alertOk = document.getElementById('ingresoAlertOk');
+    var alertFocusEl = null;
+
+    function closeIngresoAlert() {
+        if (!alertModal) return;
+        alertModal.classList.remove('open');
+        alertModal.setAttribute('aria-hidden', 'true');
+        if (alertFocusEl && typeof alertFocusEl.focus === 'function') {
+            try { alertFocusEl.focus(); } catch (e) { /* ignore */ }
+        }
+        alertFocusEl = null;
+    }
+
+    function showIngresoAlert(message, opts) {
+        opts = opts || {};
+        if (!alertModal || !alertText) {
+            window.alert(message);
+            return;
+        }
+        alertText.textContent = message || '';
+        if (alertHint) {
+            if (opts.hint) {
+                alertHint.textContent = opts.hint;
+                alertHint.hidden = false;
+            } else {
+                alertHint.textContent = '';
+                alertHint.hidden = true;
+            }
+        }
+        alertFocusEl = opts.focusEl || null;
+        alertModal.classList.add('open');
+        alertModal.setAttribute('aria-hidden', 'false');
+        setTimeout(function () {
+            if (alertOk) alertOk.focus();
+        }, 20);
+    }
+
+    if (alertOk) alertOk.addEventListener('click', closeIngresoAlert);
+    if (alertModal) {
+        alertModal.addEventListener('click', function (e) {
+            if (e.target === alertModal) closeIngresoAlert();
+        });
+    }
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && alertModal && alertModal.classList.contains('open')) {
+            closeIngresoAlert();
+            e.preventDefault();
+        }
+    });
+
     function bindPdfBtn(id, title, sub) {
         var btn = document.getElementById(id);
         if (!btn) return;
@@ -834,7 +934,9 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
         openBtn.addEventListener('click', function () {
             var checked = form.querySelectorAll('input[name="item_id"]:checked');
             if (!checked.length) {
-                window.alert('Seleccioná al menos un ítem para registrar el crédito.');
+                showIngresoAlert('Seleccioná al menos un ítem para registrar el crédito.', {
+                    hint: 'Marcá la casilla de la fila que querés devolver.'
+                });
                 return;
             }
             for (var i = 0; i < checked.length; i++) {
@@ -844,15 +946,19 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
                 var max = parseInt(qty.getAttribute('data-max') || qty.max || '0', 10) || 0;
                 var cur = parseInt(qty.value || '0', 10);
                 if (!cur || cur < 1 || cur > max) {
-                    qty.focus();
-                    window.alert('Revisá la cantidad a devolver (1 a ' + max + ').');
+                    showIngresoAlert('Revisá la cantidad a devolver (1 a ' + max + ').', {
+                        focusEl: qty,
+                        hint: 'La cantidad debe estar dentro del disponible de esa línea.'
+                    });
                     return;
                 }
             }
             var opcion = form.querySelector('select[name="opcion_devolucion"]');
             if (opcion && !(opcion.value || '').trim()) {
-                opcion.focus();
-                window.alert('Seleccioná la opción de devolución.');
+                showIngresoAlert('Seleccioná la opción de devolución.', {
+                    focusEl: opcion,
+                    hint: 'Está en el bloque “Devolución → saldo a favor”, campo Opción.'
+                });
                 return;
             }
             openModal();
@@ -862,7 +968,10 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
             if (e.target === modal) closeModal();
         });
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+            if (e.key === 'Escape' && modal.classList.contains('open')) {
+                if (alertModal && alertModal.classList.contains('open')) return;
+                closeModal();
+            }
         });
         okBtn.addEventListener('click', function () {
             closeModal();
@@ -885,7 +994,8 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     btn.addEventListener('click', function () {
         try {
             if (window.parent && window.parent !== window) {
-                var modal = window.parent.document.getElementById('relmapPreviewModal');
+                var modal = window.parent.document.getElementById('relmapPreviewModal')
+                    || window.parent.document.getElementById('provIngresoPreviewModal');
                 if (modal && typeof modal._closePreview === 'function') {
                     modal._closePreview();
                     return;

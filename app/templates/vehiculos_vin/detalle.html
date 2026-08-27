@@ -232,17 +232,97 @@
     <h3 style="margin:0 0 10px;font-size:16px;">Acciones</h3>
     <div class="vin-actions">
       <form method="post" action="{{ url_for('vehiculos_vin.toggle_activo', vid=v.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit" class="btn outline sm">
           {% if v.activo %}Desactivar{% else %}Reactivar{% endif %}
         </button>
       </form>
-      <form method="post" action="{{ url_for('vehiculos_vin.eliminar', vid=v.id) }}" onsubmit="return confirm('¿Eliminar este vehículo del registro VIN? Esta acción no se puede deshacer.');">
-        <button type="submit" class="btn danger sm">Eliminar</button>
-      </form>
+      <button type="button" class="btn danger sm js-vin-eliminar"
+              data-vid="{{ v.id }}"
+              data-vin-label="{{ (v.vin or v.chasis or ('#' ~ v.id))|e }}"
+              data-eliminar-url="{{ url_for('vehiculos_vin.eliminar', vid=v.id) }}">Eliminar</button>
     </div>
   </section>
 
 </div>
+
+<style>
+.vin-elim-auth-modal {
+  position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+  padding: 18px; background: rgba(15, 23, 42, 0.48); z-index: 1300;
+}
+.vin-elim-auth-modal.open { display: flex; }
+.vin-elim-auth-card {
+  width: min(400px, 100%); background: #fff; border: 1px solid #dbe3ef; border-radius: 12px;
+  box-shadow: 0 20px 55px rgba(15, 23, 42, 0.28); padding: 14px 16px;
+}
+.vin-elim-auth-card h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #0f172a; }
+.vin-elim-auth-card p { margin: 0 0 12px; color: #64748b; font-size: 12px; line-height: 1.4; }
+.vin-elim-auth-card label {
+  display: block; font-size: 10px; font-weight: 600; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px;
+}
+.vin-elim-auth-card input {
+  width: 100%; padding: 7px 9px; border: 1px solid #dbe3ef; border-radius: 6px;
+  font-size: 12px; box-sizing: border-box; margin-bottom: 8px;
+}
+.vin-elim-auth-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
+</style>
+
+<div id="vinEliminarAuthModal" class="vin-elim-auth-modal" aria-hidden="true">
+  <div class="vin-elim-auth-card" role="dialog" aria-modal="true" aria-labelledby="vinEliminarAuthTitle">
+    <h3 id="vinEliminarAuthTitle">Autorizar eliminación</h3>
+    <p id="vinEliminarAuthSub">Ingrese usuario y contraseña para eliminar este VIN. La acción no se puede deshacer.</p>
+    <form id="vinEliminarAuthForm" method="post" action="{{ url_for('vehiculos_vin.eliminar', vid=v.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="next" value="{{ url_for('vehiculos_vin.index') }}">
+      <label for="vinEliminarAuthUser">Usuario</label>
+      <input id="vinEliminarAuthUser" name="auth_user" required autocomplete="username">
+      <label for="vinEliminarAuthPass">Contraseña</label>
+      <input id="vinEliminarAuthPass" name="auth_password" type="password" required autocomplete="current-password">
+      <div class="vin-elim-auth-actions">
+        <button type="button" class="btn sm" id="vinEliminarAuthCancel">Cancelar</button>
+        <button type="submit" class="btn sm danger">Autorizar y eliminar</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function () {
+  var modal = document.getElementById('vinEliminarAuthModal');
+  var form = document.getElementById('vinEliminarAuthForm');
+  var sub = document.getElementById('vinEliminarAuthSub');
+  var authUser = document.getElementById('vinEliminarAuthUser');
+  var authPass = document.getElementById('vinEliminarAuthPass');
+  var cancelBtn = document.getElementById('vinEliminarAuthCancel');
+  if (!modal || !form) return;
+  function closeModal() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    if (authPass) authPass.value = '';
+  }
+  document.body.addEventListener('click', function (e) {
+    var btn = e.target.closest('.js-vin-eliminar');
+    if (!btn) return;
+    var label = btn.getAttribute('data-vin-label') || '';
+    var url = btn.getAttribute('data-eliminar-url');
+    if (url) form.action = url;
+    if (sub) {
+      sub.textContent = label
+        ? ('Vas a eliminar el VIN «' + label + '». Esta acción no se puede deshacer. Ingresá credenciales autorizadas.')
+        : 'Vas a eliminar este vehículo del registro VIN. Esta acción no se puede deshacer. Ingresá credenciales autorizadas.';
+    }
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    setTimeout(function () { if (authUser) authUser.focus(); }, 20);
+  });
+  if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+  });
+})();
+</script>
 
 {% if imagenes and imagenes|length %}
 <div class="vin-lightbox" id="vinLightbox" aria-hidden="true">

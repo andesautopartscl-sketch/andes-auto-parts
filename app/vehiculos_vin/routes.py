@@ -23,8 +23,10 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
 
 from app.extensions import db
+from app.seguridad.models import Usuario
 from app.utils.decorators import login_required
 from app.utils.permissions import has_permission
+from werkzeug.security import check_password_hash
 from .models import VehiculoVin
 
 vehiculos_vin_bp = Blueprint(
@@ -113,6 +115,36 @@ def _vehiculos_vin_module_guard():
 
 def _current_user() -> str:
     return (session.get("user") or "sistema").strip() or "sistema"
+
+
+def _validar_autorizacion_eliminar_vin(
+    username: str, password: str
+) -> tuple[bool, str, Usuario | None]:
+    """Usuario + clave con permiso VIN para autorizar borrado definitivo."""
+    user_name = (username or "").strip()
+    raw_pass = password or ""
+    if not user_name or not raw_pass:
+        return False, "Debés ingresar usuario y contraseña para autorizar la eliminación.", None
+
+    u = Usuario.query.filter_by(usuario=user_name).first()
+    if u is None:
+        return False, "Usuario de autorización no válido.", None
+    if not bool(u.activo):
+        return False, "El usuario de autorización está inactivo.", None
+    if bool(getattr(u, "bloqueado_seguridad", False)):
+        return False, "El usuario de autorización está bloqueado.", None
+
+    try:
+        ok = check_password_hash(u.password_hash or "", raw_pass)
+    except Exception:
+        ok = False
+    if not ok:
+        return False, "Contraseña de autorización incorrecta.", None
+
+    rol_name = (u.rol.nombre if getattr(u, "rol", None) and u.rol.nombre else "") or ""
+    if not has_permission(u.usuario, rol_name, "mod_vehiculos_vin"):
+        return False, "El usuario no tiene permiso para eliminar VIN / Chasis.", None
+    return True, "", u
 
 
 def _imagenes_root() -> Path:
@@ -766,10 +798,18 @@ def eliminar(vid: int):
         flash("Vehículo no encontrado.", "error")
         return redirect(url_for("vehiculos_vin.index"))
 
+    auth_user = (request.form.get("auth_user") or "").strip()
+    auth_pass = request.form.get("auth_password") or ""
+    auth_ok, auth_err, _actor = _validar_autorizacion_eliminar_vin(auth_user, auth_pass)
+    if not auth_ok:
+        flash(auth_err, "error")
+        return _safe_next_redirect("vehiculos_vin.detalle", vid=vid)
+
+    etiqueta = (v.vin or v.chasis or f"#{v.id}").strip()
     _borrar_galeria_local(vid)
     db.session.delete(v)
     db.session.commit()
-    flash("Vehículo eliminado del registro VIN.", "success")
+    flash(f"Vehículo {etiqueta} eliminado del registro VIN.", "success")
     return _safe_next_redirect("vehiculos_vin.index")
 
 

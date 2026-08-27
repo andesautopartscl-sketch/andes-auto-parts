@@ -158,12 +158,92 @@
     letter-spacing: 0.03em;
     text-decoration: none;
     line-height: 1.2;
+    font-family: inherit;
+    cursor: pointer;
+    box-sizing: border-box;
 }
 .history-open-link:hover {
     color: #0f766e;
     background: #ecfdf5;
     border-color: #a7f3d0;
     text-decoration: none;
+}
+.history-open-link.is-detalle {
+    color: #1d4ed8;
+    background: #eff6ff;
+    border-color: #bfdbfe;
+}
+.history-open-link.is-detalle:hover {
+    color: #1e40af;
+    background: #dbeafe;
+    border-color: #93c5fd;
+}
+.prov-ingreso-preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1400;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.5);
+}
+.prov-ingreso-preview-modal.open {
+    display: flex;
+}
+.prov-ingreso-preview-card {
+    width: min(1080px, 96vw);
+    height: min(88vh, 860px);
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.prov-ingreso-preview-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+.prov-ingreso-preview-head h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.prov-ingreso-preview-head p {
+    margin: 3px 0 0;
+    font-size: 11px;
+    color: #64748b;
+}
+.prov-ingreso-preview-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.prov-ingreso-preview-actions .history-open-link,
+.prov-ingreso-preview-actions button {
+    cursor: pointer;
+    font-family: inherit;
+}
+.prov-ingreso-preview-frame-wrap {
+    flex: 1;
+    min-height: 0;
+    background: #fff;
+}
+.prov-ingreso-preview-frame {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+    background: #fff;
 }
 .history-pane.active {
     display: block;
@@ -733,6 +813,11 @@
                                 <div class="history-estado-row">
                                     <span class="status-pill">{{ (doc.status or 'pendiente')|upper }}</span>
                                     {% if doc.type == 'ingreso' and doc.view_url %}
+                                    <button type="button"
+                                            class="history-open-link is-detalle btn-prov-ingreso-detalle"
+                                            data-view-url="{{ doc.view_url }}"
+                                            data-doc-num="{{ doc.number or ('ING-' ~ doc.id) }}"
+                                            title="Vista previa sin salir del historial">Detalle</button>
                                     <a class="history-open-link" href="{{ doc.view_url }}">Abrir</a>
                                     {% endif %}
                                 </div>
@@ -991,6 +1076,24 @@
                 </div>
                 <div id="homologHistBody" class="homolog-hist-body">
                     <p class="muted" style="margin:0;">Cargando…</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="provIngresoPreviewModal" class="prov-ingreso-preview-modal" aria-hidden="true">
+            <div class="prov-ingreso-preview-card" role="dialog" aria-modal="true" aria-labelledby="provIngresoPreviewTitle">
+                <div class="prov-ingreso-preview-head">
+                    <div>
+                        <h3 id="provIngresoPreviewTitle">Vista previa del ingreso</h3>
+                        <p id="provIngresoPreviewSub">Sin salir del historial. Usá Abrir si querés la página completa.</p>
+                    </div>
+                    <div class="prov-ingreso-preview-actions">
+                        <a class="history-open-link" id="provIngresoPreviewOpenFull" href="#" target="_top" rel="noopener">Abrir</a>
+                        <button type="button" class="history-open-link" id="provIngresoPreviewClose">Cerrar</button>
+                    </div>
+                </div>
+                <div class="prov-ingreso-preview-frame-wrap">
+                    <iframe id="provIngresoPreviewFrame" class="prov-ingreso-preview-frame" title="Vista previa del ingreso"></iframe>
                 </div>
             </div>
         </div>
@@ -1303,6 +1406,58 @@
                 });
         });
     });
+})();
+
+(function provIngresoDetallePreview() {
+    var modal = document.getElementById('provIngresoPreviewModal');
+    var frame = document.getElementById('provIngresoPreviewFrame');
+    var titleEl = document.getElementById('provIngresoPreviewTitle');
+    var subEl = document.getElementById('provIngresoPreviewSub');
+    var openFull = document.getElementById('provIngresoPreviewOpenFull');
+    var closeBtn = document.getElementById('provIngresoPreviewClose');
+    if (!modal || !frame) return;
+
+    function withEmbed(url) {
+        var u = String(url || '');
+        if (!u) return '';
+        if (/([?&])embed=\d+/i.test(u)) return u;
+        return u + (u.indexOf('?') === -1 ? '?' : '&') + 'embed=1';
+    }
+
+    function closePreview() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+        frame.src = 'about:blank';
+    }
+
+    function openPreview(url, docNum) {
+        if (!url) return;
+        var previewUrl = withEmbed(url);
+        if (titleEl) titleEl.textContent = 'Ingreso ' + (docNum || '');
+        if (subEl) subEl.textContent = 'Vista previa · el historial permanece abierto';
+        if (openFull) openFull.href = url;
+        frame.src = previewUrl;
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    if (closeBtn) closeBtn.addEventListener('click', closePreview);
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) closePreview();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) {
+            closePreview();
+            e.preventDefault();
+        }
+    });
+    document.addEventListener('click', function (e) {
+        var btn = e.target && e.target.closest ? e.target.closest('.btn-prov-ingreso-detalle') : null;
+        if (!btn) return;
+        e.preventDefault();
+        openPreview(btn.getAttribute('data-view-url') || '', btn.getAttribute('data-doc-num') || '');
+    });
+    modal._closePreview = closePreview;
 })();
 </script>
 {% endblock %}

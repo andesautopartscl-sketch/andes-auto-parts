@@ -47,7 +47,7 @@
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   letter-spacing:.02em;
 }
-.vin-actions{display:flex;gap:4px;flex-wrap:nowrap;}
+.vin-actions{display:flex;gap:4px;flex-wrap:wrap;align-items:center;}
 .vin-page .badge{
   padding:2px 6px;
   font-size:10.5px !important;
@@ -243,6 +243,10 @@
                 {% if v.modelo or v.modelo_completo %}
                 <a class="btn sm primary" href="{{ url_for('vehiculos_vin.productos_compatibles', vid=v.id) }}">Cat.</a>
                 {% endif %}
+                <button type="button" class="btn sm danger js-vin-eliminar"
+                        data-vid="{{ v.id }}"
+                        data-vin-label="{{ (v.vin or v.chasis or ('#' ~ v.id))|e }}"
+                        data-eliminar-url="{{ url_for('vehiculos_vin.eliminar', vid=v.id) }}">Eliminar</button>
               </div>
             </td>
           </tr>
@@ -484,11 +488,8 @@
           <input type="hidden" name="next" id="fichaToggleNext" value="">
           <button type="submit" class="btn outline sm" id="fichaBtnToggle">Desactivar</button>
         </form>
-        <form method="post" id="formFichaEliminar" action="#" style="margin:0;"
-              onsubmit="return confirm('¿Eliminar este vehículo del registro VIN? Esta acción no se puede deshacer.');">
-          <input type="hidden" name="next" id="fichaEliminarNext" value="">
-          <button type="submit" class="btn danger sm">Eliminar</button>
-        </form>
+        <button type="button" class="btn danger sm js-vin-eliminar" id="fichaBtnEliminar"
+                data-vid="" data-vin-label="" data-eliminar-url="">Eliminar</button>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button type="button" class="btn outline sm" data-close-modal="modalFichaVin">Cancelar</button>
@@ -504,6 +505,48 @@
   <img id="vinLbImg" alt="Imagen vehículo">
   <button type="button" class="vin-lightbox-nav next" id="vinLbNext" aria-label="Siguiente">›</button>
   <div class="vin-lightbox-cap" id="vinLbCap"></div>
+</div>
+
+<style>
+.vin-elim-auth-modal {
+  position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+  padding: 18px; background: rgba(15, 23, 42, 0.48); z-index: 1300;
+}
+.vin-elim-auth-modal.open { display: flex; }
+.vin-elim-auth-card {
+  width: min(400px, 100%); background: #fff; border: 1px solid #dbe3ef; border-radius: 12px;
+  box-shadow: 0 20px 55px rgba(15, 23, 42, 0.28); padding: 14px 16px;
+}
+.vin-elim-auth-card h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #0f172a; }
+.vin-elim-auth-card p { margin: 0 0 12px; color: #64748b; font-size: 12px; line-height: 1.4; }
+.vin-elim-auth-card label {
+  display: block; font-size: 10px; font-weight: 600; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px;
+}
+.vin-elim-auth-card input {
+  width: 100%; padding: 7px 9px; border: 1px solid #dbe3ef; border-radius: 6px;
+  font-size: 12px; box-sizing: border-box; margin-bottom: 8px;
+}
+.vin-elim-auth-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
+</style>
+
+<div id="vinEliminarAuthModal" class="vin-elim-auth-modal" aria-hidden="true">
+  <div class="vin-elim-auth-card" role="dialog" aria-modal="true" aria-labelledby="vinEliminarAuthTitle">
+    <h3 id="vinEliminarAuthTitle">Autorizar eliminación</h3>
+    <p id="vinEliminarAuthSub">Ingrese usuario y contraseña para eliminar este VIN. La acción no se puede deshacer.</p>
+    <form id="vinEliminarAuthForm" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="next" id="vinEliminarNext" value="">
+      <label for="vinEliminarAuthUser">Usuario</label>
+      <input id="vinEliminarAuthUser" name="auth_user" required autocomplete="username">
+      <label for="vinEliminarAuthPass">Contraseña</label>
+      <input id="vinEliminarAuthPass" name="auth_password" type="password" required autocomplete="current-password">
+      <div class="vin-elim-auth-actions">
+        <button type="button" class="btn sm" id="vinEliminarAuthCancel">Cancelar</button>
+        <button type="submit" class="btn sm danger">Autorizar y eliminar</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <script>
@@ -792,9 +835,12 @@
         if (formToggle) formToggle.action = data.url_toggle || '#';
         setVal('fichaToggleNext', nextUrl);
         if (btnToggle) btnToggle.textContent = data.activo ? 'Desactivar' : 'Reactivar';
-        var formElim = document.getElementById('formFichaEliminar');
-        if (formElim) formElim.action = data.url_eliminar || '#';
-        setVal('fichaEliminarNext', nextUrl);
+        var btnElim = document.getElementById('fichaBtnEliminar');
+        if (btnElim) {
+          btnElim.setAttribute('data-vid', String(vid || ''));
+          btnElim.setAttribute('data-vin-label', data.vin || data.chasis || data.etiqueta || '');
+          btnElim.setAttribute('data-eliminar-url', data.url_eliminar || '#');
+        }
       })
       .catch(function () {
         if (sub) sub.textContent = 'Error de red al cargar la ficha';
@@ -910,6 +956,14 @@
       if (e.key === 'ArrowRight') { lightboxStep(1); e.preventDefault(); return; }
     }
     if (e.key !== 'Escape') return;
+    var elimOpen = document.getElementById('vinEliminarAuthModal');
+    if (elimOpen && elimOpen.classList.contains('open')) {
+      elimOpen.classList.remove('open');
+      elimOpen.setAttribute('aria-hidden', 'true');
+      var passEl = document.getElementById('vinEliminarAuthPass');
+      if (passEl) passEl.value = '';
+      return;
+    }
     var okOpen = document.getElementById('modalOkVin');
     if (okOpen && okOpen.classList.contains('open')) {
       cerrarOkYRecargar();
@@ -917,6 +971,44 @@
     }
     document.querySelectorAll('.modal-bg.open').forEach(function (bg) { bg.classList.remove('open'); });
   });
+
+  (function bindEliminarVinAuth() {
+    var modal = document.getElementById('vinEliminarAuthModal');
+    var form = document.getElementById('vinEliminarAuthForm');
+    var sub = document.getElementById('vinEliminarAuthSub');
+    var authUser = document.getElementById('vinEliminarAuthUser');
+    var authPass = document.getElementById('vinEliminarAuthPass');
+    var nextInp = document.getElementById('vinEliminarNext');
+    var cancelBtn = document.getElementById('vinEliminarAuthCancel');
+    if (!modal || !form || !sub || !authUser || !authPass) return;
+
+    function closeElimModal() {
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
+      authPass.value = '';
+    }
+
+    document.body.addEventListener('click', function (e) {
+      var btn = e.target.closest('.js-vin-eliminar');
+      if (!btn) return;
+      var url = btn.getAttribute('data-eliminar-url');
+      if (!url || url === '#') return;
+      var label = btn.getAttribute('data-vin-label') || '';
+      form.action = url;
+      if (nextInp) nextInp.value = window.location.pathname + window.location.search;
+      sub.textContent = label
+        ? ('Vas a eliminar el VIN «' + label + '». Esta acción no se puede deshacer. Ingresá credenciales autorizadas.')
+        : 'Vas a eliminar este vehículo del registro VIN. Esta acción no se puede deshacer. Ingresá credenciales autorizadas.';
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
+      setTimeout(function () { authUser.focus(); }, 20);
+    });
+
+    if (cancelBtn) cancelBtn.addEventListener('click', closeElimModal);
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal) closeElimModal();
+    });
+  })();
 })();
 </script>
 <datalist id="vinMarcasList">
