@@ -5189,21 +5189,51 @@
 
     /**
      * Buscar producto (API ventas) desde formularios de bodega: mismo flujo que Ajuste/Ingreso.
-     * cfg: { datasetBound, modalId, openBtnId, closeBtnId, searchBtnId, searchInputId, statusId, resultsId, codigoSel? }
+     * cfg: {
+     *   datasetBound, modalId, openBtnId, closeBtnId, searchBtnId, searchInputId, statusId, resultsId,
+     *   codigoSel?, syncMarcaBodega?,
+     *   extraTargets?: [{ openBtnId, codigoSel, syncMarcaBodega?, f2? }]
+     * }
      */
     function initBodegaCodigoProductSearch(form, cfg) {
         if (!form || !cfg || form.dataset[cfg.datasetBound] === "1") {
             return;
         }
         var url = (form.getAttribute("data-product-search-url") || "").trim();
-        var codigoSel = cfg.codigoSel || "#codigo";
-        var codigo = form.querySelector(codigoSel);
         var modal = document.getElementById(cfg.modalId);
-        if (!url || !codigo || !modal) {
+        if (!url || !modal) {
             return;
         }
+
+        var targets = [];
+        var primarySel = cfg.codigoSel || "#codigo";
+        var primaryCodigo = form.querySelector(primarySel);
+        if (primaryCodigo) {
+            targets.push({
+                openBtnId: cfg.openBtnId,
+                codigo: primaryCodigo,
+                syncMarcaBodega: cfg.syncMarcaBodega !== false,
+                f2: true
+            });
+        }
+        if (Array.isArray(cfg.extraTargets)) {
+            cfg.extraTargets.forEach(function (t) {
+                if (!t || !t.codigoSel) return;
+                var el = form.querySelector(t.codigoSel);
+                if (!el) return;
+                targets.push({
+                    openBtnId: t.openBtnId,
+                    codigo: el,
+                    syncMarcaBodega: !!t.syncMarcaBodega,
+                    f2: t.f2 !== false
+                });
+            });
+        }
+        if (!targets.length) {
+            return;
+        }
+
         form.dataset[cfg.datasetBound] = "1";
-        var btnOpen = document.getElementById(cfg.openBtnId);
         var btnClose = document.getElementById(cfg.closeBtnId);
         var btnGo = document.getElementById(cfg.searchBtnId);
         var inpQ = document.getElementById(cfg.searchInputId);
@@ -5211,13 +5241,15 @@
         var resultsEl = document.getElementById(cfg.resultsId);
         var marca = form.querySelector("#marca");
         var bodega = form.querySelector("#bodega");
+        var activeTarget = targets[0];
 
         function closeModal() {
             modal.classList.remove("open");
             modal.setAttribute("aria-hidden", "true");
         }
 
-        function openModal() {
+        function openModal(target) {
+            activeTarget = target || targets[0];
             modal.classList.add("open");
             modal.setAttribute("aria-hidden", "false");
             if (statusEl) statusEl.textContent = "Escribe para buscar productos.";
@@ -5231,24 +5263,30 @@
         }
 
         function applyItem(it) {
-            if (!it) return;
+            if (!it || !activeTarget || !activeTarget.codigo) return;
+            var codigo = activeTarget.codigo;
             codigo.value = (it.codigo || "").toString().trim().toUpperCase();
-            if (marca && (it.marca || "").trim()) {
-                marca.value = (it.marca || "").trim().toUpperCase();
-            }
-            if (bodega && (it.bodega || "").trim()) {
-                var want = (it.bodega || "").trim();
-                var i;
-                for (i = 0; i < bodega.options.length; i++) {
-                    if (bodega.options[i].value === want) {
-                        bodega.selectedIndex = i;
-                        break;
+            if (activeTarget.syncMarcaBodega) {
+                if (marca && (it.marca || "").trim()) {
+                    marca.value = (it.marca || "").trim().toUpperCase();
+                }
+                if (bodega && (it.bodega || "").trim()) {
+                    var want = (it.bodega || "").trim();
+                    var i;
+                    for (i = 0; i < bodega.options.length; i++) {
+                        if (bodega.options[i].value === want) {
+                            bodega.selectedIndex = i;
+                            break;
+                        }
                     }
                 }
             }
             codigo.dispatchEvent(new Event("input", { bubbles: true }));
-            if (marca) marca.dispatchEvent(new Event("input", { bubbles: true }));
-            if (bodega) bodega.dispatchEvent(new Event("change", { bubbles: true }));
+            codigo.dispatchEvent(new Event("change", { bubbles: true }));
+            if (activeTarget.syncMarcaBodega) {
+                if (marca) marca.dispatchEvent(new Event("input", { bubbles: true }));
+                if (bodega) bodega.dispatchEvent(new Event("change", { bubbles: true }));
+            }
             closeModal();
         }
 
@@ -5282,12 +5320,23 @@
                 });
         }
 
-        if (btnOpen) {
-            btnOpen.addEventListener("click", function (e) {
-                e.preventDefault();
-                openModal();
-            });
-        }
+        targets.forEach(function (t) {
+            var btnOpen = t.openBtnId ? document.getElementById(t.openBtnId) : null;
+            if (btnOpen) {
+                btnOpen.addEventListener("click", function (e) {
+                    e.preventDefault();
+                    openModal(t);
+                });
+            }
+            if (t.f2 && t.codigo) {
+                t.codigo.addEventListener("keydown", function (ev) {
+                    if (ev.key === "F2") {
+                        ev.preventDefault();
+                        openModal(t);
+                    }
+                });
+            }
+        });
         if (btnClose) {
             btnClose.addEventListener("click", closeModal);
         }
@@ -5308,12 +5357,6 @@
                 }
             });
         }
-        codigo.addEventListener("keydown", function (ev) {
-            if (ev.key === "F2") {
-                ev.preventDefault();
-                openModal();
-            }
-        });
         document.addEventListener("keydown", function (ev) {
             if (ev.key === "Escape" && modal.classList.contains("open")) {
                 closeModal();
@@ -5330,7 +5373,15 @@
             searchBtnId: "ajusteProductSearchBtn",
             searchInputId: "ajusteProductSearchInput",
             statusId: "ajusteProductSearchStatus",
-            resultsId: "ajusteProductResults"
+            resultsId: "ajusteProductResults",
+            extraTargets: [
+                {
+                    openBtnId: "ajusteCodigoDestinoSearchBtn",
+                    codigoSel: "#codigo_destino",
+                    syncMarcaBodega: false,
+                    f2: true
+                }
+            ]
         });
     }
 

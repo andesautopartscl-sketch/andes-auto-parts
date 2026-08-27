@@ -97,7 +97,8 @@
     display: block;
     width: 100%;
 }
-.ajuste-codigo-wrap input#codigo {
+.ajuste-codigo-wrap input#codigo,
+.ajuste-codigo-wrap input#codigo_destino {
     width: 100%;
     min-width: 0;
     padding-right: 36px;
@@ -715,10 +716,16 @@
             </div>
             <div class="field field-full" id="ajusteIncorporacionWrap" hidden>
                 <label for="codigo_destino">Código destino (incorporación) *</label>
-                <input id="codigo_destino" name="codigo_destino" maxlength="100"
-                       value="{{ form_data.codigo_destino or '' }}"
-                       placeholder="Ej: AR240RC — producto que absorbe el costo"
-                       autocomplete="off" style="text-transform:uppercase;">
+                <div class="ajuste-codigo-wrap">
+                    <input id="codigo_destino" name="codigo_destino" maxlength="100"
+                           value="{{ form_data.codigo_destino or '' }}"
+                           placeholder="Código, descripción u OEM — producto que absorbe el costo"
+                           autocomplete="off" style="text-transform:uppercase;">
+                    <button type="button" class="ajuste-codigo-search-btn" id="ajusteCodigoDestinoSearchBtn"
+                            title="Buscar producto destino (F2)" aria-label="Buscar producto destino">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    </button>
+                </div>
                 <p id="ajusteIncorporacionHint" class="ajuste-marca-hint" style="margin-top:6px;"></p>
             </div>
             <div class="field field-full">
@@ -747,7 +754,7 @@
                 <div class="ajuste-help-section">
                     <h4 class="ajuste-help-section-title">Consulta</h4>
                     <ul class="ajuste-help-list">
-                        <li>Tocá la <strong>lupa</strong> dentro del campo de código (o <strong>F2</strong>) para buscar como en Ingreso: código, descripción u OEM.</li>
+                        <li>Tocá la <strong>lupa</strong> del código origen o del <strong>código destino</strong> (o <strong>F2</strong>) para buscar por código, descripción u OEM.</li>
                         <li>Elegí la <strong>bodega</strong> e ingresá el <strong>código</strong>: al terminar de escribirlo (o al cambiar de bodega) se consulta el saldo automáticamente.</li>
                         <li>Podés usar <strong>Consultar stock</strong> si preferís repetir la consulta.</li>
                     </ul>
