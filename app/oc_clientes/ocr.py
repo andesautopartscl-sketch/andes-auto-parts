@@ -368,6 +368,38 @@ def _preprocess_image_for_ocr(image_bytes: bytes) -> bytes:
         return image_bytes
 
 
+def _vision_contact_error(exc: BaseException) -> ValueError:
+    """Traduce fallos de Vision a un mensaje accionable (no siempre es red)."""
+    msg = str(exc) or ""
+    low = msg.lower()
+    if "billing" in low or "billing_disabled" in low:
+        return ValueError(
+            "Google Cloud Vision requiere facturación activa en el proyecto de GCP. "
+            "Activá billing en Google Cloud Console (Vision API) y reintentá en unos minutos."
+        )
+    if "permission_denied" in low or "403" in low or "permission denied" in low:
+        return ValueError(
+            "Google Cloud Vision rechazó la solicitud (sin permiso o API deshabilitada). "
+            f"Detalle: {msg[:220]}"
+        )
+    if "unauthenticated" in low or "401" in low or (
+        "invalid" in low and "credential" in low
+    ):
+        return ValueError(
+            "Credenciales de Google Cloud Vision inválidas o vencidas. "
+            "Revisá GOOGLE_VISION_CREDENTIALS / data/google_service_account.json."
+        )
+    if "timeout" in low or "deadline" in low or "timed out" in low:
+        return ValueError(
+            "Google Cloud Vision no respondió a tiempo (timeout). "
+            "Reintentá con un archivo más liviano o más tarde."
+        )
+    return ValueError(
+        "No se pudo contactar a Google Cloud Vision (timeout o red). "
+        f"Detalle: {type(exc).__name__}: {msg[:200]}"
+    )
+
+
 def _vision_ocr_text(image_bytes: bytes, cred_path: Path) -> str:
     client = _vision_client_cache.get(str(cred_path.resolve()))
     if client is None:
@@ -388,9 +420,7 @@ def _vision_ocr_text(image_bytes: bytes, cred_path: Path) -> str:
             timeout=_VISION_OCR_TIMEOUT_SEC,
         )
     except Exception as exc:
-        raise ValueError(
-            "No se pudo contactar a Google Cloud Vision (timeout o red)."
-        ) from exc
+        raise _vision_contact_error(exc) from exc
 
     if response.error.message:
         raise ValueError(response.error.message)

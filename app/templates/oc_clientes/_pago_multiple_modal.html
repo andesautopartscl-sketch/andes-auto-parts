@@ -94,6 +94,7 @@
                         <option value="{{ val }}">{{ lab }}</option>
                         {% endfor %}
                     </select>
+                    <p id="ocPagoSaldoHint" class="sub" style="margin:6px 0 0;display:none;"></p>
                 </div>
                 <div>
                     <label for="ocPagoMonto">Monto recibido *</label>
@@ -138,6 +139,10 @@
     var montoInput = document.getElementById('ocPagoMonto');
     var fechaInput = document.getElementById('ocPagoFecha');
     var horaInput = document.getElementById('ocPagoHora');
+    var metodoSel = document.getElementById('ocPagoMetodo');
+    var saldoHint = document.getElementById('ocPagoSaldoHint');
+    var currentSaldo = 0;
+    var currentSuma = 0;
     if (!bar || !modal || !form || !rowsEl) return;
 
     function todayIso() {
@@ -190,8 +195,35 @@
         return rows.every(function (tr) { return tr.getAttribute('data-cliente-id') === cid; });
     }
 
+    function updateSaldoHint() {
+        if (!saldoHint) return;
+        var metodo = metodoSel ? (metodoSel.value || '') : '';
+        if (metodo !== 'saldo_favor') {
+            saldoHint.style.display = 'none';
+            saldoHint.textContent = '';
+            return;
+        }
+        saldoHint.style.display = 'block';
+        if (currentSaldo <= 0.02) {
+            saldoHint.style.color = '#b91c1c';
+            saldoHint.textContent = 'Este cliente no tiene saldo a favor disponible.';
+            return;
+        }
+        if (currentSuma > currentSaldo + 0.02) {
+            saldoHint.style.color = '#b91c1c';
+            saldoHint.textContent = 'Saldo a favor insuficiente: disponible ' + fmt(currentSaldo) +
+                ' · suma OC ' + fmt(currentSuma) + '.';
+            return;
+        }
+        saldoHint.style.color = '#15803d';
+        saldoHint.textContent = 'Saldo a favor disponible: ' + fmt(currentSaldo) +
+            ' · se descontará ' + fmt(currentSuma) + '.';
+    }
+
     function openModal(rows, sum) {
         rowsEl.innerHTML = '';
+        currentSuma = sum;
+        currentSaldo = parseFloat(rows[0].getAttribute('data-cliente-saldo') || '0') || 0;
         rows.forEach(function (tr) {
             var id = tr.getAttribute('data-oc-id');
             var num = tr.getAttribute('data-oc-num') || id;
@@ -206,6 +238,7 @@
         sumaEl.textContent = fmt(sum);
         if (montoInput) montoInput.value = String(Math.round(sum));
         syncFechaHoraAhora();
+        updateSaldoHint();
         modal.classList.add('open');
         modal.setAttribute('aria-hidden', 'false');
         var firstFact = rowsEl.querySelector('input[name^="numero_factura_"]');
@@ -273,6 +306,10 @@
         if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
     });
 
+    if (metodoSel) {
+        metodoSel.addEventListener('change', updateSaldoHint);
+    }
+
     form.addEventListener('submit', function (e) {
         var facts = rowsEl.querySelectorAll('input[name^="numero_factura_"]');
         for (var i = 0; i < facts.length; i++) {
@@ -280,6 +317,20 @@
                 e.preventDefault();
                 alert('Ingrese el número de factura para cada OC.');
                 facts[i].focus();
+                return;
+            }
+        }
+        var metodo = metodoSel ? (metodoSel.value || '') : '';
+        if (metodo === 'saldo_favor') {
+            if (currentSaldo <= 0.02) {
+                e.preventDefault();
+                alert('Este cliente no tiene saldo a favor disponible.');
+                return;
+            }
+            if (currentSuma > currentSaldo + 0.02) {
+                e.preventDefault();
+                alert('Saldo a favor insuficiente.\nDisponible: ' + fmt(currentSaldo) +
+                    '\nSuma OC: ' + fmt(currentSuma));
                 return;
             }
         }

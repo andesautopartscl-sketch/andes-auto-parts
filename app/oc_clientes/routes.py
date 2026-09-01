@@ -21,6 +21,8 @@ from .services import (
     agregar_vendedor_catalogo,
     buscar_oc_por_numero,
     calcular_totales_items,
+    cliente_saldo_favor_disponible,
+    clientes_saldos_favor_map,
     codigo_en_inventario,
     descontar_stock_oc,
     restaurar_stock_oc,
@@ -46,6 +48,16 @@ oc_clientes_bp = Blueprint(
     url_prefix="/oc-clientes",
     template_folder="../../templates",
 )
+
+
+def _metodo_pago_options_cobro(*, incluir_saldo_favor: bool = True):
+    """Métodos para registrar cobro de OC (incluye saldo a favor del cliente)."""
+    opts = []
+    for k in METODO_PAGO_OPTIONS:
+        if not incluir_saldo_favor and k == "saldo_favor":
+            continue
+        opts.append((k, METODO_PAGO_LABELS.get(k, k)))
+    return opts
 
 
 def _current_user() -> str:
@@ -191,9 +203,7 @@ def _render_oc_form(
         from_src=from_src,
         volver_url=volver_url,
         vendedores_opciones=vendedores_opciones,
-        metodo_pago_options=[
-            (k, METODO_PAGO_LABELS.get(k, k)) for k in METODO_PAGO_OPTIONS if k != "saldo_favor"
-        ],
+        metodo_pago_options=_metodo_pago_options_cobro(incluir_saldo_favor=False),
         url_producto=url_for("ventas.api_producto"),
         url_productos_search=url_for("ventas.api_productos_search"),
         url_clientes=url_for("ventas.api_clientes"),
@@ -421,6 +431,8 @@ def lista():
             for c in Cliente.query.filter(Cliente.id.in_(cids)).all():
                 clientes_map[c.id] = c
 
+    saldos_map = clientes_saldos_favor_map({o.cliente_id for o in ordenes if o.cliente_id})
+
     filas = []
     for oc in ordenes:
         dias_entrega = _dias_entrega_oc(oc)
@@ -435,6 +447,7 @@ def lista():
                 "dias_entrega": dias_entrega,
                 "pago_parcial": oc_tiene_pago_parcial(oc),
                 "monto_pendiente": oc_monto_pendiente(oc) if (oc.estado or "") == "entregada" else None,
+                "cliente_saldo_favor": float(saldos_map.get(int(oc.cliente_id or 0), 0.0) or 0.0),
             }
         )
 
@@ -447,9 +460,7 @@ def lista():
         estados=OC_ESTADOS,
         estado_labels=OC_ESTADO_LABELS,
         puede_modificar=_can_modify(),
-        metodo_pago_options=[
-            (k, METODO_PAGO_LABELS.get(k, k)) for k in METODO_PAGO_OPTIONS if k != "saldo_favor"
-        ],
+        metodo_pago_options=_metodo_pago_options_cobro(incluir_saldo_favor=True),
         url_cobrado_mes=url_for("oc_clientes.api_cobrado_mes"),
         active_page="oc_clientes",
         _partial=_partial,
@@ -791,7 +802,8 @@ def detalle(oid: int):
         monto_pendiente=oc_monto_pendiente(oc),
         pago_parcial=oc_tiene_pago_parcial(oc),
         metodo_labels=METODO_PAGO_LABELS,
-        metodo_pago_options=[(k, METODO_PAGO_LABELS.get(k, k)) for k in METODO_PAGO_OPTIONS if k != "saldo_favor"],
+        metodo_pago_options=_metodo_pago_options_cobro(incluir_saldo_favor=True),
+        cliente_saldo_favor=cliente_saldo_favor_disponible(oc.cliente_id),
         vendedores_opciones=[v.nombre for v in listar_vendedores_catalogo()],
         puede_modificar=_can_modify(),
         company=COMPANY_INFO,

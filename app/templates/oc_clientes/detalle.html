@@ -492,6 +492,15 @@
                 <option value="{{ val }}">{{ lab }}</option>
                 {% endfor %}
             </select>
+            {% set saldo_cli = cliente_saldo_favor|default(0)|float %}
+            <p id="pagoSaldoHint" style="margin:6px 0 0;font-size:11px;display:none;"
+               data-saldo="{{ '%.2f'|format(saldo_cli) }}"
+               data-pendiente="{{ '%.2f'|format(monto_pendiente or 0) }}"></p>
+            {% if saldo_cli > 0 %}
+            <p style="margin:4px 0 0;font-size:11px;color:#15803d;">
+                Saldo a favor del cliente: ${{ '{:,.0f}'.format(saldo_cli).replace(',', '.') }}
+            </p>
+            {% endif %}
             <div style="display:flex;gap:6px;justify-content:flex-end;">
                 <button type="button" class="btn sm modal-cancel">Cancelar</button>
                 <button type="submit" class="btn sm primary">Confirmar pago</button>
@@ -585,6 +594,44 @@
     });
     updatePagoTotal();
 
+    var metodoPagoSel = document.getElementById('metodo_pago');
+    var pagoSaldoHint = document.getElementById('pagoSaldoHint');
+    function updateDetalleSaldoHint() {
+        if (!pagoSaldoHint || !metodoPagoSel) return;
+        var saldo = parseFloat(pagoSaldoHint.getAttribute('data-saldo') || '0') || 0;
+        var metodo = metodoPagoSel.value || '';
+        if (metodo !== 'saldo_favor') {
+            pagoSaldoHint.style.display = 'none';
+            pagoSaldoHint.textContent = '';
+            return;
+        }
+        var total = 0;
+        document.querySelectorAll('.pago-item-cb:checked').forEach(function (cb) {
+            total += parseFloat(cb.getAttribute('data-monto') || '0') || 0;
+        });
+        if (!document.querySelectorAll('.pago-item-cb').length) {
+            total = parseFloat(pagoSaldoHint.getAttribute('data-pendiente') || '0') || 0;
+        }
+        pagoSaldoHint.style.display = 'block';
+        if (saldo <= 0.02) {
+            pagoSaldoHint.style.color = '#b91c1c';
+            pagoSaldoHint.textContent = 'Este cliente no tiene saldo a favor disponible.';
+        } else if (total > saldo + 0.02) {
+            pagoSaldoHint.style.color = '#b91c1c';
+            pagoSaldoHint.textContent = 'Saldo insuficiente: disponible ' + fmtClp(saldo) +
+                ' · a cobrar ' + fmtClp(total) + '.';
+        } else {
+            pagoSaldoHint.style.color = '#15803d';
+            pagoSaldoHint.textContent = 'Se descontará ' + fmtClp(total) +
+                ' del saldo a favor (disponible ' + fmtClp(saldo) + ').';
+        }
+    }
+    if (metodoPagoSel) metodoPagoSel.addEventListener('change', updateDetalleSaldoHint);
+    document.querySelectorAll('.pago-item-cb').forEach(function (cb) {
+        cb.addEventListener('change', updateDetalleSaldoHint);
+    });
+    document.getElementById('pagoCheckAll')?.addEventListener('change', updateDetalleSaldoHint);
+
     formPago?.addEventListener('submit', function (e) {
         var nf = (document.getElementById('numero_factura')?.value || '').trim();
         if (!nf) {
@@ -597,6 +644,21 @@
         if (cbs.length && !document.querySelectorAll('.pago-item-cb:checked').length) {
             e.preventDefault();
             alert('Seleccione al menos un ítem para facturar.');
+            return;
+        }
+        if ((metodoPagoSel && metodoPagoSel.value) === 'saldo_favor') {
+            var saldo = parseFloat((pagoSaldoHint && pagoSaldoHint.getAttribute('data-saldo')) || '0') || 0;
+            var total = 0;
+            document.querySelectorAll('.pago-item-cb:checked').forEach(function (cb) {
+                total += parseFloat(cb.getAttribute('data-monto') || '0') || 0;
+            });
+            if (!cbs.length) {
+                total = parseFloat((pagoSaldoHint && pagoSaldoHint.getAttribute('data-pendiente')) || '0') || 0;
+            }
+            if (saldo <= 0.02 || total > saldo + 0.02) {
+                e.preventDefault();
+                alert('Saldo a favor insuficiente para cubrir este pago.');
+            }
         }
     });
 })();

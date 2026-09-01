@@ -214,6 +214,7 @@
                         data-oc-num="{{ f.oc.numero_oc }}"
                         data-oc-total="{{ f.monto_pendiente if f.monto_pendiente is not none else (f.oc.total or 0) }}"
                         data-cliente-id="{{ f.oc.cliente_id }}"
+                        data-cliente-saldo="{{ '%.2f'|format(f.cliente_saldo_favor or 0) }}"
                         data-oc-pendiente="{% if f.oc.estado == 'entregada' %}1{% else %}0{% endif %}">
                         {% if puede_modificar %}
                         <td class="check">

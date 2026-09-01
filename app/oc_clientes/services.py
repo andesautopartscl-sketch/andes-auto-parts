@@ -4,11 +4,11 @@ import uuid
 from calendar import monthrange
 from datetime import date, datetime
 
-from sqlalchemy import text
+from sqlalchemy import func, text
 
 from app.extensions import db
 from app.utils.stock_control import get_available_stock
-from app.ventas.models import Cliente
+from app.ventas.models import Cliente, ClienteSaldoFavorMovimiento
 from .models import (
     OrdenCompraCliente,
     OrdenCompraClienteItem,
@@ -16,6 +16,81 @@ from .models import (
     OrdenCompraClientePagoItem,
     oc_estado_label,
 )
+
+
+def _round_money_cl(x: float | None) -> float:
+    return round(float(x or 0), 2)
+
+
+def cliente_saldo_favor_disponible(cliente_id: int | None) -> float:
+    """Saldo a favor actual del cliente (ledger ventas)."""
+    cid = int(cliente_id or 0)
+    if cid <= 0:
+        return 0.0
+    q = (
+        db.session.query(func.coalesce(func.sum(ClienteSaldoFavorMovimiento.monto), 0.0))
+        .filter(ClienteSaldoFavorMovimiento.cliente_id == cid)
+        .scalar()
+    )
+    return _round_money_cl(q)
+
+
+def clientes_saldos_favor_map(cliente_ids: list[int] | set[int]) -> dict[int, float]:
+    ids = sorted({int(i) for i in cliente_ids if int(i) > 0})
+    if not ids:
+        return {}
+    rows = (
+        db.session.query(
+            ClienteSaldoFavorMovimiento.cliente_id,
+            func.coalesce(func.sum(ClienteSaldoFavorMovimiento.monto), 0.0),
+        )
+        .filter(ClienteSaldoFavorMovimiento.cliente_id.in_(ids))
+        .group_by(ClienteSaldoFavorMovimiento.cliente_id)
+        .all()
+    )
+    out = {int(cid): 0.0 for cid in ids}
+    for cid, total in rows:
+        out[int(cid)] = _round_money_cl(total)
+    return out
+
+
+def _consumir_saldo_favor_por_pago_oc(
+    *,
+    cliente_id: int,
+    monto: float,
+    numero_factura: str,
+    numero_oc: str,
+    usuario: str | None,
+) -> str | None:
+    """Descuenta saldo a favor del cliente. None = ok."""
+    cid = int(cliente_id or 0)
+    amount = _round_money_cl(monto)
+    if cid <= 0:
+        return "Se requiere cliente para pagar con saldo a favor."
+    if amount <= 0.001:
+        return "El monto a cubrir con saldo a favor debe ser mayor a 0."
+    disponible = cliente_saldo_favor_disponible(cid)
+    if amount > disponible + 0.02:
+        return (
+            f"Saldo a favor insuficiente. Disponible: ${disponible:,.0f}; "
+            f"se requieren ${amount:,.0f}."
+        ).replace(",", ".")
+    factura = (numero_factura or "").strip()[:100]
+    oc_num = (numero_oc or "").strip()[:60]
+    db.session.add(
+        ClienteSaldoFavorMovimiento(
+            cliente_id=cid,
+            monto=_round_money_cl(-amount),
+            tipo="manual_consumo",
+            ref_factura_numero=factura or None,
+            razon=(
+                f"Pago OC cliente {oc_num or '—'} con saldo a favor"
+                + (f" · factura {factura}" if factura else "")
+            )[:2000],
+            usuario=(usuario or "").strip()[:100] or "sistema",
+        )
+    )
+    return None
 
 
 def normalizar_nombre_vendedor(nombre: str | None) -> str:
@@ -327,12 +402,25 @@ def registrar_pago_oc(
 
     ref = (referencia_pago or "").strip()[:120] or None
     monto = round(sum(item_total_con_iva(i, oc) for i in seleccion), 2)
+    metodo = (metodo_pago or "").strip().lower()
+
+    if metodo == "saldo_favor":
+        err_saldo = _consumir_saldo_favor_por_pago_oc(
+            cliente_id=int(oc.cliente_id or 0),
+            monto=monto,
+            numero_factura=factura,
+            numero_oc=oc.numero_oc or "",
+            usuario=usuario,
+        )
+        if err_saldo:
+            return None, [err_saldo]
+
     now = datetime.utcnow()
     pago = OrdenCompraClientePago(
         oc_id=oc.id,
         numero_factura=factura[:60],
         fecha_pago=fecha_pago,
-        metodo_pago=metodo_pago,
+        metodo_pago=metodo,
         monto=monto,
         referencia_pago=ref,
         usuario=(usuario or "").strip()[:100] or None,
@@ -355,11 +443,11 @@ def registrar_pago_oc(
         it.pagado = True
         it.numero_factura = factura[:60]
         it.fecha_pago = fecha_pago
-        it.metodo_pago = metodo_pago
+        it.metodo_pago = metodo
 
     oc.numero_factura = factura[:60]
     oc.fecha_pago = fecha_pago
-    oc.metodo_pago = metodo_pago
+    oc.metodo_pago = metodo
     if ref:
         oc.referencia_pago = ref
     oc.updated_at = now
@@ -559,6 +647,17 @@ def registrar_pagos_conjuntos(
                 f"pendiente de las OC (${suma:,.0f})."
             )
 
+    metodo = (metodo_pago or "").strip().lower()
+    if metodo == "saldo_favor" and ocs:
+        disponible = cliente_saldo_favor_disponible(ocs[0].cliente_id)
+        if suma > disponible + 0.02:
+            errors.append(
+                (
+                    f"Saldo a favor insuficiente. Disponible: ${disponible:,.0f}; "
+                    f"suma de OC pendientes: ${suma:,.0f}."
+                ).replace(",", ".")
+            )
+
     if errors:
         return [], errors
 
@@ -573,7 +672,7 @@ def registrar_pagos_conjuntos(
             oc,
             numero_factura=facturas[oc.id],
             fecha_pago=fecha_pago,
-            metodo_pago=metodo_pago,
+            metodo_pago=metodo,
             item_ids=None,
             usuario=user,
             referencia_pago=ref,
