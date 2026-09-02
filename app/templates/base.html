@@ -834,23 +834,39 @@ function toggleMenu(id) {
 			}
 		}
 		var target = sidebarNavKey(url);
-		var activeLink = null;
+		var matches = [];
 
 		document.querySelectorAll('.submenu a').forEach(function (a) {
+			a.classList.remove('nav-active');
 			/* Prefer data-module-url; fall back a href */
 			var candidate = sidebarNavKey(a.dataset.moduleUrl || a.getAttribute('href') || '');
-			var isActive = candidate !== '' && candidate === target;
-			a.classList.toggle('nav-active', isActive);
-			if (isActive) {
-				activeLink = a;
+			if (candidate !== '' && candidate === target) {
+				matches.push(a);
 			}
 		});
+
+		/* Misma URL en Contabilidad e Informes (ventas operativas / cierre): el último
+		   match abría INFORMES. Preferir el submenú ya abierto; si no, Contabilidad. */
+		var activeLink = null;
+		if (matches.length === 1) {
+			activeLink = matches[0];
+		} else if (matches.length > 1) {
+			activeLink = matches.find(function (a) {
+				var sm = a.closest('.submenu');
+				return sm && sm.classList.contains('open');
+			}) || matches.find(function (a) {
+				var sm = a.closest('.submenu');
+				return sm && sm.id === 'mod-contabilidad';
+			}) || matches[0];
+		}
 
 		if (!activeLink) {
 			document.querySelectorAll('.submenu').forEach(function (m) { m.classList.remove('open'); });
 			document.querySelectorAll('.module-header').forEach(function (h) { h.classList.remove('active'); });
 			return;
 		}
+
+		activeLink.classList.add('nav-active');
 
 		var submenu = activeLink.closest('.submenu');
 		if (!submenu) {
