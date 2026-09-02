@@ -10,6 +10,7 @@ from flask import Blueprint, flash, jsonify, redirect, render_template, request,
 from sqlalchemy import and_, func, or_
 from werkzeug.security import check_password_hash
 
+from app.bodega.routes import _normalize_origen_compra
 from app.bodega.models import IngresoDocumento, IngresoDocumentoItem, MovimientoStock
 from app.extensions import db
 from app.seguridad.models import Usuario
@@ -58,16 +59,23 @@ def _costo_unitario_desde_ingresos(
     codigo: str,
     marca: str | None = None,
     bodega: str | None = None,
+    origen_compra: str | None = None,
     *,
     cache: dict | None = None,
 ) -> float | None:
-    """Costo neto unitario desde ingresos (promedio ponderado). Prioriza misma marca/bodega."""
+    """Costo neto unitario desde ingresos (promedio ponderado).
+
+    Prioriza misma marca/bodega/origen. Sin origen se mezclan nacional e
+    importación y el costo queda inflado (p.ej. T3311RC venta import ~1.782
+    vs promedio ~6.511).
+    """
     code = (codigo or "").strip().upper()
     if not code:
         return None
     marca_n = (marca or "").strip().upper()
     bodega_n = (bodega or "").strip()
-    cache_key = (code, marca_n, bodega_n)
+    origen_n = _normalize_origen_compra(origen_compra) if origen_compra else ""
+    cache_key = (code, marca_n, bodega_n, origen_n)
     if cache is not None and cache_key in cache:
         return cache[cache_key]
 
@@ -94,6 +102,14 @@ def _costo_unitario_desde_ingresos(
         ]
         if con_bodega:
             items = con_bodega
+    if origen_n:
+        con_origen = [
+            it
+            for it in items
+            if _normalize_origen_compra(getattr(it, "origen_compra", None)) == origen_n
+        ]
+        if con_origen:
+            items = con_origen
 
     total_qty = 0
     total_val = 0.0
@@ -122,6 +138,7 @@ def _enrich_venta_operativa_row(m: MovimientoStock, *, costo_cache: dict | None 
         m.codigo_producto or "",
         m.marca,
         m.bodega,
+        getattr(m, "origen_compra", None),
         cache=costo_cache,
     )
     costo_total = round(sign * (float(costo_u) * qty), 2) if costo_u is not None and qty else None
