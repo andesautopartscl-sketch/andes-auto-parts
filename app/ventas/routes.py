@@ -16,6 +16,7 @@ from app.extensions import db
 from app.seguridad.models import Usuario as UsuarioSistema
 from app.utils.decorators import login_required
 from app.utils.permissions import has_permission
+from app.utils.datetime_utils import chile_to_utc_naive, now_chile, utcnow_naive
 from app.utils.rut_utils import clean_rut, format_rut, is_valid_rut, normalize_foreign_tax_id, display_tax_id
 from app.utils.phone_format import format_phone_display, phone_to_compact_e164
 from app.utils.party_fields import normalize_party_email, party_text_upper
@@ -1963,6 +1964,12 @@ def _build_client_history_payload(client_id: int, solo_con_oc: bool = False) -> 
             "ref_factura": m.ref_factura_numero or "",
             "ref_nc": m.ref_nota_credito_numero or "",
             "razon": (m.razon or "")[:500],
+            "metodo_pago": (getattr(m, "metodo_pago", None) or "").strip(),
+            "metodo_label": METODO_PAGO_LABELS.get(
+                (getattr(m, "metodo_pago", None) or "").strip().lower(),
+                (getattr(m, "metodo_pago", None) or "").strip() or "",
+            ),
+            "numero_comprobante": (getattr(m, "numero_comprobante", None) or "").strip(),
             "created_at": m.created_at.isoformat() if m.created_at else None,
         }
         for m in movimientos_saldo
@@ -3932,6 +3939,11 @@ def cliente_historial(cid: int):
         cliente=cliente,
         data=payload,
         filtro_oc=filtro_oc,
+        metodo_pago_options=[
+            (k, METODO_PAGO_LABELS.get(k, k))
+            for k in METODO_PAGO_OPTIONS
+            if k != "saldo_favor"
+        ],
         active_page="clientes",
         **_base_ctx(),
     )
@@ -3955,6 +3967,14 @@ def cliente_saldo_favor_manual(cid: int):
     nfac = (request.form.get("ref_numero_factura") or "").strip()[:100]
     nnc = (request.form.get("ref_numero_nota_credito") or "").strip()[:100]
     razon = (request.form.get("ref_razon_saldo") or "").strip()
+    metodo = (request.form.get("metodo_pago") or "").strip().lower()
+    comprobante = (request.form.get("numero_comprobante") or "").strip()[:120]
+    fecha_tx = (request.form.get("fecha_transaccion") or "").strip()
+    hora_tx = (request.form.get("hora_transaccion") or "").strip()
+    metodos_ok = {k for k in METODO_PAGO_OPTIONS if k != "saldo_favor"}
+    if metodo and metodo not in metodos_ok:
+        flash("Método de pago no válido.", "error")
+        return redirect(url_for("ventas.cliente_historial", cid=cid))
 
     if monto <= 0:
         flash("El monto debe ser mayor a 0.", "error")
@@ -3963,9 +3983,26 @@ def cliente_saldo_favor_manual(cid: int):
         flash("Indicá la razón del movimiento de saldo.", "error")
         return redirect(url_for("ventas.cliente_historial", cid=cid))
 
+    created_at = utcnow_naive()
+    if fecha_tx or hora_tx:
+        if not fecha_tx:
+            fecha_tx = now_chile().strftime("%Y-%m-%d")
+        if not hora_tx:
+            hora_tx = now_chile().strftime("%H:%M")
+        parsed_tx = chile_to_utc_naive(f"{fecha_tx} {hora_tx}")
+        if parsed_tx is None:
+            flash("Fecha u hora de transacción no válida.", "error")
+            return redirect(url_for("ventas.cliente_historial", cid=cid))
+        created_at = parsed_tx
+
     if accion == "consumir":
-        if not nfac:
-            flash("Para consumir saldo indicá el N° de factura/boleta SII aplicada.", "error")
+        # Aplicar a factura SII (folio) O devolver dinero (método, ej. transferencia).
+        if not nfac and not metodo:
+            flash(
+                "Para consumir indicá el N° de factura/boleta SII, o el método de pago "
+                "si devolviste el saldo (ej. transferencia a su cuenta). La razón es obligatoria.",
+                "error",
+            )
             return redirect(url_for("ventas.cliente_historial", cid=cid))
         disponible = _round_money_cl(_cliente_saldo_favor_ledger(c.id))
         if monto > disponible + 0.02:
@@ -3976,10 +4013,20 @@ def cliente_saldo_favor_manual(cid: int):
             return redirect(url_for("ventas.cliente_historial", cid=cid))
         signed = -monto
         tipo = "manual_consumo"
-        ok_msg = "Consumo de saldo a favor registrado (doc. externo / SII)."
+        ok_msg = (
+            "Devolución / consumo de saldo registrado."
+            if metodo and not nfac
+            else "Consumo de saldo a favor registrado (doc. externo / SII)."
+        )
     else:
-        if not nfac or not nnc:
-            flash("Para acreditar completá número de factura, nota de crédito y la razón.", "error")
+        # Cobro de más / pago recibido: método de pago (folio SII opcional).
+        # Alternativa: N.C. SII sin método.
+        if not nnc and not metodo:
+            flash(
+                "Para acreditar indicá método de pago (cobro de más) o el N° de nota de crédito SII. "
+                "La razón es obligatoria; el folio de factura/boleta es opcional.",
+                "error",
+            )
             return redirect(url_for("ventas.cliente_historial", cid=cid))
         signed = monto
         tipo = "manual_ingreso"
@@ -3994,6 +4041,9 @@ def cliente_saldo_favor_manual(cid: int):
                 ref_factura_numero=nfac or None,
                 ref_nota_credito_numero=nnc or None,
                 razon=razon[:2000],
+                metodo_pago=metodo or None,
+                numero_comprobante=comprobante or None,
+                created_at=created_at,
                 usuario=session.get("user") or "sistema",
             )
         )

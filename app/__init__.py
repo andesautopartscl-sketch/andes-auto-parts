@@ -898,6 +898,8 @@ def create_app():
                         ref_factura_numero VARCHAR(100),
                         ref_nota_credito_numero VARCHAR(100),
                         razon TEXT,
+                        metodo_pago VARCHAR(50),
+                        numero_comprobante VARCHAR(120),
                         documento_venta_id INTEGER,
                         nota_credito_id INTEGER,
                         created_at DATETIME NOT NULL,
@@ -919,6 +921,26 @@ def create_app():
                     "ventas_clientes_saldo_movimientos (documento_venta_id)"
                 )
             )
+            vc_saldo_cols = {
+                col[1]
+                for col in conn.execute(
+                    text("PRAGMA table_info(ventas_clientes_saldo_movimientos)")
+                ).fetchall()
+            }
+            if vc_saldo_cols and "metodo_pago" not in vc_saldo_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE ventas_clientes_saldo_movimientos "
+                        "ADD COLUMN metodo_pago VARCHAR(50)"
+                    )
+                )
+            if vc_saldo_cols and "numero_comprobante" not in vc_saldo_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE ventas_clientes_saldo_movimientos "
+                        "ADD COLUMN numero_comprobante VARCHAR(120)"
+                    )
+                )
 
             conn.execute(
                 text(

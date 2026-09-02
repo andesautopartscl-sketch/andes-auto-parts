@@ -723,7 +723,7 @@ textarea.sf-input {
                         <span class="hp-label">Saldo a favor</span>
                         <span class="hp-amount">${{ '{:,.0f}'.format((data.saldo_favor|default(0))|float).replace(',', '.') }}</span>
                     </div>
-                    <p class="history-pagos-hint">NC a saldo, cargas/consumos manuales (factura SII) y descuentos al emitir docs.</p>
+                    <p class="history-pagos-hint">NC a saldo, cobros de más (con método/comprobante), cargas/consumos manuales (factura SII) y descuentos al emitir docs.</p>
                     <details class="sf-details">
                         <summary>Movimiento manual (auditoría)</summary>
                         <form method="post" action="{{ url_for('ventas.cliente_saldo_favor_manual', cid=cliente.id) }}" id="clienteSaldoFavorForm">
@@ -731,7 +731,7 @@ textarea.sf-input {
                                 <div>
                                     <label class="sf-label">Acción *</label>
                                     <select class="sf-input" name="accion_saldo" id="clienteAccionSaldo">
-                                        <option value="consumir">Consumir (−) — aplicar a venta / factura SII</option>
+                                        <option value="consumir">Consumir (−) — factura SII o devolución (transferencia)</option>
                                         <option value="acreditar">Acreditar (+)</option>
                                     </select>
                                 </div>
@@ -741,15 +741,49 @@ textarea.sf-input {
                                 </div>
                                 <div>
                                     <label class="sf-label" id="clienteSaldoFacLabel">N° factura/boleta SII *</label>
-                                    <input class="sf-input" type="text" name="ref_numero_factura" id="clienteSaldoFac" required placeholder="Folio SII" maxlength="100" autocomplete="off">
+                                    <input class="sf-input" type="text" name="ref_numero_factura" id="clienteSaldoFac" placeholder="Folio SII (opcional al acreditar)" maxlength="100" autocomplete="off">
                                 </div>
                                 <div>
                                     <label class="sf-label" id="clienteSaldoNcLabel">N° N.C. <span id="clienteSaldoNcReq">(opcional)</span></label>
-                                    <input class="sf-input" type="text" name="ref_numero_nota_credito" id="clienteSaldoNc" placeholder="Solo si acreditás" maxlength="100" autocomplete="off">
+                                    <input class="sf-input" type="text" name="ref_numero_nota_credito" id="clienteSaldoNc" placeholder="Si viene de N.C. SII" maxlength="100" autocomplete="off">
+                                </div>
+                                <div id="clienteSaldoMetodoWrap" hidden>
+                                    <label class="sf-label" id="clienteSaldoMetodoLabel">Método de pago <span id="clienteSaldoMetodoReq">*</span></label>
+                                    <select class="sf-input" name="metodo_pago" id="clienteSaldoMetodo">
+                                        <option value="">Seleccionar…</option>
+                                        {% set _mp_opts = metodo_pago_options if metodo_pago_options is defined and metodo_pago_options else none %}
+                                        {% if not _mp_opts %}
+                                            {% set _mp_opts = [
+                                                ('efectivo', 'Efectivo'),
+                                                ('transferencia', 'Transferencia bancaria'),
+                                                ('tarjeta_debito', 'Tarjeta débito'),
+                                                ('tarjeta_credito', 'Tarjeta crédito'),
+                                                ('credito_30', 'Crédito 30 días'),
+                                                ('credito_60', 'Crédito 60 días'),
+                                                ('credito_90', 'Crédito 90 días'),
+                                                ('cheque', 'Cheque'),
+                                            ] %}
+                                        {% endif %}
+                                        {% for val, lab in _mp_opts %}
+                                        <option value="{{ val }}">{{ lab }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div id="clienteSaldoComprobanteWrap" hidden>
+                                    <label class="sf-label">N° comprobante</label>
+                                    <input class="sf-input" type="text" name="numero_comprobante" id="clienteSaldoComprobante" placeholder="Transferencia / voucher / n° operación" maxlength="120" autocomplete="off">
+                                </div>
+                                <div id="clienteSaldoFechaWrap" hidden>
+                                    <label class="sf-label">Fecha transacción</label>
+                                    <input class="sf-input" type="date" name="fecha_transaccion" id="clienteSaldoFecha" autocomplete="off">
+                                </div>
+                                <div id="clienteSaldoHoraWrap" hidden>
+                                    <label class="sf-label">Hora transacción</label>
+                                    <input class="sf-input" type="time" name="hora_transaccion" id="clienteSaldoHora" step="60" autocomplete="off">
                                 </div>
                                 <div class="sf-wide">
                                     <label class="sf-label">Razón / detalle *</label>
-                                    <textarea class="sf-input" name="ref_razon_saldo" rows="2" required placeholder="Ej: Aplicado a factura SII 156 — resto cobrado por transferencia $XX"></textarea>
+                                    <textarea class="sf-input" name="ref_razon_saldo" rows="2" required placeholder="Ej: Cobro de más por transferencia — diferencia a saldo para OC / devolución"></textarea>
                                 </div>
                             </div>
                             <button class="sf-submit" type="submit">Registrar</button>
@@ -759,14 +793,56 @@ textarea.sf-input {
                             var sel = document.getElementById('clienteAccionSaldo');
                             var nc = document.getElementById('clienteSaldoNc');
                             var ncReq = document.getElementById('clienteSaldoNcReq');
+                            var fac = document.getElementById('clienteSaldoFac');
                             var facLabel = document.getElementById('clienteSaldoFacLabel');
+                            var metodo = document.getElementById('clienteSaldoMetodo');
+                            var metodoReq = document.getElementById('clienteSaldoMetodoReq');
+                            var metodoWrap = document.getElementById('clienteSaldoMetodoWrap');
+                            var compWrap = document.getElementById('clienteSaldoComprobanteWrap');
+                            var fechaWrap = document.getElementById('clienteSaldoFechaWrap');
+                            var horaWrap = document.getElementById('clienteSaldoHoraWrap');
+                            var comp = document.getElementById('clienteSaldoComprobante');
+                            var fecha = document.getElementById('clienteSaldoFecha');
+                            var hora = document.getElementById('clienteSaldoHora');
+                            function pad(n) { return String(n).padStart(2, '0'); }
+                            function fillNowChile() {
+                                if (!fecha || !hora) return;
+                                var now = new Date();
+                                if (!fecha.value) {
+                                    fecha.value = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+                                }
+                                if (!hora.value) {
+                                    hora.value = pad(now.getHours()) + ':' + pad(now.getMinutes());
+                                }
+                            }
                             function sync() {
-                                var cons = sel && sel.value === 'consumir';
-                                if (nc) nc.required = !cons;
-                                if (ncReq) ncReq.textContent = cons ? '(opcional)' : '*';
-                                if (facLabel) facLabel.textContent = cons
-                                    ? 'N° factura/boleta SII *'
-                                    : 'N° factura *';
+                                var acred = sel && sel.value === 'acreditar';
+                                var cons = !acred;
+                                if (nc) nc.required = false;
+                                if (ncReq) ncReq.textContent = '(opcional)';
+                                /* Folio SII: obligatorio solo si consumís sin método (aplicar a factura).
+                                   Con transferencia/devolución o al acreditar: opcional. */
+                                if (fac) fac.required = false;
+                                if (facLabel) {
+                                    facLabel.textContent = acred
+                                        ? 'N° factura/boleta SII (opcional)'
+                                        : 'N° factura/boleta SII (o método *)';
+                                }
+                                /* Método / comprobante / fecha: visibles en ambas acciones. */
+                                if (metodoWrap) metodoWrap.hidden = false;
+                                if (compWrap) compWrap.hidden = false;
+                                if (fechaWrap) fechaWrap.hidden = false;
+                                if (horaWrap) horaWrap.hidden = false;
+                                if (metodo) metodo.disabled = false;
+                                fillNowChile();
+                                if (metodoReq) {
+                                    metodoReq.textContent = acred ? '(o N.C.) *' : '(o folio SII) *';
+                                }
+                                if (comp) {
+                                    comp.placeholder = cons
+                                        ? 'N° transferencia / operación al cliente'
+                                        : 'Transferencia / voucher / n° operación';
+                                }
                             }
                             if (sel) { sel.addEventListener('change', sync); sync(); }
                         })();
@@ -830,6 +906,8 @@ textarea.sf-input {
                                     <td style="line-height: 1.2; text-transform: uppercase;">
                                         {% if sm.ref_factura %}F: {{ sm.ref_factura }}{% endif %}
                                         {% if sm.ref_nc %}<br>NC: {{ sm.ref_nc }}{% endif %}
+                                        {% if sm.metodo_label or sm.metodo_pago %}<br>Pago: {{ sm.metodo_label or sm.metodo_pago }}{% endif %}
+                                        {% if sm.numero_comprobante %}<br>Comp: {{ sm.numero_comprobante }}{% endif %}
                                         {% if sm.razon %}<br><span style="color:#64748b;">{{ (sm.razon or '')[:120] }}{% if (sm.razon or '')|length > 120 %}…{% endif %}</span>{% endif %}
                                     </td>
                                 </tr>

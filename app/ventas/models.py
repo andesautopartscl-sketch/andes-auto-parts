@@ -175,6 +175,8 @@ class ClienteSaldoFavorMovimiento(db.Model):
     ref_factura_numero = db.Column(db.String(100))
     ref_nota_credito_numero = db.Column(db.String(100))
     razon = db.Column(db.String(2000))
+    metodo_pago = db.Column(db.String(50))  # cómo recibió el cobro (acreditar) / ref. opcional
+    numero_comprobante = db.Column(db.String(120))  # transferencia, voucher, etc.
     documento_venta_id = db.Column(db.Integer, db.ForeignKey("ventas_documentos.id"), index=True)
     nota_credito_id = db.Column(db.Integer, db.ForeignKey("ventas_notas_credito.id"), index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
