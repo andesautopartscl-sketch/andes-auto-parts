@@ -195,6 +195,17 @@ td {
     border-color: #f87171;
     color: #991b1b;
 }
+.saldo-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #15803d;
+    font-size: 10px;
+    font-weight: 600;
+}
 .empty {
     padding: 18px 14px;
     text-align: center;
@@ -251,6 +262,7 @@ td {
                     <tr>
                         <th>Cliente</th>
                         <th>RUT</th>
+                        <th>Saldo a favor</th>
                         <th>Direccion</th>
                         <th>Contacto</th>
                         <th>Acciones</th>
@@ -261,6 +273,14 @@ td {
                     <tr>
                         <td><strong>{{ cliente.nombre }}</strong></td>
                         <td>{{ cliente.rut|format_rut if cliente.rut else 'Sin RUT' }}</td>
+                        <td>
+                            {% set sf = (saldos_cliente or {}).get(cliente.id, 0) %}
+                            {% if sf and sf|float > 0 %}
+                            <span class="saldo-pill">${{ '{:,.0f}'.format(sf|float).replace(',', '.') }}</span>
+                            {% else %}
+                            <span style="color:#94a3b8;font-size:10px;">—</span>
+                            {% endif %}
+                        </td>
                         <td>{{ cliente.direccion or 'Sin direccion' }}</td>
                         <td>
                             <div class="contact-lines">

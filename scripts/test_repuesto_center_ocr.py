@@ -275,6 +275,127 @@ FILTRO A/C
 1
 """
 
+OCR_FIXTURE_590336_PDF_ROW = """
+R.U.T. 79.656.210-2
+FACTURA ELECTRÓNICA
+N° 0000590336
+SEÑORES ANDES AUTO PARTS
+CÓDIGO DETALLE CANTIDAD PRECIO UNITARIO PRECIO ÍTEM
+3429 RODAMIENTO DE DISTRIB (TENSOR) 1 5.900,00 5.900
+3438 RODAMIENTO DE DISTRIB (GUIA) 1 4.900,00 4.900
+8852 FOCO TRASERO CABINA SIMPLE/DOBLE IZQ Y DER (UNIDAD) 1 9.900,00 9.900
+CH017RC FILTRO DIESEL 1 3.800,00 3.800
+GP068RC PORTALON 1 79.900,00 79.900
+MAX151RC BUJIA INCANDECENTE (BOSCH) 4 4.900,00 19.600
+VG5001RC FOCO TRASERO IZQ 1 25.900,00 25.900
+VG5002RC FOCO TRASERO DER 1 25.900,00 25.900
+OBSERVACIONES: Basado en la Orden de Venta : 10431472
+MONTO NETO 175.800
+MONTO IVA 19% 33.402
+MONTO TOTAL 209.202
+"""
+
+OCR_FIXTURE_590336_PDF_NATIVE = """
+Facturación Electrónica   -   www.facele.cl
+MONTO EXENTO
+MONTO NETO
+MONTO IVA 19%
+MONTO TOTAL
+79.656.210-2
+FACTURA ELECTRÓNICA
+0000590336
+ANDES AUTO PARTS
+78.074.288-7
+Crédito
+C78074288-7
+175.800
+33.402
+209.202
+0
+Basado en la Orden de Venta : 10431472
+Res. 80 de 2014 - Verifique Documento: www.sii.cl
+Timbre Electronico S.I.I.
+3429
+5.900
+RODAMIENTO DE DISTRIB (TENSOR)
+RODAMIENTO DE DISTRIB (TENSOR)
+5.900,00
+1
+3438
+4.900
+RODAMIENTO DE DISTRIB (GUIA)
+RODAMIENTO DE DISTRIB (GUIA)
+4.900,00
+1
+8852
+9.900
+FOCO TRASERO CABINA SIMPLE/DOBLE IZQ Y DER (UNIDAD)
+FOCO TRASERO CABINA SIMPLE/DOBLE IZQ Y DER (UNIDAD)
+9.900,00
+1
+CH017RC
+3.800
+FILTRO DIESEL
+FILTRO DIESEL
+3.800,00
+1
+GP068RC
+79.900
+PORTALON
+PORTALON
+79.900,00
+1
+MAX151RC
+19.600
+BUJIA INCANDECENTE (BOSCH)
+BUJIA INCANDECENTE (BOSCH)
+4.900,00
+4
+VG5001RC
+25.900
+FOCO TRASERO IZQ
+FOCO TRASERO IZQ
+25.900,00
+1
+VG5002RC
+25.900
+FOCO TRASERO DER
+FOCO TRASERO DER
+25.900,00
+1
+"""
+
+# OCR real: filas completas solo para *RC; numéricos cortos en líneas separadas.
+OCR_FIXTURE_590336_PARTIAL_MIXED = """
+R.U.T. 79.656.210-2
+FACTURA ELECTRÓNICA
+N° 0000590336
+3429
+RODAMIENTO DE DISTRIB (TENSOR)
+RODAMIENTO DE DISTRIB (TENSOR)
+5.900,00
+1
+3438
+RODAMIENTO DE DISTRIB (GUIA)
+RODAMIENTO DE DISTRIB (GUIA)
+4.900,00
+1
+8852
+FOCO TRASERO CABINA SIMPLE/DOBLE IZQ Y DER (UNIDAD)
+FOCO TRASERO CABINA SIMPLE/DOBLE IZQ Y DER (UNIDAD)
+9.900,00
+1
+CH017RC FILTRO DIESEL 1 3.800,00 3.800
+GP068RC PORTALON 1 79.900,00 79.900
+MAX151RC BUJIA INCANDECENTE (BOSCH) 4 4.900,00 19.600
+VG5001RC FOCO TRASERO IZQ 1 25.900,00 25.900
+VG5002RC FOCO TRASERO DER 1 25.900,00 25.900
+OBSERVACIONES: Basado en la Orden de Venta : 10431472
+MONTO NETO 175.800
+MONTO IVA 19% 33.402
+MONTO TOTAL 209.202
+"""
+
 
 def test_fixture_565092_pdf_native() -> None:
     """PDF Facele nativo: ítems al final, después de etiquetas MONTO NETO."""
@@ -528,6 +649,99 @@ def test_fixture_567580_pdf_native() -> None:
     print("OK repuesto_center fixture 567580 PDF native\n")
 
 
+def test_fixture_590336_pdf_row() -> None:
+    """Folio 590336: mezcla códigos numéricos cortos + alfanuméricos (fila PDF)."""
+    parser = RepuestoCenterParser()
+    data = parser.parse(
+        {
+            "rut_proveedor": "79.656.210-2",
+            "ocr_texto_crudo": OCR_FIXTURE_590336_PDF_ROW,
+            "productos": [],
+            "numero_documento": "590336",
+        }
+    )
+    productos = data.get("productos") or []
+    codes = [p["codigo_proveedor"] for p in productos]
+    assert len(productos) == 8, productos
+    assert codes == [
+        "3429",
+        "3438",
+        "8852",
+        "CH017RC",
+        "GP068RC",
+        "MAX151RC",
+        "VG5001RC",
+        "VG5002RC",
+    ]
+    assert productos[0]["valor_neto"] == 5900
+    assert productos[2]["valor_neto"] == 9900
+    assert productos[5]["cantidad"] == 4
+    assert productos[5]["valor_neto"] == 4900
+    assert data.get("total_neto") == 175800
+    assert data.get("iva") == 33402
+    assert data.get("total") == 209202
+    suma = sum((p.get("cantidad") or 1) * (p.get("valor_neto") or 0) for p in productos)
+    assert suma == 175800
+    print("OK repuesto_center fixture 590336 PDF row\n")
+
+
+def test_fixture_590336_pdf_native() -> None:
+    """Folio 590336 Facele nativo: códigos cortos 3429/3438/8852 no deben omitirse."""
+    parser = RepuestoCenterParser()
+    data = parser.parse(
+        {
+            "rut_proveedor": "79.656.210-2",
+            "ocr_texto_crudo": OCR_FIXTURE_590336_PDF_NATIVE,
+            "productos": [],
+            "numero_documento": "590336",
+        }
+    )
+    productos = data.get("productos") or []
+    codes = [p["codigo_proveedor"] for p in productos]
+    assert len(productos) == 8, productos
+    assert "3429" in codes and "3438" in codes and "8852" in codes
+    assert codes[:3] == ["3429", "3438", "8852"]
+    assert productos[0]["valor_neto"] == 5900
+    assert productos[5]["codigo_proveedor"] == "MAX151RC"
+    assert productos[5]["cantidad"] == 4
+    assert productos[5]["valor_neto"] == 4900
+    assert data.get("total_neto") == 175800
+    assert data.get("total") == 209202
+    suma = sum((p.get("cantidad") or 1) * (p.get("valor_neto") or 0) for p in productos)
+    assert suma == 175800
+    print("OK repuesto_center fixture 590336 PDF native\n")
+
+
+def test_fixture_590336_partial_mixed() -> None:
+    """OCR mezcla: filas *RC completas + numéricos cortos en bloque Facele (bug UI)."""
+    parser = RepuestoCenterParser()
+    data = parser.parse(
+        {
+            "rut_proveedor": "79.656.210-2",
+            "ocr_texto_crudo": OCR_FIXTURE_590336_PARTIAL_MIXED,
+            "productos": [],
+            "numero_documento": "590336",
+        }
+    )
+    productos = data.get("productos") or []
+    codes = [p["codigo_proveedor"] for p in productos]
+    assert len(productos) == 8, productos
+    assert set(codes) == {
+        "3429",
+        "3438",
+        "8852",
+        "CH017RC",
+        "GP068RC",
+        "MAX151RC",
+        "VG5001RC",
+        "VG5002RC",
+    }
+    assert data.get("total_neto") == 175800
+    suma = sum((p.get("cantidad") or 1) * (p.get("valor_neto") or 0) for p in productos)
+    assert suma == 175800
+    print("OK repuesto_center fixture 590336 partial mixed\n")
+
+
 def test_dte_xml_productos() -> None:
     from app.utils.invoice_vision import (
         _extract_montos_from_dte_xml,
@@ -614,6 +828,9 @@ if __name__ == "__main__":
     test_fixture_567124_pdf_row()
     test_fixture_567124_columnar()
     test_fixture_567580_pdf_native()
+    test_fixture_590336_pdf_row()
+    test_fixture_590336_pdf_native()
+    test_fixture_590336_partial_mixed()
     test_dte_xml_productos()
     test_folio_no_es_codigo()
     test_repair_folio_en_neto()

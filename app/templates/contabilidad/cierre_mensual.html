@@ -21,8 +21,14 @@
   width: 118px; min-height: 26px; padding: 2px 6px; border-radius: 6px;
   border: 1px solid #cbd5e1; box-sizing: border-box; font-size: 11px;
 }
-.cm-filters .cm-actions { display:flex; gap: 6px; align-items: center; }
+.cm-filters .cm-actions { display:flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .cm-filters .btn, .cm-filters .link-btn { min-height: 26px; font-size: 11px; padding: 2px 8px; }
+.cm-chip {
+  display: inline-flex; align-items: center; min-height: 26px; padding: 2px 8px;
+  border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #475569;
+  font-size: 10.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.cm-chip:hover { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
 .cm-kpi {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px;
 }
@@ -86,7 +92,7 @@
 
   <p class="cm-note">Gestión: compras vs ERP vs operativas. Costo/ganancia estimados. No sustituye SII.</p>
 
-  <form class="cm-filters" method="get">
+  <form class="cm-filters" method="get" id="cmFiltersForm">
     <div>
       <label for="cm-desde">Desde</label>
       <input id="cm-desde" type="date" name="desde" value="{{ filtros.desde }}">
@@ -97,7 +103,8 @@
     </div>
     <div class="cm-actions">
       <button type="submit" class="btn btn-primary">Filtrar</button>
-      <a class="link-btn" href="{{ url_for('contabilidad.cierre_mensual') }}">Mes</a>
+      <button type="button" class="cm-chip" data-range="this-month" title="Del 1 al día de hoy">Este mes</button>
+      <button type="button" class="cm-chip" data-range="prev-month" title="Mes calendario anterior completo">Mes pasado</button>
     </div>
   </form>
 
@@ -177,7 +184,7 @@
           </tbody>
         </table>
         {% else %}
-        <div class="cm-empty">Sin ERP.</div>
+        <div class="cm-empty">Sin facturas/boletas ERP en el período.<br><span class="cm-muted" style="font-size:10px;">Las ventas por ajuste aparecen en Operativas.</span></div>
         {% endif %}
       </div>
     </div>
@@ -207,4 +214,47 @@
     </div>
   </div>
 </div>
+<script>
+(function () {
+  var form = document.getElementById('cmFiltersForm');
+  var desde = document.getElementById('cm-desde');
+  var hasta = document.getElementById('cm-hasta');
+  if (!form || !desde || !hasta) return;
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function iso(d) {
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+  function applyRange(kind) {
+    var now = new Date();
+    var d0, d1;
+    if (kind === 'this-month') {
+      d0 = new Date(now.getFullYear(), now.getMonth(), 1);
+      d1 = now;
+    } else if (kind === 'prev-month') {
+      d0 = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      d1 = new Date(now.getFullYear(), now.getMonth(), 0);
+    } else {
+      return;
+    }
+    desde.value = iso(d0);
+    hasta.value = iso(d1);
+    var action = form.getAttribute('action') || window.location.pathname;
+    var params = new URLSearchParams();
+    params.set('desde', desde.value);
+    params.set('hasta', hasta.value);
+    var url = action + '?' + params.toString();
+    if (typeof window._loadModule === 'function') {
+      window._loadModule(url);
+      return;
+    }
+    window.location.assign(url);
+  }
+  document.querySelectorAll('.cm-chip[data-range]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      applyRange(btn.getAttribute('data-range'));
+    });
+  });
+})();
+</script>
 {% endblock %}

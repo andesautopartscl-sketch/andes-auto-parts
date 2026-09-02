@@ -179,7 +179,7 @@ def _extract_item_codes_loose(lines: list[str], folio: str | None = None) -> lis
             break
         if _is_ui_noise_line(line) or _is_folio_context_line(line):
             continue
-        for code in _codes_from_line(line, folio, allow_short_numeric=False):
+        for code in _codes_from_line(line, folio, allow_short_numeric=True):
             if code not in seen:
                 seen.add(code)
                 out.append(code)
@@ -404,11 +404,11 @@ def _facele_tail_unit_qty_after(
             break
         if nxt.lower().startswith("observacion"):
             break
-        nxt_codes = _codes_from_line(nxt, folio)
+        nxt_codes = _codes_from_line(nxt, folio, allow_short_numeric=True)
         if (
             j > code_idx + 1
             and nxt_codes
-            and _is_rc_product_code(nxt_codes[0], folio)
+            and _is_rc_product_code(nxt_codes[0], folio, allow_short_numeric=True)
         ):
             break
         qp = _parse_qty_price_line(nxt)
@@ -429,7 +429,7 @@ def _facele_tail_unit_qty_after(
                     break
                 if (
                     _is_facele_tail_stop_line(qline)
-                    or _codes_from_line(qline, folio)
+                    or _codes_from_line(qline, folio, allow_short_numeric=True)
                     or re.search(r"monto\s+neto", qline, re.IGNORECASE)
                 ):
                     break
@@ -446,13 +446,21 @@ def _extract_productos_facele_pdf_tail(
     for i, line in enumerate(lines):
         if _is_ui_noise_line(line) or _is_folio_context_line(line):
             continue
-        codes = _codes_from_line(line, folio)
+        codes = _codes_from_line(line, folio, allow_short_numeric=True)
         if not codes:
             continue
         code = _normalize_rc_code_ocr(codes[0])
-        if not _is_rc_product_code(code, folio) or code in seen:
+        if not _is_rc_product_code(code, folio, allow_short_numeric=True) or code in seen:
             continue
-        unit, qty = _facele_tail_unit_qty_after(lines, i, folio)
+        # Misma línea con cant+precio (OCR mezcla filas *RC con bloque Facele).
+        m_row = _FULL_PRODUCT_ROW_RE.match(line.strip())
+        if m_row and _normalize_rc_code_ocr(m_row.group(1)) == code:
+            unit = invoice_vision._parse_monto_chileno(m_row.group(3))
+            qty = max(1, int(m_row.group(2)))
+            if unit is None or unit < 1000:
+                unit, qty = _facele_tail_unit_qty_after(lines, i, folio)
+        else:
+            unit, qty = _facele_tail_unit_qty_after(lines, i, folio)
         if unit is None:
             continue
         seen.add(code)
@@ -497,40 +505,52 @@ def _extract_productos_pdf_rows(
     return productos
 
 
+def _merge_rc_productos(*sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Une extracciones complementarias; el primer source gana si el código se repite."""
+    by_code: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for src in sources:
+        for p in src or []:
+            code = str(p.get("codigo_proveedor") or "").strip()
+            if not code or code in by_code:
+                continue
+            by_code[code] = p
+            order.append(code)
+    return [by_code[c] for c in order]
+
+
 def _extract_repuesto_center_productos(
     lines: list[str], folio: str | None = None
 ) -> list[dict[str, Any]]:
-    row_products = _extract_productos_pdf_rows(lines, folio)
-    if row_products:
-        return row_products
+    """Combina filas PDF, zip columnar y pie Facele.
 
+    En OCR real a veces solo las filas *RC matchean el regex de fila completa
+    (p.ej. 5 de 8 en folio 590336) y los numéricos cortos quedan solo en el pie.
+    Unir evita devolver un subconjunto. Preferencia por código:
+    fila > columnar > pie.
+    """
+    row_products = _extract_productos_pdf_rows(lines, folio)
     tail_products = _extract_productos_facele_pdf_tail(lines, folio)
     codes = _extract_item_codes(lines, folio)
     qtys, prices = _extract_qty_and_prices(lines)
-    # PDF Facele nativo: ítems al final con precio en líneas siguientes; el bloque
-    # columnar suele traer números basura (teléfono, dirección) y sin precios.
-    if tail_products and (
-        not codes or len(tail_products) >= len(codes) or not prices
-    ):
-        return tail_products
 
-    if not codes:
-        return tail_products or []
-    units = _unit_prices(prices, len(codes))
-    productos: list[dict[str, Any]] = []
-    for i, codigo in enumerate(codes):
-        qty = qtys[i] if i < len(qtys) else 1
-        unit = units[i] if i < len(units) else None
-        if unit is None:
-            continue
-        productos.append(
-            {
-                "codigo_proveedor": _normalize_rc_code_ocr(codigo),
-                "cantidad": max(1, qty),
-                "valor_neto": unit,
-            }
-        )
-    return productos
+    columnar: list[dict[str, Any]] = []
+    if codes and prices:
+        units = _unit_prices(prices, len(codes))
+        for i, codigo in enumerate(codes):
+            qty = qtys[i] if i < len(qtys) else 1
+            unit = units[i] if i < len(units) else None
+            if unit is None:
+                continue
+            columnar.append(
+                {
+                    "codigo_proveedor": _normalize_rc_code_ocr(codigo),
+                    "cantidad": max(1, qty),
+                    "valor_neto": unit,
+                }
+            )
+
+    return _merge_rc_productos(row_products, columnar, tail_products)
 
 
 def _apply_productos_to_data(

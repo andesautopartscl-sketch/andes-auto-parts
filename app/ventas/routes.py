@@ -181,6 +181,22 @@ def _proveedor_saldos_map(proveedor_ids: list[int]) -> dict[int, float]:
     return {int(pid): _round_money_cl(monto) for pid, monto in rows}
 
 
+def _cliente_saldos_map(cliente_ids: list[int]) -> dict[int, float]:
+    ids = [int(i) for i in cliente_ids if i]
+    if not ids:
+        return {}
+    rows = (
+        db.session.query(
+            ClienteSaldoFavorMovimiento.cliente_id,
+            func.coalesce(func.sum(ClienteSaldoFavorMovimiento.monto), 0.0),
+        )
+        .filter(ClienteSaldoFavorMovimiento.cliente_id.in_(ids))
+        .group_by(ClienteSaldoFavorMovimiento.cliente_id)
+        .all()
+    )
+    return {int(cid): _round_money_cl(monto) for cid, monto in rows}
+
+
 def _credito_item_ingreso_con_iva(
     item: IngresoDocumentoItem,
     doc: IngresoDocumento,
@@ -3805,9 +3821,11 @@ def clientes():
     search_term = _extract_search_term()
     query = Cliente.query.filter_by(activo=True)
     lista = _apply_entity_search(query, Cliente, search_term).order_by(Cliente.nombre).all()
+    saldos_map = _cliente_saldos_map([c.id for c in lista])
     return render_template(
         "ventas/clientes.html",
         clientes=lista,
+        saldos_cliente=saldos_map,
         search_term=search_term,
         active_page="clientes",
         **_base_ctx(),
