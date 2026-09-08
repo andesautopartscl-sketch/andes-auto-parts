@@ -220,6 +220,68 @@
         });
     }
 
+    /** Aviso elegante (reemplaza window.alert nativo). Misma tarjeta que bodegaConfirm. */
+    function bodegaAlert(message, options) {
+        options = options || {};
+        ensureBodegaConfirmStyles();
+        return new Promise(function (resolve) {
+            var prev = document.getElementById("bodegaConfirmOverlay");
+            if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+
+            var overlay = document.createElement("div");
+            overlay.id = "bodegaConfirmOverlay";
+            overlay.className = "bodega-confirm-overlay";
+            overlay.setAttribute("role", "alertdialog");
+            overlay.setAttribute("aria-modal", "true");
+
+            var card = document.createElement("div");
+            card.className = "bodega-confirm-card";
+            card.innerHTML =
+                '<p class="bodega-confirm-eyebrow">' +
+                escProductSearch(options.eyebrow || "Aviso") +
+                "</p>" +
+                '<h3 class="bodega-confirm-title">' +
+                escProductSearch(options.title || "Revisá los datos") +
+                "</h3>" +
+                '<p class="bodega-confirm-msg"></p>' +
+                '<div class="bodega-confirm-actions">' +
+                '<button type="button" class="bodega-confirm-btn ok">' +
+                escProductSearch(options.okLabel || "Aceptar") +
+                "</button>" +
+                "</div>";
+            card.querySelector(".bodega-confirm-msg").textContent = String(message || "");
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+
+            var settled = false;
+            function finish() {
+                if (settled) return;
+                settled = true;
+                document.removeEventListener("keydown", onKey, true);
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                resolve();
+            }
+            function onKey(e) {
+                if (e.key === "Escape" || e.key === "Enter") {
+                    e.preventDefault();
+                    finish();
+                }
+            }
+            overlay.addEventListener("click", function (e) {
+                if (e.target === overlay) finish();
+            });
+            card.querySelector(".bodega-confirm-btn.ok").addEventListener("click", finish);
+            document.addEventListener("keydown", onKey, true);
+            setTimeout(function () {
+                var okBtn = card.querySelector(".bodega-confirm-btn.ok");
+                if (okBtn) okBtn.focus();
+            }, 0);
+        });
+    }
+
+    window.bodegaConfirm = bodegaConfirm;
+    window.bodegaAlert = bodegaAlert;
+
     function setOrCreateHiddenInput(form, name, value) {
         if (!form || !name) return;
         var el = form.querySelector('input[name="' + name + '"]');
@@ -2828,8 +2890,9 @@
                 });
                 if (!ok) {
                     releaseIngresoSubmit();
-                    window.alert(
-                        "Hay códigos internos que no existen en el catálogo o están inactivos. Revisá los campos en rojo."
+                    bodegaAlert(
+                        "Hay códigos internos que no existen en el catálogo o están inactivos. Revisá los campos en rojo.",
+                        { title: "Códigos inválidos", eyebrow: "Ingreso" }
                     );
                     var firstBad = itemsBody.querySelector("input.ingreso-codigo-interno-invalido");
                     if (firstBad) {
@@ -2857,7 +2920,10 @@
             var vpCheck = validateMargenYPrecioVentaIngresoRows();
             if (!vpCheck.ok) {
                 releaseIngresoSubmit();
-                window.alert(vpCheck.message);
+                bodegaAlert(vpCheck.message, {
+                    title: "Faltan datos de venta",
+                    eyebrow: "Ingreso",
+                });
                 if (vpCheck.focusEl) {
                     vpCheck.focusEl.focus();
                 }
@@ -2866,9 +2932,10 @@
             checkNumeroDocumentoDuplicado().then(function (isDup) {
                 if (isDup) {
                     releaseIngresoSubmit();
-                    window.alert(
-                        (numeroDocStatus && numeroDocStatus.textContent)
-                            || "Este N° de documento ya está ingresado para este proveedor."
+                    bodegaAlert(
+                        (numeroDocStatus && numeroDocStatus.textContent) ||
+                            "Este N° de documento ya está ingresado para este proveedor.",
+                        { title: "Documento duplicado", eyebrow: "Ingreso" }
                     );
                     if (numeroDocInput) numeroDocInput.focus();
                     return;

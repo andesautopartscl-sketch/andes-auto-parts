@@ -473,10 +473,18 @@
         ev.preventDefault();
         checkNumeroDocumentoDuplicado().then(function (isDup) {
             if (isDup) {
-                window.alert(
-                    (numeroDocStatus && numeroDocStatus.textContent)
-                        || 'Este N° de documento ya está ingresado para este proveedor.'
-                );
+                if (typeof window.bodegaAlert === 'function') {
+                    window.bodegaAlert(
+                        (numeroDocStatus && numeroDocStatus.textContent)
+                            || 'Este N° de documento ya está ingresado para este proveedor.',
+                        { title: 'Documento duplicado', eyebrow: 'Ingreso' }
+                    );
+                } else {
+                    window.alert(
+                        (numeroDocStatus && numeroDocStatus.textContent)
+                            || 'Este N° de documento ya está ingresado para este proveedor.'
+                    );
+                }
                 if (numeroDocInput) numeroDocInput.focus();
                 return;
             }
