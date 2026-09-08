@@ -1868,15 +1868,73 @@
                 return;
             }
             var provTimer = null;
-            function tryMap() {
+            var reqSeq = 0;
+            /** Si el interno lo rellenó este lookup (no a mano). */
+            var autoFilledInterno = false;
+            /** Cód. proveedor canónico del último match automático. */
+            var lastCanonicalProv = "";
+
+            function normProvKey(s) {
+                return String(s || "")
+                    .trim()
+                    .toUpperCase();
+            }
+
+            /** Tipado sigue siendo prefijo del canónico, o es exactamente el canónico. */
+            function typedTowardCanonical(typed, canonical) {
+                var a = normProvKey(typed);
+                var b = normProvKey(canonical);
+                if (!a || !b) {
+                    return false;
+                }
+                if (a === b) {
+                    return true;
+                }
+                return b.indexOf(a) === 0;
+            }
+
+            function clearAutoInterno() {
+                if (!autoFilledInterno) {
+                    return;
+                }
+                inpCode.value = "";
+                autoFilledInterno = false;
+                lastCanonicalProv = "";
+                setCodigoInternoValidState(row, false, "");
+            }
+
+            /**
+             * @param {{ normalizeProv?: boolean }} opts
+             * normalizeProv=true (blur/change): completa el cód. prov. canónico.
+             * En input: solo rellena interno; nunca reescribe el campo (evita 3314RCRC).
+             */
+            function tryMap(opts) {
+                opts = opts || {};
+                var normalizeProv = !!opts.normalizeProv;
                 var rut = (rutInput.value || "").trim();
                 var cp = (inpProv.value || "").trim();
                 if (!rut || !cp) {
                     return;
                 }
-                if ((inpCode.value || "").trim()) {
-                    return;
+
+                var existingCode = (inpCode.value || "").trim();
+                if (existingCode && !autoFilledInterno) {
+                    // Interno manual / de otra fuente: no pisar mientras escribe.
+                    if (!normalizeProv) {
+                        return;
+                    }
                 }
+
+                if (autoFilledInterno && lastCanonicalProv && !normalizeProv) {
+                    if (typedTowardCanonical(cp, lastCanonicalProv)) {
+                        return;
+                    }
+                    clearAutoInterno();
+                }
+
+                var mySeq = ++reqSeq;
+                var typedSnapshot = cp;
+
                 fetch(
                     codigoProvUrl +
                         "?rut=" +
@@ -1894,16 +1952,27 @@
                         });
                     })
                     .then(function (pack) {
+                        if (mySeq !== reqSeq) {
+                            return;
+                        }
+                        var now = (inpProv.value || "").trim();
+                        if (now !== typedSnapshot) {
+                            return;
+                        }
                         var data = pack && pack.data;
                         if (!pack.okHttp || !data || !data.ok || !data.codigo_interno) {
                             return;
                         }
-                        if ((inpCode.value || "").trim()) {
+                        existingCode = (inpCode.value || "").trim();
+                        if (existingCode && !autoFilledInterno) {
                             return;
                         }
                         inpCode.value = String(data.codigo_interno).trim();
-                        if (data.codigo_proveedor) {
-                            inpProv.value = String(data.codigo_proveedor).trim();
+                        autoFilledInterno = true;
+                        lastCanonicalProv = String(data.codigo_proveedor || "").trim();
+                        // Solo al salir del campo: completar canónico. Mientras escribe, no tocar.
+                        if (normalizeProv && lastCanonicalProv) {
+                            inpProv.value = lastCanonicalProv;
                         }
                         setCodigoInternoValidState(row, true, "");
                         scheduleMarcasFetch(row);
@@ -1914,11 +1983,17 @@
                 if (provTimer) {
                     clearTimeout(provTimer);
                 }
-                provTimer = setTimeout(tryMap, 400);
+                provTimer = setTimeout(function () {
+                    tryMap({ normalizeProv: false });
+                }, 400);
             }
             inpProv.addEventListener("input", debounceProv);
-            inpProv.addEventListener("blur", tryMap);
-            inpProv.addEventListener("change", tryMap);
+            inpProv.addEventListener("blur", function () {
+                tryMap({ normalizeProv: true });
+            });
+            inpProv.addEventListener("change", function () {
+                tryMap({ normalizeProv: true });
+            });
         }
 
         function parseChileFloat(s) {
