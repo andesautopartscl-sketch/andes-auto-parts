@@ -1,0 +1,35 @@
+<header class="ap-assistant-header">
+    <div class="ap-assistant-header-brand">
+        <span class="ap-assistant-header-mark" aria-hidden="true">
+            {% include 'assistant/_icon_spark.html' %}
+        </span>
+        <div class="ap-assistant-header-text">
+            <p class="ap-assistant-kicker">Andes Auto Parts</p>
+            <h2 id="ap-assistant-title">Asistente</h2>
+        </div>
+    </div>
+    <div class="ap-assistant-header-actions">
+        <button type="button" class="ap-assistant-icon-btn" id="ap-assistant-new" title="Nueva conversación" aria-label="Nueva conversación">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+        </button>
+        <button type="button" class="ap-assistant-icon-btn" id="ap-assistant-history-btn" title="Historial" aria-label="Ver historial de conversaciones" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M4.5 5.2v3.4h3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 8.5V12l2.4 1.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+        <button type="button" class="ap-assistant-icon-btn" id="ap-assistant-expand" title="Expandir panel" aria-label="Expandir panel" aria-pressed="false">
+            <svg class="ap-assistant-expand-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                <path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+        <button type="button" class="ap-assistant-icon-btn ap-assistant-icon-btn--close" id="ap-assistant-close" title="Cerrar asistente" aria-label="Cerrar asistente">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+        </button>
+    </div>
+</header>

@@ -1,0 +1,31 @@
+<form class="ap-assistant-composer" id="ap-assistant-form" autocomplete="off">
+    <button type="button" class="ap-assistant-composer-btn" id="ap-assistant-plus" title="Más opciones" aria-label="Más opciones" disabled>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="8.2" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M12 8.5v7M8.5 12h7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+    </button>
+    <label class="ap-assistant-sr-only" for="ap-assistant-input">Pregunta para el asistente</label>
+    <input
+        id="ap-assistant-input"
+        class="ap-assistant-input"
+        type="text"
+        maxlength="2000"
+        placeholder="Activa el agente para preguntar"
+        disabled
+        autocomplete="off"
+        enterkeyhint="send"
+    >
+    <button type="button" class="ap-assistant-composer-btn" id="ap-assistant-mic" title="Dictar pregunta" aria-label="Dictar pregunta" disabled>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+            <rect x="9" y="4" width="6" height="10" rx="3" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M7 11.5a5 5 0 0 0 10 0M12 16.5V20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+    </button>
+    <button type="submit" class="ap-assistant-send" id="ap-assistant-send" title="Enviar" aria-label="Enviar pregunta" disabled>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+            <path d="M5 12h12M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </button>
+</form>
+<p class="ap-assistant-hint" id="ap-assistant-hint" hidden></p>

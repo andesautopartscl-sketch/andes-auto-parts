@@ -42,6 +42,8 @@ from .rrhh.routes import rrhh_bp
 from .sii_sync import sii_sync_bp
 from .oc_clientes import oc_clientes_bp
 from .mobile import mobile_bp
+from .internal_agent import internal_agent_bp
+from .assistant import assistant_bp
 from app.seguridad.init_roles import crear_roles
 from app.seguridad.crear_superadmin import crear_superadmin
 from app.utils.datetime_utils import (
@@ -367,6 +369,8 @@ def create_app():
         app.register_blueprint(sii_sync_bp)
         app.register_blueprint(oc_clientes_bp)
         app.register_blueprint(mobile_bp)
+        app.register_blueprint(internal_agent_bp)
+        app.register_blueprint(assistant_bp)
 
     app.logger.debug("Rutas registradas:\n%s", app.url_map)
 
@@ -1542,9 +1546,12 @@ def create_app():
         # Sync automático PC→Render usa token propio, no CSRF de sesión.
         if request.endpoint == "admin.backups_sync" or (request.path or "").rstrip("/") == "/admin/backups/sync":
             return None
+        # Agent Gateway M2M: Bearer token, never cookies/CSRF.
+        if (request.path or "").startswith("/internal/agent/"):
+            return None
         if not validate_csrf_request():
             is_ajax = request.is_json or (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
-            if is_ajax or request.path.startswith("/chat/api/") or request.path.startswith("/ventas/api/") or request.path.startswith("/seguridad/api/"):
+            if is_ajax or request.path.startswith("/chat/api/") or request.path.startswith("/ventas/api/") or request.path.startswith("/seguridad/api/") or request.path.startswith("/assistant/api/"):
                 return jsonify(success=False, message="Token CSRF inválido o ausente"), 400
             return render_template("login.html", error="La sesión del formulario expiró. Vuelve a intentarlo."), 400
         return None
@@ -1655,6 +1662,43 @@ def create_app():
                 return response
 
             widget_html = render_template("chat/widget.html")
+            response.set_data(body.replace("</body>", f"{widget_html}\n</body>", 1))
+            return response
+        except Exception:
+            return response
+
+    @app.after_request
+    def inject_assistant_widget(response):
+        # UI del Asistente (fase visual). No requiere permiso de chat interno.
+        if (app.config.get("ANDES_APP_MODE") or "").strip().lower() == "search_lite":
+            return response
+        path = request.path or ""
+        if path == "/m" or path.startswith("/m/"):
+            return response
+        if (request.args.get("embed") or "").strip() == "1":
+            return response
+        if request.endpoint in {"auth.login", "auth.inicio_seguro"}:
+            return response
+        if response.status_code != 200:
+            return response
+        if "user" not in session:
+            return response
+        if request.endpoint in {
+            "productos.ver_producto",
+            "productos.historial_producto",
+        }:
+            return response
+        if not response.mimetype or "html" not in response.mimetype:
+            return response
+        if response.direct_passthrough:
+            return response
+        try:
+            body = response.get_data(as_text=True)
+            if not body or "</body>" not in body:
+                return response
+            if 'id="ap-assistant-root"' in body:
+                return response
+            widget_html = render_template("assistant/widget.html")
             response.set_data(body.replace("</body>", f"{widget_html}\n</body>", 1))
             return response
         except Exception:

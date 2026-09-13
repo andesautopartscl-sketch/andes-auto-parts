@@ -1,0 +1,16 @@
+<section
+    id="ap-assistant-drawer"
+    class="ap-assistant-drawer"
+    role="dialog"
+    aria-modal="false"
+    aria-labelledby="ap-assistant-title"
+    aria-hidden="true"
+>
+    {% include 'assistant/_header.html' %}
+    <div class="ap-assistant-body">
+        {% include 'assistant/_conversation.html' %}
+    </div>
+    <div class="ap-assistant-footer">
+        {% include 'assistant/_chat_input.html' %}
+    </div>
+</section>

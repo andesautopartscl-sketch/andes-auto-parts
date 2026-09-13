@@ -1,0 +1,25 @@
+<div class="ap-assistant-conversation" id="ap-assistant-conversation">
+    <div class="ap-assistant-home" id="ap-assistant-home">
+        <div class="ap-assistant-hello">
+            <p class="ap-assistant-hello-title">¡Hola{% if usuario_nombre %}, {{ usuario_nombre }}{% else %}, Andes Auto Parts{% endif %}!</p>
+            <p class="ap-assistant-hello-sub">¿En qué puedo ayudarte?</p>
+        </div>
+        {% include 'assistant/_quick_actions.html' %}
+    </div>
+    <div class="ap-assistant-chat" id="ap-assistant-chat" hidden>
+        <div class="ap-assistant-thread" id="ap-assistant-thread" aria-live="polite"></div>
+        <div class="ap-assistant-loading" id="ap-assistant-loading" hidden role="status">
+            <span class="ap-assistant-typing" aria-hidden="true">
+                <span></span><span></span><span></span>
+            </span>
+            <span>Preparando respuesta…</span>
+        </div>
+        <p class="ap-assistant-error" id="ap-assistant-error" hidden role="alert"></p>
+    </div>
+</div>
+<aside class="ap-assistant-history" id="ap-assistant-history" hidden>
+    <div class="ap-assistant-history-empty">
+        <p class="ap-assistant-history-title">Historial</p>
+        <p>Las conversaciones anteriores se conectarán en la siguiente fase. Por ahora el historial no se almacena.</p>
+    </div>
+</aside>

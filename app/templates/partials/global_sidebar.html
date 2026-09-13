@@ -16,6 +16,7 @@
 {% set puede_mod_sii_sync = (user_permissions.mod_sii_sync if user_permissions is defined else False) %}
 {% set puede_mod_vehiculos_vin = (user_permissions.mod_vehiculos_vin if user_permissions is defined else False) %}
 {% set puede_ver_oc_clientes = (user_permissions.ver_oc_clientes if user_permissions is defined else False) %}
+{% set puede_mod_chat = (user_permissions.mod_chat if user_permissions is defined else True) %}
 {% set show_verify_badge = ('admin' in rol_actual) or ('super' in rol_actual) %}
 {% set n_online = (online_users|length) if (online_users is defined and online_users) else 0 %}
 <style>
@@ -310,38 +311,39 @@ html {
 	border-top: 1px solid rgba(255, 255, 255, 0.1);
 	display: flex;
 	flex-direction: column;
-	gap: 5px;
+	gap: 4px;
 }
 .sidebar-theme-row {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
-	padding: 7px 10px;
-	border-radius: 10px;
-	background: rgba(255, 255, 255, 0.06);
-	border: 1px solid rgba(255, 255, 255, 0.1);
-	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+	padding: 4px 8px;
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.045);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	box-shadow: none;
 }
 .sidebar-theme-lead {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	font-size: 12px;
-	font-weight: 600;
-	color: rgba(255, 255, 255, 0.88);
+	font-size: 11px;
+	font-weight: 500;
+	color: rgba(255, 255, 255, 0.78);
 	min-width: 0;
 }
 .sidebar-theme-emoji {
 	flex-shrink: 0;
-	font-size: 14px;
+	font-size: 12px;
 	line-height: 1;
-	filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.35));
+	filter: none;
+	opacity: 0.9;
 }
 .sidebar-theme-switch {
 	flex-shrink: 0;
-	width: 42px;
-	height: 22px;
+	width: 34px;
+	height: 18px;
 	padding: 0;
 	border: none;
 	border-radius: 999px;
@@ -349,7 +351,7 @@ html {
 	cursor: pointer;
 	position: relative;
 	transition: background 0.2s, box-shadow 0.2s;
-	box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.25);
+	box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.28);
 }
 .sidebar-theme-switch:focus-visible {
 	outline: 2px solid var(--sb-blue-bright);
@@ -357,23 +359,21 @@ html {
 }
 .sidebar-theme-switch.is-on {
 	background: linear-gradient(90deg, var(--sb-blue), var(--sb-blue-bright));
-	box-shadow:
-		0 0 14px rgba(37, 99, 235, 0.45),
-		inset 0 1px 0 rgba(255, 255, 255, 0.2);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 .sidebar-theme-knob {
 	position: absolute;
 	top: 2px;
 	left: 2px;
-	width: 18px;
-	height: 18px;
+	width: 14px;
+	height: 14px;
 	border-radius: 50%;
 	background: linear-gradient(180deg, #fff 0%, #e2e8f0 100%);
-	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-	transition: transform 0.22s ease;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+	transition: transform 0.2s ease;
 }
 .sidebar-theme-switch.is-on .sidebar-theme-knob {
-	transform: translateX(20px);
+	transform: translateX(16px);
 }
 .sidebar-logout-btn {
 	display: grid;
@@ -798,10 +798,30 @@ html {
 	<div class="sidebar-actions">
 		<div class="sidebar-theme-row">
 			<span class="sidebar-theme-lead">
-				<span class="sidebar-theme-emoji" aria-hidden="true">🌙</span>
+				<span class="sidebar-theme-emoji" id="sidebarDarkEmoji" aria-hidden="true">🌙</span>
 				<span id="sidebarDarkLabel">Modo oscuro</span>
 			</span>
 			<button type="button" class="sidebar-theme-switch" id="sidebarDarkBtn" role="switch" aria-checked="false" aria-labelledby="sidebarDarkLabel" title="Cambiar tema" onclick="sidebarToggleDark()">
+				<span class="sidebar-theme-knob" aria-hidden="true"></span>
+			</button>
+		</div>
+		{% if puede_mod_chat %}
+		<div class="sidebar-theme-row">
+			<span class="sidebar-theme-lead">
+				<span class="sidebar-theme-emoji" id="sidebarChatEmoji" aria-hidden="true">💬</span>
+				<span id="sidebarChatLabel">Chat interno</span>
+			</span>
+			<button type="button" class="sidebar-theme-switch is-on" id="sidebarChatBtn" role="switch" aria-checked="true" aria-labelledby="sidebarChatLabel" title="Mostrar u ocultar el chat" onclick="sidebarToggleChat()">
+				<span class="sidebar-theme-knob" aria-hidden="true"></span>
+			</button>
+		</div>
+		{% endif %}
+		<div class="sidebar-theme-row">
+			<span class="sidebar-theme-lead">
+				<span class="sidebar-theme-emoji" id="sidebarAgentEmoji" aria-hidden="true">✨</span>
+				<span id="sidebarAgentLabel">Agente IA</span>
+			</span>
+			<button type="button" class="sidebar-theme-switch" id="sidebarAgentBtn" role="switch" aria-checked="false" aria-labelledby="sidebarAgentLabel" title="Activar o desactivar el agente" onclick="sidebarToggleAgent()">
 				<span class="sidebar-theme-knob" aria-hidden="true"></span>
 			</button>
 		</div>
@@ -824,7 +844,7 @@ html {
 		document.body.classList.toggle('dark', on);
 		var btn = document.getElementById('sidebarDarkBtn');
 		var lbl = document.getElementById('sidebarDarkLabel');
-		var emo = document.querySelector('.sidebar-theme-emoji');
+		var emo = document.getElementById('sidebarDarkEmoji');
 		if (btn) {
 			btn.title = on ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
 			btn.setAttribute('aria-checked', on ? 'true' : 'false');
@@ -843,6 +863,64 @@ html {
 		try { saved = localStorage.getItem(DARK_KEY) || ''; } catch (e) {}
 		applyDark(saved === '1');
 	});
+})();
+{% if puede_mod_chat %}
+(function () {
+	'use strict';
+	var CHAT_KEY = 'andes_chat_enabled';
+	function chatEnabled() {
+		try { return localStorage.getItem(CHAT_KEY) !== '0'; } catch (e) { return true; }
+	}
+	function applyChat(on) {
+		document.documentElement.classList.toggle('andes-chat-off', !on);
+		var btn = document.getElementById('sidebarChatBtn');
+		var lbl = document.getElementById('sidebarChatLabel');
+		var emo = document.getElementById('sidebarChatEmoji');
+		if (btn) {
+			btn.title = on ? 'Ocultar chat interno' : 'Mostrar chat interno';
+			btn.setAttribute('aria-checked', on ? 'true' : 'false');
+			btn.classList.toggle('is-on', on);
+		}
+		if (lbl) lbl.textContent = on ? 'Chat interno' : 'Chat oculto';
+		if (emo) emo.textContent = on ? '💬' : '🔇';
+		try {
+			window.dispatchEvent(new CustomEvent('andes-chat-visibility', { detail: { enabled: !!on } }));
+		} catch (e) {}
+	}
+	window.sidebarToggleChat = function () {
+		var on = !chatEnabled();
+		try { localStorage.setItem(CHAT_KEY, on ? '1' : '0'); } catch (e) {}
+		applyChat(on);
+	};
+	applyChat(chatEnabled());
+})();
+{% endif %}
+(function () {
+	'use strict';
+	var AGENT_KEY = 'andes_assistant_agent_enabled';
+	function agentEnabled() {
+		try { return localStorage.getItem(AGENT_KEY) === '1'; } catch (e) { return false; }
+	}
+	function applyAgent(on) {
+		var btn = document.getElementById('sidebarAgentBtn');
+		var lbl = document.getElementById('sidebarAgentLabel');
+		if (btn) {
+			btn.title = on ? 'Desactivar el agente IA' : 'Activar el agente IA';
+			btn.setAttribute('aria-checked', on ? 'true' : 'false');
+			btn.classList.toggle('is-on', on);
+		}
+		if (lbl) lbl.textContent = on ? 'Agente IA' : 'Agente inactivo';
+		document.documentElement.classList.toggle('andes-assistant-off', !on);
+		try {
+			window.dispatchEvent(new CustomEvent('andes-agent-enabled', { detail: { enabled: !!on } }));
+		} catch (e) {}
+	}
+	window.sidebarToggleAgent = function () {
+		var on = !agentEnabled();
+		try { localStorage.setItem(AGENT_KEY, on ? '1' : '0'); } catch (e) {}
+		applyAgent(on);
+	};
+	applyAgent(agentEnabled());
 })();
 </script>
 

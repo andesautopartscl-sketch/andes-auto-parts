@@ -6,6 +6,30 @@
 <title>{% block title %}Andes Auto Parts{% endblock %}</title>
 <link rel="icon" type="image/png" sizes="32x32" href="{{ 'logo_andes.png' | static_or_cloud }}">
 <link rel="shortcut icon" href="{{ 'logo_andes.png' | static_or_cloud }}">
+<script>
+(function () {
+	try {
+		if (localStorage.getItem('andes_chat_enabled') === '0') {
+			document.documentElement.classList.add('andes-chat-off');
+		}
+		if (localStorage.getItem('andes_assistant_agent_enabled') !== '1') {
+			document.documentElement.classList.add('andes-assistant-off');
+		}
+	} catch (e) {}
+})();
+</script>
+<style>
+html.andes-chat-off #apchat-root {
+	display: none !important;
+	visibility: hidden !important;
+	pointer-events: none !important;
+}
+html.andes-assistant-off #ap-assistant-root {
+	display: none !important;
+	visibility: hidden !important;
+	pointer-events: none !important;
+}
+</style>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -316,6 +340,7 @@ body.dark .module-loading-spinner {
 
 @media print {
 	#apchat-root,
+	#ap-assistant-root,
 	.sidebar-frame,
 	.sidebar,
 	#adminCenterWorkspace,
@@ -908,24 +933,43 @@ function toggleMenu(id) {
 	}
 
 	var _apchatZIndexSaved = null;
+	var _apAssistantZIndexSaved = null;
 
 	function raiseChatAboveModal() {
 		var chatEl = document.getElementById('apchat-root');
-		if (!chatEl) return;
-		if (_apchatZIndexSaved === null) {
-			_apchatZIndexSaved = chatEl.style.zIndex || '';
+		var assistantEl = document.getElementById('ap-assistant-root');
+		if (chatEl) {
+			if (_apchatZIndexSaved === null) {
+				_apchatZIndexSaved = chatEl.style.zIndex || '';
+			}
+			chatEl.style.zIndex = '99999';
 		}
-		chatEl.style.zIndex = '99999';
+		if (assistantEl) {
+			if (_apAssistantZIndexSaved === null) {
+				_apAssistantZIndexSaved = assistantEl.style.zIndex || '';
+			}
+			assistantEl.style.zIndex = '100000';
+		}
 	}
 
 	function restoreChatZIndex() {
 		var chatEl = document.getElementById('apchat-root');
-		if (!chatEl) return;
-		if (_apchatZIndexSaved !== null) {
-			chatEl.style.zIndex = _apchatZIndexSaved;
-			_apchatZIndexSaved = null;
-		} else {
-			chatEl.style.removeProperty('z-index');
+		var assistantEl = document.getElementById('ap-assistant-root');
+		if (chatEl) {
+			if (_apchatZIndexSaved !== null) {
+				chatEl.style.zIndex = _apchatZIndexSaved;
+				_apchatZIndexSaved = null;
+			} else {
+				chatEl.style.removeProperty('z-index');
+			}
+		}
+		if (assistantEl) {
+			if (_apAssistantZIndexSaved !== null) {
+				assistantEl.style.zIndex = _apAssistantZIndexSaved;
+				_apAssistantZIndexSaved = null;
+			} else {
+				assistantEl.style.removeProperty('z-index');
+			}
 		}
 	}
 

@@ -1,0 +1,19 @@
+<link rel="stylesheet" href="{{ url_for('static', filename='css/assistant.css') }}?v=20260913-assistant-17">
+<style>
+#ap-assistant-root { position: fixed; right: 14px; bottom: 86px; z-index: 1450; pointer-events: none; }
+#ap-assistant-root > * { pointer-events: auto; }
+html.andes-chat-off #ap-assistant-root,
+html:not(:has(#apchat-root)) #ap-assistant-root { bottom: 20px; }
+html.andes-assistant-off #ap-assistant-root {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+</style>
+<div id="ap-assistant-root" data-current-user="{{ usuario_nombre or '' }}" data-invoke-url="/assistant/api/invoke" data-csrf-token="{{ csrf_token }}">
+    <div class="ap-assistant-backdrop" id="ap-assistant-backdrop" hidden></div>
+    {% include 'assistant/_drawer.html' %}
+    {% include 'assistant/_button.html' %}
+</div>
+<script src="{{ url_for('static', filename='js/assistant_service.js') }}?v=20260913-assistant-17"></script>
+<script src="{{ url_for('static', filename='js/assistant.js') }}?v=20260913-assistant-17"></script>

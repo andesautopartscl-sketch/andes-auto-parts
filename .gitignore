@@ -7,11 +7,18 @@ __pycache__/
 .venv/
 venv/
 env/
+.env
+*.env
+.env.*
+!.env.example
+
+# Agent Gateway (audit logs / local secrets)
+andes_agent/data/
+andes_agent/.env
 
 # IDE / local
 .vscode/
 .cursor/
-.env
 
 # OS
 .DS_Store

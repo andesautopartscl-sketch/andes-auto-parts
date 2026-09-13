@@ -735,6 +735,11 @@
         visibility: hidden !important;
     }
 }
+html.andes-chat-off #apchat-root {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
 </style>
 
 <script>
@@ -812,6 +817,15 @@
     }
 
     const APCHAT_POS_KEY = 'apchatFABTransform';
+    const CHAT_ENABLED_KEY = 'andes_chat_enabled';
+
+    function isChatEnabled() {
+        try { return localStorage.getItem(CHAT_ENABLED_KEY) !== '0'; } catch (e) { return true; }
+    }
+
+    if (!isChatEnabled()) {
+        document.documentElement.classList.add('andes-chat-off');
+    }
     let chatDockTransX = 0;
     let chatDockTransY = 0;
     let chatDockDragging = false;
@@ -2245,6 +2259,7 @@
     }
 
     function startOpenPanelPolling() {
+        if (!isChatEnabled()) return;
         stopOpenPanelPolling();
         usersPoll = setInterval(loadUsers, 9000);
         messagesPoll = setInterval(() => { if (selectedUserId) loadMessages({ reset: false }); }, 3000);
@@ -2261,6 +2276,7 @@
     }
 
     function startIdleUsersPolling() {
+        if (!isChatEnabled()) return;
         if (idleUsersPoll) return;
         idleUsersPoll = setInterval(loadUsers, 25000);
     }
@@ -2271,10 +2287,33 @@
     }
 
     function startHeartbeat() {
+        if (!isChatEnabled()) return;
         if (heartbeatPoll) return;
         sendHeartbeat();
         heartbeatPoll = setInterval(sendHeartbeat, 55000);
     }
+
+    function setChatRuntimeEnabled(on) {
+        if (!on) {
+            if (panel && panel.classList.contains('open')) {
+                panel.classList.remove('open');
+                panel.setAttribute('aria-hidden', 'true');
+            }
+            stopAllTimers();
+            return;
+        }
+        loadUsers();
+        startHeartbeat();
+        if (panel && panel.classList.contains('open')) {
+            startOpenPanelPolling();
+        } else {
+            startIdleUsersPolling();
+        }
+    }
+
+    window.addEventListener('andes-chat-visibility', function (ev) {
+        setChatRuntimeEnabled(!!(ev.detail && ev.detail.enabled));
+    });
 
     function stopHeartbeat() {
         if (heartbeatPoll) clearInterval(heartbeatPoll);
@@ -2289,12 +2328,19 @@
         stopRecording(false);
     }
 
+    function emitChatPanelState(open) {
+        try {
+            window.dispatchEvent(new CustomEvent('andes-chat-panel', { detail: { open: !!open } }));
+        } catch (err) { /* ignore */ }
+    }
+
     function openPanel() {
         panel.classList.add('open');
         panel.setAttribute('aria-hidden', 'false');
         loadUsers();
         startOpenPanelPolling();
         startHeartbeat();
+        emitChatPanelState(true);
     }
 
     function closePanel() {
@@ -2304,7 +2350,12 @@
         closeEmojiPicker();
         stopOpenPanelPolling();
         startIdleUsersPolling();
+        emitChatPanelState(false);
     }
+
+    window.addEventListener('andes-assistant-panel', function (ev) {
+        if (ev.detail && ev.detail.open) closePanel();
+    });
 
     // keep lifecycle side effects when panel opens/closes via fail-safe toggle
     panel.addEventListener('transitionend', () => {
@@ -2552,7 +2603,7 @@
     }
 
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
+        if (document.hidden || !isChatEnabled()) {
             stopAllTimers();
         } else {
             loadUsers();
@@ -2578,9 +2629,11 @@
     setSearchPopoverVisible(false);
     buildEmojiPicker();
     updateSendButtonByRecorderState();
-    loadUsers();
-    startIdleUsersPolling();
-    startHeartbeat();
+    if (isChatEnabled()) {
+        loadUsers();
+        startIdleUsersPolling();
+        startHeartbeat();
+    }
 })();
 </script>
 
@@ -2595,11 +2648,18 @@
     function setOpen(open) {
         panel.classList.toggle('open', !!open);
         panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+        try {
+            window.dispatchEvent(new CustomEvent('andes-chat-panel', { detail: { open: !!open } }));
+        } catch (err) {}
     }
 
     fab.addEventListener('click', function () {
         const isOpen = panel.classList.contains('open');
         setOpen(!isOpen);
+    });
+
+    window.addEventListener('andes-assistant-panel', function (ev) {
+        if (ev.detail && ev.detail.open) setOpen(false);
     });
 
     if (closeBtn) {
