@@ -487,6 +487,13 @@ class FactoryFlagTests(unittest.TestCase):
         planner = build_planner(settings=settings, llm_client=mock_client)
         self.assertIsInstance(planner, LlmPlanner)
 
+    def test_soft_enable_staging(self):
+        settings = _settings(nl_enabled=True, planner_mode="llm", environment="staging")
+        mock_client = MagicMock()
+        planner = build_planner(settings=settings, llm_client=mock_client)
+        self.assertIsInstance(planner, LlmPlanner)
+        self.assertTrue(settings.soft_llm_allowed)
+
     def test_default_load_settings_flag_off(self):
         with patch.dict(
             os.environ,

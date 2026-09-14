@@ -11,6 +11,8 @@ PUBLIC_AUTH_ENDPOINTS: frozenset[str] = frozenset(
         "seguridad.login",
         # Sync PC → Render autenticado por ANDES_DB_SYNC_TOKEN (sin sesión).
         "admin.backups_sync",
+        # Ops health — no secrets.
+        "erp_health",
     }
 )
 _SAFE_NEXT_MAX = 2000
@@ -45,6 +47,8 @@ def is_public_auth_route() -> bool:
 
     path = request.path or ""
     if path.startswith("/static/"):
+        return True
+    if path == "/health":
         return True
     if path.startswith("/internal/agent/"):
         return True

@@ -32,6 +32,7 @@
     var conversationEl = document.getElementById('ap-assistant-conversation');
     var chatEl = document.getElementById('ap-assistant-chat');
     var bodyEl = root.querySelector('.ap-assistant-body');
+    var modeBadge = document.getElementById('ap-assistant-mode-badge');
 
     var state = {
         panelOpen: false,
@@ -39,8 +40,22 @@
         expanded: false,
         historyOpen: false,
         chatting: false,
-        loading: false
+        loading: false,
+        softLlmReady: false
     };
+
+    function applyModeBadge() {
+        if (!modeBadge) return;
+        if (state.softLlmReady) {
+            modeBadge.setAttribute('data-mode', 'nl');
+            modeBadge.textContent = 'NL';
+            modeBadge.title = 'Lenguaje natural habilitado (servidor)';
+        } else {
+            modeBadge.setAttribute('data-mode', 'slash');
+            modeBadge.textContent = 'Slash';
+            modeBadge.title = 'Comandos / (lenguaje natural desactivado)';
+        }
+    }
 
     function dispatchPanel(open) {
         try {
@@ -334,9 +349,20 @@
         state.expanded = !!settings.expanded;
         applyAgentEnabled();
         applyExpanded();
+        applyModeBadge();
         if (settings.panelOpen && state.agentEnabled) setPanelOpen(true, { skipFocus: true });
+        if (typeof service.loadCapabilities === 'function') {
+            return service.loadCapabilities().then(function (caps) {
+                state.softLlmReady = !!(caps && caps.soft_llm_ready);
+                if (input && caps && caps.max_message_len) {
+                    input.setAttribute('maxlength', String(caps.max_message_len));
+                }
+                applyModeBadge();
+            });
+        }
     }).catch(function () {
         applyAgentEnabled();
         applyExpanded();
+        applyModeBadge();
     });
 })();

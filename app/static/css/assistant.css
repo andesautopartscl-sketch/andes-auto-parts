@@ -196,6 +196,31 @@ html.andes-assistant-off #ap-assistant-root {
     font-weight: 800;
     letter-spacing: -0.02em;
     color: var(--ap-as-text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ap-assistant-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #475569;
+    line-height: 1.2;
+}
+
+.ap-assistant-mode-badge[data-mode="nl"] {
+    border-color: #86efac;
+    background: #f0fdf4;
+    color: #166534;
 }
 
 .ap-assistant-header-actions {

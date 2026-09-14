@@ -3,8 +3,12 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
+import uuid
 import urllib.error
 import urllib.request
+from collections import defaultdict, deque
 from typing import Any
 
 from flask import Blueprint, jsonify, request, session
@@ -29,6 +33,10 @@ ALLOWED_BROWSER_TOOLS = frozenset(
 )
 GATEWAY_TIMEOUT_SECONDS = 8.0
 
+_CHAT_HITS: dict[str, deque[float]] = defaultdict(deque)
+_CHAT_LOCK = threading.Lock()
+_CHAT_WINDOW_SECONDS = 60.0
+
 
 def _agent_url() -> str:
     return (os.environ.get("ANDES_AGENT_URL") or "http://127.0.0.1:5055").rstrip("/")
@@ -42,22 +50,55 @@ def _environment() -> str:
     return (os.environ.get("ANDES_ENV") or "local").strip().lower()
 
 
+def _chat_rate_limit_max() -> int:
+    raw = (os.environ.get("ANDES_ASSISTANT_CHAT_RATE_LIMIT") or "10").strip()
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 10
+
+
+def _chat_rate_limited(username: str) -> bool:
+    """Return True when the user exceeded the per-minute chat budget.
+
+    Limit 0 disables the check (tests / ops). In-memory per process only.
+    """
+    limit = _chat_rate_limit_max()
+    if limit <= 0:
+        return False
+    key = (username or "anon").strip().lower() or "anon"
+    now = time.monotonic()
+    with _CHAT_LOCK:
+        hits = _CHAT_HITS[key]
+        while hits and (now - hits[0]) > _CHAT_WINDOW_SECONDS:
+            hits.popleft()
+        if len(hits) >= limit:
+            return True
+        hits.append(now)
+        return False
+
+
 def invoke_gateway(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     token = _service_token()
     if not token:
         return 503, {"ok": False, "error_code": "agent_misconfigured", "message": "El agente no está configurado."}
 
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json; charset=utf-8",
+        "Accept": "application/json",
+        "X-Andes-Env": _environment(),
+    }
+    correlation_id = str(payload.get("correlation_id") or "").strip()
+    if correlation_id:
+        headers["X-Andes-Correlation-Id"] = correlation_id[:80]
+
     req = urllib.request.Request(
         f"{_agent_url()}/v1/invoke",
         data=body,
         method="POST",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json; charset=utf-8",
-            "Accept": "application/json",
-            "X-Andes-Env": _environment(),
-        },
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(req, timeout=GATEWAY_TIMEOUT_SECONDS) as resp:
@@ -77,16 +118,33 @@ def invoke_gateway(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         nested = data.get("error") if isinstance(data.get("error"), dict) else {}
         error_code = data.get("error_code") or nested.get("code") or "agent_error"
         message = data.get("message") or nested.get("message") or "El agente rechazó la solicitud."
-        body = {"ok": False, "error_code": error_code, "message": message}
+        body_out = {"ok": False, "error_code": error_code, "message": message}
         if nested:
-            body["error"] = {"code": str(nested.get("code") or error_code), "message": str(nested.get("message") or message)}
+            body_out["error"] = {
+                "code": str(nested.get("code") or error_code),
+                "message": str(nested.get("message") or message),
+            }
         elif error_code:
-            body["error"] = {"code": str(error_code), "message": str(message)}
-        return int(exc.code), body
+            body_out["error"] = {"code": str(error_code), "message": str(message)}
+        return int(exc.code), body_out
     except urllib.error.URLError:
         return 503, {"ok": False, "error_code": "agent_unavailable", "message": "El Agent Gateway no está disponible."}
     except TimeoutError:
         return 504, {"ok": False, "error_code": "agent_timeout", "message": "El agente tardó demasiado."}
+
+
+@assistant_bp.route("/api/capabilities", methods=["GET"])
+@login_required
+def api_capabilities():
+    """Safe capability snapshot for the widget — never returns secrets."""
+    from app.assistant.orchestrator.llm.config import load_llm_settings
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+
+    caps = load_llm_settings().public_capabilities()
+    return jsonify(ok=True, **caps)
 
 
 @assistant_bp.route("/api/invoke", methods=["POST"])
@@ -135,6 +193,13 @@ def api_chat():
     if not username:
         return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
 
+    if _chat_rate_limited(username):
+        return jsonify(
+            ok=False,
+            error_code="rate_limited",
+            message="Demasiadas consultas al asistente. Espera un momento e inténtalo de nuevo.",
+        ), 429
+
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return jsonify(ok=False, error_code="invalid_args", message="JSON inválido."), 400
@@ -148,11 +213,20 @@ def api_chat():
                 message=f"Campo '{forbidden}' no está permitido en /assistant/api/chat.",
             ), 400
 
+    correlation_id = str(payload.get("correlation_id") or "").strip() or str(uuid.uuid4())
+
+    def _invoke_with_correlation(gw_payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        body = dict(gw_payload)
+        body.setdefault("correlation_id", correlation_id)
+        return invoke_gateway(body)
+
     result = run_orchestrator_chat(
         message=payload.get("message"),
         actor_user=username,
         conversation_id=str(payload.get("conversation_id") or "")[:80],
-        invoke_fn=invoke_gateway,
+        invoke_fn=_invoke_with_correlation,
+        correlation_id=correlation_id,
     )
     status = int(result.pop("http_status", 200) or 200)
+    result.setdefault("correlation_id", correlation_id)
     return jsonify(result), status

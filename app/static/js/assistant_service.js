@@ -21,6 +21,10 @@
     };
 
     var UNAVAILABLE = 'Esta función todavía no está disponible.';
+    var NL_DISABLED =
+        'Lenguaje natural desactivado. Usa comandos: /buscar, /producto, /stock, /kpis, etc.';
+    var SLASH_HELP =
+        'Prueba un comando: /buscar filtro · /producto 2404 · /stock 2404 · /kpis 7d';
 
     function readFlag(key, fallback) {
         try {
@@ -51,6 +55,16 @@
     function invokeUrl() {
         var root = document.getElementById('ap-assistant-root');
         return (root && root.getAttribute('data-invoke-url')) || '/assistant/api/invoke';
+    }
+
+    function chatUrl() {
+        var root = document.getElementById('ap-assistant-root');
+        return (root && root.getAttribute('data-chat-url')) || '/assistant/api/chat';
+    }
+
+    function capabilitiesUrl() {
+        var root = document.getElementById('ap-assistant-root');
+        return (root && root.getAttribute('data-capabilities-url')) || '/assistant/api/capabilities';
     }
 
     function parseBuscar(text) {
@@ -534,6 +548,14 @@
         if (code === 'agent_unavailable' || code === 'erp_unavailable' || code === 'agent_timeout') {
             return 'El Agent Gateway no está disponible. Comprueba que esté encendido e inténtalo de nuevo.';
         }
+        if (code === 'llm_unavailable') {
+            return (payload && payload.message) ||
+                'El asistente en lenguaje natural no está disponible. Usa comandos /buscar, /stock, /kpis, etc.';
+        }
+        if (code === 'rate_limited') {
+            return (payload && payload.message) ||
+                'Demasiadas consultas al asistente. Espera un momento e inténtalo de nuevo.';
+        }
         if (code === 'invalid_args') {
             return payload.message || 'La consulta no es válida.';
         }
@@ -545,6 +567,13 @@
 
     function AssistantService() {
         this.conversationId = 'conv-' + Date.now();
+        this.capabilities = {
+            soft_llm_ready: false,
+            nl_enabled: false,
+            planner_mode: 'fake',
+            max_message_len: 500
+        };
+        this._capabilitiesLoaded = false;
     }
 
     AssistantService.prototype.getSettings = function () {
@@ -567,6 +596,81 @@
             writeFlag(STORAGE.expanded, settings.expanded);
         }
         return Promise.resolve({ ok: true });
+    };
+
+    AssistantService.prototype.loadCapabilities = function () {
+        var self = this;
+        return fetch(capabilitiesUrl(), {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        }).then(function (resp) {
+            return resp.json().catch(function () {
+                return { ok: false };
+            }).then(function (body) {
+                body = body || {};
+                if (resp.ok && body.ok) {
+                    self.capabilities = {
+                        soft_llm_ready: !!body.soft_llm_ready,
+                        nl_enabled: !!body.nl_enabled,
+                        planner_mode: body.planner_mode || 'fake',
+                        max_message_len: parseInt(body.max_message_len, 10) || 500
+                    };
+                }
+                self._capabilitiesLoaded = true;
+                return self.capabilities;
+            });
+        }).catch(function () {
+            self._capabilitiesLoaded = true;
+            return self.capabilities;
+        });
+    };
+
+    AssistantService.prototype._postChat = function (message) {
+        var self = this;
+        return fetch(chatUrl(), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({
+                message: message,
+                conversation_id: self.conversationId
+            })
+        }).then(function (resp) {
+            return resp.json().catch(function () {
+                return { ok: false, error_code: 'agent_error', message: UNAVAILABLE };
+            }).then(function (body) {
+                body = body || {};
+                if (!resp.ok || body.ok === false) {
+                    return {
+                        ok: false,
+                        code: body.error_code || (body.error && body.error.code) || 'agent_error',
+                        error: errorMessage(body),
+                        correlation_id: body.correlation_id
+                    };
+                }
+                return {
+                    ok: true,
+                    source: 'nl_chat',
+                    reply: body.reply || body.message || '',
+                    payload: body,
+                    correlation_id: body.correlation_id
+                };
+            });
+        }).catch(function () {
+            return {
+                ok: false,
+                code: 'network',
+                error: 'No se pudo contactar el asistente. Inténtalo de nuevo.'
+            };
+        });
     };
 
     AssistantService.prototype._postTool = function (tool, argumentsObj) {
@@ -898,7 +1002,17 @@
             if (kpis.fecha_hasta) kpiArgs.fecha_hasta = kpis.fecha_hasta;
             return this._invokeGetDashboardKpis(kpiArgs);
         }
-        return Promise.resolve({ ok: true, source: 'local', reply: UNAVAILABLE });
+        // Natural language only when server soft-enable is ready
+        var caps = this.capabilities || {};
+        if (caps.soft_llm_ready) {
+            var maxLen = parseInt(caps.max_message_len, 10) || 500;
+            return this._postChat(trimmed.slice(0, maxLen));
+        }
+        return Promise.resolve({
+            ok: true,
+            source: 'local',
+            reply: NL_DISABLED + ' ' + SLASH_HELP
+        });
     };
 
     AssistantService.prototype.runQuickAction = function (actionId, context) {

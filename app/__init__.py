@@ -243,6 +243,12 @@ def create_app():
         msg = "Demasiados intentos. Espera un momento."
         if request.path.endswith("/login/password-reset-request"):
             return jsonify(success=False, message=msg), 429
+        if request.path.startswith("/assistant/api/"):
+            return jsonify(
+                ok=False,
+                error_code="rate_limited",
+                message="Demasiadas consultas al asistente. Espera un momento e inténtalo de nuevo.",
+            ), 429
         if request.endpoint == "auth.login" and request.method == "POST":
             next_url = safe_next_path(
                 (request.values.get("next") or request.args.get("next") or "").strip() or None
@@ -371,6 +377,19 @@ def create_app():
         app.register_blueprint(mobile_bp)
         app.register_blueprint(internal_agent_bp)
         app.register_blueprint(assistant_bp)
+
+    @app.route("/health")
+    def erp_health():
+        """Minimal health for ops — no secrets."""
+        env = (os.environ.get("ANDES_ENV") or "").strip().lower() or None
+        return jsonify(ok=True, service="andes-erp", environment=env)
+
+    try:
+        from app.assistant.orchestrator.llm.config import assistant_config_log_line
+
+        app.logger.info(assistant_config_log_line())
+    except Exception as _asst_exc:  # pragma: no cover
+        app.logger.warning("assistant_config log omitted: %s", _asst_exc)
 
     app.logger.debug("Rutas registradas:\n%s", app.url_map)
 
