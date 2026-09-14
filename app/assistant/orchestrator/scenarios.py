@@ -14,6 +14,12 @@ SCENARIO_KPI_NO_FINANCE = "kpi_no_finance"
 SCENARIO_WRITE = "write_reject"
 SCENARIO_OUT_OF_DOMAIN = "out_of_domain"
 SCENARIO_PII = "pii_unavailable"
+SCENARIO_INVENTORY_ONLY = "inventory_only"
+SCENARIO_MOVEMENTS_ONLY = "movements_only"
+SCENARIO_INV_AND_MOV = "inventory_and_movements"
+SCENARIO_CHECK_AND_PRODUCT = "check_and_product"
+SCENARIO_CATALOG_INV_INGRESOS = "catalog_inventory_ingresos"
+SCENARIO_PRODUCT_ONLY = "product_only"
 
 
 def scenario_fixtures() -> dict[str, dict[str, Any]]:
@@ -30,6 +36,116 @@ def scenario_fixtures() -> dict[str, dict[str, Any]]:
                     "arguments": {"q": "filtro aceite", "limit": 5},
                     "reason": "búsqueda simple",
                 }
+            ],
+        },
+        SCENARIO_PRODUCT_ONLY: {
+            "plan_id": "fix-product-only",
+            "scenario": SCENARIO_PRODUCT_ONLY,
+            "user_intent": "Ficha por codigo inequívoco",
+            "answer_style": "operational",
+            "steps": [
+                {
+                    "step": 1,
+                    "tool": "get_product",
+                    "arguments": {"codigo": "2404"},
+                    "reason": "codigo inequívoco sin verbo de búsqueda",
+                }
+            ],
+        },
+        SCENARIO_INVENTORY_ONLY: {
+            "plan_id": "fix-inventory-only",
+            "scenario": SCENARIO_INVENTORY_ONLY,
+            "user_intent": "Stock directo por codigo",
+            "answer_style": "operational",
+            "steps": [
+                {
+                    "step": 1,
+                    "tool": "get_inventory",
+                    "arguments": {"codigo": "2404"},
+                    "reason": "codigo ya dado; sin search",
+                }
+            ],
+        },
+        SCENARIO_MOVEMENTS_ONLY: {
+            "plan_id": "fix-movements-only",
+            "scenario": SCENARIO_MOVEMENTS_ONLY,
+            "user_intent": "Movimientos directos por codigo",
+            "answer_style": "operational",
+            "steps": [
+                {
+                    "step": 1,
+                    "tool": "get_stock_movements",
+                    "arguments": {"codigo": "2404", "limit": 50},
+                    "reason": "codigo ya dado; sin search",
+                }
+            ],
+        },
+        SCENARIO_INV_AND_MOV: {
+            "plan_id": "fix-inv-and-mov",
+            "scenario": SCENARIO_INV_AND_MOV,
+            "user_intent": "Stock y movimientos por codigo",
+            "answer_style": "operational",
+            "steps": [
+                {
+                    "step": 1,
+                    "tool": "get_inventory",
+                    "arguments": {"codigo": "2404"},
+                    "reason": "codigo ya dado",
+                },
+                {
+                    "step": 2,
+                    "tool": "get_stock_movements",
+                    "arguments": {"codigo": "2404", "limit": 50},
+                    "reason": "movimientos mismo codigo",
+                },
+            ],
+        },
+        SCENARIO_CHECK_AND_PRODUCT: {
+            "plan_id": "fix-check-and-product",
+            "scenario": SCENARIO_CHECK_AND_PRODUCT,
+            "user_intent": "Disponibilidad y ficha por codigo",
+            "answer_style": "operational",
+            "steps": [
+                {
+                    "step": 1,
+                    "tool": "check_stock",
+                    "arguments": {"items": [{"codigo": "2404", "cantidad": 2}]},
+                    "reason": "disponibilidad",
+                },
+                {
+                    "step": 2,
+                    "tool": "get_product",
+                    "arguments": {"codigo": "2404"},
+                    "reason": "ficha",
+                },
+            ],
+        },
+        SCENARIO_CATALOG_INV_INGRESOS: {
+            "plan_id": "fix-catalog-inv-ingresos",
+            "scenario": SCENARIO_CATALOG_INV_INGRESOS,
+            "user_intent": "Catalogo, stock e ingresos",
+            "answer_style": "operational",
+            "steps": [
+                {
+                    "step": 1,
+                    "tool": "search_catalog",
+                    "arguments": {"q": "2404", "limit": 5},
+                    "reason": "descubrimiento de catalogo",
+                },
+                {
+                    "step": 2,
+                    "tool": "get_inventory",
+                    "arguments": {"codigo": "$steps.1.data.items.0.codigo"},
+                    "depends_on": [1],
+                    "reason": "stock",
+                },
+                {
+                    "step": 3,
+                    "tool": "get_ingresos",
+                    "arguments": {"codigo": "$steps.1.data.items.0.codigo"},
+                    "depends_on": [1],
+                    "reason": "ingresos",
+                },
             ],
         },
         SCENARIO_TWO_TOOLS: {
@@ -188,11 +304,44 @@ def detect_scenario(message: str) -> str:
         return SCENARIO_NO_PERMISSION
     if "sin ver_finanzas" in text or ("vendimos" in text and "semana" in text) or "kpis 7d" in text:
         return SCENARIO_KPI_NO_FINANCE
-    if "movimientos" in text and ("stock" in text or "busca" in text or "filtro diesel" in text):
-        return SCENARIO_THREE_TOOLS
-    if ("stock" in text and ("busca" in text or "2404" in text)) or "dos tools" in text:
+
+    wants_search = any(
+        w in text for w in ("busca", "buscar", "encuentra", "listar", "catálogo", "catalogo")
+    )
+    has_code = "2404" in text or "codigo" in text
+
+    # C) Ambigüedad real — frase incompleta sin verbo de búsqueda ni código
+    if text.strip() in {"el filtro", "filtro", "el producto", "producto", "stock", "busca eso", "eso"}:
+        return SCENARIO_AMBIGUOUS
+    if (not wants_search) and (not has_code) and text.strip().startswith("el ") and "filtro" in text:
+        return SCENARIO_AMBIGUOUS
+
+    # B) Búsqueda / catálogo — antes de rutas mínimas por código
+    if wants_search:
+        if "ingresos" in text and "stock" in text:
+            return SCENARIO_CATALOG_INV_INGRESOS
+        if "movimientos" in text and ("stock" in text or "filtro diesel" in text):
+            return SCENARIO_THREE_TOOLS
+        if "stock" in text:
+            return SCENARIO_TWO_TOOLS
+        return SCENARIO_ONE_TOOL
+
+    # A) Identificador inequívoco sin verbo de búsqueda
+    if has_code and not wants_search:
+        if "ficha" in text and ("disponibilidad" in text or "unidades" in text or "x2" in text):
+            return SCENARIO_CHECK_AND_PRODUCT
+        if "movimientos" in text and "stock" in text and (" y " in text or " e " in text):
+            return SCENARIO_INV_AND_MOV
+        if "movimientos" in text:
+            return SCENARIO_MOVEMENTS_ONLY
+        if "stock" in text or "inventario" in text:
+            return SCENARIO_INVENTORY_ONLY
+        if "producto" in text or "qué es" in text or "que es" in text:
+            return SCENARIO_PRODUCT_ONLY
+
+    if "dos tools" in text:
         return SCENARIO_TWO_TOOLS
-    if "busca filtro" in text or "buscar filtro" in text or "filtro de aceite" in text or "filtro aceite" in text:
+    if "filtro de aceite" in text or "filtro aceite" in text:
         return SCENARIO_ONE_TOOL
 
     # Default: treat as ambiguous clarification rather than free invent

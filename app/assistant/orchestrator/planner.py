@@ -39,5 +39,32 @@ class FakePlanner:
         if context.get("force_scenario"):
             scenario = str(context["force_scenario"])
         fixtures = scenario_fixtures()
-        plan = fixtures.get(scenario) or fixtures[detect_scenario("ambiguous")]
-        return dict(plan)
+        plan = dict(fixtures.get(scenario) or fixtures[detect_scenario("ambiguous")])
+        return _adapt_search_query(plan, message)
+
+
+def _adapt_search_query(plan: dict[str, Any], message: str) -> dict[str, Any]:
+    """Fill search_catalog.q from the user message when fixture uses a placeholder."""
+    steps = plan.get("steps")
+    if not isinstance(steps, list) or not steps:
+        return plan
+    first = steps[0] if isinstance(steps[0], dict) else None
+    if not first or first.get("tool") != "search_catalog":
+        return plan
+    q = (message or "").strip()
+    lower = q.lower()
+    for prefix in ("busca ", "buscar ", "encuentra ", "listar "):
+        if lower.startswith(prefix):
+            q = q[len(prefix) :].strip()
+            break
+    if "catalogo" in lower or "catálogo" in lower:
+        # keep code token if present
+        if "2404" in lower:
+            q = "2404"
+    elif "2404" in lower and ("stock" in lower or "dime" in lower or "ingresos" in lower):
+        q = "2404"
+    args = dict(first.get("arguments") or {})
+    if q:
+        args["q"] = q
+    new_first = dict(first, arguments=args)
+    return dict(plan, steps=[new_first, *steps[1:]])

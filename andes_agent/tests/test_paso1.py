@@ -250,7 +250,8 @@ class ConfigTests(unittest.TestCase):
         old = os.environ.get("ANDES_ENV")
         token = os.environ.get("ANDES_AGENT_SERVICE_TOKEN")
         os.environ["ANDES_ENV"] = "production"
-        os.environ.pop("ANDES_AGENT_SERVICE_TOKEN", None)
+        # Empty string (not pop): prevents repo .env from re-injecting via _load_dotenv.
+        os.environ["ANDES_AGENT_SERVICE_TOKEN"] = ""
         try:
             with self.assertRaises(ConfigError) as ctx:
                 load_settings()
