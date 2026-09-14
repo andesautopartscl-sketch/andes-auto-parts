@@ -120,3 +120,39 @@ def api_invoke():
         }
     )
     return jsonify(body), status
+
+
+@assistant_bp.route("/api/chat", methods=["POST"])
+@login_required
+def api_chat():
+    """Natural-language orchestrator entry (FakePlanner by default; LLM only if soft-enabled).
+
+    The browser must NOT send a tool name. Actor always comes from the session.
+    """
+    from app.assistant.orchestrator import run_orchestrator_chat
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify(ok=False, error_code="invalid_args", message="JSON inválido."), 400
+
+    # Reject any client-supplied tool / arguments / actor override
+    for forbidden in ("tool", "tools", "arguments", "actor_user", "Authorization", "token"):
+        if forbidden in payload:
+            return jsonify(
+                ok=False,
+                error_code="invalid_args",
+                message=f"Campo '{forbidden}' no está permitido en /assistant/api/chat.",
+            ), 400
+
+    result = run_orchestrator_chat(
+        message=payload.get("message"),
+        actor_user=username,
+        conversation_id=str(payload.get("conversation_id") or "")[:80],
+        invoke_fn=invoke_gateway,
+    )
+    status = int(result.pop("http_status", 200) or 200)
+    return jsonify(result), status

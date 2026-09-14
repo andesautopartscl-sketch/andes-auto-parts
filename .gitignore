@@ -28,6 +28,7 @@ Thumbs.db
 # data/andes.db stays tracked for Render baseline, but LOCAL changes must NEVER
 # be committed/pushed. Prefer: git update-index --skip-worktree data/andes.db
 data/tmp*/
+data/orchestrator_audit.jsonl
 data/*.db-wal
 data/*.db-shm
 data/fts_timing.txt
