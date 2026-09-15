@@ -147,6 +147,27 @@ def api_capabilities():
     return jsonify(ok=True, **caps)
 
 
+@assistant_bp.route("/api/metrics/summary", methods=["GET"])
+@login_required
+def api_metrics_summary():
+    """Local-only aggregate dashboard — no messages, prompts, or secrets."""
+    if _environment() not in {"local", "staging"}:
+        return jsonify(
+            ok=False,
+            error_code="not_available",
+            message="Resumen de métricas solo disponible en local/staging.",
+        ), 404
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+
+    from app.assistant.orchestrator.metrics import get_default_metrics_store
+
+    summary = get_default_metrics_store().summary()
+    return jsonify(summary)
+
+
 @assistant_bp.route("/api/invoke", methods=["POST"])
 @login_required
 def api_invoke():

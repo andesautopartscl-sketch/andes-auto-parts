@@ -21,6 +21,11 @@ from app.assistant.orchestrator.conversation_context import (
 from app.assistant.orchestrator.factory import build_planner
 from app.assistant.orchestrator.input_guard import InputGuardError, detect_write_intent, guard_message
 from app.assistant.orchestrator.llm.client import LlmError
+from app.assistant.orchestrator.metrics import (
+    MetricsStore,
+    build_turn_metric,
+    get_default_metrics_store,
+)
 from app.assistant.orchestrator.plan_validator import PlanValidationError, validate_plan
 from app.assistant.orchestrator.planner import Planner
 from app.assistant.orchestrator.tool_runner import ToolRunnerError, run_plan_steps
@@ -104,6 +109,29 @@ def _append_turn(
     )
 
 
+def _planner_mode_label(planner: Any) -> str:
+    name = type(planner).__name__
+    if "Llm" in name:
+        return "llm"
+    if "Fake" in name:
+        return "fake"
+    return name.lower()[:32]
+
+
+def _accumulate_usage(totals: dict[str, int], planner: Any) -> None:
+    usage = getattr(planner, "last_usage", None)
+    if not isinstance(usage, dict):
+        return
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        val = usage.get(key)
+        if val is None:
+            continue
+        try:
+            totals[key] = int(totals.get(key) or 0) + int(val)
+        except (TypeError, ValueError):
+            continue
+
+
 def run_orchestrator_chat(
     *,
     message: Any,
@@ -116,6 +144,7 @@ def run_orchestrator_chat(
     correlation_id: str | None = None,
     turn_store: TurnStore | None = None,
     resolver: ConversationResolver | None = None,
+    metrics_store: MetricsStore | None = None,
 ) -> dict[str, Any]:
     t0 = time.perf_counter()
     actor = (actor_user or "").strip()
@@ -133,28 +162,80 @@ def run_orchestrator_chat(
     planner = planner or build_planner()
     store = turn_store if turn_store is not None else get_default_turn_store()
     resolver = resolver or ConversationResolver()
+    metrics = metrics_store if metrics_store is not None else get_default_metrics_store()
     conversation_id = str(conversation_id or "")[:80]
     llm_latency_ms = 0
+    usage_totals: dict[str, int] = {}
+    planner_mode = _planner_mode_label(planner)
 
     def _elapsed_ms() -> int:
         return int((time.perf_counter() - t0) * 1000)
 
+    def _emit_metric(
+        *,
+        ok: bool,
+        message_hash_value: str,
+        error_code: str | None = None,
+        phase: str | None = None,
+        scenario: str | None = None,
+        classification: str | None = None,
+        tools_used: list[str] | None = None,
+        tool_calls: list[dict[str, Any]] | None = None,
+        needs_clarification: bool = False,
+        reuse_prior_evidence: bool = False,
+        replan_count: int = 0,
+    ) -> None:
+        try:
+            metric = build_turn_metric(
+                actor_user=actor,
+                conversation_id=conversation_id,
+                correlation_id=correlation_id,
+                message_hash_value=message_hash_value,
+                ok=ok,
+                error_code=error_code,
+                phase=phase,
+                scenario=scenario,
+                classification=classification,
+                tools_used=tools_used,
+                tool_calls=tool_calls,
+                needs_clarification=needs_clarification,
+                reuse_prior_evidence=reuse_prior_evidence,
+                replan_count=replan_count,
+                llm_latency_ms=llm_latency_ms,
+                total_latency_ms=_elapsed_ms(),
+                prompt_tokens=usage_totals.get("prompt_tokens"),
+                completion_tokens=usage_totals.get("completion_tokens"),
+                total_tokens=usage_totals.get("total_tokens"),
+                planner_mode=planner_mode,
+            )
+            metrics.record_turn(metric)
+        except Exception:
+            # Metrics must never break chat
+            pass
+
     try:
         text = guard_message(message)
     except InputGuardError as exc:
+        mh = message_hash(str(message or ""))
         audit.write(
             {
                 **_audit_base(
                     actor=actor,
                     conversation_id=conversation_id,
                     correlation_id=correlation_id,
-                    message_hash_value=message_hash(str(message or "")),
+                    message_hash_value=mh,
                 ),
                 "error_code": exc.code,
                 "phase": "input_guard",
                 "ok": False,
                 "total_latency_ms": _elapsed_ms(),
             }
+        )
+        _emit_metric(
+            ok=False,
+            message_hash_value=mh,
+            error_code=exc.code,
+            phase="input_guard",
         )
         return {
             "ok": False,
@@ -164,6 +245,8 @@ def run_orchestrator_chat(
             "correlation_id": correlation_id,
         }
 
+    mh = message_hash(text)
+
     # WRITE never gains power from conversational references.
     if detect_write_intent(text):
         audit.write(
@@ -172,7 +255,7 @@ def run_orchestrator_chat(
                     actor=actor,
                     conversation_id=conversation_id,
                     correlation_id=correlation_id,
-                    message_hash_value=message_hash(text),
+                    message_hash_value=mh,
                 ),
                 "error_code": "write_not_allowed",
                 "phase": "write_guard",
@@ -183,6 +266,15 @@ def run_orchestrator_chat(
                 "llm_latency_ms": 0,
                 "total_latency_ms": _elapsed_ms(),
             }
+        )
+        _emit_metric(
+            ok=True,
+            message_hash_value=mh,
+            error_code=None,
+            phase="write_guard",
+            scenario="write_reject",
+            classification="INTERNAL",
+            tools_used=[],
         )
         return {
             "ok": True,
@@ -213,7 +305,7 @@ def run_orchestrator_chat(
                     actor=actor,
                     conversation_id=conversation_id,
                     correlation_id=correlation_id,
-                    message_hash_value=message_hash(text),
+                    message_hash_value=mh,
                 ),
                 "scenario": plan.get("scenario"),
                 "needs_clarification": True,
@@ -223,6 +315,14 @@ def run_orchestrator_chat(
                 "classification": composed.get("classification"),
                 "total_latency_ms": _elapsed_ms(),
             }
+        )
+        _emit_metric(
+            ok=True,
+            message_hash_value=mh,
+            scenario=str(plan.get("scenario") or ""),
+            classification=composed.get("classification"),
+            tools_used=[],
+            needs_clarification=True,
         )
         _append_turn(
             store,
@@ -256,7 +356,7 @@ def run_orchestrator_chat(
                     actor=actor,
                     conversation_id=conversation_id,
                     correlation_id=correlation_id,
-                    message_hash_value=message_hash(text),
+                    message_hash_value=mh,
                 ),
                 "scenario": plan.get("scenario"),
                 "reuse_prior_evidence": True,
@@ -266,6 +366,14 @@ def run_orchestrator_chat(
                 "classification": composed.get("classification"),
                 "total_latency_ms": _elapsed_ms(),
             }
+        )
+        _emit_metric(
+            ok=True,
+            message_hash_value=mh,
+            scenario=str(plan.get("scenario") or ""),
+            classification=composed.get("classification"),
+            tools_used=[],
+            reuse_prior_evidence=True,
         )
         _append_turn(
             store,
@@ -330,6 +438,7 @@ def run_orchestrator_chat(
             t_llm = time.perf_counter()
             plan_raw = planner.plan(text, context=ctx)
             llm_latency_ms += int((time.perf_counter() - t_llm) * 1000)
+            _accumulate_usage(usage_totals, planner)
         except LlmError as exc:
             if exc.code == "llm_invalid_json":
                 if replan_count >= MAX_REPLANS:
@@ -344,7 +453,7 @@ def run_orchestrator_chat(
                         actor=actor,
                         conversation_id=conversation_id,
                         correlation_id=correlation_id,
-                        message_hash_value=message_hash(text),
+                        message_hash_value=mh,
                     ),
                     "error_code": exc.code,
                     "phase": "llm_planner",
@@ -353,6 +462,13 @@ def run_orchestrator_chat(
                     "llm_latency_ms": llm_latency_ms,
                     "total_latency_ms": _elapsed_ms(),
                 }
+            )
+            _emit_metric(
+                ok=False,
+                message_hash_value=mh,
+                error_code=exc.code,
+                phase="llm_planner",
+                replan_count=replan_count,
             )
             return {
                 "ok": False,
@@ -376,7 +492,7 @@ def run_orchestrator_chat(
                             actor=actor,
                             conversation_id=conversation_id,
                             correlation_id=correlation_id,
-                            message_hash_value=message_hash(text),
+                            message_hash_value=mh,
                         ),
                         "error_code": exc.code,
                         "phase": "plan_validator",
@@ -385,6 +501,15 @@ def run_orchestrator_chat(
                         "llm_latency_ms": llm_latency_ms,
                         "total_latency_ms": _elapsed_ms(),
                     }
+                )
+                _emit_metric(
+                    ok=True,
+                    message_hash_value=mh,
+                    phase="plan_validator",
+                    scenario="write_reject",
+                    classification="INTERNAL",
+                    tools_used=[],
+                    replan_count=replan_count,
                 )
                 return {
                     "ok": True,
@@ -404,7 +529,7 @@ def run_orchestrator_chat(
                             actor=actor,
                             conversation_id=conversation_id,
                             correlation_id=correlation_id,
-                            message_hash_value=message_hash(text),
+                            message_hash_value=mh,
                         ),
                         "error_code": exc.code,
                         "phase": "plan_validator",
@@ -413,6 +538,13 @@ def run_orchestrator_chat(
                         "llm_latency_ms": llm_latency_ms,
                         "total_latency_ms": _elapsed_ms(),
                     }
+                )
+                _emit_metric(
+                    ok=False,
+                    message_hash_value=mh,
+                    error_code=exc.code,
+                    phase="plan_validator",
+                    replan_count=replan_count,
                 )
                 return {
                     "ok": False,
@@ -452,6 +584,15 @@ def run_orchestrator_chat(
 
         if evidence:
             composed = compose_answer(plan=validate_plan(_reuse_plan()), evidence=evidence)
+            _emit_metric(
+                ok=True,
+                message_hash_value=mh,
+                scenario="context_reuse",
+                classification=composed.get("classification"),
+                tools_used=[],
+                reuse_prior_evidence=True,
+                replan_count=replan_count,
+            )
             _append_turn(
                 store,
                 actor=actor,
@@ -505,6 +646,15 @@ def run_orchestrator_chat(
                 composed = compose_answer(
                     plan=plan, evidence=[], reject_message=plan.get("reject_message")
                 )
+                _emit_metric(
+                    ok=True,
+                    message_hash_value=mh,
+                    scenario=str(plan.get("scenario") or ""),
+                    classification=composed.get("classification"),
+                    tools_used=[],
+                    needs_clarification=True,
+                    replan_count=replan_count,
+                )
                 return {
                     "ok": True,
                     "reply": composed["reply"],
@@ -524,6 +674,15 @@ def run_orchestrator_chat(
             )
             composed = compose_answer(
                 plan=plan, evidence=[], reject_message=plan.get("reject_message")
+            )
+            _emit_metric(
+                ok=True,
+                message_hash_value=mh,
+                scenario=str(plan.get("scenario") or ""),
+                classification=composed.get("classification"),
+                tools_used=[],
+                needs_clarification=True,
+                replan_count=replan_count,
             )
             return {
                 "ok": True,
@@ -545,7 +704,7 @@ def run_orchestrator_chat(
                     actor=actor,
                     conversation_id=conversation_id,
                     correlation_id=correlation_id,
-                    message_hash_value=message_hash(text),
+                    message_hash_value=mh,
                 ),
                 "scenario": plan.get("scenario"),
                 "reject": bool(plan.get("reject")),
@@ -558,6 +717,15 @@ def run_orchestrator_chat(
                 "llm_latency_ms": llm_latency_ms,
                 "total_latency_ms": _elapsed_ms(),
             }
+        )
+        _emit_metric(
+            ok=True,
+            message_hash_value=mh,
+            scenario=str(plan.get("scenario") or ""),
+            classification=composed.get("classification"),
+            tools_used=[],
+            needs_clarification=bool(plan.get("needs_clarification")),
+            replan_count=replan_count,
         )
         _append_turn(
             store,
@@ -595,7 +763,7 @@ def run_orchestrator_chat(
                     actor=actor,
                     conversation_id=conversation_id,
                     correlation_id=correlation_id,
-                    message_hash_value=message_hash(text),
+                    message_hash_value=mh,
                 ),
                 "error_code": exc.code,
                 "phase": "tool_runner",
@@ -603,6 +771,13 @@ def run_orchestrator_chat(
                 "llm_latency_ms": llm_latency_ms,
                 "total_latency_ms": _elapsed_ms(),
             }
+        )
+        _emit_metric(
+            ok=False,
+            message_hash_value=mh,
+            error_code=exc.code,
+            phase="tool_runner",
+            replan_count=replan_count,
         )
         return {
             "ok": False,
@@ -629,7 +804,7 @@ def run_orchestrator_chat(
                 actor=actor,
                 conversation_id=conversation_id,
                 correlation_id=correlation_id,
-                message_hash_value=message_hash(text),
+                message_hash_value=mh,
             ),
             "scenario": plan.get("scenario"),
             "plan_id": plan.get("plan_id"),
@@ -642,6 +817,15 @@ def run_orchestrator_chat(
             "llm_latency_ms": llm_latency_ms,
             "total_latency_ms": _elapsed_ms(),
         }
+    )
+    _emit_metric(
+        ok=True,
+        message_hash_value=mh,
+        scenario=str(plan.get("scenario") or ""),
+        classification=composed.get("classification"),
+        tools_used=[str(t) for t in tools_used if t],
+        tool_calls=tool_calls,
+        replan_count=replan_count,
     )
 
     _append_turn(

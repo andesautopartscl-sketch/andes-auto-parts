@@ -39,6 +39,7 @@ class OpenAICompatibleClient:
         self.settings = settings
         self._http = http_client  # injectable for tests (openai.OpenAI instance or mock)
         self.last_request_capture: dict[str, Any] | None = None
+        self.last_usage: dict[str, int] | None = None
 
     def _get_client(self):
         if self._http is not None:
@@ -53,6 +54,7 @@ class OpenAICompatibleClient:
         )
 
     def complete_plan_json(self, *, system: str, user: str) -> str:
+        self.last_usage = None
         # Defense: never allow M2M env leakage into prompts
         for forbidden in (
             "ANDES_AGENT_SERVICE_TOKEN",
@@ -107,6 +109,8 @@ class OpenAICompatibleClient:
                 parsed = json.loads(content)
                 if not isinstance(parsed, dict):
                     raise LlmError("llm_invalid_json", "Model response must be a JSON object")
+                # Capture token usage only (never prompts/content)
+                self.last_usage = _extract_usage(response)
                 return content
             except LlmError:
                 raise
@@ -144,3 +148,43 @@ class OpenAICompatibleClient:
                 raise LlmError("llm_unavailable", "LLM provider unavailable") from exc
 
         raise LlmError("llm_unavailable", f"LLM provider unavailable: {last_exc}")
+
+
+def _extract_usage(response: Any) -> dict[str, int] | None:
+    """Pull prompt/completion/total tokens from provider response if present."""
+    usage = getattr(response, "usage", None)
+    if usage is None and isinstance(response, dict):
+        usage = response.get("usage")
+    if usage is None:
+        return None
+
+    def _get(obj: Any, *names: str) -> int | None:
+        for name in names:
+            if isinstance(obj, dict) and name in obj and obj[name] is not None:
+                try:
+                    return int(obj[name])
+                except (TypeError, ValueError):
+                    return None
+            val = getattr(obj, name, None)
+            if val is not None:
+                try:
+                    return int(val)
+                except (TypeError, ValueError):
+                    return None
+        return None
+
+    prompt = _get(usage, "prompt_tokens", "input_tokens")
+    completion = _get(usage, "completion_tokens", "output_tokens")
+    total = _get(usage, "total_tokens")
+    if total is None and prompt is not None and completion is not None:
+        total = prompt + completion
+    if prompt is None and completion is None and total is None:
+        return None
+    out: dict[str, int] = {}
+    if prompt is not None:
+        out["prompt_tokens"] = prompt
+    if completion is not None:
+        out["completion_tokens"] = completion
+    if total is not None:
+        out["total_tokens"] = total
+    return out

@@ -27,12 +27,24 @@ SECRET_KEYS = frozenset(
     }
 )
 
+# Aggregate counters — never secret values
+SAFE_METRIC_KEYS = frozenset(
+    {
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "cost_estimated_usd",
+    }
+)
+
 BEARER_RE = re.compile(r"bearer\s+[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE)
 TOKENISH_RE = re.compile(r"\b(dev-token-local|erp-test-token|test-service-token)\b", re.IGNORECASE)
 
 
 def _is_secret_key(key: str) -> bool:
     lowered = key.strip().lower()
+    if lowered in SAFE_METRIC_KEYS:
+        return False
     if lowered in SECRET_KEYS:
         return True
     return any(

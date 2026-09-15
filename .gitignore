@@ -29,6 +29,7 @@ Thumbs.db
 # be committed/pushed. Prefer: git update-index --skip-worktree data/andes.db
 data/tmp*/
 data/orchestrator_audit.jsonl
+data/assistant_metrics.jsonl
 data/fase4_eval/
 data/*.db-wal
 data/*.db-shm

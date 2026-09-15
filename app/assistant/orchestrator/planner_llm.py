@@ -30,9 +30,11 @@ def _strip_nulls(value: Any) -> Any:
 class LlmPlanner:
     def __init__(self, client: LlmClient):
         self.client = client
+        self.last_usage: dict[str, int] | None = None
 
     def plan(self, message: str, *, context: dict[str, Any] | None = None) -> dict[str, Any]:
         context = context or {}
+        self.last_usage = None
 
         # Hard reject WRITE before spending tokens
         if detect_write_intent(message):
@@ -80,6 +82,14 @@ class LlmPlanner:
             raise
         except json.JSONDecodeError as exc:
             raise LlmError("llm_invalid_json", f"Invalid JSON: {exc}") from exc
+
+        usage = getattr(self.client, "last_usage", None)
+        if isinstance(usage, dict):
+            self.last_usage = {
+                k: int(v)
+                for k, v in usage.items()
+                if k in {"prompt_tokens", "completion_tokens", "total_tokens"} and v is not None
+            }
 
         if not isinstance(data, dict):
             raise LlmError("llm_invalid_json", "Plan must be a JSON object")
