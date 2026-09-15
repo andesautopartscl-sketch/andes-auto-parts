@@ -19,6 +19,8 @@ from app.assistant.orchestrator.conversation_context import (
     merge_entities,
 )
 from app.assistant.orchestrator.factory import build_planner
+from app.assistant.orchestrator.history_config import history_enabled
+from app.assistant.orchestrator.history_store import HistoryStore, get_default_history_store
 from app.assistant.orchestrator.input_guard import InputGuardError, detect_write_intent, guard_message
 from app.assistant.orchestrator.llm.client import LlmError
 from app.assistant.orchestrator.metrics import (
@@ -84,6 +86,14 @@ def _append_turn(
     scenario: Any,
     evidence: list[dict[str, Any]],
     reply: str,
+    history_store: HistoryStore | None = None,
+    persist_history: bool = False,
+    correlation_id: str | None = None,
+    classification: str | None = None,
+    flags: dict[str, Any] | None = None,
+    llm_latency_ms: int = 0,
+    total_latency_ms: int = 0,
+    planner_mode: str | None = None,
 ) -> None:
     fresh = extract_entities_from_evidence(evidence)
     prev_turns = store.get(actor, conversation_id)
@@ -95,18 +105,75 @@ def _append_turn(
         entities = merge_entities(*hist, fresh)
     else:
         entities = fresh
-    store.append(
-        actor,
-        conversation_id,
-        {
-            "message_hash": message_hash(text),
-            "tools_used": tools_used,
-            "scenario": scenario,
-            "entities": entities,
-            "evidence": evidence,
-            "reply_excerpt": (reply or "")[:200],
-        },
-    )
+    turn_payload = {
+        "message_hash": message_hash(text),
+        "tools_used": tools_used,
+        "scenario": scenario,
+        "entities": entities,
+        "evidence": evidence,
+        "reply_excerpt": (reply or "")[:200],
+        "classification": classification,
+        "correlation_id": correlation_id,
+        "flags": flags or {},
+        "llm_latency_ms": llm_latency_ms,
+        "total_latency_ms": total_latency_ms,
+        "planner_mode": planner_mode,
+    }
+    store.append(actor, conversation_id, turn_payload)
+    if persist_history and history_store is not None:
+        try:
+            history_store.append_turn(actor, conversation_id, turn_payload)
+        except Exception:
+            # Never break chat on history persistence failures
+            pass
+
+
+def _resolve_history_conversation(
+    *,
+    actor: str,
+    raw_conversation_id: str,
+    history: HistoryStore | None,
+) -> tuple[str, bool]:
+    """Return (conversation_id, persist_history).
+
+    When history flag is OFF → identical to prior behavior (client id as-is).
+    When ON → server UUID via HistoryStore; DB failure falls back to RAM-only id.
+    """
+    raw = str(raw_conversation_id or "")[:80]
+    if not history_enabled() or history is None:
+        return raw, False
+
+    try:
+        if raw:
+            existing = history.get_conversation(actor, raw)
+            if existing:
+                return str(existing["id"]), True
+            ensured = history.ensure_conversation(actor, client_conversation_id=raw)
+        else:
+            ensured = history.ensure_conversation(actor)
+        if ensured and ensured.get("id"):
+            return str(ensured["id"]), True
+    except Exception:
+        pass
+    # DB unavailable: continue with RAM-only conversation id
+    return raw or str(uuid.uuid4()), False
+
+
+def _hydrate_turns_from_history(
+    *,
+    store: TurnStore,
+    history: HistoryStore,
+    actor: str,
+    conversation_id: str,
+) -> None:
+    if store.get(actor, conversation_id):
+        return
+    try:
+        hydrated = history.recent_turns_for_resolver(actor, conversation_id, limit=6)
+        if hydrated:
+            store.replace(actor, conversation_id, hydrated)
+    except Exception:
+        pass
 
 
 def _planner_mode_label(planner: Any) -> str:
@@ -145,6 +212,7 @@ def run_orchestrator_chat(
     turn_store: TurnStore | None = None,
     resolver: ConversationResolver | None = None,
     metrics_store: MetricsStore | None = None,
+    history_store: HistoryStore | None = None,
 ) -> dict[str, Any]:
     t0 = time.perf_counter()
     actor = (actor_user or "").strip()
@@ -163,13 +231,60 @@ def run_orchestrator_chat(
     store = turn_store if turn_store is not None else get_default_turn_store()
     resolver = resolver or ConversationResolver()
     metrics = metrics_store if metrics_store is not None else get_default_metrics_store()
-    conversation_id = str(conversation_id or "")[:80]
+    history = history_store if history_store is not None else (
+        get_default_history_store() if history_enabled() else None
+    )
+    conversation_id, persist_history = _resolve_history_conversation(
+        actor=actor,
+        raw_conversation_id=str(conversation_id or ""),
+        history=history,
+    )
+    if persist_history and history is not None:
+        _hydrate_turns_from_history(
+            store=store,
+            history=history,
+            actor=actor,
+            conversation_id=conversation_id,
+        )
     llm_latency_ms = 0
     usage_totals: dict[str, int] = {}
     planner_mode = _planner_mode_label(planner)
 
     def _elapsed_ms() -> int:
         return int((time.perf_counter() - t0) * 1000)
+
+    def _finish(result: dict[str, Any]) -> dict[str, Any]:
+        result.setdefault("conversation_id", conversation_id)
+        return result
+
+    def _save_turn(
+        *,
+        text: str,
+        tools_used: list[Any],
+        scenario: Any,
+        evidence: list[dict[str, Any]],
+        reply: str,
+        classification: str | None = None,
+        flags: dict[str, Any] | None = None,
+    ) -> None:
+        _append_turn(
+            store,
+            actor=actor,
+            conversation_id=conversation_id,
+            text=text,
+            tools_used=tools_used,
+            scenario=scenario,
+            evidence=evidence,
+            reply=reply,
+            history_store=history,
+            persist_history=persist_history,
+            correlation_id=correlation_id,
+            classification=classification,
+            flags=flags,
+            llm_latency_ms=llm_latency_ms,
+            total_latency_ms=_elapsed_ms(),
+            planner_mode=planner_mode,
+        )
 
     def _emit_metric(
         *,
@@ -237,13 +352,13 @@ def run_orchestrator_chat(
             error_code=exc.code,
             phase="input_guard",
         )
-        return {
+        return _finish({
             "ok": False,
             "error_code": exc.code,
             "message": exc.message,
             "http_status": 400,
             "correlation_id": correlation_id,
-        }
+        })
 
     mh = message_hash(text)
 
@@ -276,7 +391,7 @@ def run_orchestrator_chat(
             classification="INTERNAL",
             tools_used=[],
         )
-        return {
+        return _finish({
             "ok": True,
             "reply": "Solo puedo consultar información; no puedo crear, anular ni modificar datos.",
             "error_code": None,
@@ -286,7 +401,7 @@ def run_orchestrator_chat(
             "grounded": True,
             "http_status": 200,
             "correlation_id": correlation_id,
-        }
+        })
 
     turns = store.get(actor, conversation_id)
     resolved: ResolveResult = resolver.resolve(text, turns)
@@ -324,17 +439,14 @@ def run_orchestrator_chat(
             tools_used=[],
             needs_clarification=True,
         )
-        _append_turn(
-            store,
-            actor=actor,
-            conversation_id=conversation_id,
+        _save_turn(
             text=text,
             tools_used=[],
             scenario=plan.get("scenario"),
             evidence=[],
             reply=composed["reply"],
         )
-        return {
+        return _finish({
             "ok": True,
             "reply": composed["reply"],
             "tools_used": [],
@@ -344,7 +456,7 @@ def run_orchestrator_chat(
             "needs_clarification": True,
             "http_status": 200,
             "correlation_id": correlation_id,
-        }
+        })
 
     if resolved.kind == KIND_REUSE:
         plan = validate_plan(_reuse_plan())
@@ -375,17 +487,14 @@ def run_orchestrator_chat(
             tools_used=[],
             reuse_prior_evidence=True,
         )
-        _append_turn(
-            store,
-            actor=actor,
-            conversation_id=conversation_id,
+        _save_turn(
             text=text,
             tools_used=[],
             scenario=plan.get("scenario"),
             evidence=evidence,
             reply=composed["reply"],
         )
-        return {
+        return _finish({
             "ok": True,
             "reply": composed["reply"],
             "tools_used": [],
@@ -405,7 +514,7 @@ def run_orchestrator_chat(
             "reuse_prior_evidence": True,
             "http_status": 200,
             "correlation_id": correlation_id,
-        }
+        })
 
     context: dict[str, Any] = {}
     if force_scenario:
@@ -470,7 +579,7 @@ def run_orchestrator_chat(
                 phase="llm_planner",
                 replan_count=replan_count,
             )
-            return {
+            return _finish({
                 "ok": False,
                 "error_code": "llm_unavailable",
                 "message": (
@@ -479,7 +588,7 @@ def run_orchestrator_chat(
                 ),
                 "http_status": 503,
                 "correlation_id": correlation_id,
-            }
+            })
 
         try:
             plan = validate_plan(plan_raw, replan_count=replan_count)
@@ -511,7 +620,7 @@ def run_orchestrator_chat(
                     tools_used=[],
                     replan_count=replan_count,
                 )
-                return {
+                return _finish({
                     "ok": True,
                     "reply": "Solo puedo consultar información; no puedo crear, anular ni modificar datos.",
                     "error_code": None,
@@ -521,7 +630,7 @@ def run_orchestrator_chat(
                     "grounded": True,
                     "http_status": 200,
                     "correlation_id": correlation_id,
-                }
+                })
             if replan_count >= MAX_REPLANS:
                 audit.write(
                     {
@@ -546,13 +655,13 @@ def run_orchestrator_chat(
                     phase="plan_validator",
                     replan_count=replan_count,
                 )
-                return {
+                return _finish({
                     "ok": False,
                     "error_code": exc.code,
                     "message": exc.message,
                     "http_status": 400,
                     "correlation_id": correlation_id,
-                }
+                })
             replan_count += 1
             validation_error = exc.message
             continue
@@ -593,17 +702,14 @@ def run_orchestrator_chat(
                 reuse_prior_evidence=True,
                 replan_count=replan_count,
             )
-            _append_turn(
-                store,
-                actor=actor,
-                conversation_id=conversation_id,
-                text=text,
-                tools_used=[],
-                scenario="context_reuse",
-                evidence=evidence,
-                reply=composed["reply"],
-            )
-            return {
+            _save_turn(
+            text=text,
+            tools_used=[],
+            scenario="context_reuse",
+            evidence=evidence,
+            reply=composed["reply"],
+        )
+            return _finish({
                 "ok": True,
                 "reply": composed["reply"],
                 "tools_used": [],
@@ -613,7 +719,7 @@ def run_orchestrator_chat(
                 "reuse_prior_evidence": True,
                 "http_status": 200,
                 "correlation_id": correlation_id,
-            }
+            })
 
         # No recoverable evidence: if we have plan hints for a tool, run that instead
         if resolved.kind == KIND_PLAN_HINTS and resolved.intent_hint == "inventory":
@@ -655,7 +761,7 @@ def run_orchestrator_chat(
                     needs_clarification=True,
                     replan_count=replan_count,
                 )
-                return {
+                return _finish({
                     "ok": True,
                     "reply": composed["reply"],
                     "tools_used": [],
@@ -665,7 +771,7 @@ def run_orchestrator_chat(
                     "needs_clarification": True,
                     "http_status": 200,
                     "correlation_id": correlation_id,
-                }
+                })
         else:
             plan = validate_plan(
                 _clarify_plan(
@@ -684,7 +790,7 @@ def run_orchestrator_chat(
                 needs_clarification=True,
                 replan_count=replan_count,
             )
-            return {
+            return _finish({
                 "ok": True,
                 "reply": composed["reply"],
                 "tools_used": [],
@@ -694,7 +800,7 @@ def run_orchestrator_chat(
                 "needs_clarification": True,
                 "http_status": 200,
                 "correlation_id": correlation_id,
-            }
+            })
 
     if plan.get("reject") or plan.get("needs_clarification"):
         composed = compose_answer(plan=plan, evidence=[], reject_message=plan.get("reject_message"))
@@ -727,17 +833,14 @@ def run_orchestrator_chat(
             needs_clarification=bool(plan.get("needs_clarification")),
             replan_count=replan_count,
         )
-        _append_turn(
-            store,
-            actor=actor,
-            conversation_id=conversation_id,
+        _save_turn(
             text=text,
             tools_used=[],
             scenario=plan.get("scenario"),
             evidence=[],
             reply=composed["reply"],
         )
-        return {
+        return _finish({
             "ok": True,
             "reply": composed["reply"],
             "tools_used": [],
@@ -747,7 +850,7 @@ def run_orchestrator_chat(
             "needs_clarification": bool(plan.get("needs_clarification")),
             "http_status": 200,
             "correlation_id": correlation_id,
-        }
+        })
 
     try:
         evidence, _payloads = run_plan_steps(
@@ -779,13 +882,13 @@ def run_orchestrator_chat(
             phase="tool_runner",
             replan_count=replan_count,
         )
-        return {
+        return _finish({
             "ok": False,
             "error_code": exc.code,
             "message": exc.message,
             "http_status": 400,
             "correlation_id": correlation_id,
-        }
+        })
 
     composed = compose_answer(plan=plan, evidence=evidence)
     tools_used = [e.get("tool") for e in evidence if e.get("tool")]
@@ -828,18 +931,15 @@ def run_orchestrator_chat(
         replan_count=replan_count,
     )
 
-    _append_turn(
-        store,
-        actor=actor,
-        conversation_id=conversation_id,
-        text=text,
-        tools_used=tools_used,
-        scenario=plan.get("scenario"),
-        evidence=evidence,
-        reply=composed["reply"],
-    )
+    _save_turn(
+            text=text,
+            tools_used=tools_used,
+            scenario=plan.get("scenario"),
+            evidence=evidence,
+            reply=composed["reply"],
+        )
 
-    return {
+    return _finish({
         "ok": True,
         "reply": composed["reply"],
         "tools_used": tools_used,
@@ -858,4 +958,4 @@ def run_orchestrator_chat(
         "grounded": True,
         "http_status": 200,
         "correlation_id": correlation_id,
-    }
+    })

@@ -251,3 +251,133 @@ def api_chat():
     status = int(result.pop("http_status", 200) or 200)
     result.setdefault("correlation_id", correlation_id)
     return jsonify(result), status
+
+
+@assistant_bp.route("/api/conversations", methods=["GET"])
+@login_required
+def api_conversations_list():
+    """List conversations for the session user (FASE 7A)."""
+    from app.assistant.orchestrator.history_config import history_enabled
+    from app.assistant.orchestrator.history_store import get_default_history_store
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+    if not history_enabled():
+        return jsonify(ok=False, error_code="history_disabled", message="Historial deshabilitado."), 404
+
+    limit = request.args.get("limit", 20)
+    try:
+        limit_i = int(limit)
+    except (TypeError, ValueError):
+        limit_i = 20
+    cursor = request.args.get("cursor")
+    data = get_default_history_store().list_conversations(username, limit=limit_i, cursor=cursor)
+    return jsonify(ok=True, **data)
+
+
+@assistant_bp.route("/api/conversations", methods=["POST"])
+@login_required
+def api_conversations_create():
+    """Ensure/create a server-owned conversation id."""
+    from app.assistant.orchestrator.history_config import history_enabled
+    from app.assistant.orchestrator.history_store import get_default_history_store
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+    if not history_enabled():
+        return jsonify(ok=False, error_code="history_disabled", message="Historial deshabilitado."), 404
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify(ok=False, error_code="invalid_args", message="JSON inválido."), 400
+    client_id = str(payload.get("client_conversation_id") or payload.get("conversation_id") or "")[:80]
+    conv = get_default_history_store().ensure_conversation(
+        username,
+        client_conversation_id=client_id or None,
+        title=str(payload.get("title") or "")[:120] or None,
+    )
+    if not conv:
+        return jsonify(ok=False, error_code="history_unavailable", message="No se pudo crear la conversación."), 503
+    return jsonify(ok=True, conversation=conv)
+
+
+@assistant_bp.route("/api/conversations/<conversation_id>", methods=["GET"])
+@login_required
+def api_conversation_get(conversation_id: str):
+    from app.assistant.orchestrator.history_config import history_enabled
+    from app.assistant.orchestrator.history_store import get_default_history_store
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+    if not history_enabled():
+        return jsonify(ok=False, error_code="history_disabled", message="Historial deshabilitado."), 404
+
+    store = get_default_history_store()
+    conv = store.get_conversation(username, str(conversation_id or "")[:80])
+    if not conv:
+        return jsonify(ok=False, error_code="not_found", message="Conversación no encontrada."), 404
+    turns = store.list_turns(username, conv["id"], limit=min(int(request.args.get("limit") or 20), 50))
+    return jsonify(ok=True, conversation=conv, turns=turns.get("items") or [], next_before_seq=turns.get("next_before_seq"))
+
+
+@assistant_bp.route("/api/conversations/<conversation_id>/turns", methods=["GET"])
+@login_required
+def api_conversation_turns(conversation_id: str):
+    from app.assistant.orchestrator.history_config import history_enabled
+    from app.assistant.orchestrator.history_store import get_default_history_store
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+    if not history_enabled():
+        return jsonify(ok=False, error_code="history_disabled", message="Historial deshabilitado."), 404
+
+    before = request.args.get("before_seq")
+    after = request.args.get("after_seq")
+    try:
+        before_i = int(before) if before is not None else None
+    except ValueError:
+        before_i = None
+    try:
+        after_i = int(after) if after is not None else None
+    except ValueError:
+        after_i = None
+    try:
+        limit_i = int(request.args.get("limit") or 20)
+    except ValueError:
+        limit_i = 20
+
+    data = get_default_history_store().list_turns(
+        username,
+        str(conversation_id or "")[:80],
+        limit=limit_i,
+        before_seq=before_i,
+        after_seq=after_i,
+    )
+    if data.get("error_code") == "not_found":
+        return jsonify(ok=False, error_code="not_found", message="Conversación no encontrada."), 404
+    return jsonify(ok=True, **{k: v for k, v in data.items() if k != "error_code"})
+
+
+@assistant_bp.route("/api/conversations/<conversation_id>", methods=["DELETE"])
+@login_required
+def api_conversation_delete(conversation_id: str):
+    from app.assistant.orchestrator.history_config import history_enabled
+    from app.assistant.orchestrator.history_store import get_default_history_store
+    from app.assistant.orchestrator.turn_store import get_default_turn_store
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+    if not history_enabled():
+        return jsonify(ok=False, error_code="history_disabled", message="Historial deshabilitado."), 404
+
+    cid = str(conversation_id or "")[:80]
+    ok = get_default_history_store().soft_delete_conversation(username, cid)
+    if not ok:
+        return jsonify(ok=False, error_code="not_found", message="Conversación no encontrada."), 404
+    get_default_turn_store().clear(username, cid)
+    return jsonify(ok=True, deleted=True, conversation_id=cid)

@@ -399,7 +399,22 @@ def create_app():
 
     with app.app_context():
 
+        try:
+            import importlib
+
+            importlib.import_module("app.assistant.history_models")
+        except Exception as _hist_models_exc:  # pragma: no cover
+            app.logger.warning("assistant history models omitted: %s", _hist_models_exc)
+
         db.create_all()
+
+        try:
+            from app.assistant.orchestrator.history_config import history_db_path
+            from app.assistant.orchestrator.history_store import HistoryStore
+
+            HistoryStore(path=history_db_path()).ensure_schema()
+        except Exception as _hist_schema_exc:  # pragma: no cover
+            app.logger.warning("assistant history schema ensure omitted: %s", _hist_schema_exc)
 
         try:
             from app.contabilidad.emisores_service import (

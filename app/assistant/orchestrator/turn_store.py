@@ -95,6 +95,28 @@ class TurnStore:
             turns.append(record)
             self._data[key] = turns[-self.max_turns :]
 
+    def replace(
+        self,
+        actor_user: str,
+        conversation_id: str,
+        turns: list[dict[str, Any]],
+        *,
+        now: float | None = None,
+    ) -> None:
+        """Replace in-memory turns (FASE 7A hydration). Does not persist."""
+        key = self._key(actor_user, conversation_id)
+        if key is None:
+            return
+        now = _now() if now is None else now
+        sanitized: list[dict[str, Any]] = []
+        for turn in turns or []:
+            if not isinstance(turn, dict):
+                continue
+            ts = float(turn.get("ts") or now)
+            sanitized.append(_sanitize_turn(turn, ts=ts))
+        with self._lock:
+            self._data[key] = sanitized[-self.max_turns :]
+
     def clear(self, actor_user: str = "", conversation_id: str = "") -> None:
         with self._lock:
             if not actor_user and not conversation_id:
