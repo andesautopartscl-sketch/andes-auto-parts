@@ -8,6 +8,11 @@ from typing import Any
 # Values that must never appear in replies unless present in evidence JSON.
 PII_LABELS = ("email", "correo", "teléfono", "telefono", "dirección", "direccion", "password")
 
+_MOVEMENT_OPTIONAL = ("usuario", "observacion", "observación", "documento", "doc")
+_PII_ROW_KEYS = frozenset(
+    {"email", "correo", "telefono", "teléfono", "password", "token", "direccion", "dirección"}
+)
+
 
 def compose_answer(
     *,
@@ -63,7 +68,7 @@ def compose_answer(
 
         if item.get("finance_redacted"):
             lines.append(
-                "Montos financieros no disponibles por permiso (null; no se reportan como 0)."
+                "Montos financieros no disponibles por permisos (null; no se reportan como 0)."
             )
         if item.get("stock_omitted") and tool == "get_dashboard_kpis":
             lines.append("Stock crítico no incluido (sin permiso ver_stock).")
@@ -151,6 +156,22 @@ def _fmt(value: Any) -> str:
     return str(value)
 
 
+def _present(row: dict[str, Any], *keys: str) -> Any | None:
+    """Return first present non-None value among keys (key must exist or alias)."""
+    for key in keys:
+        if key in row and row.get(key) is not None and str(row.get(key)).strip() != "":
+            return row.get(key)
+    return None
+
+
+def _sort_by_fecha_desc(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Presentation-only sort; does not invent dates."""
+    def key(row: dict[str, Any]) -> str:
+        return str(row.get("fecha") or "")
+
+    return sorted(rows, key=key, reverse=True)
+
+
 def _format_tool_evidence(tool: str, item: dict[str, Any]) -> list[str]:
     data = item.get("data") if isinstance(item.get("data"), dict) else {}
     meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
@@ -159,100 +180,217 @@ def _format_tool_evidence(tool: str, item: dict[str, Any]) -> list[str]:
     if tool == "search_catalog":
         items = data.get("items") if isinstance(data.get("items"), list) else []
         count = data["count"] if "count" in data else len(items)
-        out.append(f"Catálogo: {_fmt(count)} resultado(s).")
+        out.append(f"Catálogo — {_fmt(count)} resultado(s):")
         for row in items[:5]:
             if not isinstance(row, dict):
                 continue
-            out.append(
-                f"- {_fmt(row.get('codigo'))}: {_fmt(row.get('descripcion'))} "
-                f"({_fmt(row.get('marca'))} {_fmt(row.get('modelo'))})".strip()
-            )
+            codigo = _fmt(row.get("codigo"))
+            desc = _fmt(row.get("descripcion"))
+            marca = row.get("marca")
+            modelo = row.get("modelo")
+            line = f"• {codigo} — {desc}"
+            extras = []
+            if marca is not None and str(marca).strip() != "":
+                extras.append(str(marca))
+            if modelo is not None and str(modelo).strip() != "":
+                extras.append(str(modelo))
+            if extras:
+                line += f" ({' '.join(extras)})"
+            out.append(line)
         return out
 
     if tool == "get_product":
-        out.append(
-            f"Producto {_fmt(data.get('codigo'))}: {_fmt(data.get('descripcion'))} "
-            f"| marca {_fmt(data.get('marca'))}"
-        )
+        out.append(f"Producto {_fmt(data.get('codigo'))}")
+        if "descripcion" in data:
+            out.append(f"Descripción: {_fmt(data.get('descripcion'))}")
+        if "marca" in data:
+            out.append(f"Marca: {_fmt(data.get('marca'))}")
+        if "modelo" in data and data.get("modelo") is not None and str(data.get("modelo")).strip() != "":
+            out.append(f"Modelo: {_fmt(data.get('modelo'))}")
         return out
 
     if tool == "get_inventory":
-        total = data.get("total_stock") if "total_stock" in data else None
-        out.append(f"Stock de {_fmt(data.get('codigo'))}: total {_fmt(total)}.")
-        for row in (data.get("items") if isinstance(data.get("items"), list) else [])[:10]:
-            if isinstance(row, dict):
-                out.append(
-                    f"- bodega {_fmt(row.get('bodega'))}: {_fmt(row.get('stock'))} "
-                    f"({_fmt(row.get('marca'))})"
-                )
+        out.append(f"Stock de {_fmt(data.get('codigo'))}")
+        if "total_stock" in data:
+            out.append(f"Total: {_fmt(data.get('total_stock'))}")
+        rows = [r for r in (data.get("items") if isinstance(data.get("items"), list) else []) if isinstance(r, dict)]
+        if rows:
+            out.append("Por bodega:")
+            for row in rows[:10]:
+                bodega = _fmt(row.get("bodega")) if "bodega" in row else "—"
+                stock = _fmt(row.get("stock")) if "stock" in row else "—"
+                line = f"• {bodega}: {stock}"
+                if "marca" in row and row.get("marca") is not None and str(row.get("marca")).strip() != "":
+                    line += f" ({_fmt(row.get('marca'))})"
+                out.append(line)
         return out
 
     if tool == "check_stock":
-        out.append(f"Disponibilidad: available={_fmt(data.get('available'))}.")
+        if "available" in data:
+            out.append(f"Disponibilidad: {_fmt(data.get('available'))}")
         for row in (data.get("items") if isinstance(data.get("items"), list) else [])[:10]:
             if isinstance(row, dict):
-                out.append(
-                    f"- {_fmt(row.get('codigo'))}: pedido {_fmt(row.get('cantidad'))}, "
-                    f"disponible {_fmt(row.get('disponible'))}, ok={_fmt(row.get('ok'))}"
-                )
+                parts = [f"• {_fmt(row.get('codigo'))}"]
+                if "cantidad" in row:
+                    parts.append(f"pedido {_fmt(row.get('cantidad'))}")
+                if "disponible" in row:
+                    parts.append(f"disponible {_fmt(row.get('disponible'))}")
+                if "ok" in row:
+                    parts.append(f"ok={_fmt(row.get('ok'))}")
+                out.append(" — ".join(parts))
         return out
 
     if tool == "get_stock_movements":
-        count = data.get("count") if "count" in data else len(data.get("items") or [])
-        out.append(f"Movimientos de {_fmt(data.get('codigo'))}: {_fmt(count)} registro(s).")
+        rows = [
+            r
+            for r in (data.get("items") if isinstance(data.get("items"), list) else [])
+            if isinstance(r, dict)
+        ]
+        count = data.get("count") if "count" in data else len(rows)
+        out.append(f"Movimientos de {_fmt(data.get('codigo'))} — {_fmt(count)} registro(s):")
+        if not rows:
+            return out
+        ordered = _sort_by_fecha_desc(rows)[:10]
+        for idx, row in enumerate(ordered, start=1):
+            fecha = _present(row, "fecha")
+            tipo = _present(row, "tipo")
+            header_bits = [f"{idx}."]
+            if fecha is not None:
+                header_bits.append(_fmt(fecha))
+            if tipo is not None:
+                header_bits.append("·")
+                header_bits.append(_fmt(tipo))
+            out.append(" ".join(header_bits))
+            if "cantidad" in row and row.get("cantidad") is not None:
+                out.append(f"   Cantidad: {_fmt(row.get('cantidad'))}")
+            if "bodega" in row and row.get("bodega") is not None:
+                out.append(f"   Bodega: {_fmt(row.get('bodega'))}")
+            if "marca" in row and row.get("marca") is not None and str(row.get("marca")).strip() != "":
+                out.append(f"   Marca: {_fmt(row.get('marca'))}")
+            for opt in _MOVEMENT_OPTIONAL:
+                if opt in row and row.get(opt) is not None and str(row.get(opt)).strip() != "":
+                    label = "Observación" if "observ" in opt.lower() else opt.capitalize()
+                    if opt == "documento" or opt == "doc":
+                        label = "Documento"
+                    if opt == "usuario":
+                        label = "Usuario"
+                    out.append(f"   {label}: {_fmt(row.get(opt))}")
+            if idx < len(ordered):
+                out.append("")  # blank line between movements
         return out
 
     if tool == "get_ingresos":
         count = data.get("count") if "count" in data else len(data.get("items") or [])
-        out.append(f"Ingresos de {_fmt(data.get('codigo'))}: {_fmt(count)} registro(s).")
+        out.append(f"Ingresos de {_fmt(data.get('codigo'))} — {_fmt(count)} registro(s).")
+        rows = [r for r in (data.get("items") if isinstance(data.get("items"), list) else []) if isinstance(r, dict)]
+        for row in _sort_by_fecha_desc(rows)[:5]:
+            bits = []
+            if "fecha" in row and row.get("fecha") is not None:
+                bits.append(_fmt(row.get("fecha")))
+            if "numero" in row and row.get("numero") is not None:
+                bits.append(f"nº {_fmt(row.get('numero'))}")
+            if "proveedor" in row and row.get("proveedor") is not None:
+                bits.append(_fmt(row.get("proveedor")))
+            if bits:
+                out.append("• " + " — ".join(bits))
         return out
 
     if tool == "get_purchase_orders":
-        count = data.get("count") if "count" in data else len(data.get("items") or [])
-        out.append(f"Órdenes de compra: {_fmt(count)} documento(s).")
+        rows = [r for r in (data.get("items") if isinstance(data.get("items"), list) else []) if isinstance(r, dict)]
+        count = data.get("count") if "count" in data else len(rows)
+        out.append(f"Órdenes de compra — {_fmt(count)} documento(s):")
+        if not rows and data.get("numero"):
+            # Single-doc shape
+            rows = [data]
+        for row in rows[:8]:
+            numero = _present(row, "numero", "oc")
+            line = f"• {_fmt(numero)}" if numero is not None else "• (sin número)"
+            extras = []
+            if "fecha" in row and row.get("fecha") is not None:
+                extras.append(_fmt(row.get("fecha")))
+            if "estado" in row and row.get("estado") is not None:
+                extras.append(_fmt(row.get("estado")))
+            if "proveedor" in row and row.get("proveedor") is not None:
+                extras.append(_fmt(row.get("proveedor")))
+            if extras:
+                line += " — " + " · ".join(extras)
+            out.append(line)
         return out
 
     if tool == "get_dashboard_kpis":
         periodo = meta.get("periodo") if "periodo" in meta else None
-        out.append(
-            f"KPIs período `{_fmt(periodo)}` "
-            f"({_fmt(meta.get('fecha_desde'))} → {_fmt(meta.get('fecha_hasta'))})."
-        )
+        rango = ""
+        if "fecha_desde" in meta or "fecha_hasta" in meta:
+            rango = f" ({_fmt(meta.get('fecha_desde'))} → {_fmt(meta.get('fecha_hasta'))})"
+        out.append(f"KPIs — período {_fmt(periodo)}{rango}")
         if "docs_periodo" in data:
-            out.append(f"Documentos en período: {_fmt(data.get('docs_periodo'))}.")
+            out.append(f"Documentos: {_fmt(data.get('docs_periodo'))}")
         if "ventas_periodo" in data:
             ventas = data.get("ventas_periodo")
             if ventas is None:
-                out.append("Ventas del período: no disponibles (sin permiso financiero).")
+                out.append("Ventas: no disponible por permisos")
             else:
-                out.append(f"Ventas del período: {_fmt(ventas)}.")
+                out.append(f"Ventas: {_fmt(ventas)}")
+        if "ventas_hoy" in data:
+            v = data.get("ventas_hoy")
+            out.append(
+                "Ventas hoy: no disponible por permisos"
+                if v is None
+                else f"Ventas hoy: {_fmt(v)}"
+            )
+        if "ventas_mes" in data:
+            v = data.get("ventas_mes")
+            out.append(
+                "Ventas mes: no disponible por permisos"
+                if v is None
+                else f"Ventas mes: {_fmt(v)}"
+            )
         if "stock_critico" in data and data.get("stock_critico") is None:
-            out.append("stock_critico: omitido.")
+            out.append("Stock crítico: omitido")
         elif isinstance(data.get("stock_critico"), list):
-            out.append(f"stock_critico: {len(data['stock_critico'])} ítem(s).")
+            out.append(f"Stock crítico: {len(data['stock_critico'])} ítem(s)")
         return out
 
     if tool == "get_customer":
         items = data.get("items") if isinstance(data.get("items"), list) else []
         count = data.get("count") if "count" in data else len(items)
-        out.append(f"Clientes: {_fmt(count)} resultado(s).")
+        out.append(f"Clientes — {_fmt(count)} resultado(s):")
         for row in items[:5]:
             if isinstance(row, dict):
                 # Only grounded directory fields — never email/phone/address
-                out.append(f"- {_fmt(row.get('nombre'))} (RUT {_fmt(row.get('rut'))})")
+                nombre = _fmt(row.get("nombre")) if "nombre" in row else "—"
+                if "rut" in row and row.get("rut") is not None:
+                    out.append(f"• {nombre} — RUT {_fmt(row.get('rut'))}")
+                else:
+                    out.append(f"• {nombre}")
         out.append("Nota: email, teléfono y dirección no se exponen en esta tool.")
         return out
 
     if tool == "get_supplier":
         items = data.get("items") if isinstance(data.get("items"), list) else []
         count = data.get("count") if "count" in data else len(items)
-        out.append(f"Proveedores: {_fmt(count)} resultado(s).")
+        out.append(f"Proveedores — {_fmt(count)} resultado(s):")
         for row in items[:5]:
-            if isinstance(row, dict):
-                out.append(f"- {_fmt(row.get('nombre') or row.get('empresa'))}")
+            if not isinstance(row, dict):
+                continue
+            nombre = row.get("nombre")
+            empresa = row.get("empresa")
+            if nombre is not None and str(nombre).strip() != "":
+                out.append(f"• {_fmt(nombre)}")
+            if empresa is not None and str(empresa).strip() != "" and str(empresa) != str(nombre):
+                out.append(f"  Empresa: {_fmt(empresa)}")
+            if "rut" in row and row.get("rut") is not None:
+                out.append(f"  RUT: {_fmt(row.get('rut'))}")
+            ciudad = _present(row, "ciudad", "comuna")
+            if ciudad is not None:
+                out.append(f"  Ciudad: {_fmt(ciudad)}")
         out.append("Nota: email, teléfono y dirección no se exponen en esta tool.")
         return out
 
-    keys = sorted(str(k) for k in data.keys())
+    keys = sorted(
+        str(k)
+        for k in data.keys()
+        if str(k).strip().lower() not in _PII_ROW_KEYS
+    )
     out.append(f"`{tool}` OK. Campos en evidencia: {', '.join(keys) if keys else '(vacío)'}.")
     return out

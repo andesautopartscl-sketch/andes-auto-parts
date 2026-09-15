@@ -50,6 +50,7 @@ def validate_plan(plan: Any, *, replan_count: int = 0) -> dict[str, Any]:
         "reject_code",
         "reject_message",
         "scenario",
+        "reuse_prior_evidence",
     }
     extra = set(plan.keys()) - allowed_top
     if extra:
@@ -69,6 +70,7 @@ def validate_plan(plan: Any, *, replan_count: int = 0) -> dict[str, Any]:
             "reject_message": str(plan.get("reject_message") or "Solicitud rechazada."),
             "scenario": plan.get("scenario"),
             "needs_clarification": False,
+            "reuse_prior_evidence": False,
         }
 
     if plan.get("needs_clarification"):
@@ -81,6 +83,29 @@ def validate_plan(plan: Any, *, replan_count: int = 0) -> dict[str, Any]:
             "needs_clarification": True,
             "reject_message": str(plan.get("reject_message") or "Necesito más detalles para continuar."),
             "scenario": plan.get("scenario"),
+            "reuse_prior_evidence": False,
+        }
+
+    if plan.get("reuse_prior_evidence"):
+        steps_raw = plan.get("steps")
+        if steps_raw is None:
+            steps_raw = []
+        if not isinstance(steps_raw, list):
+            raise PlanValidationError("invalid_plan", "'steps' must be a list")
+        if len(steps_raw) != 0:
+            raise PlanValidationError(
+                "invalid_plan",
+                "reuse_prior_evidence plans must have empty steps",
+            )
+        return {
+            "plan_id": str(plan.get("plan_id") or "reuse-prior"),
+            "user_intent": str(plan.get("user_intent") or "reuse_prior_evidence"),
+            "steps": [],
+            "answer_style": "operational",
+            "reject": False,
+            "needs_clarification": False,
+            "reuse_prior_evidence": True,
+            "scenario": plan.get("scenario") or "context_reuse",
         }
 
     steps = plan.get("steps")
@@ -172,6 +197,7 @@ def validate_plan(plan: Any, *, replan_count: int = 0) -> dict[str, Any]:
         "answer_style": style,
         "reject": False,
         "needs_clarification": False,
+        "reuse_prior_evidence": False,
         "scenario": plan.get("scenario"),
     }
 

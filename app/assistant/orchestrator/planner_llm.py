@@ -42,8 +42,36 @@ class LlmPlanner:
         if context.get("replan"):
             replan_error = str(context.get("validation_error") or "invalid plan")
 
+        summary_parts: list[str] = []
+        if context.get("conversation_summary"):
+            summary_parts.append(str(context["conversation_summary"]))
+        resolved = context.get("resolved_entities")
+        if isinstance(resolved, dict) and resolved:
+            bits = []
+            if resolved.get("codigo"):
+                bits.append(f"codigo={resolved['codigo']}")
+            codes = resolved.get("codigos") or []
+            if isinstance(codes, list) and codes:
+                bits.append("codigos=" + ",".join(str(c) for c in codes[:5]))
+            if resolved.get("proveedor_nombre") or resolved.get("proveedor_q"):
+                bits.append(
+                    "proveedor="
+                    + str(resolved.get("proveedor_nombre") or resolved.get("proveedor_q"))
+                )
+            if resolved.get("oc_numero"):
+                bits.append(f"oc={resolved['oc_numero']}")
+            if context.get("intent_hint"):
+                bits.append(f"intent_hint={context['intent_hint']}")
+            if bits:
+                summary_parts.append("entidades_resueltas: " + "; ".join(bits))
+        conversation_context = "\n".join(summary_parts) if summary_parts else None
+
         system = build_system_prompt()
-        user = build_user_prompt(message, replan_error=replan_error)
+        user = build_user_prompt(
+            message,
+            replan_error=replan_error,
+            conversation_context=conversation_context,
+        )
 
         try:
             raw = self.client.complete_plan_json(system=system, user=user)

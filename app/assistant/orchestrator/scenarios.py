@@ -20,10 +20,40 @@ SCENARIO_INV_AND_MOV = "inventory_and_movements"
 SCENARIO_CHECK_AND_PRODUCT = "check_and_product"
 SCENARIO_CATALOG_INV_INGRESOS = "catalog_inventory_ingresos"
 SCENARIO_PRODUCT_ONLY = "product_only"
+SCENARIO_SUPPLIER = "supplier_search"
+SCENARIO_PURCHASE_ORDERS = "purchase_orders"
 
 
 def scenario_fixtures() -> dict[str, dict[str, Any]]:
     return {
+        SCENARIO_SUPPLIER: {
+            "plan_id": "fix-supplier",
+            "scenario": SCENARIO_SUPPLIER,
+            "user_intent": "Buscar proveedor",
+            "answer_style": "confidential",
+            "steps": [
+                {
+                    "step": 1,
+                    "tool": "get_supplier",
+                    "arguments": {"q": "ANDES", "limit": 5},
+                    "reason": "directorio proveedores",
+                }
+            ],
+        },
+        SCENARIO_PURCHASE_ORDERS: {
+            "plan_id": "fix-oc",
+            "scenario": SCENARIO_PURCHASE_ORDERS,
+            "user_intent": "Consultar órdenes de compra",
+            "answer_style": "operational",
+            "steps": [
+                {
+                    "step": 1,
+                    "tool": "get_purchase_orders",
+                    "arguments": {"limit": 5},
+                    "reason": "listar OC",
+                }
+            ],
+        },
         SCENARIO_ONE_TOOL: {
             "plan_id": "fix-one-tool",
             "scenario": SCENARIO_ONE_TOOL,
@@ -304,6 +334,10 @@ def detect_scenario(message: str) -> str:
         return SCENARIO_NO_PERMISSION
     if "sin ver_finanzas" in text or ("vendimos" in text and "semana" in text) or "kpis 7d" in text:
         return SCENARIO_KPI_NO_FINANCE
+    if "orden" in text and ("compra" in text or " oc" in text or text.endswith("oc")):
+        return SCENARIO_PURCHASE_ORDERS
+    if "proveedor" in text and "acme" not in text:
+        return SCENARIO_SUPPLIER
 
     wants_search = any(
         w in text for w in ("busca", "buscar", "encuentra", "listar", "catálogo", "catalogo")
@@ -318,6 +352,8 @@ def detect_scenario(message: str) -> str:
 
     # B) Búsqueda / catálogo — antes de rutas mínimas por código
     if wants_search:
+        if "proveedor" in text:
+            return SCENARIO_SUPPLIER
         if "ingresos" in text and "stock" in text:
             return SCENARIO_CATALOG_INV_INGRESOS
         if "movimientos" in text and ("stock" in text or "filtro diesel" in text):

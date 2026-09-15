@@ -52,6 +52,7 @@ PLAN_JSON_SCHEMA: dict = {
         "reject_code",
         "reject_message",
         "scenario",
+        "reuse_prior_evidence",
     ],
     "properties": {
         "plan_id": {"type": "string"},
@@ -65,6 +66,7 @@ PLAN_JSON_SCHEMA: dict = {
         "reject_code": {"type": ["string", "null"]},
         "reject_message": {"type": ["string", "null"]},
         "scenario": {"type": ["string", "null"]},
+        "reuse_prior_evidence": {"type": ["boolean", "null"]},
         "steps": {
             "type": "array",
             "maxItems": MAX_STEPS,
