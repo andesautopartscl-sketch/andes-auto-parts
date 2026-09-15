@@ -432,8 +432,8 @@ def api_memory_create():
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
         return jsonify(ok=False, error_code="invalid_json", message="JSON inválido."), 400
-    # Never accept client actor_user as authority
-    for forbidden in ("actor_user", "Authorization", "token", "permission_epoch"):
+    # Never accept client actor_user / epoch / sensitivity as authority
+    for forbidden in ("actor_user", "Authorization", "token", "permission_epoch", "sensitivity"):
         if forbidden in payload:
             return jsonify(ok=False, error_code="forbidden_field", message="Campo no permitido."), 400
 
@@ -493,7 +493,7 @@ def api_memory_update(slot_id: str):
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
         return jsonify(ok=False, error_code="invalid_json", message="JSON inválido."), 400
-    for forbidden in ("actor_user", "Authorization", "token", "permission_epoch"):
+    for forbidden in ("actor_user", "Authorization", "token", "permission_epoch", "sensitivity"):
         if forbidden in payload:
             return jsonify(ok=False, error_code="forbidden_field", message="Campo no permitido."), 400
 

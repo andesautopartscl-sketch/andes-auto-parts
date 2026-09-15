@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from app.assistant.orchestrator.memory_epoch import (
+    FixedPermissionEpochProvider,
+    set_permission_epoch_provider_for_tests,
+)
 from app.assistant.orchestrator.memory_explicit import (
     detect_explicit_memory_intent,
     write_explicit_memory,
@@ -47,6 +51,7 @@ class Fase7B3ExplicitMemoryTests(unittest.TestCase):
         self.store = MemoryStore(path=self.db)
         self.store.ensure_schema()
         reset_default_memory_store_for_tests()
+        set_permission_epoch_provider_for_tests(FixedPermissionEpochProvider(1))
         self._env = patch.dict(
             os.environ,
             {
@@ -63,6 +68,7 @@ class Fase7B3ExplicitMemoryTests(unittest.TestCase):
 
     def tearDown(self):
         self._env.stop()
+        set_permission_epoch_provider_for_tests(None)
         reset_default_memory_store_for_tests()
         self._tmpdir.cleanup()
 
@@ -167,6 +173,8 @@ class Fase7B3ExplicitMemoryTests(unittest.TestCase):
                 key="pin.2404",
                 value={"kind": "codigo", "value": "2404"},
                 source="explicit",
+                permission_epoch=1,
+                sensitivity="contextual",
                 verify_conversation=False,
             )
             self.assertIsNotNone(slot)
@@ -289,6 +297,8 @@ class Fase7B3ExplicitMemoryTests(unittest.TestCase):
             key="pin.2404",
             value={"kind": "codigo", "value": "2404"},
             source="explicit",
+            permission_epoch=1,
+            sensitivity="contextual",
             verify_conversation=False,
         )
         a = select_memory_hints(actor_user="alice", conversation_id="conv-A", store=self.store)

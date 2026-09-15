@@ -207,15 +207,26 @@ def sanitize_memory_record(
 
     from app.assistant.orchestrator.memory_schema import DEFAULT_SENSITIVITY
 
+    # Server derives sensitivity from type when omitted; never trust client as authority.
     sens = validate_sensitivity(sensitivity or DEFAULT_SENSITIVITY.get(mt, "contextual"))
 
     conf = 1.0 if confidence is None else float(confidence)
     if conf < 0 or conf > 1:
         raise MemorySchemaError("invalid_confidence", "confidence must be 0..1")
 
-    epoch = 0 if permission_epoch is None else int(permission_epoch)
-    if epoch < 0:
-        raise MemorySchemaError("invalid_epoch", "permission_epoch must be >= 0")
+    # Benign may persist NULL epoch (survives permission_epoch changes).
+    # Contextual must carry a non-negative integer epoch stamped at write time.
+    if permission_epoch is None:
+        epoch: int | None = None
+    else:
+        try:
+            epoch = int(permission_epoch)
+        except (TypeError, ValueError) as exc:
+            raise MemorySchemaError("invalid_epoch", "permission_epoch must be int") from exc
+        if epoch < 0:
+            raise MemorySchemaError("invalid_epoch", "permission_epoch must be >= 0")
+    if sens == "contextual" and epoch is None:
+        raise MemorySchemaError("invalid_epoch", "contextual memory requires permission_epoch")
 
     safe_meta: dict[str, Any] = {}
     if isinstance(meta, dict):

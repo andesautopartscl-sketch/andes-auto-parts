@@ -378,6 +378,14 @@ def create_app():
         app.register_blueprint(internal_agent_bp)
         app.register_blueprint(assistant_bp)
 
+        # FASE 7B.4 — wire real permission_epoch provider (isolated Sqlite store)
+        try:
+            from app.assistant.orchestrator.memory_epoch import configure_permission_epoch_provider
+
+            configure_permission_epoch_provider()
+        except Exception as _epoch_exc:  # pragma: no cover
+            app.logger.warning("assistant permission_epoch provider not configured: %s", _epoch_exc)
+
     @app.route("/health")
     def erp_health():
         """Minimal health for ops — no secrets."""

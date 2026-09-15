@@ -268,6 +268,10 @@ def run_orchestrator_chat(
         "memory_write_reason": None,
         "memory_write_type": None,
         "memory_write_scope": None,
+        "permission_epoch_read": None,
+        "memory_contextual_invalidated": 0,
+        "memory_contextual_selected": 0,
+        "permission_epoch_error": False,
     }
 
     def _elapsed_ms() -> int:
@@ -364,6 +368,18 @@ def run_orchestrator_chat(
                     if memory_obs.get("memory_write_scope")
                     else None
                 ),
+                permission_epoch_read=(
+                    int(memory_obs["permission_epoch_read"])
+                    if memory_obs.get("permission_epoch_read") is not None
+                    else None
+                ),
+                memory_contextual_invalidated=int(
+                    memory_obs.get("memory_contextual_invalidated") or 0
+                ),
+                memory_contextual_selected=int(
+                    memory_obs.get("memory_contextual_selected") or 0
+                ),
+                permission_epoch_error=bool(memory_obs.get("permission_epoch_error")),
             )
             metrics.record_turn(metric)
         except Exception:
@@ -672,6 +688,14 @@ def run_orchestrator_chat(
             memory_obs["memory_selected"] = int(selection.selected_count)
             memory_obs["memory_budget_chars"] = int(selection.budget_chars)
             memory_obs["memory_types"] = list(selection.selected_types)
+            memory_obs["permission_epoch_read"] = selection.permission_epoch_read
+            memory_obs["memory_contextual_invalidated"] = int(
+                selection.memory_contextual_invalidated
+            )
+            memory_obs["memory_contextual_selected"] = int(
+                selection.memory_contextual_selected
+            )
+            memory_obs["permission_epoch_error"] = bool(selection.permission_epoch_error)
             if selection.hints:
                 context["memory_hints"] = selection.hints
         except Exception:
@@ -680,6 +704,10 @@ def run_orchestrator_chat(
             memory_obs["memory_selected"] = 0
             memory_obs["memory_budget_chars"] = 0
             memory_obs["memory_types"] = []
+            memory_obs["permission_epoch_error"] = True
+            memory_obs["memory_contextual_invalidated"] = 0
+            memory_obs["memory_contextual_selected"] = 0
+            memory_obs["permission_epoch_read"] = None
 
     replan_count = 0
     validation_error: str | None = None
@@ -1080,6 +1108,10 @@ def run_orchestrator_chat(
             "memory_write_reason": memory_obs.get("memory_write_reason"),
             "memory_write_type": memory_obs.get("memory_write_type"),
             "memory_write_scope": memory_obs.get("memory_write_scope"),
+            "permission_epoch_read": memory_obs.get("permission_epoch_read"),
+            "memory_contextual_invalidated": memory_obs.get("memory_contextual_invalidated"),
+            "memory_contextual_selected": memory_obs.get("memory_contextual_selected"),
+            "permission_epoch_error": memory_obs.get("permission_epoch_error"),
         }
     )
     _emit_metric(

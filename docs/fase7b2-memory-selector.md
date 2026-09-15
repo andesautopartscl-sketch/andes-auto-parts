@@ -82,9 +82,13 @@ La memoria es **contexto auxiliar**, nunca autoridad de permisos ni WRITE.
 ## permission_epoch
 
 Abstracción: `memory_epoch.resolve_actor_permission_epoch`.
-Hoy **no hay fuente robusta de epoch en el ERP** → resolución **neutral** (`available=False`): no se excluye por mismatch.
-Cuando exista fuente real: `contextual` con epoch incompatible se excluye; `benign` puede sobrevivir.
-**No crea ni modifica permisos.**
+FASE 7B.4: provider real `SqlitePermissionEpochProvider` (tabla aislada
+`assistant_permission_epoch`), cableado en `create_app`.
+
+- **benign**: puede sobrevivir a cambios de epoch.
+- **contextual**: requiere `slot.permission_epoch == current`.
+- Si el epoch **no está disponible**: FAIL CLOSED → excluir contextual; mantener benign.
+**No crea ni modifica permisos de negocio** (solo incrementa el contador aislado).
 
 ## Observability
 

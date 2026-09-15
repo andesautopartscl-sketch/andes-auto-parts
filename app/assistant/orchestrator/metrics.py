@@ -166,6 +166,10 @@ def build_turn_metric(
     memory_write_reason: str | None = None,
     memory_write_type: str | None = None,
     memory_write_scope: str | None = None,
+    permission_epoch_read: int | None = None,
+    memory_contextual_invalidated: int = 0,
+    memory_contextual_selected: int = 0,
+    permission_epoch_error: bool = False,
 ) -> dict[str, Any]:
     tools = [str(t) for t in (tools_used or []) if t]
     calls = []
@@ -245,6 +249,12 @@ def build_turn_metric(
         "memory_write_reason": (str(memory_write_reason)[:80] if memory_write_reason else None),
         "memory_write_type": (str(memory_write_type)[:40] if memory_write_type else None),
         "memory_write_scope": (str(memory_write_scope)[:20] if memory_write_scope else None),
+        "permission_epoch_read": (
+            int(permission_epoch_read) if permission_epoch_read is not None else None
+        ),
+        "memory_contextual_invalidated": int(memory_contextual_invalidated or 0),
+        "memory_contextual_selected": int(memory_contextual_selected or 0),
+        "permission_epoch_error": bool(permission_epoch_error),
     }
     return sanitize_metric(record)
 

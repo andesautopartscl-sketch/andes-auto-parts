@@ -70,6 +70,11 @@ class MemorySelectionResult:
     budget_chars: int = 0
     selected_types: list[str] = field(default_factory=list)
     dropped_prohibited: int = 0
+    permission_epoch_read: int | None = None
+    permission_epoch_available: bool = False
+    permission_epoch_error: bool = False
+    memory_contextual_invalidated: int = 0
+    memory_contextual_selected: int = 0
     error: str | None = None
 
 
@@ -212,6 +217,9 @@ def select_memory_hints(
     epoch_res: PermissionEpochResolution = resolve_actor_permission_epoch(
         actor, provider=epoch_provider
     )
+    out.permission_epoch_available = bool(epoch_res.available)
+    out.permission_epoch_read = int(epoch_res.epoch) if epoch_res.available and epoch_res.epoch is not None else None
+    out.permission_epoch_error = not bool(epoch_res.available)
 
     filtered: list[dict[str, Any]] = []
     for slot in candidates:
@@ -224,7 +232,10 @@ def select_memory_hints(
             continue
         if slot.get("deleted_at"):
             continue
+        sens = str(slot.get("sensitivity") or "benign").strip().lower()
         if not memory_passes_permission_epoch(slot, epoch_res):
+            if sens != "benign":
+                out.memory_contextual_invalidated += 1
             continue
         filtered.append(slot)
 
@@ -258,6 +269,8 @@ def select_memory_hints(
         if chars > budget:
             continue
         hints = trial
+        if str(slot.get("sensitivity") or "").strip().lower() != "benign":
+            out.memory_contextual_selected += 1
 
     out.hints = hints
     out.selected_count = len(hints)

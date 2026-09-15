@@ -232,6 +232,19 @@ def _serialize_user_permission_payload(user: Usuario) -> dict:
     return out
 
 
+def _notify_assistant_permission_epoch(actor_user: str | None) -> None:
+    """FASE 7B.4 — bump assistant memory permission_epoch (isolated; never raises)."""
+    name = (actor_user or "").strip()
+    if not name:
+        return
+    try:
+        from app.assistant.orchestrator.memory_epoch import notify_permission_context_changed
+
+        notify_permission_context_changed(name)
+    except Exception:  # noqa: BLE001
+        logger.warning("assistant_memory permission_epoch notify skipped")
+
+
 # -----------------------------
 # LOGIN LIMPIO (FINAL)
 # -----------------------------
@@ -739,6 +752,7 @@ def api_crear_usuario():
         db.session.commit()
 
         current_app.logger.info("Usuario creado: %s", nuevo.usuario)
+        _notify_assistant_permission_epoch(nuevo.usuario)
 
         return jsonify({"success": True, "id": nuevo.id})
 
@@ -987,6 +1001,9 @@ def api_editar_usuario(id):
         data = request.get_json()
         
         logger.debug(f"Datos recibidos: {list(data.keys())}")
+        prev_rol_id = user.rol_id
+        prev_usuario = (user.usuario or "").strip()
+        auth_context_changed = False
         
         # Proteger superadmin
         if user.usuario == "albert" and "usuario" in data and data["usuario"] != "albert":
@@ -1069,6 +1086,11 @@ def api_editar_usuario(id):
         if "rol_id" in data:
             user.rol_id = int(data["rol_id"])
             logger.debug(f"   - rol_id: {data['rol_id']}")
+            try:
+                if int(data["rol_id"]) != int(prev_rol_id or 0):
+                    auth_context_changed = True
+            except (TypeError, ValueError):
+                auth_context_changed = True
         
         if "password" in data and data["password"]:
             user.password_hash = generate_password_hash(data["password"])
@@ -1079,6 +1101,7 @@ def api_editar_usuario(id):
             logger.debug(f"   - activo: {user.activo}")
 
         if "permisos" in data and isinstance(data["permisos"], dict):
+            auth_context_changed = True
             perm_payload = data["permisos"] or {}
             perm = _ensure_user_permission_row(user)
             details = _ensure_user_permission_details(user)
@@ -1142,6 +1165,11 @@ def api_editar_usuario(id):
         
         db.session.commit()
         logger.debug(f"Usuario {user.usuario} actualizado correctamente")
+        if auth_context_changed:
+            # Prefer current username; also bump previous if renamed
+            _notify_assistant_permission_epoch(user.usuario)
+            if prev_usuario and prev_usuario != (user.usuario or "").strip():
+                _notify_assistant_permission_epoch(prev_usuario)
         
         return jsonify({"success": True, "message": "Usuario actualizado correctamente"})
     
@@ -1349,7 +1377,14 @@ def editar_usuario(id):
 
         user.nombre = nombre
         user.usuario = usuario
-        user.rol_id = request.form["rol"]
+        prev_rol_id = user.rol_id
+        new_rol_id = request.form["rol"]
+        user.rol_id = new_rol_id
+        auth_context_changed = False
+        try:
+            auth_context_changed = int(new_rol_id) != int(prev_rol_id or 0)
+        except (TypeError, ValueError):
+            auth_context_changed = True
 
         if request.form["password"] != "":
             if len(request.form["password"]) < 6:
@@ -1387,6 +1422,8 @@ def editar_usuario(id):
         perfil.comision_pct = cp
 
         db.session.commit()
+        if auth_context_changed:
+            _notify_assistant_permission_epoch(user.usuario)
 
         return redirect("/usuarios")
 

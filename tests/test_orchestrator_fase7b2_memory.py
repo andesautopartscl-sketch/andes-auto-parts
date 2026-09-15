@@ -68,7 +68,8 @@ class Fase7B2MemorySelectorTests(unittest.TestCase):
         self.store = MemoryStore(path=self.db)
         self.store.ensure_schema()
         reset_default_memory_store_for_tests()
-        set_permission_epoch_provider_for_tests(None)
+        # Default upserts stamp permission_epoch=0; match so contextual slots remain selectable.
+        set_permission_epoch_provider_for_tests(_FixedEpoch(0))
         self._env = patch.dict(
             os.environ,
             {
@@ -412,10 +413,16 @@ class Fase7B2MemorySelectorTests(unittest.TestCase):
             permission_epoch=1,
             sensitivity="benign",
         )
-        # Neutral path when unavailable
-        self.assertTrue(
+        # Fail-closed when epoch unavailable: contextual excluded
+        self.assertFalse(
             memory_passes_permission_epoch(
                 {"sensitivity": "contextual", "permission_epoch": 1},
+                PermissionEpochResolution(available=False, epoch=None),
+            )
+        )
+        self.assertTrue(
+            memory_passes_permission_epoch(
+                {"sensitivity": "benign", "permission_epoch": 1},
                 PermissionEpochResolution(available=False, epoch=None),
             )
         )

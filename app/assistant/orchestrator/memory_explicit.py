@@ -353,6 +353,28 @@ def write_explicit_memory(
             conversation_id = existing.get("conversation_id")
             mt = str(existing.get("memory_type") or mt)
 
+        from app.assistant.orchestrator.memory_epoch import (
+            resolve_actor_permission_epoch,
+            sensitivity_for_memory_type,
+        )
+
+        # Server-derived sensitivity — never from client payload
+        sens = sensitivity_for_memory_type(mt)
+        epoch_arg: int | None = None
+        if sens == "contextual":
+            epoch_res = resolve_actor_permission_epoch(actor)
+            if not epoch_res.available or epoch_res.epoch is None:
+                return ExplicitWriteResult(
+                    ok=False,
+                    rejected=True,
+                    error_code="permission_epoch_unavailable",
+                    message="No pude guardar esa memoria en este momento.",
+                    memory_type=mt,
+                    scope=scope,
+                )
+            epoch_arg = int(epoch_res.epoch)
+        # benign → permission_epoch NULL (survives epoch bumps)
+
         slot = mem.upsert(
             actor_user=actor,
             scope=scope,
@@ -362,6 +384,8 @@ def write_explicit_memory(
             conversation_id=conversation_id,
             source="explicit",
             confidence=1.0,
+            permission_epoch=epoch_arg,
+            sensitivity=sens,
             verify_conversation=(scope == "conversation"),
         )
     except MemorySchemaError as exc:
