@@ -25,6 +25,7 @@ from app.assistant.orchestrator.history_store import HistoryStore, get_default_h
 from app.assistant.orchestrator.input_guard import InputGuardError, detect_write_intent, guard_message
 from app.assistant.orchestrator.llm.client import LlmError
 from app.assistant.orchestrator.memory_config import memory_enabled
+from app.assistant.orchestrator.memory_derived import apply_derived_memory
 from app.assistant.orchestrator.memory_epoch import PermissionEpochProvider
 from app.assistant.orchestrator.memory_explicit import apply_chat_explicit_memory
 from app.assistant.orchestrator.memory_selector import select_memory_hints
@@ -272,6 +273,13 @@ def run_orchestrator_chat(
         "memory_contextual_invalidated": 0,
         "memory_contextual_selected": 0,
         "permission_epoch_error": False,
+        "derived_candidates": 0,
+        "derived_accepted": 0,
+        "derived_rejected": 0,
+        "derived_reject_reason": None,
+        "derived_type": None,
+        "derived_scope": None,
+        "derived_confidence": None,
     }
 
     def _elapsed_ms() -> int:
@@ -380,6 +388,29 @@ def run_orchestrator_chat(
                     memory_obs.get("memory_contextual_selected") or 0
                 ),
                 permission_epoch_error=bool(memory_obs.get("permission_epoch_error")),
+                derived_candidates=int(memory_obs.get("derived_candidates") or 0),
+                derived_accepted=int(memory_obs.get("derived_accepted") or 0),
+                derived_rejected=int(memory_obs.get("derived_rejected") or 0),
+                derived_reject_reason=(
+                    str(memory_obs.get("derived_reject_reason"))[:80]
+                    if memory_obs.get("derived_reject_reason")
+                    else None
+                ),
+                derived_type=(
+                    str(memory_obs.get("derived_type"))[:40]
+                    if memory_obs.get("derived_type")
+                    else None
+                ),
+                derived_scope=(
+                    str(memory_obs.get("derived_scope"))[:20]
+                    if memory_obs.get("derived_scope")
+                    else None
+                ),
+                derived_confidence=(
+                    float(memory_obs["derived_confidence"])
+                    if memory_obs.get("derived_confidence") is not None
+                    else None
+                ),
             )
             metrics.record_turn(metric)
         except Exception:
@@ -1080,6 +1111,35 @@ def run_orchestrator_chat(
         }
         for e in evidence
     ]
+    _save_turn(
+            text=text,
+            tools_used=tools_used,
+            scenario=plan.get("scenario"),
+            evidence=evidence,
+            reply=composed["reply"],
+        )
+
+    # FASE 7B.5 — derived memory (post-turn, best-effort; chat already composed)
+    try:
+        derived = apply_derived_memory(
+            message=text,
+            actor_user=actor,
+            conversation_id=conversation_id,
+            evidence=evidence,
+            turns=store.get(actor, conversation_id),
+            store=memory_store,
+        )
+        memory_obs["derived_candidates"] = int(derived.candidates)
+        memory_obs["derived_accepted"] = int(derived.accepted)
+        memory_obs["derived_rejected"] = int(derived.rejected)
+        memory_obs["derived_reject_reason"] = derived.reject_reason
+        memory_obs["derived_type"] = derived.memory_type
+        memory_obs["derived_scope"] = derived.scope
+        memory_obs["derived_confidence"] = derived.confidence
+    except Exception:
+        logging.getLogger(__name__).warning("assistant_memory derived chat path soft-failed")
+        memory_obs["derived_reject_reason"] = "derived_failed"
+
     audit.write(
         {
             **_audit_base(
@@ -1112,6 +1172,12 @@ def run_orchestrator_chat(
             "memory_contextual_invalidated": memory_obs.get("memory_contextual_invalidated"),
             "memory_contextual_selected": memory_obs.get("memory_contextual_selected"),
             "permission_epoch_error": memory_obs.get("permission_epoch_error"),
+            "derived_candidates": memory_obs.get("derived_candidates"),
+            "derived_accepted": memory_obs.get("derived_accepted"),
+            "derived_rejected": memory_obs.get("derived_rejected"),
+            "derived_reject_reason": memory_obs.get("derived_reject_reason"),
+            "derived_type": memory_obs.get("derived_type"),
+            "derived_scope": memory_obs.get("derived_scope"),
         }
     )
     _emit_metric(
@@ -1123,14 +1189,6 @@ def run_orchestrator_chat(
         tool_calls=tool_calls,
         replan_count=replan_count,
     )
-
-    _save_turn(
-            text=text,
-            tools_used=tools_used,
-            scenario=plan.get("scenario"),
-            evidence=evidence,
-            reply=composed["reply"],
-        )
 
     return _finish({
         "ok": True,

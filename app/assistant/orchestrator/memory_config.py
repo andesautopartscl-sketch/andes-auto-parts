@@ -17,7 +17,7 @@ def memory_enabled() -> bool:
 
 
 def memory_derived_enabled() -> bool:
-    """Derived writes are not used in chat path; flag reserved for later stages."""
+    """FASE 7B.5 — post-turn derived writes (frequent_entity / conversation_summary)."""
     return _env_bool("ANDES_ASSISTANT_MEMORY_DERIVED", False)
 
 

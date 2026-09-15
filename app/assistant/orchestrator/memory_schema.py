@@ -18,7 +18,21 @@ SOURCES = frozenset({"explicit", "derived", "ui"})
 SENSITIVITIES = frozenset({"benign", "contextual"})
 
 ANSWER_STYLES = frozenset({"brief", "detailed", "operational"})
-ENTITY_KINDS = frozenset({"codigo", "proveedor_q", "oc"})
+ENTITY_KINDS = frozenset(
+    {
+        "codigo",
+        "sku",
+        "producto_id",
+        "proveedor_id",
+        "cliente_id",
+        "bodega_id",
+        "proveedor_q",
+        "oc",
+    }
+)
+DERIVED_ENTITY_KINDS = frozenset(
+    {"codigo", "sku", "producto_id", "proveedor_id", "cliente_id", "bodega_id"}
+)
 
 # Default TTL days by type (None = no expires_at unless caller sets one)
 DEFAULT_TTL_DAYS: dict[str, int | None] = {
@@ -115,11 +129,17 @@ def validate_value_for_type(memory_type: str, value: Any) -> dict[str, Any]:
     if mt in {"frequent_entity", "pinned_entity"}:
         kind = str(value.get("kind") or "").strip().lower()
         if kind not in ENTITY_KINDS:
-            raise MemorySchemaError("invalid_value", f"{mt}.kind must be codigo|proveedor_q|oc")
+            raise MemorySchemaError(
+                "invalid_value",
+                f"{mt}.kind must be codigo|sku|producto_id|proveedor_id|cliente_id|bodega_id|proveedor_q|oc",
+            )
         raw_val = str(value.get("value") or "").strip()
         if not raw_val or len(raw_val) > 40:
             raise MemorySchemaError("invalid_value", f"{mt}.value required (max 40 chars)")
-        out: dict[str, Any] = {"kind": kind, "value": raw_val.upper() if kind == "codigo" else raw_val}
+        out: dict[str, Any] = {
+            "kind": "codigo" if kind == "sku" else kind,
+            "value": raw_val.upper() if kind in {"codigo", "sku"} else raw_val,
+        }
         if mt == "frequent_entity":
             hit = value.get("hit_count", 1)
             try:

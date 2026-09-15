@@ -170,6 +170,13 @@ def build_turn_metric(
     memory_contextual_invalidated: int = 0,
     memory_contextual_selected: int = 0,
     permission_epoch_error: bool = False,
+    derived_candidates: int = 0,
+    derived_accepted: int = 0,
+    derived_rejected: int = 0,
+    derived_reject_reason: str | None = None,
+    derived_type: str | None = None,
+    derived_scope: str | None = None,
+    derived_confidence: float | None = None,
 ) -> dict[str, Any]:
     tools = [str(t) for t in (tools_used or []) if t]
     calls = []
@@ -255,6 +262,17 @@ def build_turn_metric(
         "memory_contextual_invalidated": int(memory_contextual_invalidated or 0),
         "memory_contextual_selected": int(memory_contextual_selected or 0),
         "permission_epoch_error": bool(permission_epoch_error),
+        "derived_candidates": int(derived_candidates or 0),
+        "derived_accepted": int(derived_accepted or 0),
+        "derived_rejected": int(derived_rejected or 0),
+        "derived_reject_reason": (
+            str(derived_reject_reason)[:80] if derived_reject_reason else None
+        ),
+        "derived_type": (str(derived_type)[:40] if derived_type else None),
+        "derived_scope": (str(derived_scope)[:20] if derived_scope else None),
+        "derived_confidence": (
+            round(float(derived_confidence), 3) if derived_confidence is not None else None
+        ),
     }
     return sanitize_metric(record)
 

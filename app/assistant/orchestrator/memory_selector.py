@@ -37,6 +37,7 @@ from app.assistant.orchestrator.memory_epoch import (
 )
 from app.assistant.orchestrator.memory_schema import MEMORY_TYPES
 from app.assistant.orchestrator.memory_store import MemoryStore, get_default_memory_store
+from app.assistant.orchestrator.memory_derived import MAX_FREQUENT_HINTS, MAX_SUMMARY_HINTS
 
 logger = logging.getLogger(__name__)
 
@@ -92,8 +93,31 @@ def _invert_iso(value: str) -> str:
     return "".join(chr(0x10FFFF - ord(ch)) for ch in value)
 
 
+def _source_rank(slot: dict[str, Any]) -> int:
+    src = str(slot.get("source") or "").strip().lower()
+    if src == "derived":
+        return 1
+    return 0
+
+
+def _entity_norm(slot: dict[str, Any]) -> str | None:
+    mt = str(slot.get("memory_type") or "").strip().lower()
+    if mt not in {"pinned_entity", "frequent_entity"}:
+        return None
+    value = slot.get("value") if isinstance(slot.get("value"), dict) else {}
+    kind = str(value.get("kind") or "").strip().lower()
+    if kind == "sku":
+        kind = "codigo"
+    raw = str(value.get("value") or "").strip()
+    if kind == "codigo":
+        raw = raw.upper()
+    if not kind or not raw:
+        return None
+    return f"{kind}|{raw}"
+
+
 def sort_memory_candidates(slots: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Deterministic ranking for selection."""
+    """Deterministic ranking: explicit types first; explicit source before derived."""
 
     def key_fn(s: dict[str, Any]) -> tuple[Any, ...]:
         mt = str(s.get("memory_type") or "").strip().lower()
@@ -105,7 +129,7 @@ def sort_memory_candidates(slots: list[dict[str, Any]]) -> list[dict[str, Any]]:
             conf = float(s.get("confidence") if s.get("confidence") is not None else 0.0)
         except (TypeError, ValueError):
             conf = 0.0
-        return (primary, scope_tie, _invert_iso(updated), -conf)
+        return (primary, _source_rank(s), scope_tie, _invert_iso(updated), -conf)
 
     return sorted(slots, key=key_fn)
 
@@ -251,9 +275,20 @@ def select_memory_hints(
         unique.append(slot)
 
     hints: list[dict[str, Any]] = []
+    seen_entities: set[str] = set()
+    frequent_n = 0
+    summary_n = 0
     for slot in unique:
         if len(hints) >= cap:
             break
+        mt = str(slot.get("memory_type") or "").strip().lower()
+        if mt == "frequent_entity" and frequent_n >= MAX_FREQUENT_HINTS:
+            continue
+        if mt == "conversation_summary" and summary_n >= MAX_SUMMARY_HINTS:
+            continue
+        ent = _entity_norm(slot)
+        if ent and ent in seen_entities:
+            continue
         hint = hint_from_slot(slot)
         if hint is None:
             continue
@@ -269,6 +304,12 @@ def select_memory_hints(
         if chars > budget:
             continue
         hints = trial
+        if ent:
+            seen_entities.add(ent)
+        if mt == "frequent_entity":
+            frequent_n += 1
+        if mt == "conversation_summary":
+            summary_n += 1
         if str(slot.get("sensitivity") or "").strip().lower() != "benign":
             out.memory_contextual_selected += 1
 
