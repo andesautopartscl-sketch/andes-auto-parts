@@ -156,6 +156,10 @@ def build_turn_metric(
     completion_tokens: int | None = None,
     total_tokens: int | None = None,
     planner_mode: str | None = None,
+    memory_candidates: int = 0,
+    memory_selected: int = 0,
+    memory_budget_chars: int = 0,
+    memory_types: list[str] | None = None,
 ) -> dict[str, Any]:
     tools = [str(t) for t in (tools_used or []) if t]
     calls = []
@@ -225,6 +229,10 @@ def build_turn_metric(
         "agent_unavailable": agent_unavailable,
         "alerts": alerts,
         "success": bool(ok) and not error_code,
+        "memory_candidates": int(memory_candidates or 0),
+        "memory_selected": int(memory_selected or 0),
+        "memory_budget_chars": int(memory_budget_chars or 0),
+        "memory_types": [str(t) for t in (memory_types or []) if t][:12],
     }
     return sanitize_metric(record)
 

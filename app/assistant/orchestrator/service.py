@@ -1,6 +1,7 @@
 """Top-level orchestrator chat runner."""
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from typing import Any, Callable
@@ -23,6 +24,10 @@ from app.assistant.orchestrator.history_config import history_enabled
 from app.assistant.orchestrator.history_store import HistoryStore, get_default_history_store
 from app.assistant.orchestrator.input_guard import InputGuardError, detect_write_intent, guard_message
 from app.assistant.orchestrator.llm.client import LlmError
+from app.assistant.orchestrator.memory_config import memory_enabled
+from app.assistant.orchestrator.memory_epoch import PermissionEpochProvider
+from app.assistant.orchestrator.memory_selector import select_memory_hints
+from app.assistant.orchestrator.memory_store import MemoryStore
 from app.assistant.orchestrator.metrics import (
     MetricsStore,
     build_turn_metric,
@@ -213,6 +218,8 @@ def run_orchestrator_chat(
     resolver: ConversationResolver | None = None,
     metrics_store: MetricsStore | None = None,
     history_store: HistoryStore | None = None,
+    memory_store: MemoryStore | None = None,
+    memory_epoch_provider: PermissionEpochProvider | None = None,
 ) -> dict[str, Any]:
     t0 = time.perf_counter()
     actor = (actor_user or "").strip()
@@ -249,6 +256,12 @@ def run_orchestrator_chat(
     llm_latency_ms = 0
     usage_totals: dict[str, int] = {}
     planner_mode = _planner_mode_label(planner)
+    memory_obs: dict[str, Any] = {
+        "memory_candidates": 0,
+        "memory_selected": 0,
+        "memory_budget_chars": 0,
+        "memory_types": [],
+    }
 
     def _elapsed_ms() -> int:
         return int((time.perf_counter() - t0) * 1000)
@@ -322,6 +335,10 @@ def run_orchestrator_chat(
                 completion_tokens=usage_totals.get("completion_tokens"),
                 total_tokens=usage_totals.get("total_tokens"),
                 planner_mode=planner_mode,
+                memory_candidates=int(memory_obs.get("memory_candidates") or 0),
+                memory_selected=int(memory_obs.get("memory_selected") or 0),
+                memory_budget_chars=int(memory_obs.get("memory_budget_chars") or 0),
+                memory_types=list(memory_obs.get("memory_types") or []),
             )
             metrics.record_turn(metric)
         except Exception:
@@ -532,6 +549,28 @@ def run_orchestrator_chat(
         context["resolved_entities"] = dict(resolved.entities or {})
         if resolved.intent_hint:
             context["intent_hint"] = resolved.intent_hint
+
+    # FASE 7B.2 — controlled memory read (auxiliary only; never authority)
+    if memory_enabled():
+        try:
+            selection = select_memory_hints(
+                actor_user=actor,
+                conversation_id=conversation_id,
+                store=memory_store,
+                epoch_provider=memory_epoch_provider,
+            )
+            memory_obs["memory_candidates"] = int(selection.candidates_count)
+            memory_obs["memory_selected"] = int(selection.selected_count)
+            memory_obs["memory_budget_chars"] = int(selection.budget_chars)
+            memory_obs["memory_types"] = list(selection.selected_types)
+            if selection.hints:
+                context["memory_hints"] = selection.hints
+        except Exception:
+            logging.getLogger(__name__).warning("assistant_memory selection soft-failed")
+            memory_obs["memory_candidates"] = 0
+            memory_obs["memory_selected"] = 0
+            memory_obs["memory_budget_chars"] = 0
+            memory_obs["memory_types"] = []
 
     replan_count = 0
     validation_error: str | None = None
@@ -919,6 +958,10 @@ def run_orchestrator_chat(
             "ok": True,
             "llm_latency_ms": llm_latency_ms,
             "total_latency_ms": _elapsed_ms(),
+            "memory_candidates": memory_obs.get("memory_candidates"),
+            "memory_selected": memory_obs.get("memory_selected"),
+            "memory_budget_chars": memory_obs.get("memory_budget_chars"),
+            "memory_types": list(memory_obs.get("memory_types") or []),
         }
     )
     _emit_metric(

@@ -47,6 +47,24 @@ def memory_max_per_conversation() -> int:
         return 10
 
 
+def memory_selector_max_slots() -> int:
+    """FASE 7B.2 — max hints sent to planner per turn."""
+    raw = (os.environ.get("ANDES_ASSISTANT_MEMORY_SELECTOR_MAX_SLOTS") or "12").strip()
+    try:
+        return max(1, min(int(raw), 50))
+    except ValueError:
+        return 12
+
+
+def memory_selector_max_chars() -> int:
+    """FASE 7B.2 — max JSON chars of memory_hints list for planner."""
+    raw = (os.environ.get("ANDES_ASSISTANT_MEMORY_SELECTOR_MAX_CHARS") or "800").strip()
+    try:
+        return max(64, min(int(raw), 4000))
+    except ValueError:
+        return 800
+
+
 def memory_db_path() -> Path:
     raw = (os.environ.get("ANDES_ASSISTANT_MEMORY_DB") or "").strip()
     if raw:

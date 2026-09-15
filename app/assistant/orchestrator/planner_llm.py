@@ -66,6 +66,16 @@ class LlmPlanner:
                 bits.append(f"intent_hint={context['intent_hint']}")
             if bits:
                 summary_parts.append("entidades_resueltas: " + "; ".join(bits))
+        memory_hints = context.get("memory_hints")
+        if isinstance(memory_hints, list) and memory_hints:
+            # Compact JSON only — auxiliary preferences/entities; never permissions
+            try:
+                summary_parts.append(
+                    "memory_hints: "
+                    + json.dumps(memory_hints, ensure_ascii=False, separators=(",", ":"))
+                )
+            except (TypeError, ValueError):
+                pass
         conversation_context = "\n".join(summary_parts) if summary_parts else None
 
         system = build_system_prompt()

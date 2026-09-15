@@ -23,7 +23,8 @@ No lee ni escribe memoria. Endpoints `/assistant/api/memory*` → `404 memory_di
 ### MEMORY=1
 
 El **storage** está disponible (CRUD admin vía BFF delete/list + upsert interno del store).
-**Todavía no existe integración automática con el planner** ni escritura desde el chat.
+Con FASE 7B.2, si el chat llega al planner, puede adjuntar `memory_hints` seleccionados (lectura controlada).
+**No hay escritura automática** desde el chat ni derived.
 
 ## Tabla
 
