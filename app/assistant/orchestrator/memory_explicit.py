@@ -411,7 +411,9 @@ def write_explicit_memory(
     if slot is None:
         err = getattr(mem, "last_error", "") or ""
         code = "memory_write_rejected"
-        if "schema" in err or "rejected" in err:
+        if "memory_history_db_mismatch" in err:
+            code = "memory_history_db_mismatch"
+        elif "schema" in err or "rejected" in err:
             code = "memory_write_rejected"
         elif "conversation" in err:
             code = "conversation_required"

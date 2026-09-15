@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.assistant.orchestrator.history_store import HistoryStore
-from app.assistant.orchestrator.memory_config import memory_enabled
+from app.assistant.orchestrator.memory_config import memory_enabled, memory_history_sqlite_aligned
 from app.assistant.orchestrator.memory_schema import MemorySchemaError
 from app.assistant.orchestrator.memory_sanitize import sanitize_memory_record
 from app.assistant.orchestrator.memory_store import MemoryStore
@@ -127,6 +127,34 @@ class Fase7B1MemoryStoreTests(unittest.TestCase):
                 value={"kind": "codigo", "value": "9999"},
             )
             self.assertIsNone(bad)
+
+    def test_split_memory_history_db_is_unsupported(self):
+        mem = Path(self._tmpdir.name) / "mem_only.db"
+        hist = Path(self._tmpdir.name) / "hist_only.db"
+        with patch.dict(
+            os.environ,
+            {
+                "ANDES_ASSISTANT_HISTORY_ENABLED": "1",
+                "ANDES_ASSISTANT_MEMORY_DB": str(mem.resolve()),
+                "ANDES_ASSISTANT_HISTORY_DB": str(hist.resolve()),
+            },
+            clear=False,
+        ):
+            self.assertFalse(memory_history_sqlite_aligned())
+            hs = HistoryStore(path=hist)
+            conv = hs.ensure_conversation("alice", client_conversation_id="c-split")
+            self.assertIsNotNone(conv)
+            store = MemoryStore(path=mem.resolve())
+            slot = store.upsert(
+                actor_user="alice",
+                scope="conversation",
+                conversation_id=conv["id"],
+                memory_type="pinned_entity",
+                key="pin.codigo",
+                value={"kind": "codigo", "value": "2404"},
+            )
+            self.assertIsNone(slot)
+            self.assertIn("memory_history_db_mismatch", store.last_error or "")
 
     def test_type_whitelist_and_schema(self):
         self.assertIsNone(

@@ -16,6 +16,9 @@ from app.assistant.orchestrator.memory_epoch import (
     SqlitePermissionEpochProvider,
     SqlitePermissionEpochStore,
     bump_actor_permission_epoch,
+    configure_permission_epoch_provider,
+    get_default_permission_epoch_provider,
+    get_default_permission_epoch_store,
     memory_passes_permission_epoch,
     notify_permission_context_changed,
     reset_permission_epoch_store_for_tests,
@@ -69,6 +72,75 @@ class Fase7B4PermissionEpochTests(unittest.TestCase):
         set_permission_epoch_provider_for_tests(None)
         reset_default_memory_store_for_tests()
         self._tmpdir.cleanup()
+
+    def test_get_default_permission_epoch_store_works(self):
+        store = get_default_permission_epoch_store()
+        self.assertIsInstance(store, SqlitePermissionEpochStore)
+        self.assertEqual(Path(store.path), self.epoch_db)
+        self.assertEqual(store.get_or_init("store-user"), 1)
+        self.assertEqual(store.get_or_init("store-user"), 1)
+
+    def test_configure_permission_epoch_provider_no_deadlock(self):
+        """configure() must not re-acquire _PROVIDER_LOCK via get_default_*_store()."""
+        set_permission_epoch_provider_for_tests(None)
+        self.assertIsInstance(get_default_permission_epoch_provider(), NeutralPermissionEpochProvider)
+        box: dict[str, Any] = {}
+
+        def _call() -> None:
+            try:
+                box["provider"] = configure_permission_epoch_provider()
+            except Exception as exc:  # noqa: BLE001
+                box["exc"] = exc
+
+        t = threading.Thread(target=_call, name="epoch-configure")
+        t.start()
+        t.join(timeout=5.0)
+        self.assertFalse(t.is_alive(), "configure_permission_epoch_provider deadlocked on _PROVIDER_LOCK")
+        self.assertNotIn("exc", box, msg=repr(box.get("exc")))
+        provider = box["provider"]
+        self.assertIsInstance(provider, SqlitePermissionEpochProvider)
+        self.assertIs(get_default_permission_epoch_provider(), provider)
+        store = get_default_permission_epoch_store()
+        self.assertIsInstance(store, SqlitePermissionEpochStore)
+        self.assertIs(provider._store, store)
+        res = provider.resolve("wired-user")
+        self.assertTrue(res.available)
+        self.assertEqual(res.epoch, 1)
+
+        fixed = FixedPermissionEpochProvider(9)
+        wired = configure_permission_epoch_provider(fixed)
+        self.assertIs(wired, fixed)
+        self.assertIs(get_default_permission_epoch_provider(), fixed)
+
+    def test_create_app_completes_permission_epoch_wiring(self):
+        """create_app() must finish epoch wiring (the 7B.4 deadlock lived here)."""
+        box: dict[str, Any] = {}
+
+        def _call() -> None:
+            try:
+                from app import create_app
+
+                flask_app = create_app()
+                box["app"] = flask_app
+                box["provider"] = get_default_permission_epoch_provider()
+                with flask_app.test_client() as client:
+                    resp = client.get("/health")
+                    box["status"] = resp.status_code
+                    box["health"] = resp.get_json()
+            except Exception as exc:  # noqa: BLE001
+                box["exc"] = exc
+
+        t = threading.Thread(target=_call, name="create-app-epoch")
+        t.start()
+        t.join(timeout=60.0)
+        self.assertFalse(t.is_alive(), "create_app() hung during permission_epoch wiring")
+        self.assertNotIn("exc", box, msg=repr(box.get("exc")))
+        self.assertIsNotNone(box.get("app"))
+        self.assertIsInstance(box["provider"], SqlitePermissionEpochProvider)
+        self.assertEqual(box.get("status"), 200)
+        health = box.get("health") or {}
+        self.assertTrue(health.get("ok"))
+        self.assertEqual(health.get("service"), "andes-erp")
 
     def test_provider_real_init_and_bump(self):
         r0 = resolve_actor_permission_epoch("alice")

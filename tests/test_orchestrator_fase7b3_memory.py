@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from app.assistant.orchestrator.history_store import HistoryStore
 from app.assistant.orchestrator.memory_epoch import (
     FixedPermissionEpochProvider,
     set_permission_epoch_provider_for_tests,
@@ -361,6 +362,34 @@ class Fase7B3ExplicitMemoryTests(unittest.TestCase):
         fresh = MemoryStore(path=self.db)
         sel = select_memory_hints(actor_user="alice", conversation_id="new", store=fresh)
         self.assertTrue(any(h["key"] == "response_style" for h in sel.hints))
+
+    def test_split_memory_history_db_pin_error_code(self):
+        mem = Path(self._tmpdir.name) / "mem_split.db"
+        hist = Path(self._tmpdir.name) / "hist_split.db"
+        with patch.dict(
+            os.environ,
+            {
+                "ANDES_ASSISTANT_HISTORY_ENABLED": "1",
+                "ANDES_ASSISTANT_MEMORY_DB": str(mem.resolve()),
+                "ANDES_ASSISTANT_HISTORY_DB": str(hist.resolve()),
+            },
+            clear=False,
+        ):
+            hs = HistoryStore(path=hist)
+            conv = hs.ensure_conversation("alice", client_conversation_id="c-split")
+            store = MemoryStore(path=mem.resolve())
+            r = write_explicit_memory(
+                actor_user="alice",
+                memory_type="pinned_entity",
+                key="pin.2404",
+                value={"kind": "codigo", "value": "2404"},
+                scope="conversation",
+                conversation_id=conv["id"],
+                store=store,
+                require_explicit_flag=False,
+            )
+            self.assertFalse(r.ok)
+            self.assertEqual(r.error_code, "memory_history_db_mismatch")
 
     def test_fase5_compat_search_still_works(self):
         r = run_orchestrator_chat(

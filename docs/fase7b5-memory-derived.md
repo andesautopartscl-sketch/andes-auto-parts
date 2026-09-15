@@ -57,7 +57,7 @@ AND schema/sanitize OK
 AND MEMORY=1 AND DERIVED=1
 ```
 
-Qualified hit: tool evidence OK (preferente); mensaje + tool de lectura misma entidad mismo turno (secundaria). Texto solo / `recuerda...` = no hit. Máximo 1 observación por turno.
+Qualified hit: tool evidence OK (preferente); mensaje + tool de lectura misma entidad mismo turno (secundaria). Texto solo / `recuerda...` = no hit. Máximo 1 observación por turno. **Reuse / `reuse_prior_evidence` no cuenta** (evidencia de un turno anterior no es hit nuevo).
 
 ## Hook
 

@@ -305,8 +305,15 @@ def apply_derived_memory(
     store: MemoryStore | None = None,
     counters: DerivedCounterStore | None = None,
     now: datetime | None = None,
+    tools_used: list[Any] | None = None,
+    reuse_prior_evidence: bool = False,
 ) -> DerivedApplyResult:
-    """Post-turn evaluator. Soft-fails. Never raises."""
+    """Post-turn evaluator. Soft-fails. Never raises.
+
+    Frequent hits require a tool executed on THIS turn. Replayed prior evidence
+    (reuse_prior_evidence or tools_used=[]) is not a qualified hit.
+    tools_used=None keeps evaluator-only tests that pass evidence directly.
+    """
     out = DerivedApplyResult()
     if not memory_enabled() or not memory_derived_enabled():
         return out
@@ -325,7 +332,17 @@ def apply_derived_memory(
         ev = evidence or []
         now_dt = now or _utc_now()
 
-        entities = extract_derived_entities(message=message, evidence=ev)
+        current_tool = False
+        if reuse_prior_evidence:
+            current_tool = False
+        elif tools_used is None:
+            current_tool = True
+        else:
+            current_tool = any(str(t) in _READ_TOOLS for t in tools_used if t)
+
+        entities = extract_derived_entities(message=message, evidence=ev) if current_tool else []
+        if not current_tool and ev:
+            out.reject_reason = out.reject_reason or "reuse_or_no_tool"
         out.candidates += len(entities)
         if entities and not cid:
             out.rejected += len(entities)

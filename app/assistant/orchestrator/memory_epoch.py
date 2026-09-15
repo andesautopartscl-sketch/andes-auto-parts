@@ -209,12 +209,17 @@ _DEFAULT_PROVIDER: PermissionEpochProvider = NeutralPermissionEpochProvider()
 _PROVIDER_LOCK = threading.Lock()
 
 
-def get_default_permission_epoch_store() -> SqlitePermissionEpochStore:
+def _ensure_default_store_locked() -> SqlitePermissionEpochStore:
+    """Create/return the process default store. Caller MUST hold _PROVIDER_LOCK."""
     global _DEFAULT_STORE
+    if _DEFAULT_STORE is None:
+        _DEFAULT_STORE = SqlitePermissionEpochStore()
+    return _DEFAULT_STORE
+
+
+def get_default_permission_epoch_store() -> SqlitePermissionEpochStore:
     with _PROVIDER_LOCK:
-        if _DEFAULT_STORE is None:
-            _DEFAULT_STORE = SqlitePermissionEpochStore()
-        return _DEFAULT_STORE
+        return _ensure_default_store_locked()
 
 
 def get_default_permission_epoch_provider() -> PermissionEpochProvider:
@@ -228,7 +233,9 @@ def configure_permission_epoch_provider(provider: PermissionEpochProvider | None
         if provider is not None:
             _DEFAULT_PROVIDER = provider
         else:
-            _DEFAULT_PROVIDER = SqlitePermissionEpochProvider(get_default_permission_epoch_store())
+            # Do not call get_default_permission_epoch_store() here: it also takes
+            # _PROVIDER_LOCK (a non-reentrant Lock) and would deadlock create_app().
+            _DEFAULT_PROVIDER = SqlitePermissionEpochProvider(_ensure_default_store_locked())
         return _DEFAULT_PROVIDER
 
 

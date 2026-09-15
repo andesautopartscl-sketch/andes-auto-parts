@@ -90,6 +90,8 @@ class Fase7B5DerivedMemoryTests(unittest.TestCase):
             store=self.store,
             counters=self.counters,
             now=now,
+            tools_used=kw.get("tools_used"),
+            reuse_prior_evidence=bool(kw.get("reuse_prior_evidence", False)),
         )
 
     def _promote(self, value: str = "2404") -> None:
@@ -468,4 +470,160 @@ class Fase7B5DerivedMemoryTests(unittest.TestCase):
         self.assertEqual(
             [s for s in self.store.list_slots("alice") if s.get("source") == "derived"],
             [],
+        )
+
+    def test_reuse_and_no_tool_are_not_qualified_hits(self):
+        """Controlled trace: reuse/copied evidence must not increment qualified_hits."""
+        traces: list[dict[str, Any]] = []
+        entity = "2404"
+
+        def _snap():
+            return self.counters.snapshot(
+                actor_user="alice", kind="codigo", value=entity, now=self.t0 + timedelta(days=1)
+            )
+
+        def _row(*, turn: str, cid: str, tool: str | None, evidence, reuse: bool, tools_used, now):
+            before = (_snap() or {}).get("qualified_hits") or 0
+            r = self._apply(
+                cid=cid,
+                now=now,
+                message=f"Stock del {entity}",
+                evidence=evidence,
+                tools_used=tools_used,
+                reuse_prior_evidence=reuse,
+            )
+            after_s = _snap() or {"qualified_hits": 0, "distinct_conversations": 0}
+            promoted = any(s.get("memory_type") == "frequent_entity" for s in r.slots)
+            traces.append(
+                {
+                    "turn_id": turn,
+                    "conversation_id": cid,
+                    "tool_executed": bool(tool) and not reuse,
+                    "tool_name": tool,
+                    "entity_kind": "codigo",
+                    "qualified_hit": after_s["qualified_hits"] == before + 1,
+                    "hit_count_before": before,
+                    "hit_count_after": after_s["qualified_hits"],
+                    "promoted": promoted,
+                }
+            )
+            return r
+
+        _row(
+            turn="T1",
+            cid="A",
+            tool="get_inventory",
+            evidence=_ev(),
+            reuse=False,
+            tools_used=["get_inventory"],
+            now=self.t0,
+        )
+        _row(
+            turn="T2",
+            cid="A",
+            tool=None,
+            evidence=_ev(),
+            reuse=True,
+            tools_used=[],
+            now=self.t0 + timedelta(seconds=130),
+        )
+        _row(
+            turn="T3",
+            cid="A",
+            tool=None,
+            evidence=_ev(),
+            reuse=True,
+            tools_used=[],
+            now=self.t0 + timedelta(seconds=260),
+        )
+        _row(
+            turn="T4",
+            cid="B",
+            tool="get_inventory",
+            evidence=_ev(),
+            reuse=False,
+            tools_used=["get_inventory"],
+            now=self.t0 + timedelta(seconds=390),
+        )
+        _row(
+            turn="T5",
+            cid="C",
+            tool="get_inventory",
+            evidence=_ev(),
+            reuse=False,
+            tools_used=["get_inventory"],
+            now=self.t0 + timedelta(seconds=520),
+        )
+        _row(
+            turn="T6",
+            cid="A",
+            tool="get_product",
+            evidence=_ev(tool="get_product"),
+            reuse=False,
+            tools_used=["get_product"],
+            now=self.t0 + timedelta(seconds=650),
+        )
+        _row(
+            turn="T7",
+            cid="B",
+            tool="get_inventory",
+            evidence=_ev(),
+            reuse=False,
+            tools_used=["get_inventory"],
+            now=self.t0 + timedelta(seconds=780),
+        )
+        expected = {
+            "T1": (1, False),
+            "T2": (1, False),
+            "T3": (1, False),
+            "T4": (2, False),
+            "T5": (3, False),
+            "T6": (4, False),
+            "T7": (5, True),
+        }
+        for row in traces:
+            after, promo = expected[row["turn_id"]]
+            self.assertEqual(row["hit_count_after"], after, msg=row)
+            self.assertEqual(row["promoted"], promo, msg=row)
+        self.assertFalse(traces[1]["qualified_hit"])
+        self.assertFalse(traces[2]["qualified_hit"])
+        self.assertEqual(sum(1 for row in traces if row["qualified_hit"]), 5)
+
+    def test_orchestrator_reuse_does_not_count_hit(self):
+        ts = TurnStore()
+        r1 = run_orchestrator_chat(
+            message="Stock del 2404",
+            actor_user="alice",
+            conversation_id="c-reuse",
+            invoke_fn=_invoke_ok,
+            planner=FakePlanner(),
+            turn_store=ts,
+            memory_store=self.store,
+        )
+        self.assertTrue(r1.get("ok"))
+        self.assertTrue(r1.get("tools_used"))
+        now = datetime.now(timezone.utc)
+        snap1 = DerivedCounterStore(path=self.db).snapshot(
+            actor_user="alice", kind="codigo", value="2404", now=now
+        )
+        self.assertIsNotNone(snap1)
+        self.assertEqual(snap1["qualified_hits"], 1)
+        r2 = run_orchestrator_chat(
+            message="cuáles son",
+            actor_user="alice",
+            conversation_id="c-reuse",
+            invoke_fn=_invoke_ok,
+            planner=FakePlanner(),
+            turn_store=ts,
+            memory_store=self.store,
+        )
+        self.assertTrue(r2.get("ok"))
+        self.assertTrue(r2.get("reuse_prior_evidence") or r2.get("scenario") == "context_reuse")
+        self.assertFalse(r2.get("tools_used"))
+        snap2 = DerivedCounterStore(path=self.db).snapshot(
+            actor_user="alice", kind="codigo", value="2404", now=now
+        )
+        self.assertEqual(snap2["qualified_hits"], 1)
+        self.assertFalse(
+            any(s.get("memory_type") == "frequent_entity" for s in self.store.list_slots("alice"))
         )

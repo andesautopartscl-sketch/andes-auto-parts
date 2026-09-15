@@ -80,3 +80,14 @@ def memory_db_path() -> Path:
         return Path(hist)
     base = Path(__file__).resolve().parents[3]
     return base / "data" / "andes.db"
+
+
+def memory_history_sqlite_aligned() -> bool:
+    """Conversation-scoped ownership requires one SQLite file for memory + history.
+
+    Split ANDES_ASSISTANT_MEMORY_DB vs ANDES_ASSISTANT_HISTORY_DB is not supported
+    when HISTORY=1. Omit both (default data/andes.db) or point them at the same path.
+    """
+    from app.assistant.orchestrator.history_config import history_db_path
+
+    return memory_db_path().resolve() == history_db_path().resolve()

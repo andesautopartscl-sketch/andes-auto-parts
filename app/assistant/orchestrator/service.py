@@ -667,6 +667,7 @@ def run_orchestrator_chat(
             evidence=evidence,
             reply=composed["reply"],
         )
+        # Do not apply_derived_memory: reused evidence is not a new qualified hit.
         return _finish({
             "ok": True,
             "reply": composed["reply"],
@@ -916,6 +917,7 @@ def run_orchestrator_chat(
             evidence=evidence,
             reply=composed["reply"],
         )
+            # Do not apply_derived_memory: reused evidence is not a new qualified hit.
             return _finish({
                 "ok": True,
                 "reply": composed["reply"],
@@ -1128,6 +1130,8 @@ def run_orchestrator_chat(
             evidence=evidence,
             turns=store.get(actor, conversation_id),
             store=memory_store,
+            tools_used=tools_used,
+            reuse_prior_evidence=False,
         )
         memory_obs["derived_candidates"] = int(derived.candidates)
         memory_obs["derived_accepted"] = int(derived.accepted)

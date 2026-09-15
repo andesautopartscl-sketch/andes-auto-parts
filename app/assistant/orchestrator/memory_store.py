@@ -19,6 +19,7 @@ from app.assistant.orchestrator.history_store import HistoryStore
 from app.assistant.orchestrator.memory_config import (
     memory_db_path,
     memory_enabled,
+    memory_history_sqlite_aligned,
     memory_max_per_conversation,
     memory_max_per_user,
     memory_soft_delete_grace_days,
@@ -161,7 +162,8 @@ class MemoryStore:
 
         if safe["scope"] == "conversation" and verify_conversation:
             if not self._conversation_owned(safe["actor_user"], safe["conversation_id"]):
-                self.last_error = "upsert: conversation not found or not owned"
+                if "memory_history_db_mismatch" not in (self.last_error or ""):
+                    self.last_error = "upsert: conversation not found or not owned"
                 return None
 
         try:
@@ -515,6 +517,15 @@ class MemoryStore:
                 # HISTORY off: cannot verify ownership in HistoryStore; accept opaque id
                 # for scope isolation only (still keyed by actor_user).
                 return True
+            # Env split is unsupported. Only flag it when this store IS the env memory file
+            # so unit tests that share one injected temp path still work.
+            store_path = Path(self.path).resolve()
+            if store_path == memory_db_path().resolve() and not memory_history_sqlite_aligned():
+                self.last_error = "upsert: memory_history_db_mismatch"
+                logger.warning(
+                    "assistant_memory conversation ownership requires MEMORY_DB == HISTORY_DB"
+                )
+                return False
             hist = HistoryStore(path=self.path)
             hist.ensure_schema()
             return hist.get_conversation(actor, conversation_id) is not None
