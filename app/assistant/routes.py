@@ -381,3 +381,89 @@ def api_conversation_delete(conversation_id: str):
         return jsonify(ok=False, error_code="not_found", message="Conversación no encontrada."), 404
     get_default_turn_store().clear(username, cid)
     return jsonify(ok=True, deleted=True, conversation_id=cid)
+
+
+# ---------------------------------------------------------------------------
+# FASE 7B.1 — memory administration (storage only; no planner integration)
+# ---------------------------------------------------------------------------
+
+
+@assistant_bp.route("/api/memory", methods=["GET"])
+@login_required
+def api_memory_list():
+    """List memory slots for the session user. MEMORY=0 → 404 memory_disabled."""
+    from app.assistant.orchestrator.memory_config import memory_enabled
+    from app.assistant.orchestrator.memory_store import get_default_memory_store
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+    if not memory_enabled():
+        return jsonify(ok=False, error_code="memory_disabled", message="Memoria deshabilitada."), 404
+
+    scope = request.args.get("scope")
+    conversation_id = request.args.get("conversation_id")
+    try:
+        limit_i = int(request.args.get("limit") or 100)
+    except (TypeError, ValueError):
+        limit_i = 100
+    items = get_default_memory_store().list_slots(
+        username,
+        scope=(scope.strip().lower() if scope else None),
+        conversation_id=(str(conversation_id)[:80] if conversation_id else None),
+        limit=limit_i,
+    )
+    return jsonify(ok=True, items=items, count=len(items))
+
+
+@assistant_bp.route("/api/memory/conversation/<conversation_id>", methods=["DELETE"])
+@login_required
+def api_memory_delete_conversation(conversation_id: str):
+    """Soft-delete conversation-scoped slots for one conversation (ownership by actor)."""
+    from app.assistant.orchestrator.memory_config import memory_enabled
+    from app.assistant.orchestrator.memory_store import get_default_memory_store
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+    if not memory_enabled():
+        return jsonify(ok=False, error_code="memory_disabled", message="Memoria deshabilitada."), 404
+
+    cid = str(conversation_id or "")[:80]
+    n = get_default_memory_store().soft_delete_conversation(username, cid)
+    return jsonify(ok=True, deleted_count=n, conversation_id=cid)
+
+
+@assistant_bp.route("/api/memory/<slot_id>", methods=["DELETE"])
+@login_required
+def api_memory_delete_one(slot_id: str):
+    from app.assistant.orchestrator.memory_config import memory_enabled
+    from app.assistant.orchestrator.memory_store import get_default_memory_store
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+    if not memory_enabled():
+        return jsonify(ok=False, error_code="memory_disabled", message="Memoria deshabilitada."), 404
+
+    ok = get_default_memory_store().soft_delete(username, str(slot_id or "")[:80])
+    if not ok:
+        return jsonify(ok=False, error_code="not_found", message="Memoria no encontrada."), 404
+    return jsonify(ok=True, deleted=True, id=str(slot_id or "")[:80])
+
+
+@assistant_bp.route("/api/memory", methods=["DELETE"])
+@login_required
+def api_memory_delete_all():
+    """Soft-delete all memory slots for the session user."""
+    from app.assistant.orchestrator.memory_config import memory_enabled
+    from app.assistant.orchestrator.memory_store import get_default_memory_store
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+    if not memory_enabled():
+        return jsonify(ok=False, error_code="memory_disabled", message="Memoria deshabilitada."), 404
+
+    n = get_default_memory_store().soft_delete_all(username)
+    return jsonify(ok=True, deleted_count=n)

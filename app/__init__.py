@@ -417,6 +417,21 @@ def create_app():
             app.logger.warning("assistant history schema ensure omitted: %s", _hist_schema_exc)
 
         try:
+            import importlib
+
+            importlib.import_module("app.assistant.memory_models")
+        except Exception as _mem_models_exc:  # pragma: no cover
+            app.logger.warning("assistant memory models omitted: %s", _mem_models_exc)
+
+        try:
+            from app.assistant.orchestrator.memory_config import memory_db_path
+            from app.assistant.orchestrator.memory_store import MemoryStore
+
+            MemoryStore(path=memory_db_path()).ensure_schema()
+        except Exception as _mem_schema_exc:  # pragma: no cover
+            app.logger.warning("assistant memory schema ensure omitted: %s", _mem_schema_exc)
+
+        try:
             from app.contabilidad.emisores_service import (
                 backfill_emisores_desde_movimientos,
                 normalizar_emisores_existentes_mayusculas,
