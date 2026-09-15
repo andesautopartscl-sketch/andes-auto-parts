@@ -17,8 +17,13 @@ def memory_enabled() -> bool:
 
 
 def memory_derived_enabled() -> bool:
-    """Derived writes are not used in 7B.1 chat path; flag reserved for later stages."""
+    """Derived writes are not used in chat path; flag reserved for later stages."""
     return _env_bool("ANDES_ASSISTANT_MEMORY_DERIVED", False)
+
+
+def memory_explicit_enabled() -> bool:
+    """FASE 7B.3 — allow NL explicit-memory signals in chat (requires MEMORY=1)."""
+    return _env_bool("ANDES_ASSISTANT_MEMORY_EXPLICIT", False)
 
 
 def memory_soft_delete_grace_days() -> int:

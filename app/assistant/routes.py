@@ -384,7 +384,7 @@ def api_conversation_delete(conversation_id: str):
 
 
 # ---------------------------------------------------------------------------
-# FASE 7B.1 — memory administration (storage only; no planner integration)
+# FASE 7B.1 / 7B.3 — memory administration + explicit write
 # ---------------------------------------------------------------------------
 
 
@@ -414,6 +414,123 @@ def api_memory_list():
         limit=limit_i,
     )
     return jsonify(ok=True, items=items, count=len(items))
+
+
+@assistant_bp.route("/api/memory", methods=["POST"])
+@login_required
+def api_memory_create():
+    """FASE 7B.3 — structured explicit memory create/upsert (closed schema)."""
+    from app.assistant.orchestrator.memory_config import memory_enabled
+    from app.assistant.orchestrator.memory_explicit import write_explicit_memory
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+    if not memory_enabled():
+        return jsonify(ok=False, error_code="memory_disabled", message="Memoria deshabilitada."), 404
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify(ok=False, error_code="invalid_json", message="JSON inválido."), 400
+    # Never accept client actor_user as authority
+    for forbidden in ("actor_user", "Authorization", "token", "permission_epoch"):
+        if forbidden in payload:
+            return jsonify(ok=False, error_code="forbidden_field", message="Campo no permitido."), 400
+
+    result = write_explicit_memory(
+        actor_user=username,
+        memory_type=str(payload.get("memory_type") or ""),
+        key=str(payload.get("key") or ""),
+        value=payload.get("value") if isinstance(payload.get("value"), dict) else {},
+        scope=str(payload.get("scope") or "user"),
+        conversation_id=(
+            str(payload.get("conversation_id"))[:80]
+            if payload.get("conversation_id")
+            else None
+        ),
+        require_explicit_flag=False,
+    )
+    if not result.ok:
+        status = 404 if result.error_code == "memory_disabled" else 400
+        if result.error_code == "not_found":
+            status = 404
+        return (
+            jsonify(
+                ok=False,
+                error_code=result.error_code,
+                message=result.message,
+                memory_type=result.memory_type,
+                scope=result.scope,
+            ),
+            status,
+        )
+    slot = result.slot or {}
+    public = {
+        "id": slot.get("id"),
+        "type": slot.get("memory_type"),
+        "key": slot.get("key"),
+        "value": slot.get("value"),
+        "scope": slot.get("scope"),
+        "conversation_id": slot.get("conversation_id"),
+    }
+    return jsonify(ok=True, item=public, confirmation=result.confirmation)
+
+
+@assistant_bp.route("/api/memory/<slot_id>", methods=["PUT"])
+@login_required
+def api_memory_update(slot_id: str):
+    """FASE 7B.3 — update existing owned memory value (closed schema)."""
+    from app.assistant.orchestrator.memory_config import memory_enabled
+    from app.assistant.orchestrator.memory_explicit import write_explicit_memory
+    from app.assistant.orchestrator.memory_store import get_default_memory_store
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+    if not memory_enabled():
+        return jsonify(ok=False, error_code="memory_disabled", message="Memoria deshabilitada."), 404
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify(ok=False, error_code="invalid_json", message="JSON inválido."), 400
+    for forbidden in ("actor_user", "Authorization", "token", "permission_epoch"):
+        if forbidden in payload:
+            return jsonify(ok=False, error_code="forbidden_field", message="Campo no permitido."), 400
+
+    existing = get_default_memory_store().get_slot(username, str(slot_id or "")[:80])
+    if not existing:
+        return jsonify(ok=False, error_code="not_found", message="Memoria no encontrada."), 404
+
+    result = write_explicit_memory(
+        actor_user=username,
+        memory_type=str(payload.get("memory_type") or existing.get("memory_type") or ""),
+        key=str(payload.get("key") or existing.get("key") or ""),
+        value=(
+            payload.get("value")
+            if isinstance(payload.get("value"), dict)
+            else (existing.get("value") if isinstance(existing.get("value"), dict) else {})
+        ),
+        scope=str(existing.get("scope") or "user"),
+        conversation_id=existing.get("conversation_id"),
+        slot_id=str(slot_id or "")[:80],
+        require_explicit_flag=False,
+    )
+    if not result.ok:
+        status = 404 if result.error_code in {"memory_disabled", "not_found"} else 400
+        return (
+            jsonify(ok=False, error_code=result.error_code, message=result.message),
+            status,
+        )
+    slot = result.slot or {}
+    public = {
+        "id": slot.get("id"),
+        "type": slot.get("memory_type"),
+        "key": slot.get("key"),
+        "value": slot.get("value"),
+        "scope": slot.get("scope"),
+        "conversation_id": slot.get("conversation_id"),
+    }
+    return jsonify(ok=True, item=public, confirmation=result.confirmation)
 
 
 @assistant_bp.route("/api/memory/conversation/<conversation_id>", methods=["DELETE"])

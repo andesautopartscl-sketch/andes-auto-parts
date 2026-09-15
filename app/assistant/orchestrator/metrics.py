@@ -160,6 +160,12 @@ def build_turn_metric(
     memory_selected: int = 0,
     memory_budget_chars: int = 0,
     memory_types: list[str] | None = None,
+    memory_write_attempt: bool = False,
+    memory_write_success: bool = False,
+    memory_write_rejected: bool = False,
+    memory_write_reason: str | None = None,
+    memory_write_type: str | None = None,
+    memory_write_scope: str | None = None,
 ) -> dict[str, Any]:
     tools = [str(t) for t in (tools_used or []) if t]
     calls = []
@@ -233,6 +239,12 @@ def build_turn_metric(
         "memory_selected": int(memory_selected or 0),
         "memory_budget_chars": int(memory_budget_chars or 0),
         "memory_types": [str(t) for t in (memory_types or []) if t][:12],
+        "memory_write_attempt": bool(memory_write_attempt),
+        "memory_write_success": bool(memory_write_success),
+        "memory_write_rejected": bool(memory_write_rejected),
+        "memory_write_reason": (str(memory_write_reason)[:80] if memory_write_reason else None),
+        "memory_write_type": (str(memory_write_type)[:40] if memory_write_type else None),
+        "memory_write_scope": (str(memory_write_scope)[:20] if memory_write_scope else None),
     }
     return sanitize_metric(record)
 

@@ -26,6 +26,7 @@ from app.assistant.orchestrator.input_guard import InputGuardError, detect_write
 from app.assistant.orchestrator.llm.client import LlmError
 from app.assistant.orchestrator.memory_config import memory_enabled
 from app.assistant.orchestrator.memory_epoch import PermissionEpochProvider
+from app.assistant.orchestrator.memory_explicit import apply_chat_explicit_memory
 from app.assistant.orchestrator.memory_selector import select_memory_hints
 from app.assistant.orchestrator.memory_store import MemoryStore
 from app.assistant.orchestrator.metrics import (
@@ -261,6 +262,12 @@ def run_orchestrator_chat(
         "memory_selected": 0,
         "memory_budget_chars": 0,
         "memory_types": [],
+        "memory_write_attempt": False,
+        "memory_write_success": False,
+        "memory_write_rejected": False,
+        "memory_write_reason": None,
+        "memory_write_type": None,
+        "memory_write_scope": None,
     }
 
     def _elapsed_ms() -> int:
@@ -339,6 +346,24 @@ def run_orchestrator_chat(
                 memory_selected=int(memory_obs.get("memory_selected") or 0),
                 memory_budget_chars=int(memory_obs.get("memory_budget_chars") or 0),
                 memory_types=list(memory_obs.get("memory_types") or []),
+                memory_write_attempt=bool(memory_obs.get("memory_write_attempt")),
+                memory_write_success=bool(memory_obs.get("memory_write_success")),
+                memory_write_rejected=bool(memory_obs.get("memory_write_rejected")),
+                memory_write_reason=(
+                    str(memory_obs.get("memory_write_reason"))[:80]
+                    if memory_obs.get("memory_write_reason")
+                    else None
+                ),
+                memory_write_type=(
+                    str(memory_obs.get("memory_write_type"))[:40]
+                    if memory_obs.get("memory_write_type")
+                    else None
+                ),
+                memory_write_scope=(
+                    str(memory_obs.get("memory_write_scope"))[:20]
+                    if memory_obs.get("memory_write_scope")
+                    else None
+                ),
             )
             metrics.record_turn(metric)
         except Exception:
@@ -419,6 +444,90 @@ def run_orchestrator_chat(
             "http_status": 200,
             "correlation_id": correlation_id,
         })
+
+    # FASE 7B.3 — explicit memory write (auxiliary; never ToolRunner / permissions)
+    text_for_plan = text
+    mem_write_note: str | None = None
+    try:
+        text_for_plan, write_res = apply_chat_explicit_memory(
+            message=text,
+            actor_user=actor,
+            conversation_id=conversation_id,
+            store=memory_store,
+        )
+    except Exception:
+        logging.getLogger(__name__).warning("assistant_memory explicit chat path soft-failed")
+        write_res = None
+        text_for_plan = text
+
+    if write_res is not None:
+        memory_obs["memory_write_attempt"] = True
+        memory_obs["memory_write_type"] = write_res.memory_type
+        memory_obs["memory_write_scope"] = write_res.scope
+        memory_obs["memory_write_success"] = bool(write_res.ok)
+        memory_obs["memory_write_rejected"] = bool(write_res.rejected)
+        memory_obs["memory_write_reason"] = write_res.error_code
+        if write_res.ok:
+            mem_write_note = write_res.confirmation
+        else:
+            mem_write_note = write_res.message or "No pude guardar la memoria."
+
+        # Memory-only turn: confirm or report failure; do not invent success
+        if not (text_for_plan or "").strip():
+            reply = mem_write_note or (
+                "Listo, lo recordaré." if write_res.ok else "No pude guardar la memoria."
+            )
+            audit.write(
+                {
+                    **_audit_base(
+                        actor=actor,
+                        conversation_id=conversation_id,
+                        correlation_id=correlation_id,
+                        message_hash_value=mh,
+                    ),
+                    "phase": "memory_explicit",
+                    "ok": True,
+                    "memory_write_attempt": True,
+                    "memory_write_success": bool(write_res.ok),
+                    "memory_write_rejected": bool(write_res.rejected),
+                    "memory_write_reason": write_res.error_code,
+                    "memory_write_type": write_res.memory_type,
+                    "memory_write_scope": write_res.scope,
+                    "tools": [],
+                    "total_latency_ms": _elapsed_ms(),
+                }
+            )
+            _emit_metric(
+                ok=True,
+                message_hash_value=mh,
+                phase="memory_explicit",
+                scenario="memory_explicit",
+                classification="INTERNAL",
+                tools_used=[],
+            )
+            _save_turn(
+                text=text,
+                tools_used=[],
+                scenario="memory_explicit",
+                evidence=[],
+                reply=reply,
+                classification="INTERNAL",
+                flags={"memory_explicit": True, "memory_write_ok": bool(write_res.ok)},
+            )
+            return _finish({
+                "ok": True,
+                "reply": reply,
+                "error_code": None if write_res.ok else write_res.error_code,
+                "tools_used": [],
+                "classification": "INTERNAL",
+                "scenario": "memory_explicit",
+                "grounded": True,
+                "http_status": 200,
+                "correlation_id": correlation_id,
+                "memory_saved": bool(write_res.ok),
+            })
+
+    text = text_for_plan or text
 
     turns = store.get(actor, conversation_id)
     resolved: ResolveResult = resolver.resolve(text, turns)
@@ -930,6 +1039,9 @@ def run_orchestrator_chat(
         })
 
     composed = compose_answer(plan=plan, evidence=evidence)
+    if mem_write_note:
+        base_reply = (composed.get("reply") or "").rstrip()
+        composed["reply"] = f"{base_reply}\n\n{mem_write_note}" if base_reply else mem_write_note
     tools_used = [e.get("tool") for e in evidence if e.get("tool")]
     tool_calls = [
         {
@@ -962,6 +1074,12 @@ def run_orchestrator_chat(
             "memory_selected": memory_obs.get("memory_selected"),
             "memory_budget_chars": memory_obs.get("memory_budget_chars"),
             "memory_types": list(memory_obs.get("memory_types") or []),
+            "memory_write_attempt": memory_obs.get("memory_write_attempt"),
+            "memory_write_success": memory_obs.get("memory_write_success"),
+            "memory_write_rejected": memory_obs.get("memory_write_rejected"),
+            "memory_write_reason": memory_obs.get("memory_write_reason"),
+            "memory_write_type": memory_obs.get("memory_write_type"),
+            "memory_write_scope": memory_obs.get("memory_write_scope"),
         }
     )
     _emit_metric(
