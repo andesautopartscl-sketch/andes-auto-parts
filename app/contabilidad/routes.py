@@ -211,6 +211,70 @@ def _validar_autorizacion_edicion_movimiento(
     return True, "", u
 
 
+def _documento_ref_key(raw: str | None) -> str:
+    return (raw or "").strip().upper()
+
+
+def _emisor_nombre_key(raw: str | None) -> str:
+    return " ".join((raw or "").strip().upper().split())
+
+
+def _emisores_mismo(
+    rut_a: str | None,
+    nombre_a: str | None,
+    rut_b: str | None,
+    nombre_b: str | None,
+) -> bool:
+    """Mismo emisor: RUT si ambos lo tienen; si no, razón social."""
+    rut_a_n = clean_rut(rut_a)
+    rut_b_n = clean_rut(rut_b)
+    if rut_a_n and rut_b_n:
+        return rut_a_n == rut_b_n
+    nom_a = _emisor_nombre_key(nombre_a)
+    nom_b = _emisor_nombre_key(nombre_b)
+    if nom_a and nom_b:
+        return nom_a == nom_b
+    if not rut_a_n and not nom_a:
+        return True
+    if not rut_b_n and not nom_b:
+        return True
+    return False
+
+
+def _movimiento_documento_ref_duplicado(
+    documento_ref: str,
+    emisor_rut: str,
+    emisor_nombre: str,
+    *,
+    exclude_mid: int | None = None,
+) -> MovimientoContable | None:
+    """Movimiento vigente con el mismo N° de documento y el mismo emisor."""
+    numero = _documento_ref_key(documento_ref)
+    if not numero:
+        return None
+    q = (
+        MovimientoContable.query.filter(MovimientoContable.documento_ref.isnot(None))
+        .filter(func.trim(MovimientoContable.documento_ref) != "")
+        .filter(func.upper(func.trim(MovimientoContable.documento_ref)) == numero)
+    )
+    if exclude_mid is not None:
+        q = q.filter(MovimientoContable.id != int(exclude_mid))
+    for mov in q.order_by(MovimientoContable.id.desc()).all():
+        if _emisores_mismo(emisor_rut, emisor_nombre, mov.emisor_rut, mov.emisor_nombre):
+            return mov
+    return None
+
+
+def _mensaje_movimiento_documento_ref_duplicado(mov: MovimientoContable) -> str:
+    num = (mov.documento_ref or "").strip() or f"#{mov.id}"
+    fecha = mov.fecha.strftime("%d-%m-%Y") if mov.fecha else "—"
+    emisor = (mov.emisor_nombre or "").strip() or "el emisor"
+    return (
+        f"El N° de documento «{num}» ya está ingresado para {emisor} "
+        f"(movimiento #{mov.id}, fecha {fecha}). Revisá el libro diario o usá otro número."
+    )
+
+
 def _parse_movimiento_form(form) -> tuple[dict | None, str | None]:
     """Parsea y valida el formulario de movimiento. Retorna (data, error)."""
     cuenta_id = (form.get("cuenta_id") or "").strip()
@@ -439,6 +503,13 @@ def movimiento_nuevo():
         flash(err, "error")
         return redirect(url_for("contabilidad.movimientos"))
 
+    dup = _movimiento_documento_ref_duplicado(
+        data["documento_ref"], data["emisor_rut"], data["emisor_nombre"]
+    )
+    if dup:
+        flash(_mensaje_movimiento_documento_ref_duplicado(dup), "error")
+        return redirect(url_for("contabilidad.movimientos"))
+
     mov = MovimientoContable(
         fecha=data["fecha"],
         cuenta_id=data["cuenta_id"],
@@ -496,6 +567,16 @@ def movimiento_editar(mid: int):
     data, err = _parse_movimiento_form(request.form)
     if err:
         flash(err, "error")
+        return redirect(url_for("contabilidad.movimientos"))
+
+    dup = _movimiento_documento_ref_duplicado(
+        data["documento_ref"],
+        data["emisor_rut"],
+        data["emisor_nombre"],
+        exclude_mid=mov.id,
+    )
+    if dup:
+        flash(_mensaje_movimiento_documento_ref_duplicado(dup), "error")
         return redirect(url_for("contabilidad.movimientos"))
 
     mov.fecha = data["fecha"]
@@ -577,6 +658,37 @@ def api_emisores_buscar():
         limit = 15
     items = buscar_emisores(q, limit=limit)
     return jsonify({"ok": True, "items": items, "q": q})
+
+
+@contabilidad_bp.route("/api/movimientos/documento-ref-duplicado", methods=["GET"])
+@login_required
+@permission_required("ver_finanzas")
+def api_documento_ref_duplicado():
+    """Verifica si el N° de factura/documento ya está en el libro diario para el mismo emisor."""
+    numero = (request.args.get("numero") or "").strip()
+    rut = (request.args.get("rut") or "").strip()
+    nombre = (request.args.get("nombre") or "").strip()
+    exclude_raw = (request.args.get("exclude_mid") or "").strip()
+    exclude_mid: int | None = int(exclude_raw) if exclude_raw.isdigit() else None
+    if not numero:
+        return jsonify(ok=True, duplicado=False)
+    dup = _movimiento_documento_ref_duplicado(
+        numero, rut, nombre, exclude_mid=exclude_mid
+    )
+    if dup is None:
+        return jsonify(ok=True, duplicado=False)
+    return jsonify(
+        ok=True,
+        duplicado=True,
+        message=_mensaje_movimiento_documento_ref_duplicado(dup),
+        movimiento={
+            "id": dup.id,
+            "documento_ref": (dup.documento_ref or "").strip(),
+            "fecha": dup.fecha.strftime("%Y-%m-%d") if dup.fecha else "",
+            "emisor_nombre": (dup.emisor_nombre or "").strip(),
+            "emisor_rut": (dup.emisor_rut or "").strip(),
+        },
+    )
 
 
 @contabilidad_bp.route("/emisores", methods=["GET"])
