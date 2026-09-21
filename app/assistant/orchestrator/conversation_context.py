@@ -84,6 +84,14 @@ def extract_entities_from_evidence(evidence: list[dict[str, Any]]) -> dict[str, 
         "proveedor_ciudad": None,
         "oc_numero": None,
         "customer_q": None,
+        "oem": None,
+        # FASE 8.7 — el periodo es el ancla que necesitan las secuencias de
+        # ventas: "muestrame las ventas del 2404" -> "comparame con el trimestre
+        # anterior" no es resoluble sin saber sobre que ventana se respondio.
+        # Se extrae de la evidencia, no del texto: es un hecho del turno, no una
+        # interpretacion, y por eso no puede desviarse de lo que se consulto.
+        "periodo_desde": None,
+        "periodo_hasta": None,
         "last_tools": [],
     }
     codigos: list[str] = []
@@ -135,6 +143,35 @@ def extract_entities_from_evidence(evidence: list[dict[str, Any]]) -> dict[str, 
             if meta.get("q"):
                 entities["proveedor_q"] = str(meta.get("q")).strip()
 
+        elif tool == "get_equivalences":
+            # El OEM consultado es el ancla de "¿y cual me sirve para el Chery?".
+            query = data.get("query") if isinstance(data.get("query"), dict) else {}
+            oem = str(query.get("oem") or "").strip()
+            if oem:
+                entities["oem"] = oem
+            items = data.get("items") if isinstance(data.get("items"), list) else []
+            for row in items:
+                if isinstance(row, dict) and row.get("codigo"):
+                    code = str(row["codigo"]).strip().upper()
+                    if code and code not in codigos:
+                        codigos.append(code)
+            if codigos and not entities["codigo"]:
+                entities["codigo"] = codigos[0]
+
+        elif tool == "get_sales":
+            periodo = data.get("periodo") if isinstance(data.get("periodo"), dict) else {}
+            desde = str(periodo.get("desde") or "").strip()
+            hasta = str(periodo.get("hasta") or "").strip()
+            if desde:
+                entities["periodo_desde"] = desde
+            if hasta:
+                entities["periodo_hasta"] = hasta
+            codigo = str(data.get("codigo") or "").strip().upper()
+            if codigo:
+                entities["codigo"] = codigo
+                if codigo not in codigos:
+                    codigos.insert(0, codigo)
+
         elif tool == "get_customer":
             meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
             if meta.get("q"):
@@ -166,6 +203,13 @@ def merge_entities(*parts: dict[str, Any] | None) -> dict[str, Any]:
         "proveedor_ciudad": None,
         "oc_numero": None,
         "customer_q": None,
+        # FASE 8.7 — el periodo es el ancla que necesitan las secuencias de
+        # ventas: "muestrame las ventas del 2404" -> "comparame con el trimestre
+        # anterior" no es resoluble sin saber sobre que ventana se respondio.
+        # Se extrae de la evidencia, no del texto: es un hecho del turno, no una
+        # interpretacion, y por eso no puede desviarse de lo que se consulto.
+        "periodo_desde": None,
+        "periodo_hasta": None,
         "last_tools": [],
     }
     for ents in parts:

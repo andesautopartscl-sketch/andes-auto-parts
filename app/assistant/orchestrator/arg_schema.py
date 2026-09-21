@@ -93,6 +93,8 @@ def validate_tool_args(tool: str, arguments: Any) -> dict[str, Any]:
         "get_stock_movements": _get_stock_movements,
         "get_ingresos": _get_ingresos,
         "get_purchase_orders": _get_purchase_orders,
+        "get_sales": _get_sales,
+        "get_equivalences": _get_equivalences,
         "get_customer": _get_party,
         "get_supplier": _get_party,
         "get_dashboard_kpis": _get_dashboard_kpis,
@@ -167,11 +169,19 @@ def _get_stock_movements(data: dict[str, Any]) -> dict[str, Any]:
     return _codigo_dated(data, {"codigo", "fecha_desde", "fecha_hasta", "limit"})
 
 
+# FASE 8.8 — el maximo se declaraba DOS veces y no coincidian. Medido: el
+# orquestador admitia limit=50 en get_customer/get_ingresos/get_purchase_orders/
+# get_supplier y el Gateway los rechazaba con 400. Un plan valido aqui moria en
+# la frontera exterior, y invalid_args es uno de los ejes que mide el benchmark.
+# Gana el mas estrecho: es el que de verdad se puede ejecutar.
 def _get_ingresos(data: dict[str, Any]) -> dict[str, Any]:
-    return _codigo_dated(data, {"codigo", "fecha_desde", "fecha_hasta", "limit", "proveedor", "numero"})
+    # get_ingresos: el Gateway acota a 20. Declarar 50 aqui producia planes
+    # validos que morian en la frontera exterior con invalid_args.
+    return _codigo_dated(data, {"codigo", "fecha_desde", "fecha_hasta", "limit", "proveedor", "numero"},
+                         max_limit=20)
 
 
-def _codigo_dated(data: dict[str, Any], allowed: set[str]) -> dict[str, Any]:
+def _codigo_dated(data: dict[str, Any], allowed: set[str], *, max_limit: int = 50) -> dict[str, Any]:
     _require_only(data, allowed)
     if "codigo" not in data:
         raise ArgSchemaError("invalid_args", "'codigo' is required")
@@ -186,8 +196,9 @@ def _codigo_dated(data: dict[str, Any], allowed: set[str]) -> dict[str, Any]:
             out[key] = data[key].strip()
     if "limit" in data:
         lim = data["limit"]
-        if isinstance(lim, bool) or not isinstance(lim, int) or lim < 1 or lim > 50:
-            raise ArgSchemaError("invalid_args", "'limit' must be between 1 and 50")
+        if isinstance(lim, bool) or not isinstance(lim, int) or lim < 1 or lim > max_limit:
+            raise ArgSchemaError(
+                "invalid_args", f"'limit' must be between 1 and {max_limit}")
         out["limit"] = lim
     return out
 
@@ -202,8 +213,68 @@ def _get_purchase_orders(data: dict[str, Any]) -> dict[str, Any]:
             out[key] = data[key].strip()
     if "limit" in data:
         lim = data["limit"]
-        if isinstance(lim, bool) or not isinstance(lim, int) or lim < 1 or lim > 50:
-            raise ArgSchemaError("invalid_args", "'limit' must be between 1 and 50")
+        if isinstance(lim, bool) or not isinstance(lim, int) or lim < 1 or lim > 20:
+            raise ArgSchemaError("invalid_args", "'limit' must be between 1 and 20")
+        out["limit"] = lim
+    return out
+
+
+def _get_equivalences(data: dict[str, Any]) -> dict[str, Any]:
+    """FASE 8.8. Se exige ancla (oem o codigo): sin ella la consulta devolveria
+    un recorte arbitrario del catalogo que el agente presentaria como
+    'equivalencias', y eso seria falso."""
+    _require_only(data, {"oem", "codigo", "marca", "modelo", "limit"})
+    out: dict[str, Any] = {}
+    for key in ("oem", "codigo", "marca", "modelo"):
+        if key in data:
+            if not isinstance(data[key], str):
+                raise ArgSchemaError("invalid_args", f"'{key}' must be a string")
+            value = data[key].strip()
+            if value:
+                out[key] = value.upper() if key == "codigo" else value
+    # Se lee del contrato: si un dia cambia el ancla, cambia en UN sitio y el
+    # prompt, el validador y el aviso de reintento siguen diciendo lo mismo.
+    from app.assistant.orchestrator.tool_contracts import TOOL_CONTRACTS
+
+    any_of = (TOOL_CONTRACTS.get("get_equivalences") or {}).get("any_of") or ()
+    if any_of and not any(out.get(k) for k in any_of):
+        raise ArgSchemaError(
+            "invalid_args",
+            "get_equivalences requires one of: " + "|".join(any_of))
+    if "limit" in data:
+        lim = data["limit"]
+        if isinstance(lim, bool) or not isinstance(lim, int) or lim < 1 or lim > 20:
+            raise ArgSchemaError("invalid_args", "'limit' must be between 1 and 20")
+        out["limit"] = lim
+    return out
+
+
+def _get_sales(data: dict[str, Any]) -> dict[str, Any]:
+    """FASE 8.6. 'tipos' se acepta pero el ERP lo valida contra su lista cerrada:
+    orden_compra se rechaza alli porque es una COMPRA y contarla como venta
+    cambiaria el signo del resultado."""
+    _require_only(data, {"codigo", "cliente", "estado", "tipos", "group_by",
+                         "fecha_desde", "fecha_hasta", "limit"})
+    out: dict[str, Any] = {}
+    for key in ("codigo", "cliente", "estado", "group_by", "fecha_desde", "fecha_hasta"):
+        if key in data:
+            if not isinstance(data[key], str):
+                raise ArgSchemaError("invalid_args", f"'{key}' must be a string")
+            out[key] = data[key].strip()
+    if "tipos" in data:
+        raw = data["tipos"]
+        if not isinstance(raw, list) or len(raw) > 8:
+            raise ArgSchemaError("invalid_args", "'tipos' must be a list of at most 8")
+        tipos = []
+        for entry in raw:
+            if not isinstance(entry, str):
+                raise ArgSchemaError("invalid_args", "'tipos' entries must be strings")
+            tipos.append(entry.strip().lower())
+        out["tipos"] = tipos
+    if "limit" in data:
+        lim = data["limit"]
+        if isinstance(lim, bool) or not isinstance(lim, int) or lim < 1 or lim > 20:
+            raise ArgSchemaError("invalid_args", "'limit' must be between 1 and 20")
         out["limit"] = lim
     return out
 
@@ -223,8 +294,8 @@ def _get_party(data: dict[str, Any]) -> dict[str, Any]:
         out["id"] = raw
     if "limit" in data:
         lim = data["limit"]
-        if isinstance(lim, bool) or not isinstance(lim, int) or lim < 1 or lim > 50:
-            raise ArgSchemaError("invalid_args", "'limit' must be between 1 and 50")
+        if isinstance(lim, bool) or not isinstance(lim, int) or lim < 1 or lim > 20:
+            raise ArgSchemaError("invalid_args", "'limit' must be between 1 and 20")
         out["limit"] = lim
     if not out.get("q") and not out.get("rut") and "id" not in out:
         raise ArgSchemaError("invalid_args", "Provide q, rut or id")

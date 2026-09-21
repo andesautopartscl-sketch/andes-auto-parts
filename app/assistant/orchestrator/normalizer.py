@@ -35,6 +35,47 @@ def _strip_pii(value: Any) -> Any:
     return value
 
 
+# FASE 8.7 — que herramientas devuelven dinero y por que campo se nota.
+#
+# El defecto que esto cierra: finance_redacted se calculaba SOLO para
+# get_dashboard_kpis, asi que para ventas, ingresos u ordenes de compra el
+# sistema omitia los montos sin decirlo. El composer tiene un aviso al usuario
+# —"Montos financieros no disponibles por permisos (null; no se reportan como
+# 0)"— que por eso nunca se emitia fuera del dashboard. Un usuario sin permiso
+# veia una respuesta sin dinero y no tenia forma de distinguir "no te lo
+# muestro" de "no hubo", que es exactamente la confusion null/cero que este
+# sistema existe para impedir.
+#
+# Declarativo a proposito: anadir una tool financiera es anadir una fila aqui,
+# no otro `if` por nombre.
+FINANCE_TOOL_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
+    # tool: (campos financieros de nivel superior, campos financieros por fila)
+    "get_sales": (("ingresos",), ("precio_unitario", "subtotal")),
+    "get_ingresos": ((), ("costo_neto", "precio_venta_neto", "margen_pct")),
+    "get_purchase_orders": ((), ("precio", "margen_pct", "subtotal")),
+}
+
+
+def _finance_withheld(tool: str, data: dict) -> bool:
+    """True cuando la tool SI devuelve dinero y en esta respuesta no vino ninguno.
+
+    Se exige que haya contenido: una respuesta vacia no tiene montos porque no
+    tiene filas, no porque se hayan ocultado, y marcarla como redactada seria un
+    falso positivo que acabaria en un aviso confuso al usuario.
+    """
+    scalars, row_fields = FINANCE_TOOL_FIELDS.get(tool, ((), ()))
+    if any(key in data for key in scalars):
+        return False
+    rows = data.get("items") if isinstance(data.get("items"), list) else []
+    rows = [r for r in rows if isinstance(r, dict)]
+    if rows:
+        if any(key in row for row in rows for key in row_fields):
+            return False
+        return bool(row_fields)
+    # Sin filas y sin escalares no hay nada que ocultar.
+    return False
+
+
 def normalize_tool_result(status: int, body: Any) -> dict[str, Any]:
     """Normalize any Gateway response into a safe evidence envelope."""
     if body is None or not isinstance(body, dict):
@@ -116,13 +157,16 @@ def normalize_tool_result(status: int, body: Any) -> dict[str, Any]:
 
     finance_redacted = False
     stock_omitted = False
-    if ok and str(body.get("tool") or "") == "get_dashboard_kpis":
+    tool_name = str(body.get("tool") or "")
+    if ok and tool_name == "get_dashboard_kpis":
         # Preserve null ≠ 0 semantics
         for key in ("ventas_hoy", "ventas_mes", "ventas_periodo"):
             if key in data and data.get(key) is None:
                 finance_redacted = True
         if data.get("stock_critico") is None or meta.get("stock_incluido") is False:
             stock_omitted = True
+    elif ok and tool_name in FINANCE_TOOL_FIELDS:
+        finance_redacted = _finance_withheld(tool_name, data)
 
     return {
         "ok": ok,

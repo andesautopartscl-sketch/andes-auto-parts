@@ -25,18 +25,24 @@ def run_plan_steps(
     actor_user: str,
     conversation_id: str,
     invoke_fn: InvokeFn,
+    max_invokes: int | None = None,
 ) -> tuple[list[dict[str, Any]], dict[int, dict[str, Any]]]:
-    """Returns (evidence list, step payloads by step number for bindings)."""
+    """Returns (evidence list, step payloads by step number for bindings).
+
+    max_invokes defaults to catalog MAX_INVOKES (3). AgentLoop may pass 1 per
+    reactive plan; the turn-level cap lives in AgentLoop (MAX_TOOL_CALLS).
+    """
     if not (actor_user or "").strip():
         raise ToolRunnerError("principal_required", "actor_user is required")
 
+    cap = MAX_INVOKES if max_invokes is None else int(max_invokes)
     evidence: list[dict[str, Any]] = []
     step_payloads: dict[int, dict[str, Any]] = {}
     invokes = 0
 
     for step in plan.get("steps") or []:
-        if invokes >= MAX_INVOKES:
-            raise ToolRunnerError("limit_exceeded", f"Exceeded max {MAX_INVOKES} invokes")
+        if invokes >= cap:
+            raise ToolRunnerError("limit_exceeded", f"Exceeded max {cap} invokes")
 
         tool = str(step.get("tool") or "")
         if tool not in ALLOWED_TOOLS:

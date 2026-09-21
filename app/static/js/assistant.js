@@ -237,6 +237,122 @@
         setHint(state.agentEnabled ? '' : 'Activa el agente en el menú izquierdo para preguntar.');
     }
 
+    /**
+     * FASE 8.4 — respuesta estructurada.
+     *
+     * Todo se construye con createElement + textContent. Nunca innerHTML: el
+     * contenido viene del ERP a través del asistente, y una tarjeta es texto del
+     * servidor puesto en el DOM. Con innerHTML, un campo de producto con
+     * markup sería ejecución de código; con textContent es, como mucho, un
+     * nombre feo.
+     *
+     * La vista es opcional por diseño. Si el servidor no la manda —agente
+     * apagado, herramienta sin proyección, fallo de la proyección— queda la
+     * burbuja de texto de siempre y no se pierde nada.
+     */
+    function fieldRow(field) {
+        var row = document.createElement('div');
+        row.className = 'ap-assistant-field';
+        var name = document.createElement('span');
+        name.className = 'ap-assistant-field__name';
+        name.textContent = String(field.name || '').replace(/_/g, ' ');
+        var value = document.createElement('span');
+        value.className = 'ap-assistant-field__value';
+        value.textContent = String(field.value == null ? '' : field.value);
+        row.appendChild(name);
+        row.appendChild(value);
+        return row;
+    }
+
+    function cardEl(card, onPick) {
+        var el = document.createElement(onPick ? 'button' : 'div');
+        el.className = 'ap-assistant-card';
+        if (onPick) {
+            el.type = 'button';
+            el.addEventListener('click', function () { onPick(card); });
+        }
+        var title = document.createElement('div');
+        title.className = 'ap-assistant-card__title';
+        title.textContent = String(card.title == null ? '' : card.title);
+        el.appendChild(title);
+        (card.fields || []).forEach(function (f) { el.appendChild(fieldRow(f)); });
+        // La procedencia viaja hasta el pixel: cada tarjeta dice de qué
+        // evidencia salió, igual que los claims del texto.
+        var prov = document.createElement('span');
+        prov.className = 'ap-assistant-card__prov';
+        prov.textContent = card.evidence_id || '';
+        prov.title = 'Evidencia ' + (card.evidence_id || '');
+        el.appendChild(prov);
+        return el;
+    }
+
+    function blockEl(block, onPick) {
+        var wrap = document.createElement('section');
+        wrap.className = 'ap-assistant-block';
+
+        var head = document.createElement('div');
+        head.className = 'ap-assistant-block__head';
+        head.textContent = String(block.label || '');
+        wrap.appendChild(head);
+
+        if (block.empty) {
+            var none = document.createElement('div');
+            none.className = 'ap-assistant-block__note';
+            none.textContent = 'Sin resultados.';
+            wrap.appendChild(none);
+            return wrap;
+        }
+
+        (block.summary || []).forEach(function (f) { wrap.appendChild(fieldRow(f)); });
+
+        if ((block.cards || []).length) {
+            var list = document.createElement('div');
+            list.className = 'ap-assistant-cards';
+            block.cards.forEach(function (c) {
+                list.appendChild(cardEl(c, c.ref ? onPick : null));
+            });
+            wrap.appendChild(list);
+        }
+
+        // Una lista nunca puede insinuar que está completa si no lo está. El
+        // truncado de 8.2C ya descartó filas y el usuario tiene que saberlo.
+        if (block.truncated || block.omitted_rows) {
+            var note = document.createElement('div');
+            note.className = 'ap-assistant-block__note';
+            note.textContent = 'Mostrando ' + block.shown_rows + ' de ' +
+                block.total_rows + ' registros.';
+            wrap.appendChild(note);
+        }
+        return wrap;
+    }
+
+    function appendView(view, onPick) {
+        if (!thread || !view || !Array.isArray(view.blocks) || !view.blocks.length) return;
+        var host = document.createElement('div');
+        host.className = 'ap-assistant-msg ap-assistant-msg--agent ap-assistant-msg--view';
+        view.blocks.forEach(function (b) { host.appendChild(blockEl(b, onPick)); });
+        thread.appendChild(host);
+        scrollThread();
+    }
+
+    function pickRecord(card) {
+        // Seleccionar un registro continúa la conversación en vez de navegar a
+        // ciegas: el asistente ya sabe resolver "dame el stock del 2404", así que
+        // la tarjeta redacta esa pregunta por el usuario. No inventa rutas del
+        // ERP ni ejecuta nada por su cuenta.
+        if (!card || !card.ref) return;
+        var ref = String(card.ref);
+        var phrase = card.entity === 'producto'
+            ? 'Stock y ficha del ' + ref
+            : (card.entity === 'orden_compra'
+                ? 'Detalle de la orden de compra ' + ref
+                : 'Dame el detalle de ' + ref);
+        if (input) {
+            input.value = phrase;
+            input.focus();
+        }
+    }
+
     function handleServiceResult(result) {
         setLoading(false);
         if (!result || !result.ok) {
@@ -246,6 +362,7 @@
         }
         setError('');
         appendMessage('agent', result.reply || 'No se obtuvo respuesta del catálogo.');
+        appendView(result.payload && result.payload.view, pickRecord);
     }
 
     function sendPrompt(text, meta) {

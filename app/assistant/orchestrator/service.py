@@ -7,6 +7,7 @@ import uuid
 from typing import Any, Callable
 
 from app.assistant.orchestrator.audit import OrchestratorAudit, message_hash
+from app.assistant.orchestrator.agent_config import agent_loop_allowed
 from app.assistant.orchestrator.catalog import MAX_REPLANS
 from app.assistant.orchestrator.composer import compose_answer
 from app.assistant.orchestrator.conversation_context import (
@@ -206,6 +207,38 @@ def _accumulate_usage(totals: dict[str, int], planner: Any) -> None:
             continue
 
 
+def _answer_view_dict(
+    *,
+    plan: dict[str, Any],
+    evidence: list[dict[str, Any]],
+    correlation_id: str,
+    store: Any | None = None,
+) -> dict[str, Any] | None:
+    """FASE 8.4 — proyeccion estructurada de la evidencia ya verificada.
+
+    Se construye en LAS DOS rutas, agente y planner, a proposito: AGENT=0 es el
+    default desplegado, asi que una experiencia estructurada que solo existiera
+    con el agente encendido naceria muerta.
+
+    Nunca puede tumbar un turno: si la proyeccion falla, la respuesta de texto
+    sale igual y simplemente no hay tarjetas.
+    """
+    try:
+        from app.assistant.orchestrator.answer_view import build_answer_view
+        from app.assistant.orchestrator.evidence_store import EvidenceStore
+
+        if store is None:
+            from app.assistant.orchestrator.agent_loop import _ingest_plan_evidence
+
+            store = EvidenceStore()
+            _ingest_plan_evidence(store, plan, evidence, correlation_id)
+        view = build_answer_view(store)
+        return None if view.is_empty() else view.as_dict()
+    except Exception:  # noqa: BLE001 — la vista es aditiva, jamas obligatoria
+        logging.getLogger(__name__).debug("answer_view soft-failed", exc_info=True)
+        return None
+
+
 def run_orchestrator_chat(
     *,
     message: Any,
@@ -222,6 +255,7 @@ def run_orchestrator_chat(
     history_store: HistoryStore | None = None,
     memory_store: MemoryStore | None = None,
     memory_epoch_provider: PermissionEpochProvider | None = None,
+    agent_decision_client: Any | None = None,
 ) -> dict[str, Any]:
     t0 = time.perf_counter()
     actor = (actor_user or "").strip()
@@ -280,6 +314,26 @@ def run_orchestrator_chat(
         "derived_type": None,
         "derived_scope": None,
         "derived_confidence": None,
+    }
+    agent_obs: dict[str, Any] = {
+        "agent_enabled": False,
+        "agent_steps": 0,
+        "evidence_size_chars": 0,
+        "verifier_failures": 0,
+        "retries": 0,
+        "loop_detected": False,
+        "timeout": False,
+        "fallback_used": False,
+        "fallback_reason": None,
+        "agent_trace": [],
+        "goal_coverage": None,
+        "arg_errors": [],
+        "budget": None,
+        "token_economics": None,
+        "evidence_degradation": None,
+        "sufficiency": None,
+        "verifier_breakdown": None,
+        "agent_progress": None,
     }
 
     def _elapsed_ms() -> int:
@@ -411,6 +465,19 @@ def run_orchestrator_chat(
                     if memory_obs.get("derived_confidence") is not None
                     else None
                 ),
+                agent_enabled=bool(agent_obs.get("agent_enabled")),
+                agent_steps=int(agent_obs.get("agent_steps") or 0),
+                tool_latency_ms=[
+                    int(c.get("latency_ms"))
+                    for c in (tool_calls or [])
+                    if isinstance(c, dict) and c.get("latency_ms") is not None
+                ],
+                evidence_size_chars=int(agent_obs.get("evidence_size_chars") or 0),
+                verifier_failures=int(agent_obs.get("verifier_failures") or 0),
+                retries=int(agent_obs.get("retries") or 0),
+                loop_detected=bool(agent_obs.get("loop_detected")),
+                timeout=bool(agent_obs.get("timeout")),
+                fallback_used=bool(agent_obs.get("fallback_used")),
             )
             metrics.record_turn(metric)
         except Exception:
@@ -744,8 +811,14 @@ def run_orchestrator_chat(
     replan_count = 0
     validation_error: str | None = None
     plan: dict[str, Any] | None = None
+    evidence: list[dict[str, Any]] = []
 
-    while True:
+    if agent_loop_allowed():
+        from app.assistant.orchestrator.agent_loop import empty_agent_plan
+
+        plan = empty_agent_plan()
+
+    while plan is None:
         ctx = dict(context)
         if replan_count > 0:
             ctx["replan"] = True
@@ -1061,45 +1134,133 @@ def run_orchestrator_chat(
             "correlation_id": correlation_id,
         })
 
-    try:
-        evidence, _payloads = run_plan_steps(
-            plan,
-            actor_user=actor,
-            conversation_id=conversation_id,
-            invoke_fn=invoke_fn,
-        )
-    except ToolRunnerError as exc:
-        audit.write(
-            {
-                **_audit_base(
-                    actor=actor,
-                    conversation_id=conversation_id,
-                    correlation_id=correlation_id,
-                    message_hash_value=mh,
-                ),
-                "error_code": exc.code,
-                "phase": "tool_runner",
+    if agent_loop_allowed():
+        evidence = []
+    else:
+        try:
+            evidence, _payloads = run_plan_steps(
+                plan,
+                actor_user=actor,
+                conversation_id=conversation_id,
+                invoke_fn=invoke_fn,
+            )
+        except ToolRunnerError as exc:
+            audit.write(
+                {
+                    **_audit_base(
+                        actor=actor,
+                        conversation_id=conversation_id,
+                        correlation_id=correlation_id,
+                        message_hash_value=mh,
+                    ),
+                    "error_code": exc.code,
+                    "phase": "tool_runner",
+                    "ok": False,
+                    "llm_latency_ms": llm_latency_ms,
+                    "total_latency_ms": _elapsed_ms(),
+                }
+            )
+            _emit_metric(
+                ok=False,
+                message_hash_value=mh,
+                error_code=exc.code,
+                phase="tool_runner",
+                replan_count=replan_count,
+            )
+            return _finish({
                 "ok": False,
-                "llm_latency_ms": llm_latency_ms,
-                "total_latency_ms": _elapsed_ms(),
-            }
-        )
-        _emit_metric(
-            ok=False,
-            message_hash_value=mh,
-            error_code=exc.code,
-            phase="tool_runner",
-            replan_count=replan_count,
-        )
-        return _finish({
-            "ok": False,
-            "error_code": exc.code,
-            "message": exc.message,
-            "http_status": 400,
-            "correlation_id": correlation_id,
-        })
+                "error_code": exc.code,
+                "message": exc.message,
+                "http_status": 400,
+                "correlation_id": correlation_id,
+            })
 
-    composed = compose_answer(plan=plan, evidence=evidence)
+    composed: dict[str, Any]
+    if agent_loop_allowed():
+        try:
+            from app.assistant.orchestrator.agent_loop import (
+                LlmAgentDecisionClient,
+                continue_agent_loop,
+            )
+            from app.assistant.orchestrator.llm.client import OpenAICompatibleClient
+            from app.assistant.orchestrator.llm.config import load_llm_settings
+
+            client = agent_decision_client
+            if client is None:
+                client = LlmAgentDecisionClient(OpenAICompatibleClient(load_llm_settings()))
+            loop_out = continue_agent_loop(
+                message=text,
+                actor_user=actor,
+                conversation_id=conversation_id,
+                correlation_id=correlation_id,
+                initial_plan=plan,
+                initial_evidence=evidence,
+                invoke_fn=invoke_fn,
+                decision_client=client,
+                memory_hints=(
+                    context.get("memory_hints")
+                    if isinstance(context.get("memory_hints"), list)
+                    else None
+                ),
+                context=context,
+                usage_totals=usage_totals,
+            )
+            evidence = loop_out.raw_evidence
+            composed = {
+                "reply": loop_out.reply,
+                "classification": loop_out.classification,
+                "grounded": True,
+            }
+            llm_latency_ms += int(loop_out.state.llm_latency_ms or 0)
+            agent_obs["agent_enabled"] = True
+            agent_obs["agent_steps"] = int(loop_out.state.step_index)
+            agent_obs["evidence_size_chars"] = int(loop_out.state.evidence.size_chars())
+            agent_obs["verifier_failures"] = int(loop_out.state.verifier_failures)
+            agent_obs["retries"] = int(loop_out.state.retries)
+            agent_obs["loop_detected"] = bool(loop_out.state.loop_detected)
+            agent_obs["timeout"] = bool(loop_out.state.timeout)
+            agent_obs["fallback_used"] = bool(loop_out.fallback_used)
+            agent_obs["fallback_reason"] = loop_out.fallback_reason
+            agent_obs["agent_trace"] = list(loop_out.state.trace)
+            agent_obs["goal_coverage"] = loop_out.state.goal.safe_snapshot()
+            agent_obs["arg_errors"] = list(loop_out.state.arg_errors)
+            agent_obs["verifier_breakdown"] = dict(loop_out.state.verifier_breakdown or {})
+            agent_obs["agent_progress"] = loop_out.state.ledger.safe_snapshot()
+            from app.assistant.orchestrator.agent_config import budget_snapshot
+
+            agent_obs["budget"] = budget_snapshot()
+            # FASE 8.2D — economia real del turno. Solo conteos: ni prompts, ni
+            # respuestas, ni secretos. Sirve para saber cuanto del prompt se
+            # reenvio y cuanto de eso el proveedor sirvio desde cache.
+            # OJO: NO llamar a esto "evidence_summary". Esa clave ya existe en la
+            # respuesta publica del orquestador y es una LISTA de evidencias por
+            # herramienta (lineas ~709 y ~1337). Reutilizar el nombre metia un
+            # dict donde los consumidores esperan una lista, y como era una clave
+            # duplicada dentro del MISMO literal, Python se quedaba en silencio
+            # con la ultima: la lista publica desaparecia en la ruta del agente.
+            agent_obs["evidence_degradation"] = loop_out.state.evidence.safe_summary()
+            agent_obs["sufficiency"] = dict(loop_out.state.sufficiency or {})
+            # La vista se proyecta del store del propio loop: es la evidencia que
+            # el verifier tuvo delante, no una segunda lectura del payload crudo.
+            agent_obs["evidence_store"] = loop_out.state.evidence
+            agent_obs["token_economics"] = {
+                "prompt_tokens": int(loop_out.state.token_in),
+                "completion_tokens": int(loop_out.state.token_out),
+                "cached_tokens": int(loop_out.state.token_cached),
+                "decisions": len(loop_out.state.decisions),
+                "invokes": int(loop_out.state.invoke_count),
+            }
+            if loop_out.needs_clarification:
+                plan["needs_clarification"] = True
+            if loop_out.scenario:
+                plan["scenario"] = loop_out.scenario
+        except Exception:
+            logging.getLogger(__name__).warning("assistant_agent_loop soft-failed; composer fallback")
+            composed = compose_answer(plan=plan, evidence=evidence)
+            agent_obs["agent_enabled"] = True
+            agent_obs["fallback_used"] = True
+    else:
+        composed = compose_answer(plan=plan, evidence=evidence)
     if mem_write_note:
         base_reply = (composed.get("reply") or "").rstrip()
         composed["reply"] = f"{base_reply}\n\n{mem_write_note}" if base_reply else mem_write_note
@@ -1182,6 +1343,25 @@ def run_orchestrator_chat(
             "derived_reject_reason": memory_obs.get("derived_reject_reason"),
             "derived_type": memory_obs.get("derived_type"),
             "derived_scope": memory_obs.get("derived_scope"),
+            "agent_enabled": agent_obs.get("agent_enabled"),
+            "agent_steps": agent_obs.get("agent_steps"),
+            "fallback_used": agent_obs.get("fallback_used"),
+            # Sin la razon el audit dice QUE hubo fallback pero no POR QUE, y
+            # agent_limit / agent_token_budget / agent_no_progress / tool_error /
+            # agent_verifier_failed son diagnosticos muy distintos.
+            "fallback_reason": agent_obs.get("fallback_reason"),
+            "loop_detected": agent_obs.get("loop_detected"),
+            "timeout": agent_obs.get("timeout"),
+            "verifier_failures": agent_obs.get("verifier_failures"),
+            "agent_trace": list(agent_obs.get("agent_trace") or []),
+            "goal_coverage": agent_obs.get("goal_coverage"),
+            "arg_errors": list(agent_obs.get("arg_errors") or []),
+            "verifier_breakdown": agent_obs.get("verifier_breakdown"),
+            "agent_progress": agent_obs.get("agent_progress"),
+            "budget": agent_obs.get("budget"),
+            "token_economics": agent_obs.get("token_economics"),
+            "evidence_degradation": agent_obs.get("evidence_degradation"),
+            "sufficiency": agent_obs.get("sufficiency"),
         }
     )
     _emit_metric(
@@ -1213,4 +1393,22 @@ def run_orchestrator_chat(
         "grounded": True,
         "http_status": 200,
         "correlation_id": correlation_id,
+        "agent_enabled": bool(agent_obs.get("agent_enabled")),
+        "fallback_used": bool(agent_obs.get("fallback_used")),
+        "fallback_reason": agent_obs.get("fallback_reason"),
+        "loop_detected": bool(agent_obs.get("loop_detected")),
+        "verifier_failures": int(agent_obs.get("verifier_failures") or 0),
+        "agent_trace": list(agent_obs.get("agent_trace") or []),
+        "goal_coverage": agent_obs.get("goal_coverage"),
+        "arg_errors": list(agent_obs.get("arg_errors") or []),
+        "verifier_breakdown": agent_obs.get("verifier_breakdown"),
+        "agent_progress": agent_obs.get("agent_progress"),
+        "budget": agent_obs.get("budget"),
+        "token_economics": agent_obs.get("token_economics"),
+        "evidence_degradation": agent_obs.get("evidence_degradation"),
+        "sufficiency": agent_obs.get("sufficiency"),
+        "view": _answer_view_dict(
+            plan=plan, evidence=evidence, correlation_id=correlation_id,
+            store=agent_obs.get("evidence_store"),
+        ),
     })

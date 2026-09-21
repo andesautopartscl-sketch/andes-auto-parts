@@ -37,3 +37,29 @@ Outputs under `data/fase4_eval/` (gitignored if under data patterns — keep rep
 ## Beta gate (auto)
 
 See scorer `beta_gate()` and `docs/fase4_nl_eval_report.md`.
+
+## FASE 8.1 (scaffold)
+
+`fase81_evidence_dataset.jsonl` (64 cases) + `fase81_runner.py` + `fase81_scorer.py`. Not a release gate.
+
+```powershell
+.\.venv\Scripts\python.exe -m evals.fase81_runner
+```
+
+Restores `AGENT=0` `NL=0` `ORCH=fake`. Keep `ANDES_ASSISTANT_AGENT_ENABLED=0` when running FASE 4.
+
+## FASE 8.1C failure diagnosis
+
+```powershell
+.\.venv\Scripts\python.exe -m evals.fase81c_failure_diagnosis
+```
+
+Reads `data/fase81_eval/runs_llm.jsonl` + scores (LLM benchmark). Writes `failure_diagnosis.json` / `.txt`. No prompts/secrets.
+
+## FASE 8.1A stability (local LLM)
+
+```powershell
+.\.venv\Scripts\python.exe -m evals.fase81a_stability
+```
+
+Requires Gateway `:5055`, `ANDES_AGENT_SERVICE_TOKEN`, and an LLM key. Restores `AGENT=0` `NL=0` `ORCH=fake`. Writes safe counts under `data/fase81a_stability/` (no prompts/secrets/raw evidence).

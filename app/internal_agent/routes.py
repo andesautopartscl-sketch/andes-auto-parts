@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify, request
 from app.internal_agent.catalog import search_catalog_page, validate_search_args
 from app.internal_agent.check_stock import check_public_stock, validate_check_stock_args
 from app.internal_agent.customer import get_public_customers, validate_customer_args
+from app.internal_agent.equivalences import get_public_equivalences, validate_equivalence_args
 from app.internal_agent.dashboard import get_public_dashboard_kpis, validate_dashboard_args
 from app.internal_agent.ingresos import get_public_ingresos, validate_ingreso_args
 from app.internal_agent.inventory import get_public_inventory, validate_inventory_args
@@ -28,6 +29,7 @@ from app.internal_agent.product import (
     validate_product_codigo,
 )
 from app.internal_agent.purchase_orders import get_public_purchase_orders, validate_purchase_order_args
+from app.internal_agent.sales import get_public_sales, validate_sales_args
 from app.internal_agent.supplier import get_public_suppliers, validate_supplier_args
 
 internal_agent_bp = Blueprint("internal_agent", __name__, url_prefix="/internal/agent/v1")
@@ -76,6 +78,34 @@ def catalog_product(codigo: str):
                 "meta": {"environment": environment},
             }
         )
+    except InternalAuthError as exc:
+        return error_response(exc)
+
+
+@internal_agent_bp.route("/catalog/equivalences", methods=["POST"])
+def catalog_equivalences():
+    """FASE 8.8 — cruce OEM. Misma ACL que el resto del catalogo (mod_productos).
+
+    Sin finanzas: el cruce es tecnico. No hay campos de precio que conceder ni
+    que redactar, asi que no se pasa include_finance.
+    """
+    try:
+        environment = authenticate_m2m(request)
+        actor = actor_username(request)
+        username, role_name = resolve_actor(actor)
+        require_mod_productos(username, role_name)
+        args = validate_equivalence_args(request.get_json(silent=True))
+        data, truncated = get_public_equivalences(
+            oem=args["oem"], codigo=args["codigo"],
+            marca=args["marca"], modelo=args["modelo"], limit=args["limit"])
+        return jsonify({
+            "ok": True,
+            "tool": "get_equivalences",
+            "classification": "INTERNAL",
+            "data": data,
+            "meta": {"limit": args["limit"], "truncated": truncated,
+                     "environment": environment},
+        })
     except InternalAuthError as exc:
         return error_response(exc)
 
@@ -212,6 +242,44 @@ def ventas_purchase_orders():
                 "classification": "CONFIDENTIAL",
                 "data": data,
                 "meta": {"limit": args["limit"], "truncated": truncated, "environment": environment},
+            }
+        )
+    except InternalAuthError as exc:
+        return error_response(exc)
+
+
+@internal_agent_bp.route("/ventas/sales", methods=["POST"])
+def ventas_sales():
+    """FASE 8.6 — ventas agregadas. Misma ACL que el resto del modulo ventas.
+
+    include_finance sigue la misma puerta que las OC: el ERP decide, el Gateway
+    no concede visibilidad financiera por su cuenta.
+    """
+    try:
+        environment = authenticate_m2m(request)
+        actor = actor_username(request)
+        username, role_name = resolve_actor(actor)
+        require_mod_ventas(username, role_name)
+        args = validate_sales_args(request.get_json(silent=True))
+        data, truncated = get_public_sales(
+            codigo=args["codigo"],
+            cliente=args["cliente"],
+            estado=args["estado"],
+            tipos=args["tipos"],
+            group_by=args["group_by"],
+            fecha_desde=args["fecha_desde"],
+            fecha_hasta=args["fecha_hasta"],
+            limit=args["limit"],
+            include_finance=actor_can_view_finanzas(username, role_name),
+        )
+        return jsonify(
+            {
+                "ok": True,
+                "tool": "get_sales",
+                "classification": "CONFIDENTIAL",
+                "data": data,
+                "meta": {"limit": args["limit"], "truncated": truncated,
+                         "environment": environment},
             }
         )
     except InternalAuthError as exc:

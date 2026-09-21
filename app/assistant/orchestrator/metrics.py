@@ -177,6 +177,15 @@ def build_turn_metric(
     derived_type: str | None = None,
     derived_scope: str | None = None,
     derived_confidence: float | None = None,
+    agent_enabled: bool = False,
+    agent_steps: int = 0,
+    tool_latency_ms: list[int] | None = None,
+    evidence_size_chars: int = 0,
+    verifier_failures: int = 0,
+    retries: int = 0,
+    loop_detected: bool = False,
+    timeout: bool = False,
+    fallback_used: bool = False,
 ) -> dict[str, Any]:
     tools = [str(t) for t in (tools_used or []) if t]
     calls = []
@@ -273,6 +282,15 @@ def build_turn_metric(
         "derived_confidence": (
             round(float(derived_confidence), 3) if derived_confidence is not None else None
         ),
+        "agent_enabled": bool(agent_enabled),
+        "agent_steps": int(agent_steps or 0),
+        "tool_latency_ms": [int(x) for x in (tool_latency_ms or []) if x is not None][:20],
+        "evidence_size_chars": int(evidence_size_chars or 0),
+        "verifier_failures": int(verifier_failures or 0),
+        "retries": int(retries or 0),
+        "loop_detected": bool(loop_detected),
+        "timeout": bool(timeout),
+        "fallback_used": bool(fallback_used),
     }
     return sanitize_metric(record)
 

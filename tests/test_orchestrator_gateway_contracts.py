@@ -144,6 +144,48 @@ class _FakeERP(BaseHTTPRequestHandler):
                 "data": {"items": [], "count": 0},
                 "meta": {"limit": 20, "truncated": False, "environment": "local"},
             },
+            "/internal/agent/v1/catalog/equivalences": {
+                "ok": True,
+                "tool": "get_equivalences",
+                "classification": "INTERNAL",
+                "data": {
+                    "query": {"oem": "038-1701225"},
+                    "matched_on": "oem",
+                    "items": []
+                    if empty
+                    else [{"codigo": "FK1264", "descripcion": "ANILLO",
+                           "marca": "FK", "modelo": "X", "motor": "",
+                           "oem": ["038-1701225"], "alternativos": [],
+                           "aplicaciones": ["RICH 6 2.5"]}],
+                    "count": 0 if empty else 1,
+                },
+                "meta": {"limit": 10, "truncated": False, "environment": "local"},
+            },
+            "/internal/agent/v1/ventas/sales": {
+                "ok": True,
+                "tool": "get_sales",
+                "classification": "CONFIDENTIAL",
+                "data": {
+                    # Agregados autoritativos + muestra. El detalle NUNCA es el
+                    # total: por eso viajan ambos y 'detalle_parcial' lo declara.
+                    "unidades": 0 if empty else 5,
+                    "documentos": 0 if empty else 2,
+                    "neto_notas_credito": True,
+                    "notas_credito": {"documentos": 0, "unidades": 0},
+                    "tipos": ["factura", "boleta"],
+                    "incluye_cotizaciones": False,
+                    "detalle_parcial": False,
+                    "items": []
+                    if empty
+                    else [{"fecha": "2026-04-07", "tipo": "factura", "numero": "FA-0001",
+                           "estado": "aprobada", "cliente": "ANDES AUTO PARTS LTDA",
+                           "codigo": "2404", "descripcion": "FILTRO", "marca": "BOSCH",
+                           "bodega": "Bodega 1", "cantidad": 5,
+                           "precio_unitario": 100.0, "subtotal": 500.0}],
+                    "count": 0 if empty else 1,
+                },
+                "meta": {"limit": 10, "truncated": False, "environment": "local"},
+            },
             "/internal/agent/v1/ventas/customers": {
                 "ok": True,
                 "tool": "get_customer",
@@ -277,7 +319,7 @@ class GatewayContractOrchestratorTests(unittest.TestCase):
         for t in list_tools():
             self.assertFalse(t.write)
 
-    def test_ten_tools_via_tool_runner(self):
+    def test_every_allowlisted_tool_runs_through_the_runner(self):
         plans = {
             "search_catalog": {"steps": [{"step": 1, "tool": "search_catalog", "arguments": {"q": "filtro", "limit": 5}}]},
             "get_product": {"steps": [{"step": 1, "tool": "get_product", "arguments": {"codigo": "2404"}}]},
@@ -287,6 +329,13 @@ class GatewayContractOrchestratorTests(unittest.TestCase):
             },
             "get_stock_movements": {
                 "steps": [{"step": 1, "tool": "get_stock_movements", "arguments": {"codigo": "2404", "limit": 5}}]
+            },
+            "get_sales": {
+                "steps": [{"step": 1, "tool": "get_sales", "arguments": {"codigo": "2404", "limit": 5}}]
+            },
+            "get_equivalences": {
+                "steps": [{"step": 1, "tool": "get_equivalences",
+                           "arguments": {"oem": "038-1701225", "limit": 5}}]
             },
             "get_ingresos": {"steps": [{"step": 1, "tool": "get_ingresos", "arguments": {"codigo": "2404", "limit": 5}}]},
             "get_purchase_orders": {"steps": [{"step": 1, "tool": "get_purchase_orders", "arguments": {"limit": 5}}]},

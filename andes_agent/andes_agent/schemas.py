@@ -119,6 +119,8 @@ def validate_tool_arguments(tool: str, arguments: Any) -> dict[str, Any]:
         "get_stock_movements": _get_stock_movements,
         "get_ingresos": _get_ingresos,
         "get_purchase_orders": _get_purchase_orders,
+        "get_sales": _get_sales,
+        "get_equivalences": _get_equivalences,
         "get_customer": _get_party,
         "get_supplier": _get_party,
         "get_dashboard_kpis": _get_dashboard_kpis,
@@ -220,6 +222,79 @@ def _get_ingresos(data: dict[str, Any]) -> dict[str, Any]:
         raise SchemaError("invalid_args", "fecha_desde must be <= fecha_hasta")
     limit = _opt_int(data, "limit", 1, 20)
     out["limit"] = limit or 20
+    return out
+
+
+def _get_equivalences(data: dict[str, Any]) -> dict[str, Any]:
+    """FASE 8.8 — cruce OEM. Exige ancla; sin ella no es una equivalencia."""
+    _require_keys(data, {"oem", "codigo", "marca", "modelo", "limit"})
+    out: dict[str, Any] = {}
+    oem = _opt_str(data, "oem", max_len=64)
+    if oem:
+        out["oem"] = oem
+    codigo = _opt_str(data, "codigo", max_len=64)
+    if codigo:
+        out["codigo"] = codigo.upper()
+    for key in ("marca", "modelo"):
+        value = _opt_str(data, key, max_len=64)
+        if value:
+            out[key] = value
+    if not out.get("oem") and not out.get("codigo"):
+        raise SchemaError("invalid_args", "get_equivalences requires 'oem' or 'codigo'")
+    limit = data.get("limit")
+    if limit is not None:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not (1 <= limit <= 20):
+            raise SchemaError("invalid_args", "'limit' must be between 1 and 20")
+        out["limit"] = limit
+    return out
+
+
+def _get_sales(data: dict[str, Any]) -> dict[str, Any]:
+    """FASE 8.6 — argumentos de ventas. orden_compra se rechaza aqui mismo:
+    es una COMPRA, y colarla por la tool de ventas invertiria el signo del
+    resultado. No es una restriccion de permisos, es de correccion."""
+    _require_keys(data, {"codigo", "cliente", "estado", "tipos", "group_by",
+                         "fecha_desde", "fecha_hasta", "limit"})
+    out: dict[str, Any] = {}
+    codigo = _opt_str(data, "codigo", max_len=64)
+    if codigo:
+        out["codigo"] = codigo.upper()
+    cliente = _opt_str(data, "cliente", max_len=120)
+    if cliente:
+        out["cliente"] = cliente
+    estado = _opt_str(data, "estado", max_len=40)
+    if estado:
+        out["estado"] = estado.lower()
+    group_by = _opt_str(data, "group_by", max_len=8)
+    if group_by:
+        group_by = group_by.lower()
+        if group_by not in {"mes", "dia"}:
+            raise SchemaError("invalid_args", "'group_by' must be mes|dia")
+        out["group_by"] = group_by
+    raw_tipos = data.get("tipos")
+    if raw_tipos not in (None, "", []):
+        if not isinstance(raw_tipos, list) or len(raw_tipos) > 8:
+            raise SchemaError("invalid_args", "'tipos' must be a list of at most 8")
+        tipos = []
+        for entry in raw_tipos:
+            if not isinstance(entry, str):
+                raise SchemaError("invalid_args", "'tipos' entries must be strings")
+            text = entry.strip().lower()
+            if text == "orden_compra":
+                raise SchemaError("invalid_args", "orden_compra is not a sale")
+            if text not in {"factura", "boleta", "orden_venta", "cotizacion"}:
+                raise SchemaError("invalid_args", "'tipos' has a value not allowed")
+            tipos.append(text)
+        out["tipos"] = tipos
+    for key in ("fecha_desde", "fecha_hasta"):
+        value = _opt_str(data, key, max_len=10)
+        if value:
+            out[key] = _date_str(value, key) if "_date_str" in globals() else value
+    limit = data.get("limit")
+    if limit is not None:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not (1 <= limit <= 20):
+            raise SchemaError("invalid_args", "'limit' must be between 1 and 20")
+        out["limit"] = limit
     return out
 
 

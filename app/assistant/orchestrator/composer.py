@@ -61,7 +61,20 @@ def compose_answer(
             continue
 
         if item.get("empty"):
-            lines.append(f"`{tool}` no devolvió resultados.")
+            # FASE 8.x — un vacio EXPLICADO es mejor que uno generico y es
+            # igual de grounded: "ningun producto declara ese OEM" es un hecho
+            # del catalogo, no una inferencia. Este cortocircuito se comia las
+            # ramas `not_found`/`no_oem_declared` de get_equivalences antes de
+            # que el formateador pudiera hablar, asi que eran codigo muerto en
+            # produccion desde 8.8 — por las DOS vias, oem y codigo. Se descubrio
+            # midiendo O04 contra el ERP real; la prueba unitaria no lo veia
+            # porque construia la evidencia con empty=False, un estado que el
+            # pipeline nunca produce para una lista vacia.
+            #
+            # La regla es general: una tool puede declarar que su vacio es un
+            # hecho emitiendo una de estas banderas. Sin bandera, nada cambia.
+            explained = _format_tool_evidence(tool, item) if _explains_empty(item) else []
+            lines.extend(explained or [f"`{tool}` no devolvió resultados."])
             continue
 
         lines.extend(_format_tool_evidence(tool, item))
@@ -148,6 +161,20 @@ def _scrub_leaked_pii(reply: str, evidence: list[dict[str, Any]]) -> str:
             "Consulté los datos disponibles. Email, teléfono y dirección no se exponen en el asistente."
         )
     return "\n".join(kept)
+
+
+# Banderas con las que una tool declara que su resultado vacio es un HECHO
+# comprobado y no una simple ausencia. Quien la emite se compromete a que su
+# formateador sepa decirlo con palabras; sin bandera, el composer usa la frase
+# generica de siempre.
+EXPLAINED_EMPTY_FLAGS = ("not_found", "no_oem_declared")
+
+
+def _explains_empty(item: dict[str, Any]) -> bool:
+    data = item.get("data")
+    if not isinstance(data, dict):
+        return False
+    return any(data.get(flag) for flag in EXPLAINED_EMPTY_FLAGS)
 
 
 def _fmt(value: Any) -> str:
@@ -349,6 +376,74 @@ def _format_tool_evidence(tool: str, item: dict[str, Any]) -> list[str]:
             out.append("Stock crítico: omitido")
         elif isinstance(data.get("stock_critico"), list):
             out.append(f"Stock crítico: {len(data['stock_critico'])} ítem(s)")
+        return out
+
+    if tool == "get_sales":
+        # FASE 8.9 — sin esto el composer caia a su rama generica y publicaba
+        # "Campos en evidencia: count, detalle_parcial, documentos, ...", es
+        # decir los NOMBRES de los campos. Medido con LLM real en V02: el
+        # verifier descarto los claims, el composer tomo el relevo y el usuario
+        # recibio un volcado de metadatos. Una tool nueva no esta entregada
+        # hasta que sus DOS renderizados existen.
+        out.append(f"Ventas — {_fmt(data.get('unidades'))} unidad(es) en "
+                   f"{_fmt(data.get('documentos'))} documento(s).")
+        periodo = data.get("periodo") if isinstance(data.get("periodo"), dict) else {}
+        if periodo.get("desde") or periodo.get("hasta"):
+            out.append(f"Periodo: {_fmt(periodo.get('desde'))} a {_fmt(periodo.get('hasta'))}.")
+        elif "periodo" in data:
+            # Callar el alcance cuando no hubo filtro es lo que dejo pasar la
+            # respuesta de V02: cifras de abril presentadas como el trimestre
+            # preguntado. Decirlo no resuelve la pregunta, pero impide que la
+            # respuesta finja haberla resuelto.
+            out.append("Periodo: sin filtro de fecha — cubre todo el historial.")
+        if "ingresos" in data:
+            out.append(f"Ingresos: {_fmt(data.get('ingresos'))}")
+        nc = data.get("notas_credito") if isinstance(data.get("notas_credito"), dict) else {}
+        if nc.get("unidades"):
+            # Decirlo siempre: una cifra neta sin mencionar la devolucion parece
+            # una venta que no ocurrio.
+            out.append(f"Neto de {_fmt(nc.get('unidades'))} unidad(es) "
+                       f"devuelta(s) en {_fmt(nc.get('documentos'))} nota(s) de credito.")
+        rows = [r for r in (data.get("items") if isinstance(data.get("items"), list) else [])
+                if isinstance(r, dict)]
+        for row in rows[:5]:
+            line = f"• {_fmt(row.get('fecha'))} {_fmt(row.get('numero'))} — {_fmt(row.get('codigo'))}"
+            if row.get("cantidad") is not None:
+                line += f" x{_fmt(row.get('cantidad'))}"
+            out.append(line)
+        if data.get("detalle_parcial"):
+            out.append("El detalle es una muestra; los totales de arriba son el dato.")
+        return out
+
+    if tool == "get_equivalences":
+        items = [r for r in (data.get("items") if isinstance(data.get("items"), list) else [])
+                 if isinstance(r, dict)]
+        if data.get("not_found"):
+            # El hecho depende de por donde se busco: "no existe ese codigo" es
+            # falso cuando lo que no aparece es un OEM, y al reves. El payload ya
+            # trae `matched_on`, asi que no hay que adivinarlo.
+            consulta = (data.get("query") or {}) if isinstance(data.get("query"), dict) else {}
+            if data.get("matched_on") == "oem":
+                out.append(f"Ningún producto del catálogo declara el OEM "
+                           f"{_fmt(consulta.get('oem'))}.")
+            else:
+                out.append("No existe ese código en el catálogo.")
+            return out
+        if data.get("no_oem_declared"):
+            out.append("El producto existe pero no declara código OEM.")
+            return out
+        out.append(f"Equivalencias — {_fmt(data.get('count') or len(items))} resultado(s):")
+        for row in items[:5]:
+            line = f"• {_fmt(row.get('codigo'))} — {_fmt(row.get('descripcion'))}"
+            oem = row.get("oem")
+            if isinstance(oem, list) and oem:
+                line += f" (OEM {', '.join(str(o) for o in oem[:3])})"
+            out.append(line)
+            apps = row.get("aplicaciones")
+            if isinstance(apps, list) and apps:
+                # Etiquetado aparte: son modelos de vehiculo, no piezas
+                # equivalentes, y confundirlos ofreceria un coche por un repuesto.
+                out.append(f"  Aplicaciones: {', '.join(str(a) for a in apps[:4])}")
         return out
 
     if tool == "get_customer":

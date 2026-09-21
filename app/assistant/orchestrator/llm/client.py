@@ -53,8 +53,15 @@ class OpenAICompatibleClient:
             max_retries=0,  # we handle retries ourselves
         )
 
-    def complete_plan_json(self, *, system: str, user: str) -> str:
+    def complete_plan_json(
+        self,
+        *,
+        system: str,
+        user: str,
+        response_format: dict[str, Any] | None = None,
+    ) -> str:
         self.last_usage = None
+        fmt = response_format if response_format is not None else plan_response_format()
         # Defense: never allow M2M env leakage into prompts
         for forbidden in (
             "ANDES_AGENT_SERVICE_TOKEN",
@@ -98,7 +105,7 @@ class OpenAICompatibleClient:
                     ],
                     temperature=self.settings.temperature,
                     max_tokens=self.settings.max_output_tokens,
-                    response_format=plan_response_format(),
+                    response_format=fmt,
                 )
                 content = ""
                 if response.choices:
@@ -176,6 +183,16 @@ def _extract_usage(response: Any) -> dict[str, int] | None:
     prompt = _get(usage, "prompt_tokens", "input_tokens")
     completion = _get(usage, "completion_tokens", "output_tokens")
     total = _get(usage, "total_tokens")
+    # FASE 8.2D — tokens servidos desde cache de prefijo. El AgentLoop reenvia el
+    # system prompt integro en cada decision (~77% del prompt de un turno de 3),
+    # asi que si el proveedor lo cachea el coste real y el contado divergen mucho.
+    # Solo se OBSERVA: no entra en budget_exceeded hasta tener la medida.
+    details = getattr(usage, "prompt_tokens_details", None)
+    if details is None and isinstance(usage, dict):
+        details = usage.get("prompt_tokens_details")
+    cached = _get(details, "cached_tokens") if details is not None else None
+    if cached is None:
+        cached = _get(usage, "cached_tokens", "cache_read_input_tokens")
     if total is None and prompt is not None and completion is not None:
         total = prompt + completion
     if prompt is None and completion is None and total is None:
@@ -187,4 +204,6 @@ def _extract_usage(response: Any) -> dict[str, int] | None:
         out["completion_tokens"] = completion
     if total is not None:
         out["total_tokens"] = total
+    if cached is not None:
+        out["cached_tokens"] = cached
     return out
