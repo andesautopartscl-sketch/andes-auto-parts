@@ -169,11 +169,24 @@
 .imp-page th, .imp-page td { padding: 5px 7px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: middle; }
 .imp-page th { background: var(--imp-navy); color: #fff; font-size: 10px; position: sticky; top: 0; z-index: 1; }
 .imp-page .preview-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; border: 1px solid var(--imp-line); background: #fff; }
-.imp-page .codigo-wrap { position: relative; min-width: 130px; }
+.imp-page .codigo-wrap { position: relative; min-width: 168px; }
 .imp-page .codigo-wrap input {
-  width: 100%; box-sizing: border-box; padding: 4px 7px; border: 1px solid #dbe2ea;
+  width: 100%; box-sizing: border-box; padding: 4px 28px 4px 7px; border: 1px solid #dbe2ea;
   border-radius: 6px; font-size: 11px; font-weight: 600; text-transform: uppercase;
 }
+.imp-page .codigo-search-btn {
+  position: absolute; z-index: 2; right: 3px; top: 50%; transform: translateY(-50%);
+  width: 22px; height: 22px; min-height: 0; margin: 0; padding: 0;
+  border: none; border-radius: 5px; background: transparent; color: #64748b;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  transition: background .12s, color .12s;
+}
+.imp-page .codigo-search-btn:hover:not(:disabled) { background: #eff6ff; color: #1d4ed8; }
+.imp-page .codigo-search-btn:focus-visible {
+  outline: none; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.28);
+}
+.imp-page .codigo-search-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.imp-page .codigo-search-btn svg { display: block; flex-shrink: 0; }
 .imp-page .codigo-suggest {
   position: absolute; left: 0; right: 0; top: calc(100% + 3px); z-index: 20;
   list-style: none; margin: 0; padding: 0; border: 1px solid var(--imp-line); border-radius: 7px;
@@ -182,6 +195,49 @@
 .imp-page .codigo-suggest li { padding: 5px 8px; cursor: pointer; border-bottom: 1px solid #f1f5f9; font-size: 11px; }
 .imp-page .codigo-suggest li:hover { background: #f8fafc; }
 .imp-page .codigo-suggest li:last-child { border-bottom: none; }
+.imp-page .imp-ps-modal {
+  display: none; position: fixed; inset: 0; z-index: 1400;
+  background: rgba(15, 23, 42, 0.45); align-items: center; justify-content: center; padding: 10px;
+}
+.imp-page .imp-ps-modal.open { display: flex; }
+.imp-page .imp-ps-card {
+  width: min(720px, 100%); max-height: min(92vh, 800px); background: #fff;
+  border-radius: 10px; border: 1px solid var(--imp-line);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.imp-page .imp-ps-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 10px; border-bottom: 1px solid var(--imp-line);
+}
+.imp-page .imp-ps-head h3 { margin: 0; font-size: 13px; font-weight: 700; }
+.imp-page .imp-ps-head .btn {
+  min-height: 24px; padding: 2px 8px; font-size: 11px; border-radius: 6px;
+}
+.imp-page .imp-ps-body { padding: 8px 10px; overflow: auto; min-height: 0; flex: 1; }
+.imp-page .imp-ps-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; margin-bottom: 6px; }
+.imp-page .imp-ps-search input {
+  min-height: 28px; padding: 4px 8px; border: 1px solid #dbe2ea; border-radius: 6px;
+  font-size: 11px; text-transform: none;
+}
+.imp-page .imp-ps-search .btn { min-height: 28px; padding: 4px 10px; font-size: 11px; }
+.imp-page .imp-ps-status { margin: 0 0 6px; font-size: 10.5px; }
+.imp-page .imp-ps-table { width: 100%; border-collapse: collapse; font-size: 10px; table-layout: fixed; }
+.imp-page .imp-ps-table th, .imp-page .imp-ps-table td {
+  padding: 3px 5px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: top;
+  line-height: 1.25; word-break: break-word;
+}
+.imp-page .imp-ps-table th { background: var(--imp-navy); color: #fff; font-size: 9px; position: sticky; top: 0; z-index: 1; letter-spacing: 0.02em; }
+.imp-page .imp-ps-col-code { width: 24%; }
+.imp-page .imp-ps-col-desc { width: 28%; }
+.imp-page .imp-ps-col-marca { width: 14%; }
+.imp-page .imp-ps-col-modelo { width: 34%; }
+.imp-page .imp-ps-table tbody tr { cursor: pointer; }
+.imp-page .imp-ps-table tbody tr:hover { background: #f8fafc; }
+.imp-page .imp-ps-empty { text-align: center; color: var(--imp-muted); padding: 16px 8px; }
+.imp-page .imp-ps-code { font-weight: 700; letter-spacing: 0.01em; font-size: 10px; }
+.imp-page .imp-ps-meta { color: var(--imp-muted); font-size: 9px; }
+.imp-page .imp-ps-table .badge-detect { font-size: 8px; padding: 0 4px; }
 .imp-page .prod-ok { color: #065f46; font-weight: 600; }
 .imp-page .prod-warn { color: #b45309; font-weight: 600; }
 .imp-page .prod-muted { color: #94a3b8; }
@@ -333,7 +389,8 @@
 body.dark .imp-page { --imp-text: #e5e7eb; --imp-muted: #9ca3af; --imp-line: #374151; }
 body.dark .imp-page .card,
 body.dark .imp-page .imp-help-pop,
-body.dark .imp-page .codigo-suggest { background: #1f2937; border-color: #374151; }
+body.dark .imp-page .codigo-suggest,
+body.dark .imp-page .imp-ps-card { background: #1f2937; border-color: #374151; }
 body.dark .imp-page .tipo-global-bar,
 body.dark .imp-page .dropzone,
 body.dark .imp-page .imp-help-btn { background: #111827; border-color: #374151; }
@@ -342,6 +399,10 @@ body.dark .imp-page .tipo-toggle { background: #1f2937; border-color: #4b5563; c
 body.dark .imp-page .dropzone-title { color: #f8fafc; }
 body.dark .imp-page .imp-help-pop strong { color: #e5e7eb; }
 body.dark .imp-page .imp-help-pop code { background: #0f172a; }
+body.dark .imp-page .codigo-search-btn { color: #9ca3af; }
+body.dark .imp-page .codigo-search-btn:hover:not(:disabled) { background: #1e3a8a; color: #bfdbfe; }
+body.dark .imp-page .imp-ps-search input { background: #111827; border-color: #4b5563; color: #e5e7eb; }
+body.dark .imp-page .imp-ps-table tbody tr:hover { background: #111827; }
 </style>
 <div class="imp-page">
 <div class="topbar">
@@ -352,6 +413,7 @@ body.dark .imp-page .imp-help-pop code { background: #0f172a; }
       <div class="imp-help-pop" id="imp-help-pop" role="tooltip">
         Arrastra imágenes desde el explorador, otra pestaña o una página web.
         La búsqueda prioriza <strong>código OEM</strong>, luego alternativo y código interno.
+        Si no sabés el código, tocá la <strong>lupa</strong> del campo (o <strong>F2</strong>) y buscá por OEM, interno o descripción.
         En Cloudinary el archivo se guarda con el OEM (ej. <code>FH302RC2.jpg</code>). Sin descargas en tu PC.
       </div>
     </div>
@@ -393,7 +455,7 @@ body.dark .imp-page .imp-help-pop code { background: #0f172a; }
 <section class="card" id="sec-asignacion" hidden>
   <h2 style="margin:0 0 8px;font-size:15px;">Asignación antes de subir</h2>
   <p class="note" style="margin-top:0;" id="cola-resumen"></p>
-  <p class="note" style="margin-top:0;">Orden <strong>0</strong> = portada (principal). <strong>1, 2, 3…</strong> = posición en la galería (menor número aparece primero).</p>
+  <p class="note" style="margin-top:0;">Orden <strong>0</strong> = portada (principal). <strong>1, 2, 3…</strong> = posición en la galería (menor número aparece primero). Si no sabés el código, usá la <strong>lupa</strong> o <strong>F2</strong> para buscar por OEM, interno o descripción.</p>
   <div class="table-wrap">
     <table>
       <thead>
@@ -423,6 +485,37 @@ body.dark .imp-page .imp-help-pop code { background: #0f172a; }
   <h2 style="margin:0 0 8px;font-size:15px;">Resumen final</h2>
   <p class="note" id="resumen-final"></p>
 </section>
+
+<div id="imp-ps-modal" class="imp-ps-modal" aria-hidden="true">
+  <div class="imp-ps-card" role="dialog" aria-modal="true" aria-labelledby="imp-ps-title">
+    <div class="imp-ps-head">
+      <h3 id="imp-ps-title">Buscar producto</h3>
+      <button type="button" class="btn" id="imp-ps-close">Cerrar</button>
+    </div>
+    <div class="imp-ps-body">
+      <div class="imp-ps-search">
+        <input type="search" id="imp-ps-input" placeholder="Código, OEM, descripción o modelo…" autocomplete="off" spellcheck="false">
+        <button type="button" class="btn btn-primary" id="imp-ps-run">Buscar</button>
+      </div>
+      <p id="imp-ps-status" class="note imp-ps-status">Escribí al menos 2 caracteres para buscar.</p>
+      <div class="table-wrap" style="max-height:min(70vh, 620px); margin-top:0;">
+        <table class="imp-ps-table">
+          <thead>
+            <tr>
+              <th class="imp-ps-col-code">Código / OEM</th>
+              <th class="imp-ps-col-desc">Descripción</th>
+              <th class="imp-ps-col-marca">Marca</th>
+              <th class="imp-ps-col-modelo">Modelo</th>
+            </tr>
+          </thead>
+          <tbody id="imp-ps-results">
+            <tr><td colspan="4" class="imp-ps-empty">Sin búsqueda ejecutada.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
 
 {% endif %}
 
@@ -645,8 +738,10 @@ body.dark .imp-page .imp-help-pop code { background: #0f172a; }
     }).then(function (r) { return r.json(); });
   }
 
-  function fetchSearch(q) {
-    return fetch(searchUrl + '?q=' + encodeURIComponent(q), {
+  function fetchSearch(q, limit) {
+    var url = searchUrl + '?q=' + encodeURIComponent(q);
+    if (limit) url += '&limit=' + encodeURIComponent(limit);
+    return fetch(url, {
       credentials: 'same-origin',
       headers: { 'X-Requested-With': 'XMLHttpRequest' }
     }).then(function (r) { return r.json(); });
@@ -936,34 +1031,172 @@ body.dark .imp-page .imp-help-pop code { background: #0f172a; }
     });
   }
 
-  function bindCodigoInput(item, input, suggestUl) {
+  function rowCodigoInput(item) {
+    var tr = tbody.querySelector('tr[data-id="' + item.id + '"]');
+    return tr ? tr.querySelector('.codigo-wrap input') : null;
+  }
+
+  function refreshProductoCell(item) {
+    var tr = tbody.querySelector('tr[data-id="' + item.id + '"]');
+    if (tr) tr.querySelector('.td-producto').innerHTML = productoCellHtml(item);
+  }
+
+  function assignProductoToItem(item, it) {
+    item.codigo = (it.display_codigo || it.oem || it.codigo || '').toUpperCase();
+    var input = rowCodigoInput(item);
+    if (input) input.value = item.codigo;
+    item.producto = Object.assign({ found: true }, it);
+    item.detectMatchType = it.match_type || (it.oem ? 'oem' : 'interno');
+    refreshProductoCell(item);
+    refreshNombreBadge(item);
+    refreshRow(item);
+    fetchResolver(item.codigo).then(function (j) {
+      applyOrdenesFromResolver(item, j);
+      syncOrdenTrasResolver(item);
+    });
+  }
+
+  var LUPA_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>';
+
+  var psModal = document.getElementById('imp-ps-modal');
+  var psInput = document.getElementById('imp-ps-input');
+  var psRun = document.getElementById('imp-ps-run');
+  var psClose = document.getElementById('imp-ps-close');
+  var psStatus = document.getElementById('imp-ps-status');
+  var psResults = document.getElementById('imp-ps-results');
+  var searchTargetItem = null;
+  var psSearchTimer = null;
+
+  function matchTypeLabel(mt) {
+    if (mt === 'oem') return 'OEM';
+    if (mt === 'alternativo') return 'Alternativo';
+    if (mt === 'interno') return 'Interno';
+    return '';
+  }
+
+  function closeCodigoSearch() {
+    if (!psModal) return;
+    psModal.classList.remove('open');
+    psModal.setAttribute('aria-hidden', 'true');
+    searchTargetItem = null;
+    clearTimeout(psSearchTimer);
+  }
+
+  function renderCodigoSearchResults(items, q) {
+    if (!psResults) return;
+    if (!items || !items.length) {
+      psResults.innerHTML = '<tr><td colspan="4" class="imp-ps-empty">Sin resultados para «' + escapeHtml(q) + '».</td></tr>';
+      return;
+    }
+    psResults.innerHTML = '';
+    items.forEach(function (it) {
+      var tr = document.createElement('tr');
+      var code = it.display_codigo || it.oem || it.codigo || '';
+      var extra = '';
+      if (it.oem && it.codigo && it.oem !== it.codigo) {
+        extra = '<div class="imp-ps-meta">Interno: ' + escapeHtml(it.codigo) + '</div>';
+      }
+      var badge = matchTypeLabel(it.match_type);
+      tr.innerHTML =
+        '<td><span class="imp-ps-code">' + escapeHtml(code) + '</span>' +
+        (badge ? ' <span class="badge-detect badge-detect-' + (it.match_type === 'oem' ? 'oem' : 'interno') + '">' + badge + '</span>' : '') +
+        extra + '</td>' +
+        '<td>' + escapeHtml(it.descripcion || '—') + '</td>' +
+        '<td>' + escapeHtml(it.marca || '—') + '</td>' +
+        '<td>' + escapeHtml(it.modelo || '—') + '</td>';
+      tr.title = 'Click para asignar este código';
+      tr.addEventListener('click', function () {
+        if (!searchTargetItem) return;
+        assignProductoToItem(searchTargetItem, it);
+        closeCodigoSearch();
+      });
+      psResults.appendChild(tr);
+    });
+  }
+
+  function runCodigoSearch() {
+    if (!psInput || !psStatus || !psResults) return;
+    var q = (psInput.value || '').trim();
+    if (q.length < 1) {
+      psStatus.textContent = 'Escribí un código, OEM o parte de la descripción.';
+      psResults.innerHTML = '<tr><td colspan="4" class="imp-ps-empty">Sin búsqueda ejecutada.</td></tr>';
+      return;
+    }
+    psStatus.textContent = 'Buscando…';
+    fetchSearch(q, 30).then(function (j) {
+      var items = (j && j.items) || [];
+      psStatus.textContent = items.length
+        ? items.length + ' resultado(s). Hacé click para asignar el código.'
+        : 'Sin coincidencias. Probá con otro OEM, interno o texto de la descripción.';
+      renderCodigoSearchResults(items, q);
+    }).catch(function () {
+      psStatus.textContent = 'No se pudo buscar productos.';
+      psResults.innerHTML = '<tr><td colspan="4" class="imp-ps-empty">Error de red.</td></tr>';
+    });
+  }
+
+  function openCodigoSearch(item, preset) {
+    if (!psModal || !item) return;
+    if (item.status === 'uploading' || item.status === 'done') return;
+    searchTargetItem = item;
+    psModal.classList.add('open');
+    psModal.setAttribute('aria-hidden', 'false');
+    if (psInput) {
+      psInput.value = String(preset != null ? preset : (item.codigo || '')).trim();
+      setTimeout(function () {
+        psInput.focus();
+        psInput.select();
+      }, 30);
+    }
+    if (psInput && psInput.value.trim()) runCodigoSearch();
+    else {
+      if (psStatus) psStatus.textContent = 'Escribí un código, OEM o parte de la descripción.';
+      if (psResults) psResults.innerHTML = '<tr><td colspan="4" class="imp-ps-empty">Sin búsqueda ejecutada.</td></tr>';
+    }
+  }
+
+  if (psRun) psRun.addEventListener('click', runCodigoSearch);
+  if (psClose) psClose.addEventListener('click', closeCodigoSearch);
+  if (psModal) {
+    psModal.addEventListener('click', function (e) {
+      if (e.target === psModal) closeCodigoSearch();
+    });
+  }
+  if (psInput) {
+    psInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        runCodigoSearch();
+      }
+    });
+    psInput.addEventListener('input', function () {
+      clearTimeout(psSearchTimer);
+      var q = (psInput.value || '').trim();
+      if (q.length < 2) return;
+      psSearchTimer = setTimeout(runCodigoSearch, 280);
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && psModal && psModal.classList.contains('open')) {
+      e.preventDefault();
+      closeCodigoSearch();
+    }
+  });
+
+  function bindCodigoInput(item, input, suggestUl, searchBtn) {
     var debounceSearch = null;
     var debounceResolve = null;
 
-    function refreshProducto() {
-      var tr = tbody.querySelector('tr[data-id="' + item.id + '"]');
-      if (tr) tr.querySelector('.td-producto').innerHTML = productoCellHtml(item);
-    }
-
     function pickSuggestion(it) {
-      item.codigo = (it.display_codigo || it.oem || it.codigo || '').toUpperCase();
-      input.value = item.codigo;
-      item.producto = Object.assign({ found: true }, it);
-      item.detectMatchType = it.match_type || (it.oem ? 'oem' : 'interno');
       suggestUl.hidden = true;
-      refreshProducto();
-      refreshNombreBadge(item);
-      fetchResolver(item.codigo).then(function (j) {
-        applyOrdenesFromResolver(item, j);
-        syncOrdenTrasResolver(item);
-      });
+      assignProductoToItem(item, it);
     }
 
     input.addEventListener('input', function () {
       item.codigo = (input.value || '').trim().toUpperCase();
       input.value = item.codigo;
       item.producto = null;
-      refreshProducto();
+      refreshProductoCell(item);
       clearTimeout(debounceSearch);
       clearTimeout(debounceResolve);
       var q = item.codigo;
@@ -987,16 +1220,32 @@ body.dark .imp-page .imp-help-pop code { background: #0f172a; }
         fetchResolver(q).then(function (j) {
           applyResolverToItem(item, j, null);
           if (j.found) input.value = item.codigo;
-          refreshProducto();
+          refreshProductoCell(item);
           refreshNombreBadge(item);
           syncOrdenTrasResolver(item);
+          refreshRow(item);
         });
       }, 420);
+    });
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        openCodigoSearch(item, input.value);
+      }
     });
 
     input.addEventListener('blur', function () {
       setTimeout(function () { suggestUl.hidden = true; }, 150);
     });
+
+    if (searchBtn) {
+      searchBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openCodigoSearch(item, input.value);
+      });
+    }
   }
 
   function renderRow(item) {
@@ -1006,7 +1255,10 @@ body.dark .imp-page .imp-help-pop code { background: #0f172a; }
       '<td><img class="preview-thumb" src="' + item.preview + '" alt=""></td>' +
       '<td class="td-nombre"></td>' +
       '<td class="td-tipo tipo-cell"></td>' +
-      '<td class="td-codigo"><div class="codigo-wrap"><input type="text" autocomplete="off" spellcheck="false" placeholder="Código OEM o interno" value="' + (item.codigo || '') + '"><ul class="codigo-suggest" hidden></ul></div></td>' +
+      '<td class="td-codigo"><div class="codigo-wrap">' +
+      '<input type="text" class="input-codigo" autocomplete="off" spellcheck="false" placeholder="Código, OEM o descripción" value="' + escapeHtml(item.codigo || '') + '">' +
+      '<button type="button" class="codigo-search-btn" title="Buscar producto (F2)" aria-label="Buscar producto">' + LUPA_SVG + '</button>' +
+      '<ul class="codigo-suggest" hidden></ul></div></td>' +
       '<td class="td-producto"></td>' +
       '<td class="td-progress"></td>' +
       '<td class="td-orden"><div class="orden-wrap"><input type="number" min="0" max="99" value="' + (item.orden != null ? item.orden : 0) + '" class="input-orden" style="width:4em" title="0 = principal (portada)"><span class="orden-warn" hidden></span></div></td>' +
@@ -1020,7 +1272,12 @@ body.dark .imp-page .imp-help-pop code { background: #0f172a; }
     bindTipoCell(item, tr.querySelector('.td-tipo'));
     tr.querySelector('.td-producto').innerHTML = productoCellHtml(item);
     tr.querySelector('.td-progress').innerHTML = progressCellHtml(item);
-    bindCodigoInput(item, tr.querySelector('.codigo-wrap input'), tr.querySelector('.codigo-suggest'));
+    bindCodigoInput(
+      item,
+      tr.querySelector('.codigo-wrap input'),
+      tr.querySelector('.codigo-suggest'),
+      tr.querySelector('.codigo-search-btn')
+    );
     bindOrdenInput(item, tr.querySelector('.input-orden'));
     tr.querySelector('.btn-subir-uno').addEventListener('click', function () {
       uploadItem(item);
@@ -1043,6 +1300,11 @@ body.dark .imp-page .imp-help-pop code { background: #0f172a; }
     if (rmBtn) {
       rmBtn.disabled = item.status === 'uploading' || item.status === 'done';
     }
+    var lupa = tr.querySelector('.codigo-search-btn');
+    var codeInp = tr.querySelector('.codigo-wrap input');
+    var locked = item.status === 'uploading' || item.status === 'done';
+    if (lupa) lupa.disabled = locked;
+    if (codeInp) codeInp.readOnly = locked;
   }
 
   function addFileToQueue(file, displayName) {
@@ -1522,6 +1784,7 @@ body.dark .imp-page .imp-help-pop code { background: #0f172a; }
 
   document.addEventListener('paste', function (e) {
     try {
+      if (psModal && psModal.classList.contains('open')) return;
       var items = e && e.clipboardData && e.clipboardData.items;
       if (!items || !items.length) return;
       var found = false;

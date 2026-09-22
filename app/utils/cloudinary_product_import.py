@@ -6,7 +6,7 @@ import logging
 import re
 from pathlib import Path
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, case, func, or_
 from werkzeug.utils import secure_filename
 
 from app.models import Producto, ProductoImagen, OemDespiece
@@ -417,6 +417,11 @@ def link_cloudinary_url_to_producto(
                 otro.imagen_url = url
 
 
+def assign_search_tokens(q: str) -> list[str]:
+    """Palabras de búsqueda (igual que /buscar: espacios, comas o ;)."""
+    return [p for p in re.split(r"[\s,;]+", (q or "").strip()) if p]
+
+
 def _producto_search_item(p: Producto, match_type: str) -> dict:
     codigo = (p.codigo or "").strip().upper()
     oem = (p.codigo_oem or "").strip().upper()
@@ -427,17 +432,49 @@ def _producto_search_item(p: Producto, match_type: str) -> dict:
         "display_codigo": oem or codigo,
         "descripcion": (p.descripcion or "")[:120],
         "marca": (p.marca or "")[:40],
+        "modelo": (p.modelo or "")[:80],
         "match_type": match_type,
     }
 
 
+def _classify_assign_match(p: Producto, qu: str, palabras: list[str]) -> str:
+    oem = (p.codigo_oem or "").strip().upper()
+    if oem and (oem == qu or all(t.upper() in oem for t in palabras)):
+        return _MATCH_OEM
+    if any(_token_en_alternativo(p.codigo_alternativo, t.upper()) for t in palabras):
+        return _MATCH_ALTERNATIVO
+    return _MATCH_INTERNO
+
+
+def _assign_token_filters(palabras: list[str]):
+    """AND de tokens sobre el blob de /buscar (tildes, modelo, homologados, etc.)."""
+    from app.productos.routes import (
+        _fold_like_contains,
+        _norm_busqueda_token,
+        _producto_busqueda_blob_expr,
+    )
+
+    blob = _producto_busqueda_blob_expr()
+    parts = []
+    for palabra in palabras:
+        norm = _norm_busqueda_token(palabra)
+        if not norm:
+            continue
+        parts.append(_fold_like_contains(blob, norm))
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return parts[0]
+    return and_(*parts)
+
+
 def search_productos_for_assign(sess, q: str, *, limit: int = 12) -> list[dict]:
-    """Búsqueda para asignación: prioridad OEM → alternativo → código interno."""
+    """Búsqueda para asignar imagen: código exacto primero; si no, mismas palabras que /buscar."""
     term = (q or "").strip()
     if len(term) < 1:
         return []
     qu = term.upper()
-    like = f"%{term}%"
+    palabras = assign_search_tokens(term)
     base = sess.query(Producto).filter(Producto.activo.is_(True))
     rows: list[tuple[Producto, str]] = []
     seen: set[str] = set()
@@ -486,46 +523,25 @@ def search_productos_for_assign(sess, q: str, *, limit: int = 12) -> list[dict]:
         )
 
     if len(rows) < limit and len(term) >= 2:
-        for p, mtype in (
-            (r, _MATCH_OEM)
-            for r in base.filter(
-                Producto.codigo_oem.isnot(None),
-                Producto.codigo_oem.ilike(like),
-            )
-            .order_by(Producto.codigo.asc())
-            .limit(limit)
-            .all()
-        ):
-            add(p, mtype)
-            if len(rows) >= limit:
-                break
-        for p in (
-            base.filter(
-                Producto.codigo_alternativo.isnot(None),
-                Producto.codigo_alternativo.ilike(like),
-            )
-            .order_by(Producto.codigo.asc())
-            .limit(limit)
-            .all()
-        ):
-            if len(rows) >= limit:
-                break
-            if _token_en_alternativo(p.codigo_alternativo, qu) or qu in (p.codigo_alternativo or "").upper():
-                add(p, _MATCH_ALTERNATIVO)
-        for p in (
-            base.filter(
-                or_(
-                    Producto.codigo.ilike(like),
-                    Producto.descripcion.ilike(like),
-                )
-            )
-            .order_by(Producto.codigo.asc())
-            .limit(limit)
-            .all()
-        ):
-            add(p, _MATCH_INTERNO)
-            if len(rows) >= limit:
-                break
+        token_filt = _assign_token_filters(palabras)
+        if token_filt is not None:
+            first_norm = ""
+            try:
+                from app.productos.routes import _fold_like_contains, _norm_busqueda_token
+
+                first_norm = _norm_busqueda_token(palabras[0]) if palabras else ""
+                desc_hit = _fold_like_contains(Producto.descripcion, first_norm) if first_norm else None
+            except Exception:
+                desc_hit = None
+            qrows = base.filter(token_filt)
+            if desc_hit is not None:
+                qrows = qrows.order_by(case((desc_hit, 0), else_=1), Producto.codigo.asc())
+            else:
+                qrows = qrows.order_by(Producto.codigo.asc())
+            for p in qrows.limit(max(limit * 3, 40)).all():
+                add(p, _classify_assign_match(p, qu, palabras))
+                if len(rows) >= limit:
+                    break
 
     return [_producto_search_item(p, mt) for p, mt in rows[:limit]]
 
