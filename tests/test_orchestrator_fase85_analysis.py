@@ -264,7 +264,13 @@ class NothingFromEightOneIsRelaxedTests(unittest.TestCase):
                                    "evidence_ids": ["e1"]}],
                        "calculations": []}, question="Stock del 2404")
         self.assertEqual(out.failures, 0)
-        self.assertEqual(out.reply, "DATOS:\n- El stock actual del 2404 es 7 unidades.")
+        # FASE 9.8 — la cabecera VUELVE aqui, y el rodeo esta documentado: 9.7
+        # se la quito a toda respuesta de una sola clase y eso tumbo el
+        # benchmark de 72/76 a 31/76 (el scorer exige la palabra "datos" en un
+        # caso con expected_data_vs_inference). Este turno tiene evidencia, asi
+        # que lleva etiqueta. Solo la charla —cero evidencia— se queda sin ella.
+        self.assertEqual(out.reply,
+                         "DATOS:\n- El stock actual del 2404 es 7 unidades.")
 
     def test_the_claim_kinds_are_a_closed_set(self):
         self.assertEqual(CLAIM_KINDS, {"dato", "inferencia", "calculo",

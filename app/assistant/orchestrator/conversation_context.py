@@ -45,7 +45,21 @@ _MOVEMENTS_RE = re.compile(
     re.IGNORECASE,
 )
 _STOCK_RE = re.compile(
-    r"\b(stock|inventario|cu[aá]nto\s+queda|queda|cu[aá]nto\s+hay)\b",
+    # FASE 9.7 — "y cuanto tenemos?" es la forma en que se pregunta esto
+    # hablando, y no encajaba: el patron cubria "cuanto queda" y "cuanto hay",
+    # asi que la pregunta caia al clarify generico SIN llegar al modelo (medido:
+    # 1 ms, 0 tokens) y el asistente contestaba "que quieres saber de eso".
+    r"\b(stock|inventario|cu[aá]nto[s]?\s+(?:queda|quedan|hay|tenemos|tengo|nos\s+queda)|"
+    r"queda|cu[aá]nto\s+hay)\b",
+    re.IGNORECASE,
+)
+# FASE 9.7 — atributos de la ficha. El vocabulario de seguimiento cubria
+# movimientos, stock, proveedor y OC, pero no los campos del producto, asi que
+# "Muestrame el producto 2404." / "Y la marca?" se rompia en el segundo turno
+# aunque la marca YA estaba en la evidencia del primero.
+_PRODUCT_ATTR_RE = re.compile(
+    r"\b(marca|modelo|motor|descripci[oó]n|categor[ií]a|subcategor[ií]a|"
+    r"qu[eé]\s+producto\s+es|ficha)\b",
     re.IGNORECASE,
 )
 _BODEGA_RE = re.compile(
@@ -530,6 +544,35 @@ class ConversationResolver:
             return ResolveResult(
                 kind=KIND_CLARIFY,
                 clarify_message="¿De qué código quieres los movimientos?",
+            )
+
+        # FASE 9.7 — atributo de ficha ("y la marca?") con codigo ya conocido.
+        # Va ANTES de stock porque no se solapan y el orden deja claro que un
+        # atributo se resuelve contra get_product, no contra el inventario.
+        if _PRODUCT_ATTR_RE.search(text):
+            prior_prod = evidence_for_tool(turns, "get_product", codigo=codigo)
+            if prior_prod:
+                # La marca ya se consulto en el turno anterior: volver a pedirla
+                # gastaria una llamada para traer exactamente lo mismo.
+                return ResolveResult(
+                    kind=KIND_REUSE,
+                    intent_hint="reuse_product",
+                    entities=entities,
+                    prior_evidence=prior_prod,
+                    tool_filter="get_product",
+                )
+            if codigo:
+                return ResolveResult(
+                    kind=KIND_PLAN_HINTS,
+                    intent_hint="product",
+                    entities={
+                        "codigo": codigo,
+                        "codigos": entities.get("codigos") or [],
+                    },
+                )
+            return ResolveResult(
+                kind=KIND_CLARIFY,
+                clarify_message="¿De qué producto o código quieres ese dato?",
             )
 
         # Stock remaining OR bodega → prefer prior inventory evidence across turns

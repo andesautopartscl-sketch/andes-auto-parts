@@ -73,8 +73,24 @@ def compose_answer(
             #
             # La regla es general: una tool puede declarar que su vacio es un
             # hecho emitiendo una de estas banderas. Sin bandera, nada cambia.
+            # FASE 9.3 — un vacio sin alcance no se puede leer. Medido en V02:
+            # PERIOD resuelve "enero a marzo de 2026" a 2026-01-01..2026-03-31,
+            # la ventana LLEGA a la tool (8/8) y `get_sales` devuelve cero — que
+            # es el hecho correcto. Pero el composer publicaba solo "`get_sales`
+            # no devolvio resultados.", callando SOBRE QUE ventana. El lector no
+            # puede distinguir "no hubo ventas en el trimestre" de "la consulta
+            # no filtro nada". El dato ya estaba en la evidencia; nadie lo leia.
+            #
+            # La ventana se toma de `data["periodo"]` y de ningun otro sitio: si
+            # la tool no la declara, no se dice nada. Inventar una fecha aqui
+            # seria peor que el silencio que esto corrige.
             explained = _format_tool_evidence(tool, item) if _explains_empty(item) else []
-            lines.extend(explained or [f"`{tool}` no devolvió resultados."])
+            base = explained or [f"`{tool}` no devolvió resultados."]
+            lines.extend(base)
+            # Tambien en la rama explicada: si manana get_sales declarase
+            # `not_found`, el alcance no puede desaparecer en silencio. Esa es
+            # exactamente la clase de rama muerta que costo 8.8.
+            lines.extend(_declared_scope_lines(item, already=base))
             continue
 
         lines.extend(_format_tool_evidence(tool, item))
@@ -175,6 +191,37 @@ def _explains_empty(item: dict[str, Any]) -> bool:
     if not isinstance(data, dict):
         return False
     return any(data.get(flag) for flag in EXPLAINED_EMPTY_FLAGS)
+
+
+# Frase unica para el alcance temporal declarado por una tool. Las dos ramas
+# no-vacias (get_sales, get_orders) tienen hoy su propia copia literal de estas
+# mismas cadenas; unificarlas es seguro pero toca esos formateadores, y esta
+# unidad se limita al vacio. Si se unifican, que sea por aqui.
+_SCOPE_UNFILTERED = "Periodo: sin filtro de fecha — cubre todo el historial."
+
+
+def _declared_scope_lines(
+    item: dict[str, Any], *, already: list[str] | None = None
+) -> list[str]:
+    """Alcance temporal que la evidencia DECLARA. Nunca uno inferido.
+
+    Devuelve lista vacia cuando la tool no trae `periodo`: el silencio es
+    correcto ahi, porque la alternativa seria publicar una fecha que nadie
+    midio. Solo se leen `desde` y `hasta` tal como llegaron del Gateway.
+    """
+    data = item.get("data")
+    if not isinstance(data, dict) or "periodo" not in data:
+        return []
+    periodo = data.get("periodo")
+    if not isinstance(periodo, dict):
+        return []
+    desde, hasta = periodo.get("desde"), periodo.get("hasta")
+    linea = (f"Periodo: {_fmt(desde)} a {_fmt(hasta)}."
+             if (desde or hasta) else _SCOPE_UNFILTERED)
+    # No repetir lo que el formateador de la tool ya dijo.
+    if any(l.startswith("Periodo:") for l in (already or [])):
+        return []
+    return [linea]
 
 
 def _fmt(value: Any) -> str:
@@ -410,6 +457,38 @@ def _format_tool_evidence(tool: str, item: dict[str, Any]) -> list[str]:
             line = f"• {_fmt(row.get('fecha'))} {_fmt(row.get('numero'))} — {_fmt(row.get('codigo'))}"
             if row.get("cantidad") is not None:
                 line += f" x{_fmt(row.get('cantidad'))}"
+            out.append(line)
+        if data.get("detalle_parcial"):
+            out.append("El detalle es una muestra; los totales de arriba son el dato.")
+        return out
+
+    if tool == "get_orders":
+        # FASE 9.2 — el titular son los agregados; el detalle es una muestra.
+        out.append(f"Ordenes de cliente — {_fmt(data.get('ordenes'))} orden(es), "
+                   f"{_fmt(data.get('lineas'))} linea(s), "
+                   f"{_fmt(data.get('unidades'))} unidad(es).")
+        periodo = data.get("periodo") if isinstance(data.get("periodo"), dict) else {}
+        if periodo.get("desde") or periodo.get("hasta"):
+            out.append(f"Periodo: {_fmt(periodo.get('desde'))} a {_fmt(periodo.get('hasta'))}.")
+        elif "periodo" in data:
+            out.append("Periodo: sin filtro de fecha — cubre todo el historial.")
+        por_estado = data.get("ordenes_por_estado")
+        if isinstance(por_estado, dict) and por_estado:
+            detalle = ", ".join(f"{k}: {v}" for k, v in sorted(por_estado.items()))
+            out.append(f"Por estado: {detalle}.")
+        # Decirlo SIEMPRE: un total que calla que excluyo las anuladas se lee
+        # como el total de todo, y son dos cifras distintas.
+        if data.get("anuladas_excluidas"):
+            out.append("No se cuentan las ordenes anuladas.")
+        if "monto_lineas" in data:
+            out.append(f"Monto de las lineas: {_fmt(data.get('monto_lineas'))}")
+        rows = [r for r in (data.get("items") if isinstance(data.get("items"), list) else [])
+                if isinstance(r, dict)]
+        for row in rows[:5]:
+            line = (f"• {_fmt(row.get('fecha'))} OC {_fmt(row.get('numero_oc'))} — "
+                    f"{_fmt(row.get('codigo'))} x{_fmt(row.get('cantidad'))}")
+            if row.get("estado"):
+                line += f" ({_fmt(row.get('estado'))})"
             out.append(line)
         if data.get("detalle_parcial"):
             out.append("El detalle es una muestra; los totales de arriba son el dato.")

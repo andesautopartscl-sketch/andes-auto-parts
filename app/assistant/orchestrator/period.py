@@ -122,21 +122,110 @@ def _valid_year(raw: str) -> int | None:
 
 # --- reglas. Cada una devuelve (desde, hasta) o None; ninguna adivina. --------
 
-def _rule_month_range(text: str, today: date):
-    """'de enero a marzo de 2026', 'enero a marzo 2026'."""
-    m = re.search(rf"\b({_MONTH_ALT})\s+(?:a|hasta)\s+({_MONTH_ALT})\s+"
-                  rf"(?:de\s+|del\s+)?(\d{{4}})\b", text)
+# FASE 9.6 — el ano puede venir en digitos o declarado por el propio mensaje.
+# "este ano" NO es adivinar: el mensaje lo dice. Lo que sigue prohibido es
+# suponer un ano que nadie escribio.
+_YEAR_TOKEN = r"(\d{4}|este\s+ano|ano\s+pasado)"
+
+
+def _year_from_token(raw: str, today: date) -> int | None:
+    token = " ".join(str(raw or "").split())
+    if token == "este ano":
+        return today.year
+    if token == "ano pasado":
+        return today.year - 1
+    return _valid_year(token)
+
+
+# FASE 9.6 (D1) — "entre X y Y" es un rango, y se leia como un mes suelto.
+#
+# MEDIDO, y en una conversacion real: "Tuvimos ventas entre enero y marzo de
+# 2026?" llamaba a get_sales con fecha_desde=2026-03-01, fecha_hasta=2026-03-31
+# —marzo a secas— y el modelo concluia "No hubo ventas entre enero y marzo de
+# 2026". Una afirmacion FALSA sobre un trimestre que nunca se consulto, con toda
+# la cadena funcionando de manera aparentemente correcta.
+#
+# La causa: `_rule_month_range` solo aceptaba los conectores `a|hasta`. Con `y`
+# no coincidia, y `_rule_single_month` recogia "marzo de 2026". El centinela
+# AMBIGUOUS no salvaba nada porque la regla no llegaba a reconocer su forma: no
+# coincidia en absoluto. Es la MISMA clase de defecto que "noviembre a marzo",
+# por una puerta que quedo sin cerrar.
+#
+# `y` exige `entre` delante, y eso no es cosmetico: "ventas de enero y marzo"
+# enumera DOS meses, no un rango. Sin `entre` la frase es ambigua y no se
+# resuelve. Con `entre` no lo es.
+_MONTH_RANGE_RES = (
+    re.compile(rf"\b({_MONTH_ALT})\s+(?:a|hasta)\s+({_MONTH_ALT})\s+"
+               rf"(?:de\s+|del\s+)?{_YEAR_TOKEN}\b"),
+    re.compile(rf"\bentre\s+({_MONTH_ALT})\s+y\s+({_MONTH_ALT})\s+"
+               rf"(?:de\s+|del\s+)?{_YEAR_TOKEN}\b"),
+)
+
+# "ventas de enero y marzo de 2026" SIN `entre`: pueden ser dos meses sueltos o
+# un rango mal dicho, y no hay forma de saberlo. Se reconoce la forma y se
+# aborta. Dejarlo pasar lo recogia `single_month` y devolvia marzo a secas, que
+# es el mismo defecto D1 con otra cara.
+_MONTH_ENUM_RE = re.compile(
+    rf"\b({_MONTH_ALT})\s+y\s+({_MONTH_ALT})\s+(?:de\s+|del\s+)?{_YEAR_TOKEN}\b")
+
+# Rango con dias explicitos: "entre el 1 de enero y el 31 de marzo de 2026",
+# "del 1 de enero al 31 de marzo de 2026". El ano del primer extremo es
+# opcional; si falta, lo hereda del segundo, que SI es obligatorio.
+#
+# Seguridad: exige "<numero> de <nombre de mes>" DOS veces. Ningun codigo de
+# producto puede producir esa forma, asi que 2404, 2026 y el "24/04" de A01
+# quedan fuera por construccion, no por una lista de excepciones.
+_DAY_RANGE_RE = re.compile(
+    rf"\b(?:entre|desde|del)\s+(?:el\s+)?(\d{{1,2}})\s+de\s+({_MONTH_ALT})"
+    rf"(?:\s+(?:de\s+|del\s+)?{_YEAR_TOKEN})?"
+    rf"\s+(?:y|a|al|hasta)\s+(?:el\s+)?(\d{{1,2}})\s+de\s+({_MONTH_ALT})\s+"
+    rf"(?:de\s+|del\s+)?{_YEAR_TOKEN}\b"
+)
+
+
+def _rule_day_range(text: str, today: date):
+    """'entre el 1 de enero y el 31 de marzo de 2026'."""
+    m = _DAY_RANGE_RE.search(text)
     if not m:
         return None
-    year = _valid_year(m.group(3))
-    if year is None:
+    year_end = _year_from_token(m.group(6), today)
+    if year_end is None:
         return None
-    start, end = MONTHS[m.group(1)], MONTHS[m.group(2)]
-    if start > end:
-        # "de noviembre a marzo de 2026" cruza el ano y no dice de que ano es
-        # cada mes. Se aborta: caer a una regla mas general daria marzo a secas.
+    year_start = _year_from_token(m.group(3), today) if m.group(3) else year_end
+    if year_start is None:
+        return None
+    try:
+        desde = date(year_start, MONTHS[m.group(2)], int(m.group(1)))
+        hasta = date(year_end, MONTHS[m.group(5)], int(m.group(4)))
+    except ValueError:
+        # "31 de febrero" no existe. Pero la FORMA si se reconocio, asi que hay
+        # que abortar, no devolver None: cayendo a `single_month` esto daba
+        # "marzo de 2026" a secas — el defecto D1 otra vez, por otra puerta.
         return AMBIGUOUS
-    return date(year, start, 1), _month_end(year, end), m.group(0)
+    if desde > hasta:
+        return AMBIGUOUS
+    return desde, hasta, m.group(0)
+
+
+def _rule_month_range(text: str, today: date):
+    """'de enero a marzo de 2026', 'entre enero y marzo de 2026'."""
+    for rx in _MONTH_RANGE_RES:
+        m = rx.search(text)
+        if not m:
+            continue
+        year = _year_from_token(m.group(3), today)
+        if year is None:
+            return None
+        start, end = MONTHS[m.group(1)], MONTHS[m.group(2)]
+        if start > end:
+            # "de noviembre a marzo de 2026" cruza el ano y no dice de que ano
+            # es cada mes. Se aborta: caer a una regla mas general daria marzo
+            # a secas — que es exactamente el defecto D1.
+            return AMBIGUOUS
+        return date(year, start, 1), _month_end(year, end), m.group(0)
+    if _MONTH_ENUM_RE.search(text):
+        return AMBIGUOUS
+    return None
 
 
 def _rule_single_month(text: str, today: date):
@@ -224,6 +313,11 @@ def _rule_named_relative(text: str, today: date):
 # sin ambiguedad. Quien quiera un ano completo puede decir "de enero a diciembre
 # de 2026" o escribir las fechas.
 _RULES = (
+    # `day_range` va PRIMERO: es la forma mas especifica, y si no se prueba
+    # antes, "entre el 1 de enero y el 31 de marzo de 2026" lo recoge una regla
+    # mas general y devuelve una ventana mas estrecha. Ese orden es el defecto
+    # D1, no un detalle de estilo.
+    ("day_range", _rule_day_range),
     ("month_range", _rule_month_range),
     ("quarter", _rule_quarter),
     ("single_month", _rule_single_month),

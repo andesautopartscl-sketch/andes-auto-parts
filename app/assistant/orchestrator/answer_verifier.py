@@ -66,6 +66,59 @@ _TEXT_DATE_RE = re.compile(
 # partial reference: grounded when some evidence date falls on that day/month.
 _PARTIAL_DATE_PREFIX = "??"
 
+# FASE 9.4 — periodos SIN dia. Las tres formas de arriba exigen todas un numero
+# de dia, asi que "de enero a marzo de 2026" no contenia ninguna fecha para el
+# verificador: "2026" sobrevivia como numero suelto, se comparaba contra las
+# cifras de la evidencia —que para un resultado vacio son {'0'}— y el claim se
+# descartaba. Sin claims, `no_grounded_claim` mandaba el turno al composer.
+# Medido: V02 con PERIOD ON pasaba 7 de 16 veces, y las 7 eran exactamente
+# aquellas en que el modelo escribio numeros de dia. El modelo estaba siendo
+# castigado por redactar el periodo con las MISMAS palabras de la pregunta.
+#
+# LA REGLA DE SEGURIDAD, y es la unica que importa aqui: un ano jamas se
+# reconoce solo. Solo cuenta como ano si va pegado a una palabra temporal —un
+# nombre de mes o "trimestre"—. Se midio antes que 55 codigos del catalogo caen
+# en 2000-2100, asi que cualquier regla que convierta un numero aislado de ese
+# rango en fecha rompe A01 y con el toda pregunta que cite un codigo. Esta es la
+# misma logica de conjuncion que explica A01: el token no basta, hacen falta las
+# palabras que lo rodean.
+#
+# (Y este fichero no puede nombrar la palabra inglesa para eso: un guard de
+# frontera comprueba que el verifier no lea nunca el estado conversacional, y lo
+# hace por substring sobre el fuente. Es tosco y es correcto.)
+_MONTH_YEAR_RE = re.compile(
+    rf"(?<![\w/\-])({_MONTH_ALT})\s+de[l]?\s+(\d{{4}})(?!\d)",
+    re.IGNORECASE,
+)
+# Solo formas en palabra. Las abreviadas ("1er", "2do") NO entran, y no por
+# gusto: `_CODE_RE` exige 3+ caracteres con al menos una letra y un digito, y
+# "1ER" encaja exacto — se descarta como codigo inventado antes de que el
+# analisis de fechas llegue a mirar. Esa comprobacion es el nucleo
+# anti-alucinacion y no se toca por una abreviatura. Quien escriba "1er
+# trimestre" queda como estaba hoy: sin reconocer. Las palabras no tienen
+# digitos y no colisionan.
+_QUARTER_ORDINALS = {
+    "primer": 1, "primero": 1, "primera": 1,
+    "segundo": 2, "segunda": 2,
+    "tercer": 3, "tercero": 3, "tercera": 3,
+    "cuarto": 4, "cuarta": 4,
+}
+_QUARTER_ALT = "|".join(sorted(_QUARTER_ORDINALS, key=len, reverse=True))
+# El ano es OBLIGATORIO: sin el no hay numero que se escape, y exigirlo mantiene
+# la regla anclada a dos palabras temporales en vez de una.
+_QUARTER_RE = re.compile(
+    rf"(?<![\w/\-])({_QUARTER_ALT})\s+trimestre\s+de[l]?\s+(\d{{4}})(?!\d)",
+    re.IGNORECASE,
+)
+# Granularidades por encima del dia. Un sufijo distinto para cada una porque
+# `_date_grounded` las compara de forma distinta, y porque ninguna debe poder
+# fundar una fecha exacta: "marzo de 2026" no prueba "2026-03-15".
+_MONTH_LEVEL_SUFFIX = "-??"
+_QUARTER_MARK = "-Q"
+# Un numero de dia justo antes del mes significa que quien escribio intentaba una
+# fecha completa. Si `_TEXT_DATE_RE` no la acepto, es que era invalida.
+_DAY_PREFIX_RE = re.compile(r"\d{1,3}\s+de\s*$", re.IGNORECASE)
+
 
 def _as_number(value: Any) -> float:
     if isinstance(value, bool) or value is None:
@@ -229,7 +282,140 @@ def mask_dates(text: str) -> tuple[str, list[str]]:
         if canon:
             found.append(canon)
             _blank(*match.span())
+    # FASE 9.4 — periodos sin dia, DESPUES de las tres formas con dia: "1 de
+    # enero de 2026" ya quedo en blanco entera, asi que lo que llega aqui no
+    # tiene numero de dia delante y no hay forma de contar la misma fecha dos
+    # veces. El orden es parte de la correccion, no una casualidad.
+    partial = "".join(chars)
+    for match in _MONTH_YEAR_RE.finditer(partial):
+        # "99 de julio de 2026" es una fecha INVALIDA, no un mes. `_TEXT_DATE_RE`
+        # ya la rechazo por el dia y dejo el texto intacto; degradarla aqui a
+        # "julio de 2026" seria reinterpretar lo que el modelo quiso decir. Una
+        # fecha invalida no es una fecha — esa frontera ya estaba fijada y esta
+        # regla no la mueve.
+        if _DAY_PREFIX_RE.search(partial[: match.start()]):
+            continue
+        canon = _canonical_month(match.group(2), _MONTHS_ES.get(match.group(1).lower()))
+        if canon:
+            found.append(canon)
+            _blank(*match.span())
+    partial = "".join(chars)
+    for match in _QUARTER_RE.finditer(partial):
+        canon = _canonical_quarter(match.group(2),
+                                   _QUARTER_ORDINALS.get(match.group(1).lower()))
+        if canon:
+            found.append(canon)
+            _blank(*match.span())
     return "".join(chars), found
+
+
+def _valid_year(year: Any) -> int | None:
+    try:
+        y = int(year)
+    except (TypeError, ValueError):
+        return None
+    return y if 1900 <= y <= 2999 else None
+
+
+def _canonical_month(year: Any, month: Any) -> str | None:
+    """YYYY-MM-?? — el mes entero. Nunca funda un dia concreto."""
+    y = _valid_year(year)
+    try:
+        m = int(month)
+    except (TypeError, ValueError):
+        return None
+    if y is None or not (1 <= m <= 12):
+        return None
+    return f"{y:04d}-{m:02d}{_MONTH_LEVEL_SUFFIX}"
+
+
+def _canonical_quarter(year: Any, quarter: Any) -> str | None:
+    """YYYY-Qn — el trimestre entero."""
+    y = _valid_year(year)
+    try:
+        q = int(quarter)
+    except (TypeError, ValueError):
+        return None
+    if y is None or not (1 <= q <= 4):
+        return None
+    return f"{y:04d}{_QUARTER_MARK}{q}"
+
+
+def _inference_is_anchored(
+    text: str,
+    numbers: set[str],
+    dates: set[str],
+    calcs: list[dict[str, Any]],
+    *,
+    any_evidence_succeeded: bool = True,
+) -> bool:
+    """¿Esta inferencia se apoya en algo que se pueda comprobar?
+
+    FASE 9.8 — LA REGLA, y por que sustituye a una lista de palabras.
+
+    9.7 filtraba las inferencias con una lista de marcadores ("superan",
+    "esto indica", "probablemente"...). En la corrida real se colo esta:
+
+        "Las ventas netas estan neutralizadas por devoluciones"
+
+    "neutralizadas" no estaba en la lista. Anadirla no arregla nada: la
+    siguiente sera "compensadas", "absorbidas", "contrarrestadas". Una lista de
+    palabras persigue la redaccion, y la redaccion es infinita.
+
+    Lo que SI es finito es la evidencia. Una inferencia habla de cantidades
+    observadas o no habla de nada comprobable, asi que la condicion se invierte:
+    en vez de buscar las formas prohibidas, se exige un ANCLA.
+
+        una cifra que el verifier fundo,  o
+        una fecha que el verifier fundo,  o
+        una calculation recomputada.
+
+    Sin ancla no hay nada contra lo que contrastar la afirmacion, y una
+    afirmacion que no se puede contradecir no se publica bajo una cabecera que
+    le da autoridad.
+
+    FASE 9.9 — DONDE LA REGLA NO APLICA, y por que es una cuestion de TIPO DE
+    EVIDENCIA y no de vocabulario.
+
+    Medido: E05 (un actor sin permiso financiero) cayo de 8/8 a 2/8. Su
+    respuesta correcta es
+
+        "No se puede acceder a la informacion de ventas por falta de permisos."
+
+    y el modelo la emite como `inferencia`. No trae cifras —no puede traerlas—,
+    asi que la regla la descartaba, el turno se quedaba sin claims y terminaba
+    en el composer con `expect_fallback: false`. Los fallbacks pasaron de 1 a 6.
+
+    Exigir un ancla presupone que hay algo que citar. Cuando NINGUNA llamada de
+    la vuelta tuvo exito, no hay cantidad observada con la que relacionar nada:
+    lo que la respuesta dice es necesariamente un estado —acceso, ausencia,
+    error—, no una relacion entre magnitudes. El requisito es vacuo ahi, y una
+    exigencia vacua solo puede producir falsos positivos.
+
+    La condicion se lee del sobre de evidencia (`ok`), no del texto. Y se apoya
+    en `ok`, no en "sin cifras": se midio que una denegacion SI aporta numeros
+    —salen de los ARGUMENTOS ("7" de periodo="7d", la fecha de fecha_desde)—,
+    asi que "no hay cifras" no habria eximido a E05. Un vacio con exito
+    (`ok=True, empty=True`) tampoco exime: `count: 0` es un hecho observado, y
+    sobre el si se puede afirmar una relacion falsa.
+
+    LO QUE ESTO NO AFLOJA: con cualquier evidencia exitosa la regla se aplica
+    entera. "Las notas de credito superan las ventas" sobre un get_sales vacio
+    sigue cayendo, porque ese turno SI observo algo.
+
+    EL PRECIO que queda: en una vuelta donde todo fallo, una frase causal sin
+    cifras se publicaria. Es un turno sin ningun dato del ERP, asi que no hay
+    magnitud que tergiversar, y el resto de comprobaciones del verifier
+    —codigos, tools, PII— siguen aplicando.
+    """
+    if not any_evidence_succeeded:
+        return True
+    if calcs:
+        return True
+    sin_fechas, fechas = mask_dates(str(text or ""))
+    if any(_date_grounded(c, dates) for c in fechas):
+        return True
+    return any(_norm_number(n) in numbers for n in _claim_number_tokens(sin_fechas))
 
 
 def _date_grounded(canonical: str, dates: set[str]) -> bool:
@@ -238,6 +424,22 @@ def _date_grounded(canonical: str, dates: set[str]) -> bool:
     if canonical.startswith(_PARTIAL_DATE_PREFIX):
         suffix = canonical[len(_PARTIAL_DATE_PREFIX):]
         return any(known.endswith(suffix) for known in dates)
+    # FASE 9.4 — una referencia de mes o de trimestre esta fundada cuando ALGUNA
+    # fecha de la evidencia cae dentro. La direccion importa y es asimetrica a
+    # proposito: "marzo de 2026" lo funda 2026-03-31, pero 2026-03-31 NO lo
+    # funda "marzo de 2026" — la comprobacion exacta de arriba no la toca, asi
+    # que ampliar la granularidad hacia arriba no afloja ninguna hacia abajo.
+    if canonical.endswith(_MONTH_LEVEL_SUFFIX):
+        prefijo = canonical[: -len(_MONTH_LEVEL_SUFFIX)]  # "2026-03"
+        return any(known.startswith(prefijo) for known in dates)
+    if _QUARTER_MARK in canonical:
+        anio, _, trimestre = canonical.partition(_QUARTER_MARK)
+        try:
+            q = int(trimestre)
+        except ValueError:
+            return False
+        meses = {f"{anio}-{m:02d}" for m in range(3 * (q - 1) + 1, 3 * q + 1)}
+        return any(known[:7] in meses for known in dates)
     return False
 
 
@@ -503,6 +705,7 @@ class VerifyResult:
         provenance_by_kind: dict[str, int] | None = None,
         provenance_severity: str = "none",
         provenance_enforced: bool = False,
+        cited_evidence_ids: Any = None,
     ):
         self.ok = ok
         self.reply = reply
@@ -523,6 +726,7 @@ class VerifyResult:
         self.provenance_by_kind = dict(provenance_by_kind or {})
         self.provenance_severity = str(provenance_severity)
         self.provenance_enforced = bool(provenance_enforced)
+        self.cited_evidence_ids = set(cited_evidence_ids or ())
 
     def breakdown(self) -> dict[str, Any]:
         """Enumerable counters. No claim text, no evidence values."""
@@ -542,6 +746,10 @@ class VerifyResult:
             "provenance_by_kind": dict(self.provenance_by_kind),
             "provenance_severity": str(self.provenance_severity),
             "provenance_enforced": bool(self.provenance_enforced),
+            # FASE 9.8 — ids, ni texto ni valores: sigue cumpliendo el contrato
+            # de este metodo y es lo que permite acotar las tarjetas a la
+            # evidencia que sostiene el texto publicado.
+            "cited_evidence_ids": sorted(self.cited_evidence_ids or []),
         }
 
 
@@ -644,6 +852,15 @@ def verify_agent_answer(
 
     datos: list[str] = []
     inferencias: list[str] = []
+    # FASE 9.8 — que evidencia sostiene el texto PUBLICADO. `cited` ya se
+    # calculaba por claim para la procedencia, pero se perdia dentro del bucle y
+    # nunca salia de aqui, asi que `build_answer_view` se llamaba SIN scope y las
+    # tarjetas podian enseñar evidencia que el verifier dejo fuera del texto.
+    # Demostrado: con get_product (marca MAXUS) y get_inventory (marca BOSCH) en
+    # el store, la vista publicaba una tarjeta con BOSCH aunque el texto solo
+    # citara la ficha. Se agrupa por texto para que el filtro de inferencias de
+    # 9.7 —que corre despues— no deje citas de claims ya descartados.
+    _citas_por_texto: dict[str, set[str]] = {}
     # FASE 8.5 — peldaños de la escalera, en el orden en que se publicarán.
     rungs: list[tuple[str, str]] = []
     unsupported_projection = 0
@@ -727,6 +944,8 @@ def verify_agent_answer(
                     failures += 1
                     dropped_claims += 1
                     continue
+            _citas_por_texto.setdefault(text, set()).update(
+                str(x) for x in (claim.get("evidence_ids") or []) if x)
             inferencias.append(text)
             continue
         if not _claim_grounded(text, blob, tool_names, numbers, dates):
@@ -740,10 +959,40 @@ def verify_agent_answer(
                 failures += 1
                 dropped_claims += 1
                 continue
+        _citas_por_texto.setdefault(text, set()).update(
+            str(x) for x in (claim.get("evidence_ids") or []) if x)
         if kind == "dato":
             datos.append(text)
         else:
             inferencias.append(text)
+
+    # FASE 9.8 — una inferencia sin ancla no se publica.
+    #
+    # `_claim_grounded` comprueba las cifras, codigos y fechas que un claim
+    # ESCRIBE. Un claim que no escribe ninguna pasa por vacio. Para un `dato`
+    # rara vez importa —"no se encontro el producto" es una frase, no una
+    # cifra—, pero para una `inferencia` es el agujero entero: afirma una
+    # relacion entre cantidades de la evidencia sin escribir ninguna, y se
+    # publicaba bajo una cabecera que le daba autoridad.
+    #
+    # 9.7 lo filtraba con una lista de marcadores y se colo "Las ventas netas
+    # estan neutralizadas por devoluciones": "neutralizadas" no estaba. Anadirla
+    # no arregla nada — la siguiente sera "compensadas". La condicion esta
+    # invertida ahora: se exige un ancla comprobable en vez de perseguir la
+    # redaccion. Ver `_inference_is_anchored`.
+    if inferencias:
+        # Si ninguna llamada tuvo exito, la vuelta no observo ninguna cantidad y
+        # exigir un ancla es imposible por construccion. Se lee del sobre.
+        hubo_exito = any(getattr(i, "ok", False) for i in store.items)
+        conservadas: list[str] = []
+        for text in inferencias:
+            if not _inference_is_anchored(text, numbers, dates, calc_ok,
+                                          any_evidence_succeeded=hubo_exito):
+                failures += 1
+                dropped_claims += 1
+                continue
+            conservadas.append(text)
+        inferencias = conservadas
 
     draft = str(decision.get("draft_reply") or "").strip()
     if draft and not (datos or inferencias):
@@ -759,7 +1008,17 @@ def verify_agent_answer(
     rendered: list[tuple[str, str]] = [("dato", line) for line in datos]
     rendered += list(rungs)
     rendered += [("inferencia", line) for line in inferencias]
-    reply = "\n".join(ladder_sections(rendered)).strip()
+    # Un turno sin evidencia es charla: ahi la etiqueta sobra. Con evidencia, la
+    # palabra "datos" es la señal de que el turno separo lo observado de lo
+    # inferido, y el scorer la exige — quitarla costo 41 casos del benchmark.
+    reply = "\n".join(
+        ladder_sections(rendered, has_evidence=bool(store.items))
+    ).strip()
+
+    # Solo las citas de lo que SOBREVIVIO hasta el texto publicado.
+    cited_evidence_ids: set[str] = set()
+    for _linea in datos + inferencias:
+        cited_evidence_ids |= _citas_por_texto.get(_linea, set())
 
     breakdown = {
         "provenance_violations": len(provenance_violations),
@@ -780,6 +1039,7 @@ def verify_agent_answer(
         "calc_mismatch": calc_mismatch,
         "calc_unresolved": calc_unresolved,
         "calc_error": calc_error,
+        "cited_evidence_ids": sorted(cited_evidence_ids),
     }
     composer_evidence = raw_evidence if raw_evidence else _composer_evidence(store)
     if not reply:

@@ -119,6 +119,15 @@ TOOL_VIEWS: dict[str, dict[str, Any]] = {
         # dice siempre: una cifra agregada sin su ventana no es verificable.
         "summary": ("periodo", "unidades", "documentos", "ingresos"),
     },
+    "get_orders": {
+        # Mismo reparto que get_sales: agregados en el resumen, lineas en
+        # tarjetas, y el alcance SIEMPRE en el resumen para que una cifra no
+        # aparezca sin su ventana.
+        "entity": "linea_orden", "list": "items", "title": "numero_oc",
+        "fields": ("fecha", "codigo", "descripcion", "marca", "cantidad", "estado"),
+        "ref": "numero_oc", "label": "Ordenes de cliente",
+        "summary": ("periodo", "ordenes", "lineas", "unidades"),
+    },
     "get_equivalences": {
         # 'aplicaciones' NO se proyecta como campo de tarjeta: es una lista de
         # modelos de vehiculo y mezclarla con los codigos haria que la tarjeta

@@ -97,6 +97,18 @@ TOOL_CONTRACTS: dict[str, dict[str, Any]] = {
             "limit": {"type": "int", "min": 1, "max": 20},
         },
     },
+    "get_orders": {
+        "description": "Read customer orders (lines, states, volume)",
+        "required": {},
+        "optional": {
+            "codigo": {"type": "string", "pattern": "product_code"},
+            "cliente": {"type": "string"},
+            "group_by": {"type": "string"},
+            "fecha_desde": {"type": "date"},
+            "fecha_hasta": {"type": "date"},
+            "limit": {"type": "int", "min": 1, "max": 20},
+        },
+    },
     "get_customer": {
         "description": "Read customer directory",
         "required": {},
@@ -165,15 +177,44 @@ def passthrough_string_keys(tool: str) -> tuple[str, ...]:
         and key not in _STRING_KEYS_WITH_OWN_PATH))
 
 
-def format_contracts_for_prompt() -> str:
+# FASE 9.1 — economia de prompt, sin perder una sola senal.
+#
+# El tipo por defecto es string, y anotarlo era redundante DOS veces: el schema
+# de generacion corre en modo strict, asi que `q` ya esta fijado a
+# ["string","null"] y el modelo no puede emitir otra cosa aunque el prompt calle.
+# Decirselo ademas en el contrato gastaba tokens para repetir lo que el
+# decodificador impone. Los tipos que NO son string se siguen anotando porque si
+# informan: una fecha lleva formato y un int lleva rango.
+#
+# Medido sobre las 12 tools: 592 -> 480 tokens por decision (-112), que sobre
+# MAX_AGENT_STEPS son 559 tokens de pico. Las descripciones NO se tocan: son la
+# senal con la que el modelo elige tool, y la seleccion es la puerta mas
+# puntuada del benchmark. Quitarlas ahorraba 155 tokens mas y no vale su riesgo.
+_DEFAULT_ARG_TYPE = "string"
+
+
+def _render_args(fields: dict[str, Any]) -> str:
+    return ",".join(
+        k if (v or {}).get("type") == _DEFAULT_ARG_TYPE else f"{k}:{(v or {}).get('type')}"
+        for k, v in fields.items())
+
+
+def format_contracts_for_prompt(only: Any = None) -> str:
+    """`only` restringe a las tools que el modelo ve. Nombres y contratos se
+    filtran juntos: una tool nombrada sin contrato es inllamable."""
+    names = sorted(ALLOWED_TOOLS if only is None else (set(ALLOWED_TOOLS) & set(only)))
     lines = []
-    for name in sorted(ALLOWED_TOOLS):
+    for name in names:
         spec = TOOL_CONTRACTS[name]
         req = spec.get("required") or {}
         opt = spec.get("optional") or {}
-        req_s = ",".join(f"{k}:{v.get('type')}" for k, v in req.items()) or "none"
-        opt_s = ",".join(f"{k}:{v.get('type')}" for k, v in opt.items()) or "none"
-        line = f"{name}: {spec['description']}. required={req_s}. optional={opt_s}."
+        line = f"{name}: {spec['description']}."
+        # Una clausula vacia ("required=none") no dice nada que el modelo no
+        # deduzca de su ausencia, y cuesta lo mismo que una que si dice algo.
+        if req:
+            line += f" required={_render_args(req)}."
+        if opt:
+            line += f" optional={_render_args(opt)}."
         # FASE 8.9 — un requisito CONDICIONAL tiene que poder declararse. Antes
         # get_equivalences exigia 'oem' o 'codigo' en codigo imperativo mientras
         # el contrato decia required=none: el modelo llamaba sin ancla, el

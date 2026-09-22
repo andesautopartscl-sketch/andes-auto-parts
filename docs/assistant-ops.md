@@ -36,6 +36,12 @@ copy .env.example .env
 | `ANDES_ERP_BASE_URL` | `http://127.0.0.1:5000` | Gateway → ERP |
 | `ANDES_ASSISTANT_CHAT_RATE_LIMIT` | `10` | req/min/usuario; `0` desactiva |
 | `ANDES_ORCH_AUDIT_PATH` | `data/orchestrator_audit.jsonl` | sin secretos |
+| `ANDES_ASSISTANT_METRICS_PATH` | `data/assistant_metrics.jsonl` | métricas agregadas (FASE 6) |
+| `ANDES_LLM_COST_INPUT_PER_1K` | vacío | costo estimado opcional |
+| `ANDES_LLM_COST_OUTPUT_PER_1K` | vacío | costo estimado opcional |
+| `ANDES_ASSISTANT_MEMORY_ENABLED` | `0` | Kill switch memoria (7B) |
+| `ANDES_ASSISTANT_MEMORY_DERIVED` | `0` | Frequent/summary automáticos (7B.5) |
+| `ANDES_ASSISTANT_MEMORY_EXPLICIT` | `0` | Escritura explícita (7B.3) |
 
 Al arrancar el ERP se registra una línea `assistant_config nl=… planner=… soft_llm=…` **sin API key**.
 
@@ -112,6 +118,15 @@ Go-live smoke: `tests/test_assistant_golive_smoke.py` (fake, sin imprimir secret
 | ERP | `GET /health` |
 | Gateway | `GET /health` |
 | Asistente | `GET /assistant/api/capabilities` (sesión) |
+| Métricas (local/staging) | `GET /assistant/api/metrics/summary` (sesión) |
+
+CLI local (sin PII):
+
+```powershell
+.\.venv\Scripts\python.exe scripts/assistant_metrics_summary.py
+```
+
+Métricas: hashes + agregados (tools, latencias, tokens, hotspots). **Nunca** prompts, respuestas completas, API keys ni PII.
 
 ## Diagnóstico rápido
 
@@ -131,6 +146,15 @@ Go-live smoke: `tests/test_assistant_golive_smoke.py` (fake, sin imprimir secret
 Usuario **local de prueba** usado en la matriz E2E de producto (sin `ver_finanzas`).
 No se crean permisos automáticamente en código. **No documentar contraseñas.**
 
+## Memoria (FASE 7B)
+
+Default **OFF**. Store `assistant_memory_slot`. Selector 12/800. Explicit > derived.
+
+- `ANDES_ASSISTANT_MEMORY_DERIVED=1` (y `MEMORY=1`): post-turn, best-effort. `frequent_entity` (user) y `conversation_summary` (conversation). Summary 100% determinista, sin LLM.
+- Contadores pre-threshold: tabla técnica `assistant_derived_freq_counter` (mismo SQLite). **No** es memoria: no GET, no selector, no hints.
+- POST/PUT explícitos siguen rechazando `frequent_entity` y `conversation_summary`.
+- Detalle: [`docs/fase7b5-memory-derived.md`](fase7b5-memory-derived.md)
+
 ## Fuera de alcance (aún)
 
-Memoria multi-turno, multi-cerebro, tools WRITE, Excel, tareas pendientes, tools nuevas.
+FASE 7C, aprendizaje, entrenamiento, tools WRITE, Excel, tareas pendientes, tools nuevas.

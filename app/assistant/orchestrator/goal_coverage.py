@@ -34,6 +34,14 @@ REQUIREMENT_TYPES: dict[str, dict[str, Any]] = {
         "tools": frozenset({"get_purchase_orders"}),
         "label": "órdenes de compra",
     },
+    # FASE 9.2 — ordenes de CLIENTE. Vecina peligrosa de purchase_orders: las
+    # dos hablan de "ordenes" y apuntan a lados opuestos del negocio. Por eso su
+    # deteccion exige un calificador de cliente, igual que purchase_orders exige
+    # uno de compra.
+    "customer_orders": {
+        "tools": frozenset({"get_orders"}),
+        "label": "órdenes de cliente",
+    },
     "dashboard_kpis": {
         "tools": frozenset({"get_dashboard_kpis"}),
         "label": "indicadores",
@@ -244,6 +252,25 @@ def _sales_intent(folded: str) -> bool:
     return bool(re.search(CODE_LIKE_RE, folded))
 
 
+# FASE 9.2 — "orden" suelto no es nada: ya lo dice el comentario de
+# purchase_orders, y anadir una segunda familia de ordenes lo vuelve mas cierto.
+# Una orden de CLIENTE solo cuenta junto a un calificador que la desambigue del
+# otro lado del negocio. Sin el, no se levanta requisito: un requisito no
+# cubierto bloquea el final_answer, asi que un falso positivo aqui rompe casos
+# que hoy pasan — que es exactamente lo que le paso a "ventas" suelto en 8.6.
+_CO_BARE_STEMS = ("ordenes", "orden", "oc")
+_CO_QUALIFIERS = ("cliente", "clientes", "venta", "ventas", "despacho")
+
+
+def _customer_order_intent(folded: str) -> bool:
+    """'orden de cliente', 'OC del cliente'. Nunca 'orden' a secas."""
+    if _has_phrase(folded, "orden de compra") or _has_phrase(folded, "ordenes de compra"):
+        return False
+    if not any(_has_phrase(folded, stem) for stem in _CO_BARE_STEMS):
+        return False
+    return any(_has_phrase(folded, q) for q in _CO_QUALIFIERS)
+
+
 def _bare_purchase_order_intent(folded: str) -> bool:
     """'ordenes'/'orden' only count next to an explicit compra/proveedor qualifier."""
     if not any(_has_phrase(folded, stem) for stem in _PO_BARE_STEMS):
@@ -258,6 +285,8 @@ def extract_requirement_types(message: str) -> tuple[str, list[str]]:
     for rtype, phrases in _AUTO_SIGNALS.items():
         if any(_has_phrase(folded, p) for p in phrases):
             found.append(rtype)
+    if "customer_orders" not in found and _customer_order_intent(folded):
+        found.append("customer_orders")
     if "purchase_orders" not in found and _bare_purchase_order_intent(folded):
         found.append("purchase_orders")
     # Absorcion: si la pregunta ya es de indicadores, el dashboard cubre las

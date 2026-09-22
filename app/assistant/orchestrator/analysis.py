@@ -284,18 +284,51 @@ def order_claims(claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(claims, key=lambda c: rank.get(str(c.get("kind")), len(rank)))
 
 
-def ladder_sections(rendered: list[tuple[str, str]]) -> list[str]:
+def ladder_sections(
+    rendered: list[tuple[str, str]], *, has_evidence: bool = True
+) -> list[str]:
     """Agrupa (kind, texto) bajo sus etiquetas, en orden de escalera.
 
     La etiqueta no es decoración: es lo que impide leer una proyección como un
     hecho. Si un día se quitan las cabeceras, "necesitarías 24 unidades" y "hay 7
     unidades" pasan a parecer la misma clase de afirmación.
+
+    FASE 9.7 — medido en la primera prueba real con lenguaje natural:
+
+        usuario   : "Hola"
+        asistente : "DATOS:\\n- Hola, ¿en qué puedo ayudarte?"
+
+    La cabecera afirmaba que un saludo era un dato observado del ERP.
+
+    FASE 9.8 — la primera corrección fue DEMASIADO ancha y se midió: quitar la
+    etiqueta a toda respuesta de una sola clase tumbó el benchmark de 72/76 a
+    31/76. La causa está en `evals/fase81_scorer.py:243`: un caso con
+    ``expected_data_vs_inference`` exige que la respuesta diga "datos", porque
+    esa palabra ES la señal de que el turno separó lo observado de lo inferido.
+    La queja original era "DATOS: aparece incluso en SALUDOS", no en respuestas
+    de datos.
+
+    La regla correcta, por tanto, mira si el turno consultó algo:
+
+        sin evidencia y una sola clase  -> es charla, no lleva etiqueta
+        con evidencia                   -> lleva etiqueta, siempre
+        dos o más clases                -> lleva etiqueta, siempre
+
+    ``has_evidence`` por defecto True: cualquier llamador que no se pronuncie
+    conserva el comportamiento de 8.1.
     """
+    clases = {k for k, _ in rendered if k}
+    etiquetar = len(clases) >= 2 or bool(has_evidence)
     out: list[str] = []
     for kind in LADDER_ORDER:
         lines = [text for k, text in rendered if k == kind]
         if not lines:
             continue
-        out.append(f"{LADDER_LABELS.get(kind, kind.upper())}:")
-        out.extend(f"- {line}" for line in lines)
+        if etiquetar:
+            out.append(f"{LADDER_LABELS.get(kind, kind.upper())}:")
+            out.extend(f"- {line}" for line in lines)
+        else:
+            # Sin etiqueta tampoco hacen falta viñetas para una sola idea: una
+            # frase suelta se lee como una frase, no como un informe de un ítem.
+            out.extend([lines[0]] if len(lines) == 1 else [f"- {l}" for l in lines])
     return out

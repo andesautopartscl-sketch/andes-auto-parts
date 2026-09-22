@@ -207,12 +207,38 @@ def _accumulate_usage(totals: dict[str, int], planner: Any) -> None:
             continue
 
 
+def _card_scope(agent_obs: dict[str, Any]) -> set[str] | None:
+    """La evidencia que sostiene el texto publicado, o None para no acotar.
+
+    FASE 9.8 — `build_answer_view` acepta `scope` justamente para esto y se
+    llamaba sin el. Demostrado con el store cargado: con get_product (marca
+    MAXUS) y get_inventory (marca BOSCH), la vista publicaba una tarjeta con
+    BOSCH aunque el texto solo citara la ficha. Eso es una segunda verdad por la
+    interfaz, que es exactamente lo que el docstring de la vista prohibe.
+
+    DOS GUARDAS, y las dos existen para que esto solo pueda QUITAR tarjetas que
+    se demuestran no citadas, nunca dejar la vista vacia:
+
+    1. si ningun claim declaro `evidence_ids`, no hay nada que demostrar y no se
+       acota — el comportamiento queda como estaba;
+    2. si el compositor tomo el relevo, el texto publicado ya NO sale de los
+       claims sino de toda la evidencia, asi que acotarlo lo dejaria mas estrecho
+       que el propio texto.
+    """
+    desglose = agent_obs.get("verifier_breakdown") or {}
+    if desglose.get("answer_replaced") or agent_obs.get("fallback_used"):
+        return None
+    citados = {str(x) for x in (desglose.get("cited_evidence_ids") or []) if x}
+    return citados or None
+
+
 def _answer_view_dict(
     *,
     plan: dict[str, Any],
     evidence: list[dict[str, Any]],
     correlation_id: str,
     store: Any | None = None,
+    scope: set[str] | None = None,
 ) -> dict[str, Any] | None:
     """FASE 8.4 — proyeccion estructurada de la evidencia ya verificada.
 
@@ -232,7 +258,7 @@ def _answer_view_dict(
 
             store = EvidenceStore()
             _ingest_plan_evidence(store, plan, evidence, correlation_id)
-        view = build_answer_view(store)
+        view = build_answer_view(store, scope=scope)
         return None if view.is_empty() else view.as_dict()
     except Exception:  # noqa: BLE001 — la vista es aditiva, jamas obligatoria
         logging.getLogger(__name__).debug("answer_view soft-failed", exc_info=True)
@@ -341,6 +367,31 @@ def run_orchestrator_chat(
 
     def _finish(result: dict[str, Any]) -> dict[str, Any]:
         result.setdefault("conversation_id", conversation_id)
+        # FASE 9.7 — la forma se declara en UN sitio. Hay catorce puntos de
+        # salida en esta funcion y varios son atajos conversacionales
+        # —aclaracion, rechazo de escritura, reutilizacion de contexto—, que son
+        # justo los turnos que 9.7 existe para describir. Ponerlo en cada
+        # `return` deja huecos: medido, los dos turnos anaforicos de N11 salian
+        # con el campo vacio. Derivarlo aqui no puede tener huecos.
+        if "response_kind" not in result:
+            if not result.get("ok", True) or result.get("error_code"):
+                # La salida mas temprana ocurre ANTES de que exista el mensaje
+                # saneado: no hay nada que clasificar y la forma ya se sabe.
+                result["response_kind"] = "error"
+            else:
+                try:
+                    from app.assistant.orchestrator.response_shape import (
+                        classify_response)
+
+                    result["response_kind"] = classify_response(
+                        message=text,
+                        evidence=[],
+                        needs_clarification=bool(result.get("needs_clarification")),
+                        reject=bool(result.get("scenario") == "write_reject"),
+                    )
+                except Exception:  # noqa: BLE001 — una etiqueta no tumba un turno
+                    logging.getLogger(__name__).debug(
+                        "response_shape soft-failed", exc_info=True)
         return result
 
     def _save_turn(
@@ -862,7 +913,12 @@ def run_orchestrator_chat(
             )
             return _finish({
                 "ok": False,
-                "error_code": "llm_unavailable",
+                # FASE 9 — se propaga el codigo REAL. Aplanarlo todo en
+                # "llm_unavailable" borraba la diferencia entre una credencial
+                # rechazada y un proveedor caido, y por eso 354 turnos con una
+                # clave placeholder se leyeron como "el proveedor no responde".
+                # El mensaje al usuario no cambia: el codigo es para diagnostico.
+                "error_code": exc.code or "llm_unavailable",
                 "message": (
                     "El asistente en lenguaje natural no está disponible. "
                     "Usa comandos /buscar, /stock, /kpis, etc."
@@ -1374,9 +1430,29 @@ def run_orchestrator_chat(
         replan_count=replan_count,
     )
 
+    # FASE 9.7 — que forma tiene esta respuesta. Se DEDUCE de lo que el turno ya
+    # hizo (evidencia, banderas, mensaje); no decide contenido ni llama a nadie.
+    # Sirve para dos cosas concretas: no colgar tarjetas de una charla, y que la
+    # forma sea observable en metricas en vez de adivinarse desde el texto.
+    try:
+        from app.assistant.orchestrator.response_shape import (
+            classify_response, wants_cards)
+
+        response_kind = classify_response(
+            message=text,
+            evidence=evidence,
+            needs_clarification=bool(plan.get("needs_clarification")),
+            reject=bool(plan.get("reject")),
+            error_code=None,
+        )
+    except Exception:  # noqa: BLE001 — una etiqueta no puede tumbar un turno
+        logging.getLogger(__name__).debug("response_shape soft-failed", exc_info=True)
+        response_kind, wants_cards = "data_answer", (lambda _k: True)
+
     return _finish({
         "ok": True,
         "reply": composed["reply"],
+        "response_kind": response_kind,
         "tools_used": tools_used,
         "evidence_summary": [
             {
@@ -1407,8 +1483,11 @@ def run_orchestrator_chat(
         "token_economics": agent_obs.get("token_economics"),
         "evidence_degradation": agent_obs.get("evidence_degradation"),
         "sufficiency": agent_obs.get("sufficiency"),
+        # Una charla no lleva tarjetas: un saludo con una ficha de producto
+        # colgando es la version visual del "DATOS:" delante de "Hola".
         "view": _answer_view_dict(
             plan=plan, evidence=evidence, correlation_id=correlation_id,
             store=agent_obs.get("evidence_store"),
-        ),
+            scope=_card_scope(agent_obs),
+        ) if wants_cards(response_kind) else None,
     })

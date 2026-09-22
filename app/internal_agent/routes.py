@@ -29,6 +29,7 @@ from app.internal_agent.product import (
     validate_product_codigo,
 )
 from app.internal_agent.purchase_orders import get_public_purchase_orders, validate_purchase_order_args
+from app.internal_agent.orders import get_public_orders, validate_orders_args
 from app.internal_agent.sales import get_public_sales, validate_sales_args
 from app.internal_agent.supplier import get_public_suppliers, validate_supplier_args
 
@@ -276,6 +277,43 @@ def ventas_sales():
             {
                 "ok": True,
                 "tool": "get_sales",
+                "classification": "CONFIDENTIAL",
+                "data": data,
+                "meta": {"limit": args["limit"], "truncated": truncated,
+                         "environment": environment},
+            }
+        )
+    except InternalAuthError as exc:
+        return error_response(exc)
+
+
+@internal_agent_bp.route("/ventas/orders", methods=["POST"])
+def ventas_orders():
+    """FASE 9.2 — ordenes de cliente. Misma ACL que el resto del modulo ventas.
+
+    include_finance sigue la misma puerta que ventas e ingresos: el ERP decide,
+    el Gateway no concede visibilidad financiera por su cuenta.
+    """
+    try:
+        environment = authenticate_m2m(request)
+        actor = actor_username(request)
+        username, role_name = resolve_actor(actor)
+        require_mod_ventas(username, role_name)
+        args = validate_orders_args(request.get_json(silent=True))
+        data, truncated = get_public_orders(
+            codigo=args["codigo"],
+            cliente=args["cliente"],
+            estados=args["estados"],
+            group_by=args["group_by"],
+            fecha_desde=args["fecha_desde"],
+            fecha_hasta=args["fecha_hasta"],
+            limit=args["limit"],
+            include_finance=actor_can_view_finanzas(username, role_name),
+        )
+        return jsonify(
+            {
+                "ok": True,
+                "tool": "get_orders",
                 "classification": "CONFIDENTIAL",
                 "data": data,
                 "meta": {"limit": args["limit"], "truncated": truncated,

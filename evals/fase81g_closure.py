@@ -49,6 +49,7 @@ def _arm_report(out_dir: Path, *, measurement_valid: bool = True) -> dict[str, A
         "analysis_enabled": "an1" in this.split("-"),
         "provenance_enforced": "pv1" in this.split("-"),
         "period_resolution": "pr1" in this.split("-"),
+        "orders_enabled": "or1" in this.split("-"),
         "siblings_available": siblings,
         # Un A/B necesita los DOS brazos. Decirlo aqui evita analizar uno solo
         # creyendo que se tiene la pareja, que es lo que paso en 8.5.
@@ -89,11 +90,30 @@ def arm_id() -> str:
         # brazo o dos configuraciones distintas se pisan el fichero, que es
         # exactamente el fallo de 8.5 que este identificador existe para evitar.
         "pr1" if _on("ANDES_ASSISTANT_PERIOD_RESOLUTION") else "pr0",
+        # FASE 9.2 — la visibilidad de get_orders cambia el prompt de TODAS las
+        # preguntas, no solo de las comerciales. Mismo argumento que `pr`: una
+        # dimension que cambia el comportamiento va en el id o dos brazos se
+        # pisan el fichero.
+        "or1" if _on("ANDES_ASSISTANT_ORDERS_ENABLED") else "or0",
     ]
     return "-".join(parts)
 
 
-ARM_DIMENSIONS = (("an0", "an1"), ("pv0", "pv1"), ("pr0", "pr1"))
+# Dimension -> (prefijo, variable de entorno). Una sola tabla: el id del brazo,
+# la enumeracion de hermanos y la restauracion tras la suite salen de aqui.
+#
+# FASE 9.2 — antes la restauracion enumeraba las banderas a mano, y al anadir la
+# cuarta dimension me la deje: la corrida con ORDERS=1 se reetiqueto como `or0` y
+# piso el informe del otro brazo. El guard lo detecto (stable=False) porque se
+# comprueba a si mismo, pero la lista a mano era el defecto. Derivarla cierra la
+# clase entera.
+ARM_FLAGS: tuple[tuple[str, str], ...] = (
+    ("an", "ANDES_ASSISTANT_ANALYSIS_ENABLED"),
+    ("pv", "ANDES_ASSISTANT_PROVENANCE_ENFORCE"),
+    ("pr", "ANDES_ASSISTANT_PERIOD_RESOLUTION"),
+    ("or", "ANDES_ASSISTANT_ORDERS_ENABLED"),
+)
+ARM_DIMENSIONS = tuple((f"{p}0", f"{p}1") for p, _ in ARM_FLAGS)
 
 
 def _all_arm_ids() -> tuple[str, ...]:
@@ -188,6 +208,11 @@ TEST_MODULES = [
     "tests.test_orchestrator_fase8x_unmeasured",
     "tests.test_orchestrator_fase8x_boundaries",
     "tests.test_orchestrator_fase8x_artifacts",
+    # 9.1 — economia de prompt
+    "tests.test_orchestrator_fase9_prompt_economy",
+    "tests.test_orchestrator_fase92_orders",
+    "tests.test_orchestrator_fase9_flag_measurement",
+    "tests.test_orchestrator_fase9_preflight",
     # FASE 5 / 7A / 7B
     "tests.test_orchestrator_fase5_context",
     "tests.test_orchestrator_fase7a_history",
@@ -998,6 +1023,73 @@ def _explained_empty_reply(body: dict[str, Any]) -> bool:
         plan={"steps": [{"step": 1, "tool": "get_equivalences"}]},
         evidence=[item])["reply"]
     return "OEM" in reply and "no devolvi" not in reply
+
+
+def probe_orders_over_http() -> dict[str, Any]:
+    """FASE 9.2 — ordenes de cliente por la CADENA REAL.
+
+    Existir en disco no es estar entregado: Gateway y ERP son procesos aparte
+    sin reloader, y en 8.6 una tool respondia tool_not_allowed por HTTP mientras
+    todos los tests en proceso pasaban. Este probe es el que nota la diferencia.
+    """
+    from app.assistant.orchestrator.composer import compose_answer
+    from app.assistant.orchestrator.normalizer import normalize_tool_result
+    from app.assistant.routes import invoke_gateway
+
+    def _call(args: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        return _gateway_call("get_orders", args)
+
+    status, base = _call({})
+    data = base.get("data") or {}
+    _, ventana = _call({"fecha_desde": "2026-07-01", "fecha_hasta": "2026-07-31"})
+    _, con_anuladas = _call({"estados": ["pagada", "recibida", "anulada"]})
+    mal_estado, _ = _call({"estados": ["inventado"]})
+    mal_group, _ = _call({"group_by": "semana"})
+    denegado, body_denegado = invoke_gateway(
+        {"tool": "get_orders", "arguments": {}, "actor_user": "noexiste_usuario"})
+
+    blob = json.dumps(base, ensure_ascii=False).lower()
+    leaked = [k for k in ("vendedor", "direccion", "despacho", "observacion",
+                          "usuario", "referencia", "cliente_id", "telefono",
+                          "email", "rut", "password", "token") if k in blob]
+
+    item = normalize_tool_result(status, base)
+    item["tool"] = "get_orders"
+    reply = compose_answer(plan={"steps": [{"step": 1, "tool": "get_orders"}]},
+                           evidence=[item])["reply"]
+
+    vent = (ventana.get("data") or {}).get("periodo") or {}
+    base_ordenes = int(data.get("ordenes") or 0)
+    anul_ordenes = int((con_anuladas.get("data") or {}).get("ordenes") or 0)
+    return {
+        "http_status": status,
+        "reachable": status == 200 and bool(base.get("ok")),
+        "classification": base.get("classification"),
+        "ordenes": base_ordenes,
+        "lineas": data.get("lineas"),
+        "leaked_keys": leaked,
+        "scope_always_declared": isinstance(data.get("periodo"), dict),
+        "windowed_periodo": vent,
+        "cancelled_excluded_by_default": bool(data.get("anuladas_excluidas")),
+        # Nombrarlas tiene que cambiar la cifra: si no, la exclusion no existe.
+        "naming_cancelled_changes_the_figure": anul_ordenes > base_ordenes,
+        "state_breakdown_present": bool(data.get("ordenes_por_estado")),
+        "bad_state_rejected": mal_estado == 400,
+        "bad_group_by_rejected": mal_group == 400,
+        "unknown_actor_denied": denegado in (401, 403) and not body_denegado.get("ok"),
+        "reply_states_the_exclusion": "anuladas" in reply.lower(),
+        "reply_states_its_scope": "sin filtro de fecha" in reply,
+        "verdict": (
+            "RATE_LIMITED" if _rate_limited(base)
+            else "PASS" if (status == 200 and base.get("ok") and not leaked
+                            and isinstance(data.get("periodo"), dict)
+                            and data.get("anuladas_excluidas")
+                            and anul_ordenes > base_ordenes
+                            and mal_estado == 400 and mal_group == 400
+                            and denegado in (401, 403)
+                            and "anuladas" in reply.lower())
+            else "FAIL"),
+    }
 
 
 def probe_artifact_integrity(out_dir: Path) -> dict[str, Any]:
@@ -1939,16 +2031,50 @@ class _RateTolerantGateway:
             _routes.invoke_gateway = self._original
 
 
+from app.assistant.orchestrator.agent_config import MAX_SECONDS as MAX_SECONDS_HINT  # noqa: E402
+
+
+def _reclassify_throttled(section: dict[str, Any], waited: float) -> list[str]:
+    """FASE 9.2 — un probe que expiro por culpa del limitador no midio el producto.
+
+    El AgentLoop tiene un plazo de MAX_SECONDS (40 s). Si el limitador del
+    Gateway durmio 70 s durante la tanda, ese plazo se agota por espera, no por
+    comportamiento: medido en `definitive_not_found`, que dio FAIL dentro del
+    closure con `agent_timeout` y PASS en aislamiento treinta segundos despues.
+
+    Es la misma clase que `unmeasured` en el benchmark: no confundir la
+    disponibilidad de la infraestructura con un fallo del producto. La regla es
+    estrecha a proposito — solo reclasifica un FAIL cuyo propio payload declara
+    un timeout, y solo si el limitador llego a dormir.
+    """
+    if waited <= 0:
+        return []
+    reclasificados = []
+    for name, row in section.items():
+        if not isinstance(row, dict) or row.get("verdict") != "FAIL":
+            continue
+        if "timeout" not in json.dumps(row, ensure_ascii=False, default=str).lower():
+            continue
+        row["verdict"] = "RATE_LIMITED"
+        row["throttled_note"] = (
+            f"reclasificado: el limitador durmio {waited:.1f}s y el plazo del "
+            f"AgentLoop ({MAX_SECONDS_HINT}s) expiro por espera, no por el producto")
+        reclasificados.append(name)
+    return reclasificados
+
+
 def run_deterministic(*, with_gateway: bool) -> dict[str, Any]:
     with _RateTolerantGateway() as guard:
         section = _run_deterministic_probes(with_gateway=with_gateway)
-    if guard.retries or guard.exhausted:
+    reclasificados = _reclassify_throttled(section, guard.waited)
+    if guard.retries or guard.exhausted or reclasificados:
         section["rate_limit"] = {
             "retries": guard.retries,
             "seconds_waited": round(guard.waited, 1),
             # Si esto NO es cero, algun probe trabajo con una respuesta de error
             # y su veredicto no es fiable. Decirlo vale mas que un FAIL opaco.
             "exhausted_calls": guard.exhausted,
+            "throttled_probes": reclasificados,
         }
     return section
 
@@ -1986,6 +2112,7 @@ def _run_deterministic_probes(*, with_gateway: bool) -> dict[str, Any]:
     section["equivalences_over_http"] = probe_equivalences_over_http()
     section["contract_honesty"] = probe_contract_honesty()
     section["period_resolution"] = probe_period_resolution()
+    section["orders_over_http"] = probe_orders_over_http()
     section["artifact_integrity"] = probe_artifact_integrity(OUT_DIR)
     section["limit_coherence"] = probe_limit_coherence()
     section["finance_redaction"] = probe_finance_redaction()
@@ -2813,10 +2940,9 @@ def main(argv: list[str] | None = None) -> int:
     report["tests"] = run_tests()
     arm_after = arm_id()
     if arm_after != arm_before:
-        for flag, on in (("ANDES_ASSISTANT_ANALYSIS_ENABLED", "an1" in arm_before),
-                         ("ANDES_ASSISTANT_PROVENANCE_ENFORCE", "pv1" in arm_before),
-                         ("ANDES_ASSISTANT_PERIOD_RESOLUTION", "pr1" in arm_before)):
-            os.environ[flag] = "1" if on else "0"
+        partes = set(arm_before.split("-"))
+        for prefijo, flag in ARM_FLAGS:
+            os.environ[flag] = "1" if f"{prefijo}1" in partes else "0"
         report["notes"].append(
             f"la suite altero las banderas de brazo ({arm_before} -> {arm_after}); "
             f"restauradas a {arm_before}")
@@ -2825,7 +2951,20 @@ def main(argv: list[str] | None = None) -> int:
                                "stable": arm_after == arm_before}
 
     if want_llm:
-        if not _llm_ready():
+        # FASE 9 — preflight ANTES de gastar turnos. Una comprobacion de
+        # presencia acepta un placeholder: el 2026-09-21 una sesion exporto la
+        # cadena "TU_KEY_YA_EXISTENTE", `_llm_ready()` dijo que si, y el arnes
+        # ejecuto 354 turnos marcandolos "sin medir" sin que nadie dijera que la
+        # credencial era el problema. Una llamada barata lo zanja.
+        from evals.fase9_llm_preflight import require_usable_provider
+
+        bloqueo = require_usable_provider(context="fase81g --llm")
+        if bloqueo is not None:
+            report["notes"].append(
+                f"preflight LLM: {bloqueo['verdict']} — {bloqueo.get('advice')}")
+            report["llm_preflight"] = bloqueo
+            print("fase81g: SKIP llm (preflight)")
+        elif not _llm_ready():
             report["notes"].append("ANDES_LLM_API_KEY missing: LLM sections skipped")
             print("fase81g: SKIP llm (no ANDES_LLM_API_KEY)")
         elif not _enable_agent():

@@ -601,13 +601,32 @@ def continue_agent_loop(
                 ).safe_snapshot()
             except Exception:  # noqa: BLE001 — una metrica no puede tumbar el turno
                 state.sufficiency = {}
+            # FASE 9.6 (D2) — la senal estructurada tiene que decir lo que el
+            # turno HIZO.
+            #
+            # Medido en N08 ("Cuanto nos queda?"): el asistente pidio aclaracion
+            # correctamente y no llamo ninguna tool, pero el turno reportaba
+            # needs_clarification=False. La accion `clarify` existe y pone la
+            # bandera bien; el modelo simplemente no la eligio — el prompt la
+            # enumera y nunca dice cuando usarla. Reescribir el prompt es la
+            # clase de cambio que ya costo T07 (9/10 -> 0/10) en 8.1I.2, asi que
+            # la senal se deriva de la estructura en vez de pedirsela al modelo.
+            #
+            # Una respuesta final SIN evidencia y SIN claims no afirma nada y no
+            # se apoya en nada: por construccion no es una respuesta, es una
+            # peticion de mas informacion. Los saludos de N01/N02 NO caen aqui
+            # porque si emiten claims. No se mira el texto: "Hola, en que puedo
+            # ayudarte?" tambien termina en interrogacion, y una heuristica
+            # sobre el signo los marcaria a los tres.
+            sin_evidencia = not raw_evidence
+            sin_claims = not (decision.get("claims") or [])
             return AgentLoopResult(
                 reply=reply,
                 classification=verified.classification,
                 raw_evidence=raw_evidence,
                 fallback_used=state.fallback_used,
                 fallback_reason=state.fallback_reason,
-                needs_clarification=False,
+                needs_clarification=bool(sin_evidencia and sin_claims),
                 reject=False,
                 scenario=plan.get("scenario"),
                 grounded=True,

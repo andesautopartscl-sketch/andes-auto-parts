@@ -232,8 +232,9 @@ class ItNeverWidensWhatTheModelMaySendTests(unittest.TestCase):
                 continue
             (skipped if "periodo" in keys else injected).append(tool)
         self.assertEqual(skipped, ["get_dashboard_kpis"])
-        self.assertEqual(injected, ["get_ingresos", "get_purchase_orders",
-                                    "get_sales", "get_stock_movements"])
+        self.assertEqual(injected, ["get_ingresos", "get_orders",
+                                    "get_purchase_orders", "get_sales",
+                                    "get_stock_movements"])
 
     def test_a_user_written_iso_date_still_works(self):
         out = self._norm("get_ingresos", {"codigo": "2404",
@@ -284,8 +285,10 @@ class TheFlagKeepsTheOldBehaviourExactlyTests(unittest.TestCase):
         del brazo o dos configuraciones se pisan el fichero."""
         from evals.fase81g_closure import _all_arm_ids, arm_id
 
+        from evals.fase81g_closure import ARM_DIMENSIONS
+
         self.assertIn("pr0", arm_id().split("-"))
-        self.assertEqual(len(_all_arm_ids()), 8)
+        self.assertEqual(len(_all_arm_ids()), 2 ** len(ARM_DIMENSIONS))
 
 
 if __name__ == "__main__":

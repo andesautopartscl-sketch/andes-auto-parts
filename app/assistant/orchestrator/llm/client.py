@@ -128,6 +128,29 @@ class OpenAICompatibleClient:
                 status = getattr(exc, "status_code", None) or getattr(exc, "status", None)
                 name = type(exc).__name__.lower()
                 message = str(exc).lower()
+                # FASE 9 — una credencial invalida NO es "proveedor no disponible".
+                #
+                # Medido el 2026-09-21: una sesion exporto la cadena literal
+                # "TU_KEY_YA_EXISTENTE" como clave. `_llm_ready()` solo miraba que
+                # la variable no estuviera vacia, el cliente colapso el 401 en
+                # `llm_unavailable`, y el arnes quemo 354 turnos marcandolos "sin
+                # medir". Nadie dijo nunca "tus credenciales estan mal".
+                #
+                # Reintentar un 401 es ademas gasto puro: la credencial no mejora
+                # con el tiempo. Se separa del resto y se corta en seco.
+                hard_auth = (
+                    status in (401, 403)
+                    or "authenticationerror" in name
+                    or "permissiondenied" in name
+                    or "invalid_api_key" in message
+                    or "incorrect api key" in message
+                    or "invalid x-api-key" in message
+                    or "unauthorized" in message
+                )
+                if hard_auth:
+                    raise LlmError(
+                        "llm_auth_invalid",
+                        "LLM credentials rejected by the provider") from exc
                 # Quota exhaustion is a hard 429 — do not burn retries.
                 hard_quota = (
                     "insufficient_quota" in message
@@ -149,9 +172,10 @@ class OpenAICompatibleClient:
                 if "timeout" in name or "timeout" in message:
                     raise LlmError("llm_unavailable", "LLM request timed out") from exc
                 if hard_quota:
-                    raise LlmError("llm_unavailable", "LLM provider quota exhausted") from exc
+                    raise LlmError("llm_quota_exhausted",
+                                   "LLM provider quota exhausted") from exc
                 if status == 429:
-                    raise LlmError("llm_unavailable", "LLM rate limited") from exc
+                    raise LlmError("llm_rate_limited", "LLM rate limited") from exc
                 raise LlmError("llm_unavailable", "LLM provider unavailable") from exc
 
         raise LlmError("llm_unavailable", f"LLM provider unavailable: {last_exc}")

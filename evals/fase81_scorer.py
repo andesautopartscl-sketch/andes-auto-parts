@@ -7,22 +7,26 @@ from __future__ import annotations
 import re
 from typing import Any
 
-ALLOWED_TOOLS = frozenset(
-    {
-        "search_catalog",
-        "get_product",
-        "get_inventory",
-        "check_stock",
-        "get_stock_movements",
-        "get_ingresos",
-        "get_purchase_orders",
-        "get_customer",
-        "get_supplier",
-        "get_sales",
-        "get_equivalences",
-        "get_dashboard_kpis",
-    }
-)
+# FASE 9 — se DERIVA del catalogo del orquestador, no se copia.
+#
+# Era una sexta allowlist escrita a mano, y se quedo en 12 tools cuando el
+# sistema paso a 13. Consecuencia medida: una llamada legitima a `get_orders`
+# se puntuaba `invented_tool` y el caso FALLABA. El A/B de esa bandera habria
+# leido una regresion masiva donde no habia ninguna — el mismo error de clase
+# que las 59 casillas vacias contadas como fallos de producto.
+#
+# El fallback existe para que el scorer siga siendo importable suelto (se usa
+# desde runners que no cargan la app); si se usa, se nota, porque quedaria
+# desalineado igual que antes.
+try:  # pragma: no cover - ruta normal
+    from app.assistant.orchestrator.catalog import ALLOWED_TOOLS
+except Exception:  # noqa: BLE001 - runner sin la app cargada
+    ALLOWED_TOOLS = frozenset({
+        "search_catalog", "get_product", "get_inventory", "check_stock",
+        "get_stock_movements", "get_ingresos", "get_purchase_orders",
+        "get_customer", "get_supplier", "get_sales", "get_equivalences",
+        "get_orders", "get_dashboard_kpis",
+    })
 
 # Explicit families only — never inferred from free text / stemming.
 TOOL_FAMILIES: dict[str, frozenset[str]] = {
@@ -37,6 +41,7 @@ TOOL_FAMILIES: dict[str, frozenset[str]] = {
     "supplier": frozenset({"get_supplier"}),
     "sales": frozenset({"get_sales"}),
     "equivalences": frozenset({"get_equivalences"}),
+    "customer_orders": frozenset({"get_orders"}),
 }
 
 WRITE_PREFIXES = ("create_", "write_", "delete_", "update_", "insert_", "remove_")
@@ -557,6 +562,17 @@ def _multi_ok(gold: dict[str, Any], run: dict[str, Any], tools: list[str], tool_
     return ok, reasons
 
 
+# FASE 9 — la familia entera de fallos del proveedor. Ninguno es un fallo del
+# producto y los cuatro dejan la casilla vacia, pero decir CUAL fue es la
+# diferencia entre "repite la corrida" y "arregla tu credencial".
+PROVIDER_FAILURE_CODES = frozenset({
+    "llm_unavailable",      # caida, red o timeout
+    "llm_auth_invalid",     # credencial rechazada — no se arregla esperando
+    "llm_quota_exhausted",  # sin saldo
+    "llm_rate_limited",     # 429 sostenido
+})
+
+
 def _unmeasured(run: dict[str, Any]) -> bool:
     """El modelo nunca respondio: este caso NO se midio.
 
@@ -576,7 +592,7 @@ def _unmeasured(run: dict[str, Any]) -> bool:
     agotada, rate limit y proveedor caido. Un caso asi no es un fallo del
     producto: es una casilla vacia.
     """
-    return str(run.get("fallback_reason") or "") == "llm_unavailable"
+    return str(run.get("fallback_reason") or "") in PROVIDER_FAILURE_CODES
 
 
 def _failure_kind(run: dict[str, Any], *, passed: bool, baseline: str,

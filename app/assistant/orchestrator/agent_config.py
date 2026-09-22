@@ -242,6 +242,32 @@ def period_resolution_enabled() -> bool:
     return _env_bool("ANDES_ASSISTANT_PERIOD_RESOLUTION", False)
 
 
+# FASE 9.2 — capacidades comerciales que el modelo AUN no ha visto medido.
+#
+# Anadir una tool cambia el prompt de TODAS las preguntas, y eso no se puede
+# declarar neutro sin una corrida con modelo: el sistema tiene 13 contratos
+# donde antes tenia 12, y la seleccion de tool es la puerta mas puntuada del
+# benchmark. La tool existe en las cinco allowlists y el validador la acepta
+# —asi el drift, los contratos y las pruebas la cubren igual— pero el modelo NO
+# la ve hasta que la medicion lo respalde.
+#
+# Apagada, el prompt es el de 8.x mas la compresion de 9.1, y nada mas.
+_GATED_TOOLS: dict[str, str] = {
+    "get_orders": "ANDES_ASSISTANT_ORDERS_ENABLED",
+}
+
+
+def model_facing_tools(all_tools) -> frozenset[str]:
+    """Las tools que el modelo VE. Subconjunto de las que el sistema acepta."""
+    hidden = {name for name, flag in _GATED_TOOLS.items()
+              if not _env_bool(flag, False)}
+    return frozenset(t for t in all_tools if t not in hidden)
+
+
+def orders_enabled() -> bool:
+    return _env_bool("ANDES_ASSISTANT_ORDERS_ENABLED", False)
+
+
 def agent_enabled() -> bool:
     """Raw flag. Default 0. Does not imply the loop will run."""
     return _env_bool("ANDES_ASSISTANT_AGENT_ENABLED", False)

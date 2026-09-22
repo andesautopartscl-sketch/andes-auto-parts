@@ -120,6 +120,7 @@ def validate_tool_arguments(tool: str, arguments: Any) -> dict[str, Any]:
         "get_ingresos": _get_ingresos,
         "get_purchase_orders": _get_purchase_orders,
         "get_sales": _get_sales,
+        "get_orders": _get_orders,
         "get_equivalences": _get_equivalences,
         "get_customer": _get_party,
         "get_supplier": _get_party,
@@ -246,6 +247,52 @@ def _get_equivalences(data: dict[str, Any]) -> dict[str, Any]:
         if isinstance(limit, bool) or not isinstance(limit, int) or not (1 <= limit <= 20):
             raise SchemaError("invalid_args", "'limit' must be between 1 and 20")
         out["limit"] = limit
+    return out
+
+
+def _get_orders(data: dict[str, Any]) -> dict[str, Any]:
+    """FASE 9.2 — argumentos de ordenes de cliente.
+
+    `anulada` se admite solo si se nombra: excluirla por defecto no es una
+    restriccion de permisos sino de correccion, igual que rechazar orden_compra
+    en get_sales. Sumar una orden anulada a los ingresos invierte el signo de la
+    realidad, y el payload declara que las excluyo.
+    """
+    _require_keys(data, {"codigo", "cliente", "estados", "group_by",
+                         "fecha_desde", "fecha_hasta", "limit"})
+    out: dict[str, Any] = {}
+    codigo = _opt_str(data, "codigo", max_len=64)
+    if codigo:
+        out["codigo"] = codigo.upper()
+    cliente = _opt_str(data, "cliente", max_len=120)
+    if cliente:
+        out["cliente"] = cliente
+    group_by = _opt_str(data, "group_by", max_len=8)
+    if group_by:
+        group_by = group_by.lower()
+        if group_by not in {"mes", "dia"}:
+            raise SchemaError("invalid_args", "'group_by' must be mes|dia")
+        out["group_by"] = group_by
+    raw_estados = data.get("estados")
+    if raw_estados not in (None, "", []):
+        if not isinstance(raw_estados, list) or len(raw_estados) > 4:
+            raise SchemaError("invalid_args", "'estados' must be a list of at most 4")
+        estados = []
+        for entry in raw_estados:
+            if not isinstance(entry, str):
+                raise SchemaError("invalid_args", "'estados' entries must be strings")
+            text = entry.strip().lower()
+            if text not in {"pagada", "recibida", "anulada"}:
+                raise SchemaError("invalid_args", "'estados' has a value not allowed")
+            estados.append(text)
+        out["estados"] = estados
+    for key in ("fecha_desde", "fecha_hasta"):
+        value = _opt_str(data, key, max_len=10)
+        if value:
+            if not _DATE_RE.match(value):
+                raise SchemaError("invalid_args", f"'{key}' must be YYYY-MM-DD")
+            out[key] = value
+    out["limit"] = _clamp_int(data, "limit", 1, 20, 10)
     return out
 
 

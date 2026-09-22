@@ -161,6 +161,34 @@ class _FakeERP(BaseHTTPRequestHandler):
                 },
                 "meta": {"limit": 10, "truncated": False, "environment": "local"},
             },
+            "/internal/agent/v1/ventas/orders": {
+                "ok": True,
+                "tool": "get_orders",
+                "classification": "CONFIDENTIAL",
+                "data": {
+                    # FASE 9.2 — mismo reparto que ventas: agregados sobre el
+                    # conjunto completo y detalle marcado como muestra. Y el
+                    # alcance viaja siempre, tambien sin filtro de fecha.
+                    "ordenes": 0 if empty else 2,
+                    "lineas": 0 if empty else 3,
+                    "unidades": 0 if empty else 3,
+                    "count": 0 if empty else 3,
+                    "ordenes_por_estado": {} if empty else {"pagada": 2},
+                    "lineas_por_estado": {} if empty else {"pagada": 3},
+                    "estados_consultados": ["pagada", "recibida"],
+                    "anuladas_excluidas": True,
+                    "periodo": {"desde": None, "hasta": None},
+                    "detalle_parcial": False,
+                    "items": []
+                    if empty
+                    else [{"numero_oc": "73858", "fecha": "2026-06-27",
+                           "estado": "pagada", "codigo": "2404",
+                           "descripcion": "FILTRO", "marca": "BOSCH",
+                           "cantidad": 1, "precio_unitario": 100.0,
+                           "subtotal": 100.0}],
+                },
+                "meta": {"limit": 10, "truncated": False},
+            },
             "/internal/agent/v1/ventas/sales": {
                 "ok": True,
                 "tool": "get_sales",
@@ -336,6 +364,10 @@ class GatewayContractOrchestratorTests(unittest.TestCase):
             "get_equivalences": {
                 "steps": [{"step": 1, "tool": "get_equivalences",
                            "arguments": {"oem": "038-1701225", "limit": 5}}]
+            },
+            "get_orders": {
+                "steps": [{"step": 1, "tool": "get_orders",
+                           "arguments": {"codigo": "2404", "limit": 5}}]
             },
             "get_ingresos": {"steps": [{"step": 1, "tool": "get_ingresos", "arguments": {"codigo": "2404", "limit": 5}}]},
             "get_purchase_orders": {"steps": [{"step": 1, "tool": "get_purchase_orders", "arguments": {"limit": 5}}]},

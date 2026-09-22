@@ -94,6 +94,7 @@ def validate_tool_args(tool: str, arguments: Any) -> dict[str, Any]:
         "get_ingresos": _get_ingresos,
         "get_purchase_orders": _get_purchase_orders,
         "get_sales": _get_sales,
+        "get_orders": _get_orders,
         "get_equivalences": _get_equivalences,
         "get_customer": _get_party,
         "get_supplier": _get_party,
@@ -271,6 +272,39 @@ def _get_sales(data: dict[str, Any]) -> dict[str, Any]:
                 raise ArgSchemaError("invalid_args", "'tipos' entries must be strings")
             tipos.append(entry.strip().lower())
         out["tipos"] = tipos
+    if "limit" in data:
+        lim = data["limit"]
+        if isinstance(lim, bool) or not isinstance(lim, int) or lim < 1 or lim > 20:
+            raise ArgSchemaError("invalid_args", "'limit' must be between 1 and 20")
+        out["limit"] = lim
+    return out
+
+
+def _get_orders(data: dict[str, Any]) -> dict[str, Any]:
+    """FASE 9.2. `estados` se acepta pero NO se expone al modelo en el contrato:
+    decidir que una orden anulada cuenta como venta es del sistema, no del
+    modelo — es la misma trampa que `tipos` en get_sales, donde admitir
+    orden_compra invertiria el signo del resultado."""
+    _require_only(data, {"codigo", "cliente", "estados", "group_by",
+                         "fecha_desde", "fecha_hasta", "limit"})
+    out: dict[str, Any] = {}
+    for key in ("codigo", "cliente", "group_by", "fecha_desde", "fecha_hasta"):
+        if key in data:
+            if not isinstance(data[key], str):
+                raise ArgSchemaError("invalid_args", f"'{key}' must be a string")
+            value = data[key].strip()
+            if value:
+                out[key] = value.upper() if key == "codigo" else value
+    if "estados" in data:
+        raw = data["estados"]
+        if not isinstance(raw, list) or len(raw) > 4:
+            raise ArgSchemaError("invalid_args", "'estados' must be a list of at most 4")
+        estados = []
+        for entry in raw:
+            if not isinstance(entry, str):
+                raise ArgSchemaError("invalid_args", "'estados' entries must be strings")
+            estados.append(entry.strip().lower())
+        out["estados"] = estados
     if "limit" in data:
         lim = data["limit"]
         if isinstance(lim, bool) or not isinstance(lim, int) or lim < 1 or lim > 20:

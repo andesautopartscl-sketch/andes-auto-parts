@@ -134,7 +134,9 @@ class TheArmRefusesToCompleteAnABTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             out = Path(tmp)
             # Un hermano en disco para que `siblings` no este vacio.
-            otro = "an1-pv1-pr1" if arm_id() != "an1-pv1-pr1" else "an0-pv0-pr0"
+            from evals.fase81g_closure import _all_arm_ids
+
+            otro = next(a for a in _all_arm_ids() if a != arm_id())
             (out / f"fase81_final_report.{otro}.json").write_text("{}", encoding="utf-8")
 
             valido = _arm_report(out, measurement_valid=True)

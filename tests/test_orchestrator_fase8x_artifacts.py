@@ -109,9 +109,14 @@ class SupersededArtifactsAreListedNotHiddenTests(unittest.TestCase):
                     passed=66, n=69)  # sin runs: validez indeterminable
             self.assertEqual(probe_artifact_integrity(out)["verdict"], "PASS")
 
-    def test_the_current_scheme_has_eight_arms_and_old_names_are_not_among_them(self):
+    def test_the_current_scheme_enumerates_every_flag_combination(self):
+        """El numero crece con cada dimension; lo que no puede cambiar es que se
+        GENERE de la tabla de banderas en vez de escribirse."""
+        from evals.fase81g_closure import ARM_DIMENSIONS
+
         vigentes = set(_all_arm_ids())
-        self.assertEqual(len(vigentes), 8)
+        esperado = 2 ** len(ARM_DIMENSIONS)
+        self.assertEqual(len(vigentes), esperado)
         self.assertNotIn("an0-pv0", vigentes)
         self.assertIn(arm_id(), vigentes)
 

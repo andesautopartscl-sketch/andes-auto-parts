@@ -147,7 +147,46 @@ class LlmClientMockTests(unittest.TestCase):
         client = OpenAICompatibleClient(_settings(max_retries=0), http_client=_FakeOpenAI(behavior))
         with self.assertRaises(LlmError) as ctx:
             client.complete_plan_json(system="s", user="u")
+        # Un timeout SI es "no disponible": la red o el proveedor no respondio.
         self.assertEqual(ctx.exception.code, "llm_unavailable")
+
+    def test_an_invalid_credential_fails_fast_without_retrying(self):
+        """Medido el 2026-09-21: una sesion exporto la cadena literal
+        "TU_KEY_YA_EXISTENTE" como clave. El cliente colapsaba el 401 en
+        `llm_unavailable` y el arnes quemo 354 turnos marcandolos "sin medir",
+        sin que nadie dijera nunca "tus credenciales estan mal".
+
+        Y reintentar un 401 es gasto puro: la credencial no mejora esperando."""
+        class AuthExc(Exception):
+            status_code = 401
+
+        calls = {"n": 0}
+
+        def behavior(n, kw):
+            calls["n"] += 1
+            raise AuthExc("Incorrect API key provided")
+
+        client = OpenAICompatibleClient(_settings(max_retries=3),
+                                        http_client=_FakeOpenAI(behavior))
+        with patch("app.assistant.orchestrator.llm.client.time.sleep", return_value=None):
+            with self.assertRaises(LlmError) as ctx:
+                client.complete_plan_json(system="s", user="u")
+        self.assertEqual(ctx.exception.code, "llm_auth_invalid")
+        self.assertEqual(calls["n"], 1, "un 401 NO se reintenta")
+
+    def test_quota_exhaustion_has_its_own_code(self):
+        class QuotaExc(Exception):
+            status_code = 429
+
+        def behavior(n, kw):
+            raise QuotaExc("insufficient_quota: you exceeded your current quota")
+
+        client = OpenAICompatibleClient(_settings(max_retries=2),
+                                        http_client=_FakeOpenAI(behavior))
+        with patch("app.assistant.orchestrator.llm.client.time.sleep", return_value=None):
+            with self.assertRaises(LlmError) as ctx:
+                client.complete_plan_json(system="s", user="u")
+        self.assertEqual(ctx.exception.code, "llm_quota_exhausted")
 
     def test_429_retries_then_fails(self):
         class RateExc(Exception):
@@ -163,7 +202,10 @@ class LlmClientMockTests(unittest.TestCase):
         with patch("app.assistant.orchestrator.llm.client.time.sleep", return_value=None):
             with self.assertRaises(LlmError) as ctx:
                 client.complete_plan_json(system="s", user="u")
-        self.assertEqual(ctx.exception.code, "llm_unavailable")
+        # FASE 9 — un 429 sostenido ya no se colapsa en "no disponible": el
+        # codigo dice QUE paso. Se reintenta igual, porque es transitorio, pero
+        # al rendirse se distingue de una caida y de una credencial rechazada.
+        self.assertEqual(ctx.exception.code, "llm_rate_limited")
         self.assertEqual(calls["n"], 3)  # 1 + 2 retries
 
     def test_503_retries(self):

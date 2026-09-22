@@ -157,9 +157,12 @@ class TheDetectorActuallyFiresTests(unittest.TestCase):
         finally:
             tc.passthrough_string_keys = original
         dropped = {(f["tool"], f["arg"]) for f in findings if f["side"] == "normalizer"}
+        # 9.2 — get_orders comparte `cliente` y `group_by` con get_sales, asi que
+        # la lista literal de antes tampoco los habria pasado para la tool nueva.
         self.assertEqual(dropped, {
             ("get_equivalences", "oem"), ("get_equivalences", "modelo"),
-            ("get_sales", "cliente"), ("get_sales", "group_by")})
+            ("get_sales", "cliente"), ("get_sales", "group_by"),
+            ("get_orders", "cliente"), ("get_orders", "group_by")})
 
     def test_it_catches_a_dead_property(self):
         import app.assistant.orchestrator.llm.plan_schema as ps

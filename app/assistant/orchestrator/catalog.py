@@ -12,6 +12,7 @@ ALLOWED_TOOLS = frozenset(
         "get_purchase_orders",
         "get_sales",
         "get_equivalences",
+        "get_orders",
         "get_customer",
         "get_supplier",
         "get_dashboard_kpis",
