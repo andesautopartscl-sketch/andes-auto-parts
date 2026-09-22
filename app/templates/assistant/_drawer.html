@@ -13,4 +13,42 @@
     <div class="ap-assistant-footer">
         {% include 'assistant/_chat_input.html' %}
     </div>
+    {# FASE 10.2.5 — modal propio, dentro del drawer.
+    
+       Reemplaza a window.confirm/prompt. El esqueleto es estatico y TODO su
+       contenido variable lo escribe assistant_memory.js con textContent: el resumen
+       de lo que se va a aprobar sale del valor de una memoria, que es contenido no
+       confiable. Una plantilla que lo interpolara seria el unico sitio del panel
+       donde ese texto podria convertirse en markup.
+    
+       Vive fuera del <aside> para que el dialogo pueda cubrir el drawer entero sin
+       heredar el scroll de la lista. #}
+    <div class="ap-assistant-modal" id="ap-assistant-modal" hidden>
+        <div class="ap-assistant-modal__veil" id="ap-assistant-modal-veil"></div>
+        <div class="ap-assistant-modal__box" role="dialog" aria-modal="true"
+             aria-labelledby="ap-assistant-modal-title"
+             aria-describedby="ap-assistant-modal-body">
+            <h4 class="ap-assistant-modal__title" id="ap-assistant-modal-title"></h4>
+            <p class="ap-assistant-modal__lead" id="ap-assistant-modal-lead"></p>
+            <div class="ap-assistant-modal__body" id="ap-assistant-modal-body"></div>
+    
+            <div class="ap-assistant-modal__reason" id="ap-assistant-modal-reason-wrap" hidden>
+                <label class="ap-assistant-modal__label" for="ap-assistant-modal-reason">
+                    Motivo (opcional)
+                </label>
+                <input id="ap-assistant-modal-reason" class="ap-assistant-modal__input"
+                       type="text" maxlength="200" autocomplete="off"
+                       placeholder="Por qué la rechazas">
+            </div>
+    
+            <p class="ap-assistant-modal__error" id="ap-assistant-modal-error" hidden role="alert"></p>
+    
+            <div class="ap-assistant-modal__actions">
+                <button type="button" class="ap-assistant-memory-btn"
+                        id="ap-assistant-modal-cancel">Cancelar</button>
+                <button type="button" class="ap-assistant-memory-btn is-primary"
+                        id="ap-assistant-modal-ok"></button>
+            </div>
+        </div>
+    </div>
 </section>

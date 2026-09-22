@@ -492,6 +492,15 @@ def run_orchestrator_chat(
                 memory_contextual_selected=int(
                     memory_obs.get("memory_contextual_selected") or 0
                 ),
+                memory_approval_enforced=bool(
+                    memory_obs.get("memory_approval_enforced")
+                ),
+                memory_approval_excluded=int(
+                    memory_obs.get("memory_approval_excluded") or 0
+                ),
+                memory_approval_shadow_count=len(
+                    memory_obs.get("memory_approval_shadow") or []
+                ),
                 permission_epoch_error=bool(memory_obs.get("permission_epoch_error")),
                 derived_candidates=int(memory_obs.get("derived_candidates") or 0),
                 derived_accepted=int(memory_obs.get("derived_accepted") or 0),
@@ -846,6 +855,14 @@ def run_orchestrator_chat(
                 selection.memory_contextual_selected
             )
             memory_obs["permission_epoch_error"] = bool(selection.permission_epoch_error)
+            # FASE 10.2.2 — impacto de la puerta de aprobacion. Con la bandera
+            # apagada estos campos son el MODO SOMBRA: dicen que habria quedado
+            # fuera sin haber cambiado nada de la respuesta.
+            memory_obs["memory_approval_enforced"] = bool(selection.approval_enforced)
+            memory_obs["memory_approval_excluded"] = int(selection.approval_excluded)
+            memory_obs["memory_approval_by_status"] = dict(
+                selection.approval_excluded_by_status)
+            memory_obs["memory_approval_shadow"] = list(selection.approval_shadow)
             if selection.hints:
                 context["memory_hints"] = selection.hints
         except Exception:
@@ -1393,6 +1410,19 @@ def run_orchestrator_chat(
             "memory_contextual_invalidated": memory_obs.get("memory_contextual_invalidated"),
             "memory_contextual_selected": memory_obs.get("memory_contextual_selected"),
             "permission_epoch_error": memory_obs.get("permission_epoch_error"),
+            # FASE 10.2.2 — la puerta de aprobacion. Sin estas cuatro lineas el
+            # modo sombra no serviria de nada: con la bandera apagada la puerta
+            # no cambia ninguna respuesta, asi que lo unico que deja es esta
+            # telemetria. Si no llega al metric, medir el impacto antes de
+            # encenderla es imposible.
+            "memory_approval_enforced": memory_obs.get("memory_approval_enforced"),
+            "memory_approval_excluded": memory_obs.get("memory_approval_excluded"),
+            "memory_approval_by_status": dict(
+                memory_obs.get("memory_approval_by_status") or {}),
+            # Acotada: el detalle por memoria es para diagnosticar, no para
+            # crecer sin limite en cada fila de metrica.
+            "memory_approval_shadow": list(
+                memory_obs.get("memory_approval_shadow") or [])[:10],
             "derived_candidates": memory_obs.get("derived_candidates"),
             "derived_accepted": memory_obs.get("derived_accepted"),
             "derived_rejected": memory_obs.get("derived_rejected"),

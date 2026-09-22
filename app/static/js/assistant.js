@@ -28,6 +28,8 @@
     var errorEl = document.getElementById('ap-assistant-error');
     var hintEl = document.getElementById('ap-assistant-hint');
     var historyEl = document.getElementById('ap-assistant-history');
+    var memoryBtn = document.getElementById('ap-assistant-memory-btn');
+    var memoryEl = document.getElementById('ap-assistant-memory');
     var homeEl = document.getElementById('ap-assistant-home');
     var conversationEl = document.getElementById('ap-assistant-conversation');
     var chatEl = document.getElementById('ap-assistant-chat');
@@ -39,6 +41,7 @@
         agentEnabled: false,
         expanded: false,
         historyOpen: false,
+        memoryOpen: false,
         chatting: false,
         loading: false,
         softLlmReady: false
@@ -117,25 +120,51 @@
         scrollThread();
     }
 
+    /**
+     * FASE 10.2.4 — tres vistas excluyentes en el mismo drawer: conversacion,
+     * historial y memoria. Se mantiene UNA sola funcion que decide que se ve,
+     * porque tener dos sitios que oculten paneles es como aparecen los estados
+     * en los que se ven dos a la vez.
+     */
     function applyView() {
         var history = !!state.historyOpen;
+        var memory = !!state.memoryOpen;
+        var aside = history || memory;
         if (historyEl) historyEl.hidden = !history;
-        if (conversationEl) conversationEl.hidden = history;
-        if (homeEl) homeEl.hidden = history || state.chatting;
-        if (chatEl) chatEl.hidden = history || !state.chatting;
-        if (drawer) drawer.classList.toggle('is-chatting', !history && state.chatting);
+        if (memoryEl) memoryEl.hidden = !memory;
+        if (conversationEl) conversationEl.hidden = aside;
+        if (homeEl) homeEl.hidden = aside || state.chatting;
+        if (chatEl) chatEl.hidden = aside || !state.chatting;
+        if (drawer) drawer.classList.toggle('is-chatting', !aside && state.chatting);
         if (historyBtn) {
             historyBtn.classList.toggle('is-active', history);
             historyBtn.setAttribute('aria-pressed', history ? 'true' : 'false');
         }
-        if (!history && state.chatting) {
+        if (memoryBtn) {
+            memoryBtn.classList.toggle('is-active', memory);
+            memoryBtn.setAttribute('aria-pressed', memory ? 'true' : 'false');
+        }
+        if (!aside && state.chatting) {
             window.setTimeout(scrollThread, 40);
         }
+    }
+
+    function setMemoryOpen(open) {
+        state.memoryOpen = !!open;
+        if (state.memoryOpen) state.historyOpen = false;
+        applyView();
+        if (!state.memoryOpen) return;
+        try {
+            window.dispatchEvent(new CustomEvent('andes-assistant-memory', {
+                detail: { open: true }
+            }));
+        } catch (err) { /* el panel se pinta igual en su proxima carga */ }
     }
 
     function enterChat() {
         state.chatting = true;
         state.historyOpen = false;
+        state.memoryOpen = false;
         applyView();
     }
 
@@ -191,7 +220,10 @@
     function setPanelOpen(open, options) {
         options = options || {};
         state.panelOpen = !!open;
-        if (!open) state.historyOpen = false;
+        if (!open) {
+            state.historyOpen = false;
+            state.memoryOpen = false;
+        }
         if (drawer) {
             drawer.classList.toggle('is-open', state.panelOpen);
             drawer.setAttribute('aria-hidden', state.panelOpen ? 'false' : 'true');
@@ -231,6 +263,7 @@
         setError('');
         setLoading(false);
         state.historyOpen = false;
+        state.memoryOpen = false;
         state.chatting = false;
         if (service) service.conversationId = 'conv-' + Date.now();
         applyView();
@@ -408,7 +441,13 @@
     if (historyBtn) {
         historyBtn.addEventListener('click', function () {
             state.historyOpen = !state.historyOpen;
+            if (state.historyOpen) state.memoryOpen = false;
             applyHistory();
+        });
+    }
+    if (memoryBtn) {
+        memoryBtn.addEventListener('click', function () {
+            setMemoryOpen(!state.memoryOpen);
         });
     }
     if (newBtn) {
@@ -446,6 +485,10 @@
 
     document.addEventListener('keydown', function (event) {
         if (event.key !== 'Escape' || !state.panelOpen) return;
+        if (state.memoryOpen) {
+            setMemoryOpen(false);
+            return;
+        }
         if (state.historyOpen) {
             state.historyOpen = false;
             applyView();

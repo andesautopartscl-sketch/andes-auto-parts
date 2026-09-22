@@ -13,7 +13,11 @@ from typing import Any
 
 from app.assistant.orchestrator.catalog import ALLOWED_TOOLS
 from app.assistant.orchestrator.conversation_context import extract_entities_from_evidence
-from app.assistant.orchestrator.memory_config import memory_derived_enabled, memory_enabled
+from app.assistant.orchestrator.memory_config import (
+    memory_approval_enabled,
+    memory_derived_enabled,
+    memory_enabled,
+)
 from app.assistant.orchestrator.memory_derived_counters import (
     MIN_DISTINCT_CONVERSATIONS,
     MIN_GAP_SECONDS,
@@ -288,6 +292,14 @@ def _stamp_and_upsert(
         confidence=confidence,
         permission_epoch=epoch_arg,
         sensitivity=sens,
+        # FASE 10.2.2 — LA POLITICA. Lo que el sistema INFIERE nace pendiente de
+        # aprobacion; lo que el usuario pide explicitamente no pasa por aqui.
+        #
+        # Con la bandera apagada nace `approved`, que es el comportamiento de
+        # 10.2.1 y de siempre. Solo lo NUEVO cambia de estado: esto no reetiqueta
+        # nada retroactivamente, porque el upsert no toca `status` salvo que se
+        # le pase (ver el CASE WHEN de MemoryStore.upsert).
+        status="suggested" if memory_approval_enabled() else None,
         verify_conversation=False,
     )
     if slot is None:

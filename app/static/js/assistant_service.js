@@ -62,6 +62,11 @@
         return (root && root.getAttribute('data-chat-url')) || '/assistant/api/chat';
     }
 
+    function memoryUrl() {
+        var root = document.getElementById('ap-assistant-root');
+        return (root && root.getAttribute('data-memory-url')) || '/assistant/api/memory';
+    }
+
     function capabilitiesUrl() {
         var root = document.getElementById('ap-assistant-root');
         return (root && root.getAttribute('data-capabilities-url')) || '/assistant/api/capabilities';
@@ -1036,6 +1041,92 @@
             source: 'local',
             actionId: actionId,
             reply: UNAVAILABLE
+        });
+    };
+
+    /**
+     * FASE 10.2.4 — memoria: leer la bandeja y moderar.
+     *
+     * Mismo transporte que el resto del asistente: cookie de sesion,
+     * `X-CSRF-Token` y `same-origin`. El servidor rechaza el POST sin token,
+     * asi que aqui no hay nada que "decidir" sobre autorizacion: se manda el
+     * token y se respeta lo que conteste.
+     *
+     * Lo que este cliente NUNCA manda: actor_user, status, status_by,
+     * permission_epoch, sensitivity ni source. El servidor es la autoridad;
+     * mandarlos solo daria la ilusion de que el navegador puede elegirlos, y
+     * la ruta los rechaza con `forbidden_field`.
+     */
+    function memoryHeaders() {
+        return {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken(),
+            'X-Requested-With': 'XMLHttpRequest'
+        };
+    }
+
+    function memoryFailure(resp, body) {
+        body = body || {};
+        return {
+            ok: false,
+            code: body.error_code || 'memory_error',
+            status: resp ? resp.status : 0,
+            error: body.message || 'No se pudo completar la operación.',
+            current_status: body.status_actual || null
+        };
+    }
+
+    AssistantService.prototype.loadMemoryPanel = function (options) {
+        options = options || {};
+        var query = [];
+        if (options.status) query.push('status=' + encodeURIComponent(options.status));
+        if (options.q) query.push('q=' + encodeURIComponent(options.q));
+        var url = memoryUrl() + '/panel' + (query.length ? '?' + query.join('&') : '');
+        return fetch(url, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (resp) {
+            return resp.json().catch(function () { return {}; }).then(function (body) {
+                if (!resp.ok || body.ok === false) return memoryFailure(resp, body);
+                return {
+                    ok: true,
+                    items: body.items || [],
+                    counts: body.counts || {},
+                    order: body.order || []
+                };
+            });
+        }).catch(function () {
+            return { ok: false, code: 'network', error: 'No se pudo contactar el asistente.' };
+        });
+    };
+
+    AssistantService.prototype.moderateMemory = function (slotId, operation, payload) {
+        payload = payload || {};
+        var body = { version: payload.version, correlation_id: payload.correlation_id };
+        if (payload.reason) body.reason = payload.reason;
+        if (payload.conversation_id) body.conversation_id = payload.conversation_id;
+        if (payload.reconsider) body.reconsider = true;
+        if (payload.revoke) body.revoke = true;
+        var op = operation === 'reject' ? 'reject' : 'approve';
+        return fetch(memoryUrl() + '/' + encodeURIComponent(slotId) + '/' + op, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: memoryHeaders(),
+            body: JSON.stringify(body)
+        }).then(function (resp) {
+            return resp.json().catch(function () { return {}; }).then(function (data) {
+                if (!resp.ok || data.ok === false) return memoryFailure(resp, data);
+                return {
+                    ok: true,
+                    changed: !!data.changed,
+                    item: data.item || {},
+                    previous_status: data.previous_status || null,
+                    correlation_id: data.correlation_id || null
+                };
+            });
+        }).catch(function () {
+            return { ok: false, code: 'network', error: 'No se pudo contactar el asistente.' };
         });
     };
 

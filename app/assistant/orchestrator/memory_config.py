@@ -21,6 +21,19 @@ def memory_derived_enabled() -> bool:
     return _env_bool("ANDES_ASSISTANT_MEMORY_DERIVED", False)
 
 
+def memory_approval_enabled() -> bool:
+    """FASE 10.2.2 — la memoria inferida necesita aprobacion antes de volver al
+    modelo.
+
+    Apagada (default) el comportamiento es exactamente el de 10.2.1: el `status`
+    existe y se escribe, pero no filtra nada. Encendida, lo `derived` nace
+    `suggested` y solo lo `approved` llega al prompt.
+
+    Se mide en A/B como el resto de banderas del sistema.
+    """
+    return _env_bool("ANDES_ASSISTANT_MEMORY_APPROVAL", False)
+
+
 def memory_explicit_enabled() -> bool:
     """FASE 7B.3 — allow NL explicit-memory signals in chat (requires MEMORY=1)."""
     return _env_bool("ANDES_ASSISTANT_MEMORY_EXPLICIT", False)

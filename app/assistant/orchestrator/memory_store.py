@@ -27,6 +27,8 @@ from app.assistant.orchestrator.memory_config import (
 from app.assistant.orchestrator.memory_schema import (
     DEFAULT_TTL_DAYS,
     MemorySchemaError,
+    memory_version,
+    validate_status,
 )
 from app.assistant.orchestrator.memory_sanitize import sanitize_memory_record
 
@@ -50,7 +52,10 @@ CREATE TABLE IF NOT EXISTS assistant_memory_slot (
     expires_at TEXT,
     deleted_at TEXT,
     source_turn_id TEXT,
-    meta_json TEXT
+    meta_json TEXT,
+    status TEXT NOT NULL DEFAULT 'approved',
+    status_changed_at TEXT,
+    status_by TEXT
 );
 
 CREATE INDEX IF NOT EXISTS ix_asst_mem_actor_updated
@@ -61,6 +66,12 @@ CREATE INDEX IF NOT EXISTS ix_asst_mem_actor_scope_conv
 
 CREATE INDEX IF NOT EXISTS ix_asst_mem_expires
     ON assistant_memory_slot(expires_at);
+
+-- El indice sobre `status` NO va aqui: este script corre ANTES de la migracion
+-- de columnas, y sobre una base anterior a 10.2.1 la columna todavia no existe.
+-- Lo crea `_migrate_status`, que es quien garantiza el orden. Medido: ponerlo
+-- aqui rompe `ensure_schema` con "no such column: status".
+
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_asst_mem_identity
     ON assistant_memory_slot(
@@ -116,8 +127,46 @@ class MemoryStore:
             conn = self.connect()
             try:
                 conn.executescript(SCHEMA_SQL)
+                self._migrate_status(conn)
             finally:
                 conn.close()
+
+    @staticmethod
+    def _migrate_status(conn: sqlite3.Connection) -> None:
+        """FASE 10.2.1 — anade el ciclo de vida a una base ya existente.
+
+        `CREATE TABLE IF NOT EXISTS` no toca una tabla que ya esta, asi que las
+        columnas nuevas necesitan un ALTER explicito. Se sigue el patron que ya
+        usa el repositorio en `app/__init__.py`: PRAGMA, ALTER si falta, y un
+        backfill con COALESCE que es idempotente.
+
+        LA PROPIEDAD QUE IMPORTA: toda fila preexistente queda en `approved`, que
+        es el comportamiento que ya tenia. Esta migracion no puede convertir en
+        `suggested` una memoria que hoy el modelo si ve — eso seria un cambio de
+        comportamiento disfrazado de migracion.
+
+        Hacia atras: las tres columnas son aditivas. Una version anterior del
+        codigo lee la tabla ignorandolas, porque `_public` nombra sus campos uno
+        a uno y nunca hace SELECT * a ciegas. No hace falta revertir nada.
+        """
+        existentes = {
+            str(row[1]) for row in conn.execute(
+                "PRAGMA table_info(assistant_memory_slot)").fetchall()
+        }
+        for nombre, ddl in (
+            ("status", "TEXT NOT NULL DEFAULT 'approved'"),
+            ("status_changed_at", "TEXT"),
+            ("status_by", "TEXT"),
+        ):
+            if nombre not in existentes:
+                conn.execute(
+                    f"ALTER TABLE assistant_memory_slot ADD COLUMN {nombre} {ddl}")
+        conn.execute(
+            "UPDATE assistant_memory_slot SET status = 'approved' "
+            "WHERE status IS NULL OR TRIM(status) = ''")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS ix_asst_mem_actor_status "
+            "ON assistant_memory_slot(actor_user, status)")
 
     def upsert(
         self,
@@ -132,6 +181,8 @@ class MemoryStore:
         confidence: float | None = 1.0,
         permission_epoch: int | None = 0,
         sensitivity: str | None = None,
+        status: str | None = None,
+        status_by: str | None = None,
         source_turn_id: str | None = None,
         meta: dict[str, Any] | None = None,
         expires_at: str | None = None,
@@ -152,6 +203,7 @@ class MemoryStore:
                 confidence=confidence,
                 permission_epoch=permission_epoch,
                 sensitivity=sensitivity,
+                status=status,
                 source_turn_id=source_turn_id,
                 meta=meta,
             )
@@ -207,7 +259,11 @@ class MemoryStore:
                                 permission_epoch = ?, sensitivity = ?,
                                 updated_at = ?, expires_at = ?,
                                 source_turn_id = COALESCE(?, source_turn_id),
-                                meta_json = ?
+                                meta_json = ?,
+                                status = CASE WHEN ? IS NULL THEN status ELSE ? END,
+                                status_changed_at = CASE WHEN ? IS NULL
+                                    THEN status_changed_at ELSE ? END,
+                                status_by = CASE WHEN ? IS NULL THEN status_by ELSE ? END
                             WHERE id = ? AND actor_user = ? AND deleted_at IS NULL
                             """,
                             (
@@ -220,6 +276,9 @@ class MemoryStore:
                                 exp,
                                 safe["source_turn_id"],
                                 json.dumps(safe["meta"], ensure_ascii=False),
+                                status, safe["status"],
+                                status, now_s,
+                                status, (status_by or "").strip()[:80] or None,
                                 slot_id,
                                 safe["actor_user"],
                             ),
@@ -232,8 +291,9 @@ class MemoryStore:
                                 id, actor_user, scope, conversation_id, memory_type, key,
                                 value_json, confidence, source, permission_epoch, sensitivity,
                                 created_at, updated_at, expires_at, deleted_at,
-                                source_turn_id, meta_json
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                                source_turn_id, meta_json,
+                                status, status_changed_at, status_by
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
                             """,
                             (
                                 slot_id,
@@ -252,6 +312,9 @@ class MemoryStore:
                                 exp,
                                 safe["source_turn_id"],
                                 json.dumps(safe["meta"], ensure_ascii=False),
+                                safe["status"],
+                                now_s,
+                                (status_by or "").strip()[:80] or None,
                             ),
                         )
 
@@ -351,6 +414,125 @@ class MemoryStore:
         except Exception as exc:  # noqa: BLE001
             self.last_error = f"get_slot: {exc}"
             return None
+
+    def set_status(
+        self,
+        *,
+        actor_user: str,
+        slot_id: str,
+        new_status: str,
+        expected_version: str | None = None,
+        expected_status: str | None = None,
+        status_by: str | None = None,
+    ) -> dict[str, Any]:
+        """FASE 10.2.3 — cambio de estado con concurrencia optimista.
+
+        Devuelve siempre un dict con `ok`, `error_code`, `previous_status` y
+        `slot`. No lanza: los errores son datos, como en el resto del store.
+
+        LA COMPROBACION VA DENTRO DE LA TRANSACCION, no antes. Leer la version
+        fuera y actualizar despues deja una ventana en la que otro escribe
+        entremedio: el `BEGIN IMMEDIATE` toma el lock de escritura, y recien ahi
+        se relee la fila y se compara. Es lo que hace que "A aprueba mientras B
+        rechaza" termine con uno de los dos rechazado en vez de con el ultimo
+        pisando al primero en silencio.
+
+        La fila se relee bajo el MISMO criterio que `get_slot` —viva, propia y
+        no caducada por TTL— para que el actor no pueda tocar por id lo que no
+        podria leer.
+        """
+        fuera = {"ok": False, "error_code": None, "previous_status": None,
+                 "slot": None}
+        if not memory_enabled():
+            fuera["error_code"] = "memory_disabled"
+            return fuera
+        actor = (actor_user or "").strip()
+        sid = (slot_id or "").strip()[:80]
+        if not actor or not sid:
+            fuera["error_code"] = "not_found"
+            return fuera
+        try:
+            destino = validate_status(new_status)
+        except MemorySchemaError as exc:
+            fuera["error_code"] = exc.code
+            return fuera
+
+        try:
+            self.ensure_schema()
+            with self._lock:
+                conn = self.connect()
+                try:
+                    conn.execute("BEGIN IMMEDIATE")
+                    now_s = _iso(_utc_now())
+                    row = conn.execute(
+                        """
+                        SELECT * FROM assistant_memory_slot
+                        WHERE id = ? AND actor_user = ? AND deleted_at IS NULL
+                          AND (expires_at IS NULL OR expires_at > ?)
+                        """,
+                        (sid, actor, now_s),
+                    ).fetchone()
+                    if not row:
+                        conn.execute("ROLLBACK")
+                        fuera["error_code"] = "not_found"
+                        return fuera
+
+                    actual = _public(dict(row))
+                    fuera["previous_status"] = actual.get("status")
+                    fuera["slot"] = actual
+
+                    if expected_status is not None and (
+                        actual.get("status") != expected_status
+                    ):
+                        conn.execute("ROLLBACK")
+                        fuera["error_code"] = "status_conflict"
+                        return fuera
+                    if expected_version is not None and (
+                        memory_version(actual) != expected_version
+                    ):
+                        conn.execute("ROLLBACK")
+                        fuera["error_code"] = "version_conflict"
+                        return fuera
+
+                    if actual.get("status") == destino:
+                        # Idempotente: ni escritura ni marca de tiempo nueva.
+                        conn.execute("ROLLBACK")
+                        fuera["ok"] = True
+                        fuera["error_code"] = None
+                        fuera["changed"] = False
+                        return fuera
+
+                    conn.execute(
+                        """
+                        UPDATE assistant_memory_slot
+                        SET status = ?, status_changed_at = ?, status_by = ?
+                        WHERE id = ? AND actor_user = ? AND deleted_at IS NULL
+                        """,
+                        (destino, now_s,
+                         (status_by or "").strip()[:80] or None, sid, actor),
+                    )
+                    conn.execute("COMMIT")
+                    fresca = conn.execute(
+                        "SELECT * FROM assistant_memory_slot WHERE id = ? AND actor_user = ?",
+                        (sid, actor),
+                    ).fetchone()
+                    fuera["ok"] = True
+                    fuera["changed"] = True
+                    fuera["slot"] = _public(dict(fresca)) if fresca else actual
+                    return fuera
+                except Exception:
+                    try:
+                        conn.execute("ROLLBACK")
+                    except Exception:
+                        pass
+                    raise
+                finally:
+                    conn.close()
+        except Exception as exc:  # noqa: BLE001
+            self.last_error = f"set_status: {exc}"
+            logger.warning("assistant_memory set_status failed: %s", type(exc).__name__)
+            fuera["error_code"] = "write_failed"
+            return fuera
 
     def soft_delete(self, actor_user: str, slot_id: str) -> bool:
         if not memory_enabled():
@@ -607,6 +789,9 @@ def _public(row: dict[str, Any]) -> dict[str, Any]:
         "source": row.get("source"),
         "permission_epoch": row.get("permission_epoch"),
         "sensitivity": row.get("sensitivity"),
+        "status": row.get("status") or "approved",
+        "status_changed_at": row.get("status_changed_at"),
+        "status_by": row.get("status_by"),
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
         "expires_at": row.get("expires_at"),

@@ -16,6 +16,7 @@ html.andes-assistant-off #ap-assistant-root {
     data-invoke-url="/assistant/api/invoke"
     data-chat-url="/assistant/api/chat"
     data-capabilities-url="/assistant/api/capabilities"
+    data-memory-url="/assistant/api/memory"
     data-csrf-token="{{ csrf_token }}"
 >
     <div class="ap-assistant-backdrop" id="ap-assistant-backdrop" hidden></div>
@@ -24,3 +25,4 @@ html.andes-assistant-off #ap-assistant-root {
 </div>
 <script src="{{ url_for('static', filename='js/assistant_service.js') }}?v=20260914-assistant-fase3"></script>
 <script src="{{ url_for('static', filename='js/assistant.js') }}?v=20260914-assistant-fase3"></script>
+<script src="{{ url_for('static', filename='js/assistant_memory.js') }}?v=20260922-memoria-1024"></script>

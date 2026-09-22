@@ -1,0 +1,53 @@
+{# FASE 10.2.4 — bandeja de memoria.
+
+   Hermana de `_history`: mismo <aside> dentro del drawer, misma conmutacion por
+   `applyView()`. No es un panel administrativo aparte — el usuario no deberia
+   salir del asistente para decidir que recuerda el asistente.
+
+   Todo el contenido lo pinta assistant_memory.js con createElement/textContent.
+   Aqui solo va el esqueleto: el valor de una memoria es contenido no confiable
+   y no puede pasar por una plantilla que lo interpole como markup. #}
+<aside class="ap-assistant-memory" id="ap-assistant-memory" hidden aria-labelledby="ap-assistant-memory-title">
+    <div class="ap-assistant-memory-head">
+        <h3 class="ap-assistant-memory-title" id="ap-assistant-memory-title">Memoria</h3>
+        <p class="ap-assistant-memory-sub">Lo que Andes recuerda de ti. Nada llega al asistente sin tu visto bueno.</p>
+    </div>
+
+    <div class="ap-assistant-memory-tabs" role="tablist" aria-label="Estado de las memorias">
+        <button type="button" class="ap-assistant-memory-tab is-active" role="tab"
+                data-memory-tab="suggested" aria-selected="true">
+            Pendientes <span class="ap-assistant-memory-count" data-memory-count="suggested">0</span>
+        </button>
+        <button type="button" class="ap-assistant-memory-tab" role="tab"
+                data-memory-tab="approved" aria-selected="false">
+            Aprobadas <span class="ap-assistant-memory-count" data-memory-count="approved">0</span>
+        </button>
+        <button type="button" class="ap-assistant-memory-tab" role="tab"
+                data-memory-tab="rejected" aria-selected="false">
+            Rechazadas <span class="ap-assistant-memory-count" data-memory-count="rejected">0</span>
+        </button>
+        <button type="button" class="ap-assistant-memory-tab" role="tab"
+                data-memory-tab="expired" aria-selected="false">
+            Expiradas <span class="ap-assistant-memory-count" data-memory-count="expired">0</span>
+        </button>
+    </div>
+
+    <div class="ap-assistant-memory-search">
+        <label class="ap-assistant-sr-only" for="ap-assistant-memory-q">Buscar en la memoria</label>
+        <input id="ap-assistant-memory-q" class="ap-assistant-memory-input" type="search"
+               maxlength="80" placeholder="Buscar…" autocomplete="off">
+        <button type="button" class="ap-assistant-memory-refresh" id="ap-assistant-memory-refresh"
+                title="Actualizar" aria-label="Actualizar la lista">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                <path d="M4.5 12a7.5 7.5 0 1 1 2.2 5.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M4.5 18.8v-3.4h3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+    </div>
+
+    <p class="ap-assistant-memory-notice" id="ap-assistant-memory-notice" hidden role="status"></p>
+    <p class="ap-assistant-error" id="ap-assistant-memory-error" hidden role="alert"></p>
+
+    <div class="ap-assistant-memory-list" id="ap-assistant-memory-list" role="tabpanel"
+         aria-labelledby="ap-assistant-memory-title"></div>
+</aside>

@@ -1,6 +1,8 @@
 """FASE 7B.1 — closed schemas for memory value_json (no arbitrary client types)."""
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 MEMORY_TYPES = frozenset(
@@ -16,6 +18,19 @@ MEMORY_TYPES = frozenset(
 SCOPES = frozenset({"user", "conversation"})
 SOURCES = frozenset({"explicit", "derived", "ui"})
 SENSITIVITIES = frozenset({"benign", "contextual"})
+
+# FASE 10.2.1 — ciclo de vida de una memoria.
+#
+# Hoy toda memoria nace utilizable. El objetivo de 10.2 es que lo que el sistema
+# INFIERE tenga que ser aprobado antes de volver al modelo, mientras que lo que
+# el usuario pide explicitamente siga siendo inmediato.
+#
+# Esta unidad SOLO introduce el estado. La politica —que `derived` nazca
+# `suggested`— y la puerta del selector pertenecen a 10.2.2, y por eso aqui el
+# default es `approved`: ninguna fila existente ni ninguna nueva cambia de
+# comportamiento por este cambio.
+STATUSES = frozenset({"approved", "suggested", "rejected", "expired"})
+DEFAULT_STATUS = "approved"
 
 ANSWER_STYLES = frozenset({"brief", "detailed", "operational"})
 ENTITY_KINDS = frozenset(
@@ -85,6 +100,14 @@ def validate_sensitivity(sensitivity: str) -> str:
     if s not in SENSITIVITIES:
         raise MemorySchemaError("invalid_sensitivity", f"sensitivity not allowed: {sensitivity!r}")
     return s
+
+
+def validate_status(status: str | None) -> str:
+    """Un estado vacio es `approved`: es el comportamiento de siempre."""
+    st = (status or "").strip().lower() or DEFAULT_STATUS
+    if st not in STATUSES:
+        raise MemorySchemaError("invalid_status", f"status not allowed: {status!r}")
+    return st
 
 
 def validate_key(key: str) -> str:
@@ -173,3 +196,31 @@ def validate_value_for_type(memory_type: str, value: Any) -> dict[str, Any]:
         return {"text": text[:240], "tools": clean_tools}
 
     raise MemorySchemaError("invalid_memory_type", f"unhandled type {mt}")
+
+
+def memory_version(slot: dict[str, Any]) -> str:
+    """FASE 10.2.3 — huella de LA memoria que el usuario vio.
+
+    Es el testigo de concurrencia optimista de approve/reject. Cubre estado,
+    marcas de tiempo Y contenido, a proposito: si otro cambia el valor entre que
+    el usuario lee la sugerencia y pulsa Aprobar, el testigo deja de coincidir y
+    la aprobacion se rechaza. Sin el contenido dentro, aprobar podria confirmar
+    un texto distinto del que se mostro, que es exactamente el riesgo que esta
+    unidad tiene que cerrar.
+
+    Opaca a proposito: el cliente la devuelve tal cual, no la interpreta.
+    """
+    valor = slot.get("value")
+    try:
+        crudo = json.dumps(valor, ensure_ascii=False, sort_keys=True,
+                           separators=(",", ":"))
+    except (TypeError, ValueError):
+        crudo = repr(valor)
+    partes = "|".join([
+        str(slot.get("id") or ""),
+        str(slot.get("status") or DEFAULT_STATUS),
+        str(slot.get("status_changed_at") or ""),
+        str(slot.get("updated_at") or ""),
+        crudo,
+    ])
+    return hashlib.sha256(partes.encode("utf-8")).hexdigest()[:16]

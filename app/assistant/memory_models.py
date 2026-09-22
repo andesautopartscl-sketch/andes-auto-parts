@@ -24,3 +24,16 @@ class AssistantMemorySlot(db.Model):
     deleted_at = db.Column(db.String(40), nullable=True)
     source_turn_id = db.Column(db.String(80), nullable=True)
     meta_json = db.Column(db.Text, nullable=True)
+    # FASE 10.2.1 — ciclo de vida: approved | suggested | rejected | expired.
+    #
+    # `default` y `server_default` a la vez, y no por duplicar: el primero cubre
+    # las filas que crea SQLAlchemy, el segundo las que crea el MemoryStore por
+    # SQL directo. Sin el segundo, una fila insertada por el store quedaria en
+    # NULL y el contrato dejaria de sostenerse.
+    #
+    # La politica que hara nacer `suggested` a lo derivado es de 10.2.2: aqui
+    # todo nace `approved`, que es el comportamiento de siempre.
+    status = db.Column(db.String(20), nullable=False,
+                       default="approved", server_default="approved")
+    status_changed_at = db.Column(db.String(40), nullable=True)
+    status_by = db.Column(db.String(80), nullable=True)

@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from app.assistant.orchestrator.memory_config import (
+    memory_approval_enabled,
     memory_enabled,
     memory_selector_max_chars,
     memory_selector_max_slots,
@@ -35,7 +36,7 @@ from app.assistant.orchestrator.memory_epoch import (
     memory_passes_permission_epoch,
     resolve_actor_permission_epoch,
 )
-from app.assistant.orchestrator.memory_schema import MEMORY_TYPES
+from app.assistant.orchestrator.memory_schema import DEFAULT_STATUS, MEMORY_TYPES
 from app.assistant.orchestrator.memory_store import MemoryStore, get_default_memory_store
 from app.assistant.orchestrator.memory_derived import MAX_FREQUENT_HINTS, MAX_SUMMARY_HINTS
 
@@ -76,7 +77,47 @@ class MemorySelectionResult:
     permission_epoch_error: bool = False
     memory_contextual_invalidated: int = 0
     memory_contextual_selected: int = 0
+    # FASE 10.2.2 — la puerta de aprobacion y su modo sombra.
+    approval_enforced: bool = False
+    approval_excluded: int = 0
+    approval_excluded_by_status: dict[str, int] = field(default_factory=dict)
+    # Metadata SEGURA de lo que la puerta dejo (o habria dejado) fuera. Nunca
+    # el valor de la memoria: solo id, estado, razon, scope, actor y tamano.
+    approval_shadow: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
+
+
+# Razon legible por estado. Cerrada: la telemetria no repite texto libre.
+_SHADOW_REASONS: dict[str, str] = {
+    "suggested": "pendiente_de_aprobacion",
+    "rejected": "rechazada_por_el_usuario",
+    "expired": "caducada",
+}
+
+
+def _shadow_entry(slot: dict[str, Any], estado: str, actor: str) -> dict[str, Any]:
+    """Metadata SEGURA de una memoria que la puerta deja (o dejaria) fuera.
+
+    Seis campos y ninguno es el valor. `estimated_tokens` se calcula sobre el
+    hint que se habria publicado —no sobre el slot crudo—, porque lo que importa
+    medir es lo que habria costado en el prompt, no lo que ocupa en la base.
+    """
+    hint = hint_from_slot(slot)
+    tam = 0
+    if hint is not None:
+        try:
+            tam = len(json.dumps(hint, ensure_ascii=False,
+                                 separators=(",", ":"))) // 4
+        except (TypeError, ValueError):
+            tam = 0
+    return {
+        "memory_id": str(slot.get("id") or "")[:80],
+        "status": estado,
+        "reason": _SHADOW_REASONS.get(estado, "estado_no_aprobado"),
+        "scope": str(slot.get("scope") or "")[:20],
+        "actor": str(actor or "")[:80],
+        "estimated_tokens": int(tam),
+    }
 
 
 def _dedup_key(slot: dict[str, Any]) -> str:
@@ -235,6 +276,8 @@ def select_memory_hints(
         logger.warning("assistant_memory select list failed: %s", type(exc).__name__)
         return out
 
+    aplicar_aprobacion = memory_approval_enabled()
+    out.approval_enforced = aplicar_aprobacion
     candidates = list(user_slots or []) + list(conv_slots or [])
     out.candidates_count = len(candidates)
 
@@ -261,6 +304,25 @@ def select_memory_hints(
             if sens != "benign":
                 out.memory_contextual_invalidated += 1
             continue
+
+        # FASE 10.2.2 — LA PUERTA DE APROBACION. Un solo sitio, y este.
+        #
+        # Va DESPUES de propiedad, scope, TTL y epoch a proposito: el estado no
+        # puede servir para saltarse ninguna de esas puertas, solo para cerrar
+        # una mas. Una memoria de otro actor ya se descarto arriba y su estado
+        # nunca se mira.
+        #
+        # Con la bandera apagada no filtra: solo cuenta lo que habria dejado
+        # fuera, para poder medir el impacto antes de activarla.
+        estado = str(slot.get("status") or DEFAULT_STATUS).strip().lower()
+        if estado != DEFAULT_STATUS:
+            out.approval_excluded_by_status[estado] = (
+                out.approval_excluded_by_status.get(estado, 0) + 1)
+            out.approval_shadow.append(_shadow_entry(slot, estado, actor))
+            if aplicar_aprobacion:
+                out.approval_excluded += 1
+                continue
+
         filtered.append(slot)
 
     ranked = sort_memory_candidates(filtered)

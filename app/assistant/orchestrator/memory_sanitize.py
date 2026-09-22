@@ -11,6 +11,7 @@ from app.assistant.orchestrator.memory_schema import (
     validate_memory_type,
     validate_scope,
     validate_sensitivity,
+    validate_status,
     validate_source,
     validate_value_for_type,
 )
@@ -151,6 +152,7 @@ def sanitize_memory_record(
     confidence: float | None = 1.0,
     permission_epoch: int | None = 0,
     sensitivity: str | None = None,
+    status: str | None = None,
     source_turn_id: str | None = None,
     meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -209,6 +211,8 @@ def sanitize_memory_record(
 
     # Server derives sensitivity from type when omitted; never trust client as authority.
     sens = validate_sensitivity(sensitivity or DEFAULT_SENSITIVITY.get(mt, "contextual"))
+    # FASE 10.2.1 — el estado tambien lo decide el servidor, no el cliente.
+    st = validate_status(status)
 
     conf = 1.0 if confidence is None else float(confidence)
     if conf < 0 or conf > 1:
@@ -252,6 +256,7 @@ def sanitize_memory_record(
         "source": src,
         "permission_epoch": epoch,
         "sensitivity": sens,
+        "status": st,
         "source_turn_id": turn_id,
         "meta": safe_meta,
     }

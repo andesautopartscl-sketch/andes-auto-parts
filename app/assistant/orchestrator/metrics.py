@@ -170,6 +170,11 @@ def build_turn_metric(
     memory_contextual_invalidated: int = 0,
     memory_contextual_selected: int = 0,
     permission_epoch_error: bool = False,
+    # FASE 10.2.2 — la puerta de aprobacion. Contadores, no contenido: el
+    # detalle por memoria vive en el audit.
+    memory_approval_enforced: bool = False,
+    memory_approval_excluded: int = 0,
+    memory_approval_shadow_count: int = 0,
     derived_candidates: int = 0,
     derived_accepted: int = 0,
     derived_rejected: int = 0,
@@ -271,6 +276,12 @@ def build_turn_metric(
         "memory_contextual_invalidated": int(memory_contextual_invalidated or 0),
         "memory_contextual_selected": int(memory_contextual_selected or 0),
         "permission_epoch_error": bool(permission_epoch_error),
+        # FASE 10.2.2 — con la bandera apagada estos son el MODO SOMBRA: lo que
+        # la puerta HABRIA excluido, sin haber cambiado ninguna respuesta. Sin
+        # ellos en la metrica, medir el impacto antes de encenderla no se puede.
+        "memory_approval_enforced": bool(memory_approval_enforced),
+        "memory_approval_excluded": int(memory_approval_excluded or 0),
+        "memory_approval_shadow_count": int(memory_approval_shadow_count or 0),
         "derived_candidates": int(derived_candidates or 0),
         "derived_accepted": int(derived_accepted or 0),
         "derived_rejected": int(derived_rejected or 0),

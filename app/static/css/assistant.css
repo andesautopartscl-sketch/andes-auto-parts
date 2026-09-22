@@ -796,3 +796,527 @@ body.dark button.ap-assistant-card:focus-visible {
 body.dark .ap-assistant-field__value {
     color: #e2e8f0;
 }
+
+/* ── FASE 10.2.4 · bandeja de memoria ───────────────────────────────────────
+   Reutiliza los tokens de #ap-assistant-root y el lenguaje de .ap-assistant-card
+   y .ap-assistant-field. El marcado lo construye assistant_memory.js con
+   createElement/textContent: una memoria es contenido no confiable. */
+.ap-assistant-memory {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 14px 20px;
+    min-height: 0;
+}
+
+.ap-assistant-memory-head { display: grid; gap: 4px; }
+
+.ap-assistant-memory-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.ap-assistant-memory-sub {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--ap-as-muted);
+}
+
+.ap-assistant-memory-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ap-assistant-memory-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--ap-as-line);
+    background: var(--ap-as-soft);
+    color: var(--ap-as-muted);
+    border-radius: 999px;
+    padding: 5px 11px;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.ap-assistant-memory-tab:hover,
+.ap-assistant-memory-tab:focus-visible {
+    border-color: rgba(29, 78, 216, .45);
+    color: var(--ap-as-primary);
+}
+
+.ap-assistant-memory-tab.is-active {
+    background: var(--ap-as-primary);
+    border-color: var(--ap-as-primary);
+    color: #fff;
+}
+
+.ap-assistant-memory-count {
+    display: inline-block;
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, .10);
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.ap-assistant-memory-tab.is-active .ap-assistant-memory-count {
+    background: rgba(255, 255, 255, .26);
+}
+
+.ap-assistant-memory-search {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.ap-assistant-memory-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 1px solid var(--ap-as-line);
+    border-radius: 10px;
+    padding: 7px 10px;
+    font: inherit;
+    font-size: 13px;
+    background: #fff;
+    color: var(--ap-as-text);
+}
+
+.ap-assistant-memory-input:focus-visible {
+    outline: none;
+    border-color: rgba(29, 78, 216, .55);
+    box-shadow: 0 0 0 3px rgba(29, 78, 216, .12);
+}
+
+.ap-assistant-memory-refresh {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid var(--ap-as-line);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--ap-as-muted);
+    cursor: pointer;
+}
+
+.ap-assistant-memory-refresh svg { width: 17px; height: 17px; }
+
+.ap-assistant-memory-refresh:hover,
+.ap-assistant-memory-refresh:focus-visible {
+    color: var(--ap-as-primary);
+    border-color: rgba(29, 78, 216, .45);
+}
+
+.ap-assistant-memory-notice {
+    margin: 0;
+    padding: 7px 10px;
+    border-radius: 9px;
+    background: rgba(22, 163, 74, .10);
+    border: 1px solid rgba(22, 163, 74, .28);
+    color: #166534;
+    font-size: 12.5px;
+}
+
+.ap-assistant-memory-list {
+    display: grid;
+    gap: 10px;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.ap-assistant-memory-note {
+    margin: 0;
+    padding: 14px 4px;
+    font-size: 13px;
+    color: var(--ap-as-muted);
+    text-align: center;
+}
+
+.ap-assistant-memory-card {
+    border: 1px solid rgba(15, 23, 42, .10);
+    border-radius: 12px;
+    padding: 11px 12px;
+    background: #fff;
+    display: grid;
+    gap: 6px;
+}
+
+.ap-assistant-memory-card.is-busy { opacity: .6; }
+
+.ap-assistant-memory-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ap-assistant-memory-card__title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--ap-as-text);
+}
+
+.ap-assistant-memory-chip {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid transparent;
+}
+
+.ap-assistant-memory-chip.is-suggested {
+    background: rgba(217, 119, 6, .12);
+    border-color: rgba(217, 119, 6, .32);
+    color: #92400e;
+}
+
+.ap-assistant-memory-chip.is-approved {
+    background: rgba(22, 163, 74, .12);
+    border-color: rgba(22, 163, 74, .32);
+    color: #166534;
+}
+
+.ap-assistant-memory-chip.is-rejected {
+    background: rgba(220, 38, 38, .10);
+    border-color: rgba(220, 38, 38, .28);
+    color: #991b1b;
+}
+
+.ap-assistant-memory-chip.is-expired {
+    background: rgba(100, 116, 139, .12);
+    border-color: rgba(100, 116, 139, .30);
+    color: #475569;
+}
+
+.ap-assistant-memory-why {
+    margin: 2px 0 0;
+    font-size: 12.5px;
+    color: var(--ap-as-muted);
+    line-height: 1.45;
+}
+
+.ap-assistant-memory-meta {
+    display: grid;
+    gap: 2px;
+    padding-top: 4px;
+    border-top: 1px dashed rgba(15, 23, 42, .10);
+}
+
+.ap-assistant-memory-trace {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--ap-as-muted);
+}
+
+.ap-assistant-memory-trace.is-fresh {
+    color: var(--ap-as-ok);
+    font-weight: 700;
+}
+
+.ap-assistant-memory-warn {
+    margin: 0;
+    padding: 6px 9px;
+    border-radius: 8px;
+    background: rgba(217, 119, 6, .10);
+    border: 1px solid rgba(217, 119, 6, .26);
+    color: #92400e;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.ap-assistant-memory-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-top: 4px;
+}
+
+.ap-assistant-memory-btn {
+    border-radius: 9px;
+    padding: 6px 13px;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid var(--ap-as-line);
+    background: #fff;
+    color: var(--ap-as-text);
+    transition: background 140ms ease, border-color 140ms ease;
+}
+
+.ap-assistant-memory-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.ap-assistant-memory-btn.is-primary {
+    background: var(--ap-as-primary);
+    border-color: var(--ap-as-primary);
+    color: #fff;
+}
+
+.ap-assistant-memory-btn.is-primary:hover:not(:disabled) {
+    background: var(--ap-as-primary-dark);
+}
+
+.ap-assistant-memory-btn.is-ghost:hover:not(:disabled) {
+    border-color: rgba(220, 38, 38, .45);
+    color: var(--ap-as-danger);
+}
+
+/* Reconsiderar y retirar revierten una decision anterior: se ven como lo que
+   son, acciones secundarias, nunca como el boton principal. */
+.ap-assistant-memory-btn.is-secondary {
+    font-weight: 600;
+    color: var(--ap-as-muted);
+}
+
+.ap-assistant-memory-conflict {
+    display: grid;
+    gap: 7px;
+    margin-top: 6px;
+    padding: 9px 10px;
+    border-radius: 9px;
+    background: rgba(217, 119, 6, .10);
+    border: 1px solid rgba(217, 119, 6, .30);
+}
+
+.ap-assistant-memory-conflict p {
+    margin: 0;
+    font-size: 12.5px;
+    color: #92400e;
+    line-height: 1.45;
+}
+
+.ap-assistant-memory-conflict .ap-assistant-memory-btn { justify-self: start; }
+
+/* Contador de pendientes sobre el icono de la cabecera. */
+.ap-assistant-icon-btn { position: relative; }
+
+.ap-assistant-icon-badge {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 3px;
+    border-radius: 999px;
+    background: var(--ap-as-warn);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 15px;
+    text-align: center;
+}
+
+body.dark .ap-assistant-memory-card,
+body.dark .ap-assistant-memory-input,
+body.dark .ap-assistant-memory-refresh {
+    background: #111c33;
+    border-color: rgba(148, 163, 184, .16);
+    color: #e2e8f0;
+}
+
+body.dark .ap-assistant-memory-tab {
+    background: #0f172a;
+    border-color: rgba(148, 163, 184, .18);
+}
+
+body.dark .ap-assistant-memory-tab.is-active {
+    background: var(--ap-as-primary);
+    border-color: var(--ap-as-primary);
+    color: #fff;
+}
+
+body.dark .ap-assistant-memory-card__title,
+body.dark .ap-assistant-memory-title {
+    color: #e2e8f0;
+}
+
+body.dark .ap-assistant-memory-btn {
+    background: #111c33;
+    border-color: rgba(148, 163, 184, .18);
+    color: #e2e8f0;
+}
+
+body.dark .ap-assistant-memory-btn.is-primary {
+    background: var(--ap-as-primary);
+    border-color: var(--ap-as-primary);
+}
+
+@media (max-width: 600px) {
+    .ap-assistant-memory { padding: 14px 11px 18px; }
+    .ap-assistant-memory-tabs { gap: 5px; }
+    .ap-assistant-memory-tab { padding: 5px 9px; font-size: 12px; }
+    .ap-assistant-memory-card__head { flex-wrap: wrap; }
+    .ap-assistant-memory-actions .ap-assistant-memory-btn { flex: 1 1 auto; }
+}
+
+/* ── FASE 10.2.5 · modal del panel de memoria ───────────────────────────────
+   Reemplaza a window.confirm/prompt. Se posiciona sobre el drawer, no sobre la
+   pagina: el dialogo pertenece al asistente, no al ERP que hay debajo. */
+.ap-assistant-modal {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.ap-assistant-modal__veil {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.42);
+    border-radius: inherit;
+}
+
+.ap-assistant-modal__box {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 330px;
+    max-height: 100%;
+    overflow-y: auto;
+    display: grid;
+    gap: 9px;
+    padding: 15px 15px 13px;
+    border-radius: 14px;
+    background: #fff;
+    border: 1px solid rgba(15, 23, 42, .10);
+    box-shadow: 0 20px 44px rgba(15, 23, 42, .26);
+}
+
+.ap-assistant-modal__title {
+    margin: 0;
+    font-size: 14.5px;
+    font-weight: 800;
+    color: var(--ap-as-text);
+}
+
+.ap-assistant-modal__lead {
+    margin: 0;
+    font-size: 12.8px;
+    line-height: 1.45;
+    color: var(--ap-as-muted);
+}
+
+.ap-assistant-modal__body {
+    display: grid;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    background: var(--ap-as-soft);
+    border: 1px solid var(--ap-as-line);
+}
+
+.ap-assistant-modal__body:empty {
+    display: none;
+}
+
+.ap-assistant-modal__reason {
+    display: grid;
+    gap: 4px;
+}
+
+.ap-assistant-modal__label {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--ap-as-muted);
+}
+
+.ap-assistant-modal__input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--ap-as-line);
+    border-radius: 9px;
+    padding: 7px 10px;
+    font: inherit;
+    font-size: 13px;
+    background: #fff;
+    color: var(--ap-as-text);
+}
+
+.ap-assistant-modal__input:focus-visible {
+    outline: none;
+    border-color: rgba(29, 78, 216, .55);
+    box-shadow: 0 0 0 3px rgba(29, 78, 216, .12);
+}
+
+.ap-assistant-modal__error {
+    margin: 0;
+    padding: 7px 9px;
+    border-radius: 8px;
+    background: rgba(220, 38, 38, .09);
+    border: 1px solid rgba(220, 38, 38, .28);
+    color: #991b1b;
+    font-size: 12.3px;
+    line-height: 1.45;
+}
+
+.ap-assistant-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 7px;
+    padding-top: 2px;
+}
+
+/* La accion primaria se distingue del cancelar por color y peso, y la
+   destructiva por color propio: aprobar no puede parecer peligroso. */
+.ap-assistant-memory-btn.is-danger {
+    background: var(--ap-as-danger);
+    border-color: var(--ap-as-danger);
+    color: #fff;
+}
+
+.ap-assistant-memory-btn.is-danger:hover:not(:disabled) {
+    background: #b91c1c;
+    border-color: #b91c1c;
+}
+
+.ap-assistant-memory-btn:focus-visible,
+.ap-assistant-modal__input:focus-visible {
+    outline: 2px solid rgba(29, 78, 216, .55);
+    outline-offset: 2px;
+}
+
+/* Origen heredado: ni verde de aprobado ni rojo de problema. Es un hecho
+   historico, no una decision de nadie. */
+.ap-assistant-memory-trace.is-inherited {
+    color: var(--ap-as-muted);
+    font-style: italic;
+    line-height: 1.45;
+}
+
+body.dark .ap-assistant-modal__box {
+    background: #111c33;
+    border-color: rgba(148, 163, 184, .18);
+}
+
+body.dark .ap-assistant-modal__title {
+    color: #e2e8f0;
+}
+
+body.dark .ap-assistant-modal__body,
+body.dark .ap-assistant-modal__input {
+    background: #0f172a;
+    border-color: rgba(148, 163, 184, .18);
+    color: #e2e8f0;
+}
+
+@media (max-width: 600px) {
+    .ap-assistant-modal { padding: 12px; align-items: flex-end; }
+    .ap-assistant-modal__box { max-width: none; padding: 14px 13px 12px; }
+    .ap-assistant-modal__actions { flex-direction: column-reverse; }
+    .ap-assistant-modal__actions .ap-assistant-memory-btn { width: 100%; }
+}

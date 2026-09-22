@@ -413,7 +413,72 @@ def api_memory_list():
         conversation_id=(str(conversation_id)[:80] if conversation_id else None),
         limit=limit_i,
     )
+    # FASE 10.2.3 — la version viaja con cada fila: es lo que el panel devuelve
+    # al aprobar para demostrar que aprueba LA memoria que mostro. Se calcula
+    # aqui, en la superficie HTTP, para no cambiar lo que el store proyecta.
+    from app.assistant.orchestrator.memory_schema import memory_version
+
+    items = [{**it, "version": memory_version(it)} for it in items]
     return jsonify(ok=True, items=items, count=len(items))
+
+
+@assistant_bp.route("/api/memory/panel", methods=["GET"])
+@login_required
+def api_memory_panel():
+    """FASE 10.2.4 — la bandeja del panel: proyeccion segura + recuentos.
+
+    Ruta aparte de `GET /api/memory` a proposito, y no por comodidad:
+
+      1. `/api/memory` devuelve la fila publica, con `actor_user` y
+         `permission_epoch`. Eso es metadata interna que no tiene por que
+         viajar al navegador, y cambiarle la forma romperia su contrato.
+      2. El panel necesita las CADUCADAS, que el listado normal oculta.
+      3. El panel necesita recuentos por estado para las pestañas.
+
+    El filtro por estado se aplica aqui y no en SQL porque el estado efectivo
+    no es el almacenado: una `approved` con TTL vencido es, para el usuario y
+    para el modelo, una caducada.
+    """
+    from app.assistant.orchestrator.memory_config import memory_enabled
+    from app.assistant.orchestrator.memory_panel import ORDEN_ESTADOS, panel_payload
+    from app.assistant.orchestrator.memory_store import get_default_memory_store
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+    if not memory_enabled():
+        return jsonify(ok=False, error_code="memory_disabled", message="Memoria deshabilitada."), 404
+
+    try:
+        limite = int(request.args.get("limit") or 100)
+    except (TypeError, ValueError):
+        limite = 100
+
+    filas = get_default_memory_store().list_slots(
+        username, include_expired=True, limit=limite)
+    # FASE 10.2.5 — el actor va explicito: la transicion se proyecta de la
+    # auditoria y solo se muestran las del propio usuario.
+    datos = panel_payload(filas, actor=username)
+
+    estado = (request.args.get("status") or "").strip().lower()
+    if estado and estado in ORDEN_ESTADOS:
+        datos["items"] = [i for i in datos["items"] if i["status"] == estado]
+    datos["filter"] = estado or None
+
+    # Busqueda simple por texto, sobre lo YA proyectado: nunca sobre el valor
+    # crudo, para que buscar no pueda sacar a la luz un campo que el panel
+    # decidio no mostrar.
+    q = (request.args.get("q") or "").strip().lower()[:80]
+    if q:
+        def _coincide(it):
+            partes = [it.get("title") or ""]
+            partes += [f"{c.get('name')} {c.get('value')}" for c in it.get("fields") or []]
+            return q in " ".join(partes).lower()
+
+        datos["items"] = [i for i in datos["items"] if _coincide(i)]
+    datos["q"] = q or None
+
+    return jsonify(ok=True, **datos)
 
 
 @assistant_bp.route("/api/memory", methods=["POST"])
@@ -531,6 +596,109 @@ def api_memory_update(slot_id: str):
         "conversation_id": slot.get("conversation_id"),
     }
     return jsonify(ok=True, item=public, confirmation=result.confirmation)
+
+
+# FASE 10.2.3 — el estado de una memoria se cambia POR SU PROPIA RUTA.
+#
+# `PUT /api/memory/<id>` sigue significando "corrige el contenido" y no toca el
+# estado. Aprobar es otro acto: mezclarlos dejaria que una correccion de texto
+# aprobara de paso. Por eso son dos POST con nombre propio.
+#
+# El codigo de error decide el status HTTP; 409 es el de los conflictos que el
+# usuario puede resolver recargando o eligiendo explicitamente.
+_APPROVAL_HTTP = {
+    "memory_disabled": 404,
+    "not_found": 404,
+    "invalid_source": 403,
+    "scope_mismatch": 403,
+    "version_required": 400,
+    "invalid_json": 400,
+    "version_conflict": 409,
+    "status_conflict": 409,
+    "expired_terminal": 409,
+    "rejected_requires_reconsider": 409,
+    "approved_requires_revoke": 409,
+    "write_failed": 500,
+}
+
+
+def _memory_moderation(slot_id: str, *, operation: str):
+    """Cuerpo comun de approve y reject."""
+    from app.assistant.orchestrator.memory_approval import (
+        approve_memory,
+        reject_memory,
+    )
+
+    username = (session.get("user") or "").strip()
+    if not username:
+        return jsonify(ok=False, error_code="unauthorized", message="Debe iniciar sesión."), 401
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify(ok=False, error_code="invalid_json", message="JSON inválido."), 400
+    # El actor lo pone la sesión, nunca el cliente. Mismo patrón que el PUT.
+    for forbidden in ("actor_user", "status", "status_by", "Authorization",
+                      "token", "permission_epoch", "sensitivity", "source"):
+        if forbidden in payload:
+            return jsonify(ok=False, error_code="forbidden_field",
+                           message="Campo no permitido."), 400
+
+    comun = dict(
+        actor_user=username,
+        slot_id=str(slot_id or "")[:80],
+        expected_version=str(payload.get("version") or "")[:64],
+        # `source` lo fija el servidor: esta es LA ruta humana autorizada, y el
+        # cliente no puede declararse otra cosa.
+        source="ui",
+        reason=payload.get("reason"),
+        correlation_id=(str(payload.get("correlation_id") or "").strip()
+                        or str(uuid.uuid4())),
+        conversation_id=payload.get("conversation_id"),
+    )
+    if operation == "approve":
+        result = approve_memory(reconsider=bool(payload.get("reconsider")), **comun)
+    else:
+        result = reject_memory(revoke=bool(payload.get("revoke")), **comun)
+
+    if not result.ok:
+        status = _APPROVAL_HTTP.get(result.error_code or "", 400)
+        return (
+            jsonify(ok=False, error_code=result.error_code,
+                    message=result.message,
+                    status_actual=result.previous_status),
+            status,
+        )
+    slot = result.slot or {}
+    return jsonify(
+        ok=True,
+        changed=result.changed,
+        item={
+            "id": slot.get("id"),
+            "type": slot.get("memory_type"),
+            "key": slot.get("key"),
+            "scope": slot.get("scope"),
+            "status": slot.get("status"),
+            "status_changed_at": slot.get("status_changed_at"),
+            "status_by": slot.get("status_by"),
+            "version": result.version,
+        },
+        previous_status=result.previous_status,
+        correlation_id=result.audit.get("correlation_id"),
+    )
+
+
+@assistant_bp.route("/api/memory/<slot_id>/approve", methods=["POST"])
+@login_required
+def api_memory_approve(slot_id: str):
+    """FASE 10.2.3 — `suggested → approved`. Requiere `version`."""
+    return _memory_moderation(slot_id, operation="approve")
+
+
+@assistant_bp.route("/api/memory/<slot_id>/reject", methods=["POST"])
+@login_required
+def api_memory_reject(slot_id: str):
+    """FASE 10.2.3 — `suggested → rejected`. Requiere `version`."""
+    return _memory_moderation(slot_id, operation="reject")
 
 
 @assistant_bp.route("/api/memory/conversation/<conversation_id>", methods=["DELETE"])
