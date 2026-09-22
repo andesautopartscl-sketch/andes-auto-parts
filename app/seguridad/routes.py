@@ -232,17 +232,49 @@ def _serialize_user_permission_payload(user: Usuario) -> dict:
     return out
 
 
-def _notify_assistant_permission_epoch(actor_user: str | None) -> None:
-    """FASE 7B.4 — bump assistant memory permission_epoch (isolated; never raises)."""
+def _notify_assistant_permission_epoch(
+    actor_user: str | None, *, motivo: str = "permisos_actualizados"
+) -> None:
+    """FASE 7B.4 / 10.3.1 — invalida la autorizacion previa de un actor.
+
+    POR QUE SE LLAMA SIEMPRE DESPUES DEL COMMIT, y no es descuido:
+
+    el epoch vive en la MISMA base SQLite que el ERP, pero por otra conexion y
+    con `BEGIN IMMEDIATE`. Llamarlo con la transaccion de SQLAlchemy todavia
+    abierta haria que esa segunda conexion esperase el lock de escritura hasta
+    agotar su timeout de 5 s, y el bump fallaria en silencio: el hook pareceria
+    cableado y no incrementaria nada. Una transaccion comun no esta disponible
+    porque son dos conexiones sobre un archivo.
+
+    EL PRECIO DE ESE ORDEN es una ventana: si el proceso muere entre el commit
+    y el bump, el permiso cambio y el epoch no. Por eso el resultado se AUDITA.
+    Un bump que no ocurrio deja rastro en la auditoria del ERP en vez de
+    perderse en un warning, que es la diferencia entre poder investigar una
+    autorizacion rancia y no poder.
+    """
     name = (actor_user or "").strip()
     if not name:
         return
+    nuevo_epoch = None
     try:
         from app.assistant.orchestrator.memory_epoch import notify_permission_context_changed
 
-        notify_permission_context_changed(name)
+        nuevo_epoch = notify_permission_context_changed(name)
     except Exception:  # noqa: BLE001
         logger.warning("assistant_memory permission_epoch notify skipped")
+    try:
+        record_audit_event(
+            "assistant_permission_epoch_bump",
+            {
+                "actor_afectado": name,
+                "motivo": motivo,
+                "epoch_nuevo": nuevo_epoch,
+                "resultado": "ok" if nuevo_epoch is not None else "sin_efecto",
+            },
+            actor_usuario=(session.get("user") or "").strip() or None,
+        )
+    except Exception:  # noqa: BLE001 - auditar nunca puede tumbar seguridad
+        pass
 
 
 # -----------------------------
@@ -752,7 +784,7 @@ def api_crear_usuario():
         db.session.commit()
 
         current_app.logger.info("Usuario creado: %s", nuevo.usuario)
-        _notify_assistant_permission_epoch(nuevo.usuario)
+        _notify_assistant_permission_epoch(nuevo.usuario, motivo="usuario_creado")
 
         return jsonify({"success": True, "id": nuevo.id})
 
@@ -789,6 +821,10 @@ def api_toggle_usuario(id):
 
     user.activo = not user.activo
     db.session.commit()
+    # FASE 10.3.1 — activar o desactivar cambia lo que ese actor puede hacer.
+    _notify_assistant_permission_epoch(
+        user.usuario,
+        motivo="usuario_activado" if user.activo else "usuario_desactivado")
 
     return jsonify({"success": True})
 
@@ -802,12 +838,18 @@ def api_unlock_usuario(id):
     if not user:
         return jsonify({"success": False, "error": "Usuario no encontrado"}), 404
 
+    # FASE 10.3.1 — desbloquear devuelve acceso, pero solo cuando habia algo
+    # que devolver. Reintentar sobre un usuario ya activo y no bloqueado no
+    # cambia ninguna autorizacion, y no puede inventar un bump.
+    devolvio_acceso = bool(user.bloqueado_seguridad) or not bool(user.activo)
     user.bloqueado_seguridad = False
     user.bloqueado_at = None
     user.intentos_fallidos = 0
     if not user.activo:
         user.activo = True
     db.session.commit()
+    if devolvio_acceso:
+        _notify_assistant_permission_epoch(user.usuario, motivo="usuario_desbloqueado")
     return jsonify({"success": True})
 
 
@@ -835,6 +877,9 @@ def api_eliminar_usuario(id):
     if not allowed:
         return jsonify({"success": False, "error": reason}), 403
 
+    # El nombre se captura ANTES de borrar: despues del delete el objeto ya no
+    # sirve para saber a quien hay que invalidar.
+    nombre_borrado = (user.usuario or "").strip()
     try:
         delete_user_photo_file(user.id)
         _purge_usuario_dependencies(user.id)
@@ -844,6 +889,10 @@ def api_eliminar_usuario(id):
         db.session.rollback()
         current_app.logger.exception("Error eliminando usuario %s", id)
         return jsonify({"success": False, "error": f"No se pudo eliminar: {exc}"}), 500
+
+    # FASE 10.3.1 — si manana alguien recrea ese nombre de usuario, no puede
+    # heredar la autorizacion del anterior.
+    _notify_assistant_permission_epoch(nombre_borrado, motivo="usuario_eliminado")
 
     return jsonify({"success": True})
 
@@ -1003,6 +1052,9 @@ def api_editar_usuario(id):
         logger.debug(f"Datos recibidos: {list(data.keys())}")
         prev_rol_id = user.rol_id
         prev_usuario = (user.usuario or "").strip()
+        # FASE 10.3.1 — desactivar a alguien ES un cambio de autorizacion, y por
+        # esta via no lo era: solo rol y permisos marcaban el flag.
+        prev_activo = bool(user.activo)
         auth_context_changed = False
         
         # Proteger superadmin
@@ -1099,6 +1151,9 @@ def api_editar_usuario(id):
         if "activo" in data:
             user.activo = bool(data["activo"])
             logger.debug(f"   - activo: {user.activo}")
+            # Solo si CAMBIA: reenviar el mismo valor no invalida nada.
+            if bool(user.activo) != prev_activo:
+                auth_context_changed = True
 
         if "permisos" in data and isinstance(data["permisos"], dict):
             auth_context_changed = True
@@ -1167,9 +1222,10 @@ def api_editar_usuario(id):
         logger.debug(f"Usuario {user.usuario} actualizado correctamente")
         if auth_context_changed:
             # Prefer current username; also bump previous if renamed
-            _notify_assistant_permission_epoch(user.usuario)
+            _notify_assistant_permission_epoch(user.usuario, motivo="usuario_editado")
             if prev_usuario and prev_usuario != (user.usuario or "").strip():
-                _notify_assistant_permission_epoch(prev_usuario)
+                _notify_assistant_permission_epoch(
+                    prev_usuario, motivo="usuario_renombrado")
         
         return jsonify({"success": True, "message": "Usuario actualizado correctamente"})
     
@@ -1259,6 +1315,10 @@ def toggle_usuario(id):
         return redirect("/usuarios")
     user.activo = not user.activo
     db.session.commit()
+    # FASE 10.3.1 — misma mutacion que la ruta API, misma consecuencia.
+    _notify_assistant_permission_epoch(
+        user.usuario,
+        motivo="usuario_activado" if user.activo else "usuario_desactivado")
 
     return redirect("/usuarios")
 
@@ -1342,6 +1402,8 @@ def nuevo_usuario():
                 )
             )
         db.session.commit()
+        # FASE 10.3.1 — la via API ya lo hacia; la del formulario no.
+        _notify_assistant_permission_epoch(nuevo.usuario, motivo="usuario_creado")
 
         return redirect("/usuarios")
 
@@ -1423,7 +1485,7 @@ def editar_usuario(id):
 
         db.session.commit()
         if auth_context_changed:
-            _notify_assistant_permission_epoch(user.usuario)
+            _notify_assistant_permission_epoch(user.usuario, motivo="usuario_editado")
 
         return redirect("/usuarios")
 
@@ -1454,6 +1516,7 @@ def eliminar_usuario(id):
     if not allowed:
         return redirect("/usuarios")
 
+    nombre_borrado = (user.usuario or "").strip()
     try:
         _purge_usuario_dependencies(user.id)
         db.session.delete(user)
@@ -1461,5 +1524,8 @@ def eliminar_usuario(id):
     except Exception:
         db.session.rollback()
         return redirect("/usuarios")
+
+    # FASE 10.3.1 — misma razon que en la ruta API.
+    _notify_assistant_permission_epoch(nombre_borrado, motivo="usuario_eliminado")
 
     return redirect("/usuarios")

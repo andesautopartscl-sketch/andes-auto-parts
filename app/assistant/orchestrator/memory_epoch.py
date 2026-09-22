@@ -283,12 +283,20 @@ def bump_actor_permission_epoch(actor_user: str, *, store: SqlitePermissionEpoch
         return None
 
 
-def notify_permission_context_changed(actor_user: str) -> None:
-    """Safe hook for seguridad: bump epoch; never raise into business flows."""
+def notify_permission_context_changed(actor_user: str) -> int | None:
+    """Safe hook for seguridad: bump epoch; never raise into business flows.
+
+    FASE 10.3.1 — devuelve el epoch nuevo, o None si el bump no ocurrio. El
+    valor no cambia el comportamiento de nadie: existe para que quien llama
+    pueda AUDITAR el resultado. Un bump que falla en silencio deja una
+    autorizacion previa viva mas tiempo del debido, y eso tiene que dejar
+    rastro en vez de perderse en un warning.
+    """
     try:
-        bump_actor_permission_epoch(actor_user)
+        return bump_actor_permission_epoch(actor_user)
     except Exception:  # noqa: BLE001
         logger.warning("assistant_memory permission_epoch notify soft-failed")
+        return None
 
 
 def memory_passes_permission_epoch(

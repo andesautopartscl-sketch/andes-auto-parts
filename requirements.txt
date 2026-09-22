@@ -26,3 +26,11 @@ gunicorn
 
 # Assistant NL planner (ERP only — never install into andes_agent)
 openai>=1.40.0
+
+# Assistant Secret Vault (FASE 10.3) --- AES-256-GCM via AEAD.
+# El piso no es una intuicion: pyOpenSSL --- que ya entra con las
+# bibliotecas de Google Drive --- exige cryptography>=46.0.0, asi que el
+# proyecto YA dependia de esto de forma transitiva. Declararlo solo hace
+# explicito lo que una instalacion limpia ya resuelve, y evita que una
+# reorganizacion de los extras de Google se lleve por delante el vault.
+cryptography>=46.0
