@@ -43,6 +43,12 @@ data/gdrive_oauth_credentials.json
 data/gdrive_token.json
 data/google_service_account.json
 data/.flask_secret_key
+# Secret Vault (FASE 10.3): ni la base ni el llavero entran a git.
+# El criptograma fuera del repositorio y la KEK fuera del criptograma:
+# un vault.db filtrado no contiene nada legible, y un llavero filtrado
+# no tiene nada que abrir.
+data/vault.db
+data/.vault_keys.json
 data/gdrive_backup_status.json
 data/andes_para_render.db
 data/andes_para_render.zip
