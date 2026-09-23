@@ -1033,22 +1033,27 @@ class ElStoreNoAbreUnaPuertaAlTextoPlanoTests(_ConVault):
                           "session", "request"):
             self.assertNotIn(prohibido, ids, prohibido)
 
-    def test_el_store_no_conoce_al_broker_y_sigue_sin_haber_rutas_ni_UI(self):
-        """10.3.3 anadio `vault_broker`, y la direccion de la dependencia es
-        parte del diseno: el Broker usa el Store, el Store no sabe que el
-        Broker existe. Lo de fuera —HTTP y UI— sigue sin existir."""
+    def test_el_store_no_conoce_ni_al_broker_ni_a_la_capa_HTTP(self):
+        """La direccion de la dependencia es parte del diseno.
+
+        10.3.3 anadio el Broker y 10.3.4-A la capa HTTP. Los dos usan el Store;
+        el Store no sabe que existen. Si algun dia lo supiera, la separacion
+        entre "guardar cifrado" y "decidir quien puede usarlo" habria
+        desaparecido sin que nadie lo decidiera.
+        """
         import ast
 
         arbol = ast.parse(Path("app/assistant/vault/vault_store.py")
                           .read_text(encoding="utf-8"))
-        self.assertEqual(
-            [n for n in ast.walk(arbol)
-             if isinstance(n, ast.ImportFrom) and "broker" in (n.module or "")],
-            [])
-        rutas = Path("app/assistant/routes.py").read_text(encoding="utf-8")
-        self.assertNotIn("vault", rutas.lower())
-        self.assertEqual(
-            [p for p in Path("app/templates/assistant").glob("*vault*")], [])
+        for n in ast.walk(arbol):
+            mod = (n.module if isinstance(n, ast.ImportFrom) else None) or ""
+            self.assertNotIn("broker", mod)
+            self.assertNotIn("vault_api", mod)
+            self.assertNotIn("flask", mod)
+        # Y no conoce nada de HTTP: ni sesion, ni peticion, ni respuesta.
+        codigo = Path("app/assistant/vault/vault_store.py").read_text(encoding="utf-8")
+        for prohibido in ("session", "jsonify", "Blueprint", "login_required"):
+            self.assertNotIn(prohibido, codigo, prohibido)
 
     def test_ningun_modulo_del_orquestador_importa_el_vault(self):
         """La misma frontera que 10.2.3 impuso para el motor de aprobacion."""

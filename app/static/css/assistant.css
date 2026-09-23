@@ -1320,3 +1320,326 @@ body.dark .ap-assistant-modal__input {
     .ap-assistant-modal__actions { flex-direction: column-reverse; }
     .ap-assistant-modal__actions .ap-assistant-memory-btn { width: 100%; }
 }
+
+
+/* --- FASE 10.3.4-A · panel de secretos -------------------------------------
+   Reutiliza los tokens de #ap-assistant-root y las piezas de .ap-assistant-memory
+   (botones, input, chips). No es un segundo lenguaje visual: es el mismo con
+   otro contenido. Lo que cambia es el color del chip, porque "revocado" aqui
+   significa otra cosa que en memoria.
+
+   El marcado lo construye assistant_secrets.js con createElement/textContent.
+   Aqui no hay ninguna regla que pinte un valor porque no hay ningun valor que
+   pintar. */
+.ap-assistant-secrets {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 14px 20px;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.ap-assistant-secrets-head { display: grid; gap: 4px; }
+
+.ap-assistant-secrets-title { margin: 0; font-size: 15px; font-weight: 800; }
+
+.ap-assistant-secrets-sub,
+.ap-assistant-secrets-hint {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--ap-as-muted);
+}
+
+.ap-assistant-secrets-nav {
+    display: flex;
+    gap: 6px;
+    border-bottom: 1px solid var(--ap-as-line);
+    padding-bottom: 8px;
+}
+
+.ap-assistant-secrets-navbtn {
+    border: 0;
+    background: none;
+    color: var(--ap-as-muted);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 4px 2px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ap-assistant-secrets-navbtn.is-active {
+    color: var(--ap-as-primary);
+    border-bottom-color: var(--ap-as-primary);
+}
+
+.ap-assistant-secrets-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.ap-assistant-secrets-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--ap-as-line);
+    background: var(--ap-as-soft);
+    color: var(--ap-as-muted);
+    border-radius: 999px;
+    padding: 5px 11px;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.ap-assistant-secrets-tab:hover,
+.ap-assistant-secrets-tab:focus-visible {
+    border-color: rgba(29, 78, 216, .45);
+    color: var(--ap-as-primary);
+}
+
+.ap-assistant-secrets-tab.is-active {
+    background: var(--ap-as-primary);
+    border-color: var(--ap-as-primary);
+    color: #fff;
+}
+
+.ap-assistant-secrets-count {
+    display: inline-block;
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, .10);
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.ap-assistant-secrets-tab.is-active .ap-assistant-secrets-count {
+    background: rgba(255, 255, 255, .26);
+}
+
+.ap-assistant-secrets-toolbar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ap-assistant-secrets-view { display: grid; gap: 10px; min-width: 0; }
+
+.ap-assistant-secrets-list { display: grid; gap: 10px; min-width: 0; }
+
+.ap-assistant-secrets-card {
+    border: 1px solid var(--ap-as-line);
+    border-radius: 12px;
+    background: #fff;
+    padding: 12px;
+    display: grid;
+    gap: 9px;
+    min-width: 0;
+}
+
+.ap-assistant-secrets-card__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.ap-assistant-secrets-card__title {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: var(--ap-as-text);
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+
+.ap-assistant-secrets-chip {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(15, 23, 42, .08);
+    color: var(--ap-as-muted);
+    white-space: nowrap;
+}
+
+.ap-assistant-secrets-chip.is-active,
+.ap-assistant-secrets-chip.is-issued { background: rgba(22, 163, 74, .14); color: #15803d; }
+.ap-assistant-secrets-chip.is-expiring { background: rgba(217, 119, 6, .16); color: #b45309; }
+.ap-assistant-secrets-chip.is-revoked { background: rgba(220, 38, 38, .14); color: #b91c1c; }
+.ap-assistant-secrets-chip.is-expired { background: rgba(100, 116, 139, .18); color: #475569; }
+.ap-assistant-secrets-chip.is-consumed { background: rgba(29, 78, 216, .14); color: #1d4ed8; }
+
+.ap-assistant-secrets-meta,
+.ap-assistant-secrets-canon { display: grid; gap: 5px; min-width: 0; }
+
+.ap-assistant-secrets-field-row {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 12.5px;
+    min-width: 0;
+}
+
+.ap-assistant-secrets-field-key {
+    flex: 0 0 auto;
+    min-width: 108px;
+    color: var(--ap-as-muted);
+    font-weight: 600;
+}
+
+.ap-assistant-secrets-field-val {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--ap-as-text);
+    overflow-wrap: anywhere;
+}
+
+/* El bloque canonico se separa visualmente: es lo que se firma, no adorno. */
+.ap-assistant-secrets-canon {
+    border: 1px solid rgba(29, 78, 216, .28);
+    border-radius: 10px;
+    background: rgba(29, 78, 216, .04);
+    padding: 10px 11px;
+}
+
+.ap-assistant-secrets-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.ap-assistant-secrets-back {
+    justify-self: start;
+    border: 0;
+    background: none;
+    color: var(--ap-as-primary);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 2px 0;
+    cursor: pointer;
+}
+
+.ap-assistant-secrets-formtitle { margin: 0; font-size: 14px; font-weight: 800; }
+
+.ap-assistant-secrets-subtitle {
+    margin: 6px 0 0;
+    font-size: 12.5px;
+    font-weight: 800;
+    color: var(--ap-as-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.ap-assistant-secrets-field { display: grid; gap: 5px; border: 0; margin: 0; padding: 0; }
+
+.ap-assistant-secrets-label {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--ap-as-text);
+    padding: 0;
+}
+
+.ap-assistant-secrets-checks { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.ap-assistant-secrets-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12.5px;
+    border: 1px solid var(--ap-as-line);
+    border-radius: 999px;
+    padding: 4px 10px;
+    cursor: pointer;
+}
+
+/* El aviso de la clave. Informativo, no una alarma: la condicion es real y
+   permanente, y gritarla solo consigue que se deje de leer. */
+.ap-assistant-secrets-kek {
+    margin: 0;
+    border: 1px solid rgba(217, 119, 6, .35);
+    background: rgba(217, 119, 6, .07);
+    border-radius: 10px;
+    padding: 9px 11px;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: #92400e;
+}
+
+.ap-assistant-secrets-notice {
+    margin: 0;
+    border-radius: 10px;
+    background: rgba(22, 163, 74, .10);
+    color: #15803d;
+    padding: 7px 10px;
+    font-size: 12.5px;
+}
+
+.ap-assistant-secrets-empty {
+    margin: 0;
+    padding: 14px 4px;
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--ap-as-muted);
+}
+
+.ap-assistant-secrets-versions,
+.ap-assistant-secrets-usage { display: grid; gap: 5px; }
+
+.ap-assistant-secrets-version,
+.ap-assistant-secrets-use {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 12px;
+    border: 1px solid var(--ap-as-line);
+    border-radius: 9px;
+    padding: 6px 9px;
+    min-width: 0;
+}
+
+.ap-assistant-secrets-version__id,
+.ap-assistant-secrets-use__act { font-weight: 800; color: var(--ap-as-text); }
+
+.ap-assistant-secrets-version__st,
+.ap-assistant-secrets-version__dt,
+.ap-assistant-secrets-use__st,
+.ap-assistant-secrets-use__dt,
+.ap-assistant-secrets-use__by { color: var(--ap-as-muted); overflow-wrap: anywhere; }
+
+body.dark .ap-assistant-secrets-card,
+body.dark .ap-assistant-secrets-version,
+body.dark .ap-assistant-secrets-use { background: #0f1a2e; border-color: rgba(148, 163, 184, .18); }
+
+body.dark .ap-assistant-secrets-title,
+body.dark .ap-assistant-secrets-card__title,
+body.dark .ap-assistant-secrets-field-val,
+body.dark .ap-assistant-secrets-version__id,
+body.dark .ap-assistant-secrets-use__act { color: #e2e8f0; }
+
+body.dark .ap-assistant-secrets-canon { background: rgba(29, 78, 216, .12); }
+
+body.dark .ap-assistant-secrets-kek {
+    background: rgba(217, 119, 6, .12);
+    color: #fbbf24;
+}
+
+/* 375px: la columna de etiquetas deja de tener sentido a lo ancho y las filas
+   se apilan. Sin esto, "Cabeceras que se envian" empuja el valor fuera. */
+@media (max-width: 600px) {
+    .ap-assistant-secrets { padding: 14px 11px 18px; }
+    .ap-assistant-secrets-tabs { gap: 5px; }
+    .ap-assistant-secrets-tab { padding: 5px 9px; font-size: 12px; }
+    .ap-assistant-secrets-field-row { flex-direction: column; gap: 1px; }
+    .ap-assistant-secrets-field-key { min-width: 0; }
+    .ap-assistant-secrets-card__head { flex-wrap: wrap; }
+    .ap-assistant-secrets-actions .ap-assistant-memory-btn { flex: 1 1 auto; }
+    .ap-assistant-secrets-toolbar { flex-wrap: wrap; }
+}

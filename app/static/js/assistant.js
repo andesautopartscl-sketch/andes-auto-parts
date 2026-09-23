@@ -30,6 +30,8 @@
     var historyEl = document.getElementById('ap-assistant-history');
     var memoryBtn = document.getElementById('ap-assistant-memory-btn');
     var memoryEl = document.getElementById('ap-assistant-memory');
+    var secretsBtn = document.getElementById('ap-assistant-secrets-btn');
+    var secretsEl = document.getElementById('ap-assistant-secrets');
     var homeEl = document.getElementById('ap-assistant-home');
     var conversationEl = document.getElementById('ap-assistant-conversation');
     var chatEl = document.getElementById('ap-assistant-chat');
@@ -42,6 +44,7 @@
         expanded: false,
         historyOpen: false,
         memoryOpen: false,
+        secretsOpen: false,
         chatting: false,
         loading: false,
         softLlmReady: false
@@ -121,17 +124,19 @@
     }
 
     /**
-     * FASE 10.2.4 — tres vistas excluyentes en el mismo drawer: conversacion,
-     * historial y memoria. Se mantiene UNA sola funcion que decide que se ve,
-     * porque tener dos sitios que oculten paneles es como aparecen los estados
-     * en los que se ven dos a la vez.
+     * FASE 10.2.4 / 10.3.4-A — cuatro vistas excluyentes en el mismo drawer:
+     * conversacion, historial, memoria y secretos. Se mantiene UNA sola
+     * funcion que decide que se ve, porque tener dos sitios que oculten
+     * paneles es como aparecen los estados en los que se ven dos a la vez.
      */
     function applyView() {
         var history = !!state.historyOpen;
         var memory = !!state.memoryOpen;
-        var aside = history || memory;
+        var secrets = !!state.secretsOpen;
+        var aside = history || memory || secrets;
         if (historyEl) historyEl.hidden = !history;
         if (memoryEl) memoryEl.hidden = !memory;
+        if (secretsEl) secretsEl.hidden = !secrets;
         if (conversationEl) conversationEl.hidden = aside;
         if (homeEl) homeEl.hidden = aside || state.chatting;
         if (chatEl) chatEl.hidden = aside || !state.chatting;
@@ -144,6 +149,10 @@
             memoryBtn.classList.toggle('is-active', memory);
             memoryBtn.setAttribute('aria-pressed', memory ? 'true' : 'false');
         }
+        if (secretsBtn) {
+            secretsBtn.classList.toggle('is-active', secrets);
+            secretsBtn.setAttribute('aria-pressed', secrets ? 'true' : 'false');
+        }
         if (!aside && state.chatting) {
             window.setTimeout(scrollThread, 40);
         }
@@ -151,7 +160,7 @@
 
     function setMemoryOpen(open) {
         state.memoryOpen = !!open;
-        if (state.memoryOpen) state.historyOpen = false;
+        if (state.memoryOpen) { state.historyOpen = false; state.secretsOpen = false; }
         applyView();
         if (!state.memoryOpen) return;
         try {
@@ -161,10 +170,28 @@
         } catch (err) { /* el panel se pinta igual en su proxima carga */ }
     }
 
+    /**
+     * FASE 10.3.4-A — al cerrar el panel se avisa tambien, no solo al abrir.
+     * El controlador de secretos necesita saberlo para vaciar el formulario:
+     * un valor a medio escribir que sobreviva a un cambio de vista es un
+     * secreto esperando en el DOM a que alguien vuelva.
+     */
+    function setSecretsOpen(open) {
+        state.secretsOpen = !!open;
+        if (state.secretsOpen) { state.historyOpen = false; state.memoryOpen = false; }
+        applyView();
+        try {
+            window.dispatchEvent(new CustomEvent('andes-assistant-secrets', {
+                detail: { open: state.secretsOpen }
+            }));
+        } catch (err) { /* el panel se pinta igual en su proxima carga */ }
+    }
+
     function enterChat() {
         state.chatting = true;
         state.historyOpen = false;
         state.memoryOpen = false;
+        state.secretsOpen = false;
         applyView();
     }
 
@@ -264,6 +291,7 @@
         setLoading(false);
         state.historyOpen = false;
         state.memoryOpen = false;
+        state.secretsOpen = false;
         state.chatting = false;
         if (service) service.conversationId = 'conv-' + Date.now();
         applyView();
@@ -448,6 +476,11 @@
     if (memoryBtn) {
         memoryBtn.addEventListener('click', function () {
             setMemoryOpen(!state.memoryOpen);
+        });
+    }
+    if (secretsBtn) {
+        secretsBtn.addEventListener('click', function () {
+            setSecretsOpen(!state.secretsOpen);
         });
     }
     if (newBtn) {

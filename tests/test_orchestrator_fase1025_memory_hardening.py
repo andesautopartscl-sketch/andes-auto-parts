@@ -455,10 +455,21 @@ class ElModalReemplazaAWindowTests(unittest.TestCase):
         self.assertNotIn("cdn", w.lower())
 
     def test_el_modal_es_usable_en_movil(self):
+        """Buscado en TODOS los bloques moviles, no en el ultimo.
+
+        Este test usaba `rindex` y se rompio en 10.3.4-A al anadirse otro
+        `@media` detras: las reglas del modal seguian ahi, pero el localizador
+        miraba el bloque equivocado. Lo que importa es que existan, no donde.
+        """
+        import re
+
         css = Path("app/static/css/assistant.css").read_text(encoding="utf-8")
-        movil = css[css.rindex("@media (max-width: 600px)"):]
-        self.assertIn(".ap-assistant-modal", movil)
-        self.assertIn("width: 100%", movil)
+        patron = re.compile(r"@media \(max-width: 600px\)\s*\{.*?\n\}",
+                            re.S)
+        bloques = [m.group(0) for m in patron.finditer(css)]
+        del_modal = [b for b in bloques if ".ap-assistant-modal" in b]
+        self.assertTrue(del_modal, "ningun bloque movil toca el modal")
+        self.assertIn("width: 100%", "".join(del_modal))
 
     def test_el_contrato_http_no_cambio(self):
         """El modal es UI: manda exactamente lo mismo que antes."""

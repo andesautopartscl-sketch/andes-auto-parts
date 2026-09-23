@@ -44,6 +44,8 @@ from .oc_clientes import oc_clientes_bp
 from .mobile import mobile_bp
 from .internal_agent import internal_agent_bp
 from .assistant import assistant_bp
+# FASE 10.3.4-A — solo el blueprint; el paquete no exporta nada mas.
+from .assistant.vault import vault_bp
 from app.seguridad.init_roles import crear_roles
 from app.seguridad.crear_superadmin import crear_superadmin
 from app.utils.datetime_utils import (
@@ -377,6 +379,7 @@ def create_app():
         app.register_blueprint(mobile_bp)
         app.register_blueprint(internal_agent_bp)
         app.register_blueprint(assistant_bp)
+        app.register_blueprint(vault_bp)
 
         # FASE 7B.4 — wire real permission_epoch provider (isolated Sqlite store)
         try:

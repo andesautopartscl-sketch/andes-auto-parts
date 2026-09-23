@@ -931,12 +931,34 @@ class ElBrokerNoDevuelvePlaintextTests(_ConBroker):
                     culpables.append(f"{f.as_posix()}: {mod}")
         self.assertEqual(culpables, [])
 
-    def test_todavia_no_hay_HTTP_ni_UI(self):
-        rutas = Path("app/assistant/routes.py").read_text(encoding="utf-8")
-        self.assertNotIn("vault", rutas.lower())
-        self.assertNotIn("broker", rutas.lower())
-        self.assertEqual(list(Path("app/templates/assistant").glob("*vault*")), [])
-        self.assertEqual(list(Path("app/static/js").glob("*vault*")), [])
+    def test_el_broker_no_se_expone_directamente_por_HTTP(self):
+        """Actualizado en 10.3.4-A, que SI anadio rutas e interfaz.
+
+        Este test decia "todavia no hay HTTP ni UI" y seguia pasando despues de
+        que las hubiera, porque comprobaba nombres de archivo con `*vault*` y
+        los de 10.3.4-A se llaman `_secrets.html` y `assistant_secrets.js`. Un
+        test que pasa por la razon equivocada es peor que uno que falla: se
+        reescribe para afirmar lo que sigue siendo cierto.
+
+        Lo que sigue siendo cierto: el Broker no tiene ninguna ruta propia. La
+        capa HTTP (`vault_api`) administra y aprueba; canjear un grant y
+        ejecutar con el secreto no esta expuesto a la red.
+        """
+        import ast
+
+        # El blueprint de conversacion/memoria sigue sin tocar el vault.
+        arbol = ast.parse(Path("app/assistant/routes.py").read_text(encoding="utf-8"))
+        for n in ast.walk(arbol):
+            mod = (n.module if isinstance(n, ast.ImportFrom) else None) or ""
+            self.assertNotIn("vault", mod)
+
+        # Y la capa HTTP del vault no puede ejecutar: no importa el canje.
+        api = Path("app/assistant/vault/vault_api.py")
+        if api.exists():
+            fuente = api.read_text(encoding="utf-8")
+            for prohibido in ("execute_with_secret", "with_current_plaintext",
+                              "with_version_plaintext", "Executor"):
+                self.assertNotIn(prohibido, fuente, prohibido)
 
 
 # ───────────────────────────── tests hostiles

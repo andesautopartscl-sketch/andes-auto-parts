@@ -401,26 +401,53 @@ class SecretBroker:
         return int(r.epoch) if r.available and r.epoch is not None else None
 
     @staticmethod
-    def _huella(action: str, resource: str, request: ExecutionRequest | None
-                ) -> str:
-        """Que se aprobo, exactamente.
+    def canonical_approval(action: str, resource: str,
+                           request: ExecutionRequest | None) -> dict[str, Any]:
+        """Que se aprueba, exactamente. LA estructura, no una descripcion.
 
         Cubre metodo, recurso y la FORMA de la peticion —cabeceras y huecos—,
         no su contenido secreto. Aprobar "la accion X" y ejecutar X' es la
         amenaza D de 10.3.0, y esto es lo que la cierra.
-        """
-        import hashlib
 
-        partes = {
+        FASE 10.3.4-A — es publica porque la pantalla de aprobacion tiene que
+        enseñar esto y nada mas que esto. Si la vista se construyera aparte,
+        acabaria ensenando una cosa mientras se firma otra: no por malicia,
+        sino porque dos representaciones de lo mismo se separan con el tiempo.
+        Aqui hay UNA, y la huella es su sha256.
+
+        No lleva valores: `header_keys` son claves sin valor y `slots` son
+        nombres de hueco. Por eso este diccionario puede viajar al navegador.
+        """
+        return {
             "action": action, "resource": resource,
             "method": (request.method if request else "").upper(),
             "header_keys": sorted((request.headers or {}) if request else {}),
             "slots": list(request.slots()) if request else [],
             "has_body": bool(request and request.body),
         }
-        crudo = json.dumps(partes, ensure_ascii=False, sort_keys=True,
-                           separators=(",", ":"))
-        return hashlib.sha256(crudo.encode("utf-8")).hexdigest()[:32]
+
+    @staticmethod
+    def canonical_bytes(canonico: dict[str, Any]) -> bytes:
+        return json.dumps(canonico, ensure_ascii=False, sort_keys=True,
+                          separators=(",", ":")).encode("utf-8")
+
+    @classmethod
+    def fingerprint_of(cls, canonico: dict[str, Any]) -> str:
+        """La huella de una estructura canonica ya construida.
+
+        Que la pantalla pueda calcular la huella de lo que muestra es lo que
+        convierte "lo que ves es lo que firmas" en algo comprobable en vez de
+        una promesa.
+        """
+        import hashlib
+
+        return hashlib.sha256(cls.canonical_bytes(canonico)).hexdigest()[:32]
+
+    @classmethod
+    def _huella(cls, action: str, resource: str,
+                request: ExecutionRequest | None) -> str:
+        return cls.fingerprint_of(cls.canonical_approval(action, resource,
+                                                         request))
 
     def _auditar(self, evento: str, **campos: Any) -> None:
         """Lista blanca, campo a campo. Nunca `**kwargs` de quien llama.
@@ -623,6 +650,10 @@ class SecretBroker:
             conn.close()
         if r is None:
             return None
+        return self._grant_de_fila(r)
+
+    @staticmethod
+    def _grant_de_fila(r: sqlite3.Row) -> Grant:
         return Grant(
             id=r["id"], approval_id=r["approval_id"], secret_id=r["secret_id"],
             secret_version=r["secret_version"], actor=r["actor"],
@@ -631,15 +662,82 @@ class SecretBroker:
             issued_at=r["issued_at"], expires_at=r["expires_at"],
             consumed_at=r["consumed_at"], correlation_id=r["correlation_id"])
 
-    def revoke_grant(self, grant_id: str) -> bool:
+    def list_grants(self, *, actor: str, secret_id: str | None = None,
+                    limit: int = 50) -> list[Grant]:
+        """Los grants de UN actor. Metadatos, nunca material.
+
+        FASE 10.3.4-A — la pantalla necesita ensenar que hay vivo ahora mismo.
+        El filtro por actor esta en el SQL, no en quien llama: una lista que se
+        filtra despues es una lista que alguna vez se devuelve entera.
+        """
+        self.ensure_schema()
+        a = (actor or "").strip()
+        if not a:
+            return []
+        conn = self._conn()
+        try:
+            sql = "SELECT * FROM vault_grant WHERE actor = ?"
+            params: list[Any] = [a]
+            if secret_id:
+                sql += " AND secret_id = ?"
+                params.append(str(secret_id))
+            sql += " ORDER BY issued_at DESC LIMIT ?"
+            params.append(max(1, min(int(limit), 200)))
+            filas = conn.execute(sql, params).fetchall()
+        finally:
+            conn.close()
+        return [self._grant_de_fila(r) for r in filas]
+
+    def usage_history(self, *, actor: str, secret_id: str,
+                      limit: int = 20) -> list[dict[str, Any]]:
+        """Historial de uso de un secreto: quien autorizo que, y como acabo.
+
+        Sale de `vault_grant` unida a `vault_approval` —las dos tablas del
+        Broker— y no del log de auditoria: el log es append-only y puede estar
+        rotado, mientras que estas filas son el estado real. Campos elegidos a
+        mano; aqui no hay `SELECT *` que viaje al navegador.
+        """
+        self.ensure_schema()
+        a = (actor or "").strip()
+        if not a or not secret_id:
+            return []
+        conn = self._conn()
+        try:
+            filas = conn.execute(
+                "SELECT g.id, g.status, g.action, g.purpose, g.resource, "
+                "       g.secret_version, g.issued_at, g.expires_at, "
+                "       g.consumed_at, ap.source, ap.actor AS aprobado_por "
+                "  FROM vault_grant g "
+                "  JOIN vault_approval ap ON ap.id = g.approval_id "
+                " WHERE g.actor = ? AND g.secret_id = ? "
+                " ORDER BY g.issued_at DESC LIMIT ?",
+                (a, str(secret_id), max(1, min(int(limit), 100)))).fetchall()
+        finally:
+            conn.close()
+        return [{
+            "grant_id": r["id"], "status": r["status"], "action": r["action"],
+            "purpose": r["purpose"], "resource": r["resource"],
+            "secret_version": r["secret_version"], "issued_at": r["issued_at"],
+            "expires_at": r["expires_at"], "consumed_at": r["consumed_at"],
+            "approved_by": r["aprobado_por"], "approval_source": r["source"],
+        } for r in filas]
+
+    def revoke_grant(self, grant_id: str, *, actor: str | None = None) -> bool:
+        """Mata un grant vivo. Con `actor`, solo si es suyo —en el SQL."""
         self.ensure_schema()
         with self._lock:
             conn = self._conn()
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                cur = conn.execute(
-                    "UPDATE vault_grant SET status='revoked' WHERE id=? AND "
-                    "status='issued'", (str(grant_id or ""),))
+                if actor is not None:
+                    cur = conn.execute(
+                        "UPDATE vault_grant SET status='revoked' WHERE id=? "
+                        "AND status='issued' AND actor=?",
+                        (str(grant_id or ""), (actor or "").strip()))
+                else:
+                    cur = conn.execute(
+                        "UPDATE vault_grant SET status='revoked' WHERE id=? AND "
+                        "status='issued'", (str(grant_id or ""),))
                 conn.execute("COMMIT")
                 return bool(cur.rowcount)
             except sqlite3.Error:
