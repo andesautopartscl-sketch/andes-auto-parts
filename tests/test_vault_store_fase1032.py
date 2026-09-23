@@ -1033,8 +1033,18 @@ class ElStoreNoAbreUnaPuertaAlTextoPlanoTests(_ConVault):
                           "session", "request"):
             self.assertNotIn(prohibido, ids, prohibido)
 
-    def test_todavia_no_hay_broker_ni_rutas_ni_UI(self):
-        self.assertFalse(Path("app/assistant/vault/vault_broker.py").exists())
+    def test_el_store_no_conoce_al_broker_y_sigue_sin_haber_rutas_ni_UI(self):
+        """10.3.3 anadio `vault_broker`, y la direccion de la dependencia es
+        parte del diseno: el Broker usa el Store, el Store no sabe que el
+        Broker existe. Lo de fuera —HTTP y UI— sigue sin existir."""
+        import ast
+
+        arbol = ast.parse(Path("app/assistant/vault/vault_store.py")
+                          .read_text(encoding="utf-8"))
+        self.assertEqual(
+            [n for n in ast.walk(arbol)
+             if isinstance(n, ast.ImportFrom) and "broker" in (n.module or "")],
+            [])
         rutas = Path("app/assistant/routes.py").read_text(encoding="utf-8")
         self.assertNotIn("vault", rutas.lower())
         self.assertEqual(

@@ -617,6 +617,46 @@ class VaultStore:
         finally:
             del claro
 
+    def with_version_plaintext(self, *, secret_id: str, owner_actor: str,
+                               version: int,
+                               consumer: Callable[[bytes], Any]) -> Any:
+        """Igual que `with_current_plaintext`, pero para una version CONCRETA.
+
+        FASE 10.3.3 — la necesita el Broker: un grant fija `secret_version`, y
+        ejecutar con "la actual" significaria usar una credencial distinta de la
+        que el usuario aprobo si alguien roto entremedio.
+
+        La version tiene que seguir ACTIVA. Si fue superseded o revocada, esto
+        falla y el Broker lo traduce a `version_conflict`: la aprobacion era
+        para la credencial de entonces, y pedir una nueva es lo correcto. Eso
+        cierra ademas la ventana entre validar y descifrar — una rotacion en ese
+        instante deja la version pinchada inactiva y aqui se falla cerrado.
+
+        El descifrado sigue estando en UN solo sitio; esto no lo duplica, solo
+        le dice que fila mirar.
+        """
+        self._exigir_abierto()
+        if not callable(consumer):
+            raise VaultStoreError("invalid_argument")
+        self.ensure_schema()
+        conn = self.connect()
+        try:
+            fila = self._fila_secreto(conn, secret_id, (owner_actor or "").strip())
+            self._exigir_utilizable(fila)
+            v = conn.execute(
+                "SELECT * FROM vault_secret_version WHERE secret_id = ? AND "
+                "version = ? AND status = 'active'",
+                (fila["id"], int(version))).fetchone()
+            if v is None:
+                raise VaultStoreError("no_active_version")
+            claro = self._descifrar(fila, v)
+        finally:
+            conn.close()
+        try:
+            return consumer(claro)
+        finally:
+            del claro
+
     def _descifrar(self, fila: sqlite3.Row, v: sqlite3.Row) -> bytes:
         try:
             sobre = Envelope.from_json(v["envelope_json"])
