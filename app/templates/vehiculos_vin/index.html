@@ -921,9 +921,7 @@
   if (lbPrev) lbPrev.addEventListener('click', function () { lightboxStep(-1); });
   if (lbNext) lbNext.addEventListener('click', function () { lightboxStep(1); });
   if (lb) {
-    lb.addEventListener('click', function (e) {
-      if (e.target === lb) closeLightbox();
-    });
+    if (window.andesBindBackdropClose) window.andesBindBackdropClose(lb, closeLightbox);
   }
 
   document.querySelectorAll('.js-ficha-vin').forEach(function (el) {
@@ -1005,9 +1003,7 @@
     });
 
     if (cancelBtn) cancelBtn.addEventListener('click', closeElimModal);
-    modal.addEventListener('click', function (e) {
-      if (e.target === modal) closeElimModal();
-    });
+    if (window.andesBindBackdropClose) window.andesBindBackdropClose(modal, closeElimModal);
   })();
 })();
 </script>

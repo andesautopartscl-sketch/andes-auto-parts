@@ -235,9 +235,9 @@
 	[closeBtn, cancelBtn].forEach(function (el) {
 		if (el) el.addEventListener('click', closeModal);
 	});
-	modal.addEventListener('click', function (e) {
-		if (e.target === modal) closeModal();
-	});
+	if (window.andesBindBackdropClose) {
+		window.andesBindBackdropClose(modal, closeModal);
+	}
 
 	if (confirmBtn) {
 		confirmBtn.addEventListener('click', async function () {

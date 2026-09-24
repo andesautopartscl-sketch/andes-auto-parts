@@ -124,11 +124,15 @@
         '<button type="button" class="andes-flash-close" data-flash-dismiss="1">Cerrar</button>' +
         '</div>';
       document.body.appendChild(overlay);
+      overlay.addEventListener('mousedown', function (e) {
+        var t = e.target;
+        overlay._andesFlashDown = !!(t && t.getAttribute && t.getAttribute('data-flash-dismiss'));
+      });
       overlay.addEventListener('click', function (e) {
         var t = e.target;
-        if (t && t.getAttribute && t.getAttribute('data-flash-dismiss')) {
-          hideFlash();
-        }
+        var should = overlay._andesFlashDown && t && t.getAttribute && t.getAttribute('data-flash-dismiss');
+        overlay._andesFlashDown = false;
+        if (should) hideFlash();
       });
     }
     panel = overlay.querySelector('.andes-flash-items');

@@ -1261,16 +1261,21 @@ html.andes-chat-off #apchat-root {
                 confirmOkBtn.removeEventListener('click', onOk);
                 confirmCancelBtn.removeEventListener('click', onCancel);
                 confirmModal.removeEventListener('click', onBackdrop);
+                confirmModal.removeEventListener('mousedown', onBackdropDown);
                 resolve(Boolean(result));
             };
             const onOk = () => close(true);
             const onCancel = () => close(false);
+            let backdropDown = false;
+            const onBackdropDown = (event) => { backdropDown = event.target === confirmModal; };
             const onBackdrop = (event) => {
-                if (event.target === confirmModal) close(false);
+                if (backdropDown && event.target === confirmModal) close(false);
+                backdropDown = false;
             };
 
             confirmOkBtn.addEventListener('click', onOk);
             confirmCancelBtn.addEventListener('click', onCancel);
+            confirmModal.addEventListener('mousedown', onBackdropDown);
             confirmModal.addEventListener('click', onBackdrop);
             confirmModal.classList.remove('hidden');
             confirmModal.setAttribute('aria-hidden', 'false');
@@ -1297,6 +1302,7 @@ html.andes-chat-off #apchat-root {
                 translateCancelBtn.removeEventListener('click', onCancel);
                 translateSelect.removeEventListener('change', onSelectChange);
                 translateModal.removeEventListener('click', onBackdrop);
+                translateModal.removeEventListener('mousedown', onBackdropDown);
                 resolve(value || null);
             };
 
@@ -1315,13 +1321,17 @@ html.andes-chat-off #apchat-root {
                 close(selected || null);
             };
             const onCancel = () => close(null);
+            let backdropDown = false;
+            const onBackdropDown = (event) => { backdropDown = event.target === translateModal; };
             const onBackdrop = (event) => {
-                if (event.target === translateModal) close(null);
+                if (backdropDown && event.target === translateModal) close(null);
+                backdropDown = false;
             };
 
             translateOkBtn.addEventListener('click', onOk);
             translateCancelBtn.addEventListener('click', onCancel);
             translateSelect.addEventListener('change', onSelectChange);
+            translateModal.addEventListener('mousedown', onBackdropDown);
             translateModal.addEventListener('click', onBackdrop);
             translateModal.classList.remove('hidden');
             translateModal.setAttribute('aria-hidden', 'false');
@@ -2583,23 +2593,16 @@ html.andes-chat-off #apchat-root {
         imageModal.classList.add('hidden');
         imageFull.src = '';
     });
-    imageModal.addEventListener('click', (event) => {
-        if (event.target === imageModal) {
+    if (window.andesBindBackdropClose) {
+        window.andesBindBackdropClose(imageModal, function () {
             imageModal.classList.add('hidden');
             imageFull.src = '';
-        }
-    });
-
-    editModal.addEventListener('click', (event) => {
-        if (event.target === editModal) closeEditModal();
-    });
+        });
+        window.andesBindBackdropClose(editModal, closeEditModal);
+        if (noticeModal) window.andesBindBackdropClose(noticeModal, closeNotice);
+    }
     if (noticeOkBtn) {
         noticeOkBtn.addEventListener('click', closeNotice);
-    }
-    if (noticeModal) {
-        noticeModal.addEventListener('click', (event) => {
-            if (event.target === noticeModal) closeNotice();
-        });
     }
 
     document.addEventListener('visibilitychange', () => {

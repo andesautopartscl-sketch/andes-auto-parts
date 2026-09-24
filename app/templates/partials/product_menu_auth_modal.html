@@ -244,10 +244,11 @@ body.dark .product-auth-action { border-color:#1e3a8a; color:#bfdbfe; background
 	});
 
 	modal.addEventListener('click', function (event) {
-		if (event.target === modal || event.target.closest('[data-product-auth-close]')) {
+		if (event.target.closest('[data-product-auth-close]')) {
 			closeModal();
 		}
 	});
+	if (window.andesBindBackdropClose) window.andesBindBackdropClose(modal, closeModal);
 	document.addEventListener('keydown', function (event) {
 		if (event.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
 	});

@@ -1,6 +1,23 @@
 (function () {
   "use strict";
 
+  if (!window.andesBindBackdropClose) {
+    window.andesBindBackdropClose = function (overlay, closeFn) {
+      if (!overlay || typeof closeFn !== "function") return;
+      if (overlay.getAttribute("data-andes-backdrop-bound") === "1") return;
+      overlay.setAttribute("data-andes-backdrop-bound", "1");
+      var pressed = false;
+      overlay.addEventListener("mousedown", function (e) {
+        pressed = e.target === overlay;
+      });
+      overlay.addEventListener("click", function (e) {
+        var should = pressed && e.target === overlay;
+        pressed = false;
+        if (should) closeFn();
+      });
+    };
+  }
+
   var masMenuApi = null;
 
   function initMasMenu() {
@@ -60,9 +77,11 @@
     });
 
     menu.querySelectorAll("[data-mas-close]").forEach(function (el) {
-      el.addEventListener("click", function () {
-        closeMenu(false);
-      });
+      if (window.andesBindBackdropClose) {
+        window.andesBindBackdropClose(el, function () { closeMenu(false); });
+      } else {
+        el.addEventListener("click", function () { closeMenu(false); });
+      }
     });
 
     var syncBtn = document.getElementById("mas-sync-catalog");

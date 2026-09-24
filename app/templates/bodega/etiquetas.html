@@ -1629,11 +1629,6 @@ html[data-print-mode="thermal"] .barcode img {
     if (etiquetasProductModalClose) {
         etiquetasProductModalClose.addEventListener('click', closeEtiquetasProductModal);
     }
-    if (etiquetasProductModal) {
-        etiquetasProductModal.addEventListener('click', function (e) {
-            if (e.target === etiquetasProductModal) closeEtiquetasProductModal();
-        });
-    }
     if (etiquetasProductSearchBtn) {
         etiquetasProductSearchBtn.addEventListener('click', searchProductsInModal);
     }

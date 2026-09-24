@@ -751,9 +751,7 @@
   });
 
   if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
-  modal.addEventListener('click', function (e) {
-    if (e.target === modal) closeModal();
-  });
+  if (window.andesBindBackdropClose) window.andesBindBackdropClose(modal, closeModal);
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
   });

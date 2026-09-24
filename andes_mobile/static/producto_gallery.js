@@ -112,13 +112,21 @@
 
   if (lightbox) {
     lightbox.querySelectorAll("[data-gallery-close]").forEach(function (el) {
-      el.addEventListener("click", closeLightbox);
+      if (window.andesBindBackdropClose) {
+        window.andesBindBackdropClose(el, closeLightbox);
+      } else {
+        el.addEventListener("click", closeLightbox);
+      }
     });
   }
 
   if (viewer360) {
     viewer360.querySelectorAll("[data-gallery-close]").forEach(function (el) {
-      el.addEventListener("click", close360);
+      if (window.andesBindBackdropClose) {
+        window.andesBindBackdropClose(el, close360);
+      } else {
+        el.addEventListener("click", close360);
+      }
     });
 
     if (viewer360Img) {

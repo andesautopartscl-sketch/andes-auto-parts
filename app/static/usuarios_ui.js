@@ -2,6 +2,22 @@
 (function () {
     "use strict";
 
+    function bindBackdropClose(overlay, closeFn) {
+        if (window.andesBindBackdropClose) {
+            window.andesBindBackdropClose(overlay, closeFn);
+            return;
+        }
+        if (!overlay || typeof closeFn !== "function") return;
+        var pressed = false;
+        overlay.addEventListener("mousedown", function (e) {
+            pressed = e.target === overlay;
+        });
+        overlay.addEventListener("click", function (e) {
+            if (pressed && e.target === overlay) closeFn();
+            pressed = false;
+        });
+    }
+
     function escapeHtml(value) {
         return String(value == null ? "" : value)
             .replace(/&/g, "&amp;")
@@ -87,11 +103,7 @@
                 return;
             }
             userConfirmModal.dataset.userConfirmBound = "1";
-            userConfirmModal.addEventListener("click", function (ev) {
-                if (ev.target === userConfirmModal) {
-                    closeUserActionConfirm();
-                }
-            });
+            bindBackdropClose(userConfirmModal, closeUserActionConfirm);
             userConfirmModal.querySelectorAll("[data-user-confirm-dismiss]").forEach(function (btn) {
                 btn.addEventListener("click", function (ev) {
                     ev.preventDefault();
@@ -1241,9 +1253,7 @@
                     closeCreateUserModal();
                 });
             });
-            sub.addEventListener("click", function (e) {
-                if (e.target === sub) closeCreateUserModal();
-            });
+            bindBackdropClose(sub, closeCreateUserModal);
 
             function syncCreateSalud() {
                 if (!saludSelect || !isapreInput) return;
@@ -1330,9 +1340,7 @@
                     closeEditUserModal();
                 });
             });
-            sub.addEventListener("click", function (e) {
-                if (e.target === sub) closeEditUserModal();
-            });
+            bindBackdropClose(sub, closeEditUserModal);
             if (btnPermAll && btnPermAll.dataset.bound !== "1") {
                 btnPermAll.dataset.bound = "1";
                 btnPermAll.addEventListener("click", function () {
@@ -1447,9 +1455,7 @@
                     closePasswordResetModal();
                 });
             });
-            sub.addEventListener("click", function (e) {
-                if (e.target === sub) closePasswordResetModal();
-            });
+            bindBackdropClose(sub, closePasswordResetModal);
 
             if (rejectBtn.dataset.optionsResetRejectBound !== "1") {
                 rejectBtn.dataset.optionsResetRejectBound = "1";
@@ -1512,12 +1518,7 @@
             });
         }
 
-        // Cerrar al hacer click sobre el backdrop
-        modal.addEventListener("click", function (event) {
-            if (event.target === modal) {
-                closeOptionsModal();
-            }
-        });
+        bindBackdropClose(modal, closeOptionsModal);
 
         // Navegación SPA desde el modal: cerrar y cargar el módulo (sin full page).
         modal.querySelectorAll("a[data-module-url]").forEach(function (a) {

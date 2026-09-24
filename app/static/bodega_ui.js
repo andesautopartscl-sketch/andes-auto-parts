@@ -1,6 +1,22 @@
 (function () {
     "use strict";
 
+    function bindBackdropClose(overlay, closeFn) {
+        if (window.andesBindBackdropClose) {
+            window.andesBindBackdropClose(overlay, closeFn);
+            return;
+        }
+        if (!overlay || typeof closeFn !== "function") return;
+        var pressed = false;
+        overlay.addEventListener("mousedown", function (e) {
+            pressed = e.target === overlay;
+        });
+        overlay.addEventListener("click", function (e) {
+            if (pressed && e.target === overlay) closeFn();
+            pressed = false;
+        });
+    }
+
     window.toggleMenu = function toggleMenu(id) {
         var el = document.getElementById(id);
         var hdr = document.getElementById("hdr-" + id);
@@ -194,9 +210,7 @@
                     tryAccept();
                 }
             }
-            overlay.addEventListener("click", function (e) {
-                if (e.target === overlay) finish(false);
-            });
+            bindBackdropClose(overlay, function () { finish(false); });
             card.querySelector(".bodega-confirm-btn.cancel").addEventListener("click", function () {
                 finish(false);
             });
@@ -267,9 +281,7 @@
                     finish();
                 }
             }
-            overlay.addEventListener("click", function (e) {
-                if (e.target === overlay) finish();
-            });
+            bindBackdropClose(overlay, finish);
             card.querySelector(".bodega-confirm-btn.ok").addEventListener("click", finish);
             document.addEventListener("keydown", onKey, true);
             setTimeout(function () {
@@ -1023,11 +1035,7 @@
                 telHelpModalClose.addEventListener("click", closeIngresoTelHelpModal);
             }
             if (telHelpModal) {
-                telHelpModal.addEventListener("click", function (ev) {
-                    if (ev.target === telHelpModal) {
-                        closeIngresoTelHelpModal();
-                    }
-                });
+                bindBackdropClose(telHelpModal, closeIngresoTelHelpModal);
             }
             document.addEventListener("keydown", function (ev) {
                 if (ev.key !== "Escape" || !telHelpModal || !telHelpModal.classList.contains("open")) {
@@ -2446,11 +2454,6 @@
         if (productModalClose) {
             productModalClose.addEventListener("click", closeProductSearchModal);
         }
-        if (productModal) {
-            productModal.addEventListener("click", function (ev) {
-                if (ev.target === productModal) closeProductSearchModal();
-            });
-        }
         if (productSearchBtn) {
             productSearchBtn.addEventListener("click", doProductSearch);
         }
@@ -3053,11 +3056,6 @@
         }
         if (provModalClose) {
             provModalClose.addEventListener("click", closeProveedorSearchModal);
-        }
-        if (provModal) {
-            provModal.addEventListener("click", function (ev) {
-                if (ev.target === provModal) closeProveedorSearchModal();
-            });
         }
         if (provSearchBtn) {
             provSearchBtn.addEventListener("click", doProveedorSearch);
@@ -4391,9 +4389,7 @@
             hideFacturaAutoBadge();
             if (modalClose) modalClose.addEventListener("click", cancelScan);
             if (btnCancel) btnCancel.addEventListener("click", cancelScan);
-            modal.addEventListener("click", function (ev) {
-                if (ev.target === modal) cancelScan();
-            });
+            bindBackdropClose(modal, cancelScan);
             document.addEventListener("keydown", function (ev) {
                 if (ev.key === "Escape" && modal.classList.contains("open")) cancelScan();
             });
@@ -5014,9 +5010,6 @@
             if (etiquetasProductModalClose) {
                 etiquetasProductModalClose.addEventListener("click", closeEtiquetasProductModal);
             }
-            etiquetasProductModal.addEventListener("click", function (e) {
-                if (e.target === etiquetasProductModal) closeEtiquetasProductModal();
-            });
             if (etiquetasProductSearchBtn) {
                 etiquetasProductSearchBtn.addEventListener("click", searchProductsInEtiquetasModal);
             }
@@ -5482,9 +5475,6 @@
         if (btnClose) {
             btnClose.addEventListener("click", closeModal);
         }
-        modal.addEventListener("click", function (ev) {
-            if (ev.target === modal) closeModal();
-        });
         if (btnGo) {
             btnGo.addEventListener("click", doSearch);
         }

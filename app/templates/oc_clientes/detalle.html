@@ -563,7 +563,7 @@
     window.addEventListener('afterprint', function () { document.body.classList.remove('oc-printing'); });
     document.querySelectorAll('.modal-cancel').forEach(function (b) { b.addEventListener('click', closeModals); });
     document.querySelectorAll('.oc-modal').forEach(function (m) {
-        m.addEventListener('click', function (e) { if (e.target === m) closeModals(); });
+        if (window.andesBindBackdropClose) window.andesBindBackdropClose(m, closeModals);
     });
 
     var formPago = document.getElementById('formPago');

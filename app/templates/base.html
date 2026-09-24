@@ -18,6 +18,7 @@
 	} catch (e) {}
 })();
 </script>
+<script src="{{ url_for('static', filename='andes_modals.js') }}?v=20260923-backdrop"></script>
 <style>
 html.andes-chat-off #apchat-root {
 	display: none !important;
@@ -1435,16 +1436,14 @@ function toggleMenu(id) {
 	});
 
 	document.addEventListener('click', function (event) {
-		var modal = document.getElementById('appModal');
 		var closeBtn = event.target.closest('#appModalClose');
 		if (closeBtn) {
 			closeAppModal();
-			return;
-		}
-		if (modal && event.target === modal) {
-			closeAppModal();
 		}
 	});
+	if (window.andesBindBackdropClose) {
+		window.andesBindBackdropClose(document.getElementById('appModal'), closeAppModal);
+	}
 
 	/* Tras recarga completa (POST de formularios, F5, enlace directo): reabrir el acordeón
 	   del módulo que corresponde a la URL actual (p. ej. BODEGA en ajuste/ingreso). */
@@ -1456,7 +1455,7 @@ function toggleMenu(id) {
 {% if not embed_modal|default(false) %}
 {% include 'partials/idle_session_warning.html' %}
 {% endif %}
-<script src="{{ url_for('static', filename='usuarios_ui.js') }}"></script>
+<script src="{{ url_for('static', filename='usuarios_ui.js') }}?v=20260923-modal-backdrop"></script>
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

@@ -1051,10 +1051,8 @@
   });
 
   if (btnAuthCancel) btnAuthCancel.addEventListener('click', closeAuthModal);
-  if (authModal) {
-    authModal.addEventListener('click', function (e) {
-      if (e.target === authModal) closeAuthModal();
-    });
+  if (authModal && window.andesBindBackdropClose) {
+    window.andesBindBackdropClose(authModal, closeAuthModal);
   }
   if (authForm) {
     authForm.addEventListener('submit', function (e) {

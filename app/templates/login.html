@@ -583,9 +583,14 @@ html.login-reduced-motion #particles-js {
     }
     openBtn.addEventListener("click", openDlg);
     closeBtn.addEventListener("click", closeDlg);
-    dlg.addEventListener("click", function (e) {
-        if (e.target === dlg) closeDlg();
-    });
+    (function bindDlgBackdrop() {
+        var down = false;
+        dlg.addEventListener("mousedown", function (e) { down = e.target === dlg; });
+        dlg.addEventListener("click", function (e) {
+            if (down && e.target === dlg) closeDlg();
+            down = false;
+        });
+    })();
     form.addEventListener("submit", async function (e) {
         e.preventDefault();
         var username = (userInput.value || "").trim();
@@ -633,9 +638,14 @@ html.login-reduced-motion #particles-js {
     }
     openBtn.addEventListener("click", function () { openDlg(); });
     closeBtn.addEventListener("click", function () { closeDlg(); });
-    dlg.addEventListener("click", function (e) {
-        if (e.target === dlg) closeDlg();
-    });
+    (function bindDlgBackdrop() {
+        var down = false;
+        dlg.addEventListener("mousedown", function (e) { down = e.target === dlg; });
+        dlg.addEventListener("click", function (e) {
+            if (down && e.target === dlg) closeDlg();
+            down = false;
+        });
+    })();
     document.addEventListener("keydown", function (e) {
         if (e.key === "Escape" && dlg.open) closeDlg();
     });

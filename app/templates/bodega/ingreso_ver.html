@@ -833,10 +833,8 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
     }
 
     if (alertOk) alertOk.addEventListener('click', closeIngresoAlert);
-    if (alertModal) {
-        alertModal.addEventListener('click', function (e) {
-            if (e.target === alertModal) closeIngresoAlert();
-        });
+    if (alertModal && window.andesBindBackdropClose) {
+        window.andesBindBackdropClose(alertModal, closeIngresoAlert);
     }
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && alertModal && alertModal.classList.contains('open')) {
@@ -964,9 +962,7 @@ ${{ '{:,.2f}'.format(v|float).replace(',', 'X').replace('.', ',').replace('X', '
             openModal();
         });
         cancelBtn.addEventListener('click', closeModal);
-        modal.addEventListener('click', function (e) {
-            if (e.target === modal) closeModal();
-        });
+        if (window.andesBindBackdropClose) window.andesBindBackdropClose(modal, closeModal);
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && modal.classList.contains('open')) {
                 if (alertModal && alertModal.classList.contains('open')) return;

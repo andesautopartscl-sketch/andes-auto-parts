@@ -1000,7 +1000,6 @@
     document.getElementById('btnClearForm')?.addEventListener('click', clearForm);
     document.getElementById('btnAddRow')?.addEventListener('click', function () { addRow({}); });
     document.getElementById('psClose')?.addEventListener('click', function () { psModal.classList.remove('open'); });
-    psModal?.addEventListener('click', function (e) { if (e.target === psModal) psModal.classList.remove('open'); });
     psInput?.addEventListener('input', function () { runSearch(psInput.value); });
 
     function showDupAlert(msg) {

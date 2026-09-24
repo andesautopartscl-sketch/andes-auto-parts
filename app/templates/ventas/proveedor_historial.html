@@ -1442,9 +1442,7 @@
     }
 
     if (closeBtn) closeBtn.addEventListener('click', closePreview);
-    modal.addEventListener('click', function (e) {
-        if (e.target === modal) closePreview();
-    });
+    if (window.andesBindBackdropClose) window.andesBindBackdropClose(modal, closePreview);
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && modal.classList.contains('open')) {
             closePreview();

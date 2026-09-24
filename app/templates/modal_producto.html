@@ -1544,7 +1544,7 @@ body.ft-lazy-ficha #ftMediaRoot {
 </div>
 
 <!-- MODAL DESPIECE (layout tipo catálogo EPC: diagrama | lista | barra detalle) -->
-<div id="modalDespiece" class="epc-despiece-overlay" style="display:none;" onclick="if(event.target===this)cerrarModalDespiece();">
+<div id="modalDespiece" class="epc-despiece-overlay" style="display:none;" onmousedown="this._andesDown=event.target===this" onclick="if(this._andesDown&&event.target===this)cerrarModalDespiece();">
 
 <div class="epc-despiece-wrap" data-epc-admin="{{ 1 if es_admin else 0 }}" onclick="event.stopPropagation();">
 
@@ -1746,7 +1746,7 @@ Imprimir
 </div>
 </div>
 
-<div id="modalHistorialProducto" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.52);z-index:10000;backdrop-filter:blur(4px);" onclick="if(event.target===this)cerrarModalHistorialProducto();">
+<div id="modalHistorialProducto" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.52);z-index:10000;backdrop-filter:blur(4px);" onmousedown="this._andesDown=event.target===this" onclick="if(this._andesDown&&event.target===this)cerrarModalHistorialProducto();">
   <div style="width:min(1100px,calc(100vw - 40px));height:min(760px,calc(100vh - 40px));background:#fff;border-radius:16px;box-shadow:0 24px 80px rgba(15,23,42,.28);overflow:hidden;display:flex;flex-direction:column;margin:auto;">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid #e2e8f0;background:#f8fafc;">
       <div>

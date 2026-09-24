@@ -490,7 +490,11 @@
   });
 
   elModal.querySelectorAll("[data-vr-modal-close]").forEach(function (el) {
-    el.addEventListener("click", closeModal);
+    if (window.andesBindBackdropClose) {
+      window.andesBindBackdropClose(el, closeModal);
+    } else {
+      el.addEventListener("click", closeModal);
+    }
   });
 
   function enrichCartPrecios() {

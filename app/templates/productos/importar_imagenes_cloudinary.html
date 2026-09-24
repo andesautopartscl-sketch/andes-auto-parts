@@ -1157,11 +1157,6 @@ body.dark .imp-page .imp-ps-table tbody tr:hover { background: #111827; }
 
   if (psRun) psRun.addEventListener('click', runCodigoSearch);
   if (psClose) psClose.addEventListener('click', closeCodigoSearch);
-  if (psModal) {
-    psModal.addEventListener('click', function (e) {
-      if (e.target === psModal) closeCodigoSearch();
-    });
-  }
   if (psInput) {
     psInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {

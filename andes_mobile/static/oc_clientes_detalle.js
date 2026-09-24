@@ -58,7 +58,11 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll("[data-oc-close]").forEach(function (el) {
-      el.addEventListener("click", closeModals);
+      if (window.andesBindBackdropClose) {
+        window.andesBindBackdropClose(el, closeModals);
+      } else {
+        el.addEventListener("click", closeModals);
+      }
     });
 
     var fechaEntrega = document.getElementById("m-oc-fecha-entrega");

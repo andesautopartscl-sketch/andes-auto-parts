@@ -319,9 +319,16 @@
     var btn2 = document.getElementById('relmapPreviewClose2');
     if (btn1) btn1.addEventListener('click', closePreview);
     if (btn2) btn2.addEventListener('click', closePreview);
-    el.addEventListener('click', function (ev) {
-      if (ev.target === el) closePreview();
-    });
+    if (window.andesBindBackdropClose) {
+      window.andesBindBackdropClose(el, closePreview);
+    } else {
+      var down = false;
+      el.addEventListener('mousedown', function (ev) { down = ev.target === el; });
+      el.addEventListener('click', function (ev) {
+        if (down && ev.target === el) closePreview();
+        down = false;
+      });
+    }
     el._closePreview = closePreview;
     return el;
   }

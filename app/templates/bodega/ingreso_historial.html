@@ -920,9 +920,7 @@ body.ingreso-hist-etiq-bar-pad {
     if (abrirA) abrirA.addEventListener('click', closeOpcionesModal);
     movA.addEventListener('click', closeOpcionesModal);
     editA.addEventListener('click', closeOpcionesModal);
-    opcionesModal.addEventListener('click', function (e) {
-        if (e.target === opcionesModal) closeOpcionesModal();
-    });
+    if (window.andesBindBackdropClose) window.andesBindBackdropClose(opcionesModal, closeOpcionesModal);
 
     document.addEventListener('keydown', function (e) {
         if (e.key !== 'Escape') return;
@@ -970,9 +968,7 @@ body.ingreso-hist-etiq-bar-pad {
     });
 
     if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
-    modal.addEventListener('click', function (e) {
-        if (e.target === modal) closeModal();
-    });
+    if (window.andesBindBackdropClose) window.andesBindBackdropClose(modal, closeModal);
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
     });
@@ -1088,9 +1084,7 @@ body.ingreso-hist-etiq-bar-pad {
     });
 
     closeBtn.addEventListener('click', closeModal);
-    modal.addEventListener('click', function (e) {
-        if (e.target === modal) closeModal();
-    });
+    if (window.andesBindBackdropClose) window.andesBindBackdropClose(modal, closeModal);
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
     });

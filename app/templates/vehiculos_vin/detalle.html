@@ -317,7 +317,7 @@
     setTimeout(function () { if (authUser) authUser.focus(); }, 20);
   });
   if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
-  modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+  if (window.andesBindBackdropClose) window.andesBindBackdropClose(modal, closeModal);
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
   });
@@ -383,7 +383,7 @@
     if (lbImg) lbImg.src = urls[idx];
     if (lbCap) lbCap.textContent = (idx + 1) + ' / ' + urls.length;
   });
-  lb?.addEventListener('click', function (e) { if (e.target === lb) closeLb(); });
+  if (window.andesBindBackdropClose) window.andesBindBackdropClose(lb, closeLb);
   document.addEventListener('keydown', function (e) {
     if (!lb || !lb.classList.contains('open')) return;
     if (e.key === 'Escape') closeLb();

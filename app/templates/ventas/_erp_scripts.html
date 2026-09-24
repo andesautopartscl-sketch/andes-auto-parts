@@ -588,10 +588,16 @@
                 if (btnCancel) btnCancel.removeEventListener('click', onCancel);
                 if (btnClose) btnClose.removeEventListener('click', onCancel);
                 modal.removeEventListener('click', onBackdrop);
+                modal.removeEventListener('mousedown', onBackdropDown);
                 passInput.removeEventListener('keydown', onPassKey);
             }
             function onCancel() { finish(false); }
-            function onBackdrop(ev) { if (ev.target === modal) finish(false); }
+            var backdropDown = false;
+            function onBackdropDown(ev) { backdropDown = ev.target === modal; }
+            function onBackdrop(ev) {
+                if (backdropDown && ev.target === modal) finish(false);
+                backdropDown = false;
+            }
             function onPassKey(ev) {
                 if (ev.key === 'Enter') onConfirm();
             }
@@ -648,6 +654,7 @@
             btnOk.addEventListener('click', onConfirm);
             if (btnCancel) btnCancel.addEventListener('click', onCancel);
             if (btnClose) btnClose.addEventListener('click', onCancel);
+            modal.addEventListener('mousedown', onBackdropDown);
             modal.addEventListener('click', onBackdrop);
             passInput.addEventListener('keydown', onPassKey);
             window.setTimeout(function () { userInput.focus(); }, 10);
@@ -2116,10 +2123,8 @@
     }
     if (traceClose) traceClose.addEventListener('click', closeTrace);
     if (traceClose2) traceClose2.addEventListener('click', closeTrace);
-    if (traceModal) {
-        traceModal.addEventListener('click', function (event) {
-            if (event.target === traceModal) closeTrace();
-        });
+    if (traceModal && window.andesBindBackdropClose) {
+        window.andesBindBackdropClose(traceModal, closeTrace);
     }
     if (traceList) {
         traceList.addEventListener('click', function (event) {
@@ -2139,10 +2144,8 @@
     if (margenAuthClose) margenAuthClose.addEventListener('click', function () { closeMargenAuthModal(false); });
     if (margenAuthCancel) margenAuthCancel.addEventListener('click', function () { closeMargenAuthModal(false); });
     if (margenAuthConfirm) margenAuthConfirm.addEventListener('click', submitMargenAuthorization);
-    if (margenAuthModal) {
-        margenAuthModal.addEventListener('click', function (event) {
-            if (event.target === margenAuthModal) closeMargenAuthModal(false);
-        });
+    if (margenAuthModal && window.andesBindBackdropClose) {
+        window.andesBindBackdropClose(margenAuthModal, function () { closeMargenAuthModal(false); });
     }
     if (margenAuthPass) {
         margenAuthPass.addEventListener('keydown', function (event) {
@@ -2215,7 +2218,6 @@
     if (psClose) psClose.addEventListener('click', closePSModal);
     if (psClose2) psClose2.addEventListener('click', closePSModal);
     if (psApply) psApply.addEventListener('click', applySelected);
-    if (psModal) psModal.addEventListener('click', function (event) { if (event.target === psModal) closePSModal(); });
 
     var productHistoryClose = document.getElementById('productHistoryClose');
     var traceabilityModalEl = document.getElementById('traceabilityModal');
@@ -2224,11 +2226,9 @@
             if (typeof window.closeProductoTraceability === 'function') window.closeProductoTraceability();
         });
     }
-    if (traceabilityModalEl) {
-        traceabilityModalEl.addEventListener('click', function (event) {
-            if (event.target === traceabilityModalEl && typeof window.closeProductoTraceability === 'function') {
-                window.closeProductoTraceability();
-            }
+    if (traceabilityModalEl && window.andesBindBackdropClose) {
+        window.andesBindBackdropClose(traceabilityModalEl, function () {
+            if (typeof window.closeProductoTraceability === 'function') window.closeProductoTraceability();
         });
     }
     if (psInput) {
@@ -2556,10 +2556,8 @@
         if (!el) return;
         el.addEventListener('click', closeDocActionModal);
     });
-    if (docActionModal) {
-        docActionModal.addEventListener('click', function (event) {
-            if (event.target === docActionModal) closeDocActionModal();
-        });
+    if (docActionModal && window.andesBindBackdropClose) {
+        window.andesBindBackdropClose(docActionModal, closeDocActionModal);
     }
     document.addEventListener('keydown', function (event) {
         if (event.key === 'Escape' && docActionModal && docActionModal.classList.contains('open')) {
