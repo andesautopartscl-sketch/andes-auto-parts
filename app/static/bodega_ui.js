@@ -5972,13 +5972,323 @@
         });
     }
 
+    function initIngresoEditarView(root) {
+        var form = root.querySelector("#ingresoEditarForm");
+        if (!form || form.dataset.ingresoEditarMarcaBound === "1") {
+            return;
+        }
+        var marcasUrl = (form.getAttribute("data-marcas-url") || "").trim();
+        if (!marcasUrl) {
+            return;
+        }
+        var itemsBody = form.querySelector("tbody");
+        if (!itemsBody) {
+            return;
+        }
+        form.dataset.ingresoEditarMarcaBound = "1";
+
+        var marcaOptionsByRow = new WeakMap();
+
+        function rowCodigo(row) {
+            return String((row && row.getAttribute("data-codigo")) || "").trim().toUpperCase();
+        }
+
+        function closeMarcaMenu(row) {
+            if (!row) {
+                return;
+            }
+            var menu = row.querySelector(".ingreso-marca-menu");
+            var btn = row.querySelector(".ingreso-marca-dropdown-btn");
+            if (menu) {
+                menu.hidden = true;
+                menu.classList.remove("is-dropup");
+                menu.style.maxHeight = "";
+                menu.style.top = "";
+                menu.style.bottom = "";
+                menu.style.left = "";
+                menu.style.width = "";
+                menu.style.right = "";
+                menu.style.position = "";
+            }
+            if (btn) {
+                btn.setAttribute("aria-expanded", "false");
+            }
+        }
+
+        function closeAllMarcaMenus() {
+            itemsBody.querySelectorAll("tr.item-row").forEach(closeMarcaMenu);
+        }
+
+        function renderMarcaMenu(row, menuOpts) {
+            var menu = row.querySelector(".ingreso-marca-menu");
+            var marcaInput = row.querySelector("input.ingreso-marca-input");
+            if (!menu || !marcaInput) {
+                return;
+            }
+            menuOpts = menuOpts || {};
+            var opts = marcaOptionsByRow.get(row) || [];
+            var current = (marcaInput.value || "").trim().toUpperCase();
+            var filterText = menuOpts.showAll
+                ? ""
+                : String(menuOpts.filter != null ? menuOpts.filter : marcaInput.value || "")
+                      .trim()
+                      .toUpperCase();
+            menu.innerHTML = "";
+            if (!opts.length) {
+                var emptyNoOpts = document.createElement("div");
+                emptyNoOpts.className = "ingreso-marca-menu-empty";
+                emptyNoOpts.textContent = "Sin variantes para este código";
+                menu.appendChild(emptyNoOpts);
+                return;
+            }
+            var shown = 0;
+            opts.forEach(function (m) {
+                var mu = (m || "").trim().toUpperCase();
+                if (!mu || (filterText && mu.indexOf(filterText) < 0)) {
+                    return;
+                }
+                shown += 1;
+                var item = document.createElement("button");
+                item.type = "button";
+                item.className = "ingreso-marca-menu-item";
+                item.setAttribute("role", "option");
+                item.textContent = mu;
+                if (current && mu === current) {
+                    item.classList.add("is-selected");
+                    item.setAttribute("aria-selected", "true");
+                } else {
+                    item.setAttribute("aria-selected", "false");
+                }
+                item.addEventListener("mousedown", function (ev) {
+                    ev.preventDefault();
+                });
+                item.addEventListener("click", function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    marcaInput.value = mu;
+                    marcaInput.dispatchEvent(new Event("input", { bubbles: true }));
+                    marcaInput.dispatchEvent(new Event("change", { bubbles: true }));
+                    closeMarcaMenu(row);
+                    marcaInput.focus();
+                });
+                menu.appendChild(item);
+            });
+            if (!shown) {
+                var emptyMatch = document.createElement("div");
+                emptyMatch.className = "ingreso-marca-menu-empty";
+                emptyMatch.textContent = filterText ? "Sin coincidencias" : "Sin variantes para este código";
+                menu.appendChild(emptyMatch);
+            }
+        }
+
+        function positionMarcaMenu(row) {
+            var wrap = row.querySelector(".ingreso-marca-wrap");
+            var menu = row.querySelector(".ingreso-marca-menu");
+            if (!wrap || !menu || menu.hidden) {
+                return;
+            }
+            menu.classList.remove("is-dropup");
+            var rect = wrap.getBoundingClientRect();
+            var maxDefault = 200;
+            var gap = 8;
+            var spaceBelow = window.innerHeight - rect.bottom - gap;
+            var spaceAbove = rect.top - gap;
+            menu.style.position = "fixed";
+            menu.style.left = Math.max(8, rect.left) + "px";
+            menu.style.width = Math.max(rect.width, 140) + "px";
+            menu.style.right = "auto";
+            menu.hidden = false;
+            var natural = menu.scrollHeight;
+            var menuHeight = Math.min(maxDefault, natural || maxDefault);
+            var preferDropup = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+            if (preferDropup) {
+                menu.classList.add("is-dropup");
+                menu.style.maxHeight = Math.min(maxDefault, Math.max(72, spaceAbove - 4)) + "px";
+                menu.style.top = "auto";
+                menu.style.bottom = window.innerHeight - rect.top + 2 + "px";
+            } else {
+                menu.style.maxHeight = Math.min(maxDefault, Math.max(72, spaceBelow - 4)) + "px";
+                menu.style.top = rect.bottom + 2 + "px";
+                menu.style.bottom = "auto";
+            }
+        }
+
+        function openMarcaMenu(row, menuOpts) {
+            if (!row || !row.querySelector(".ingreso-marca-wrap")) {
+                return;
+            }
+            closeAllMarcaMenus();
+            renderMarcaMenu(row, menuOpts);
+            var menu = row.querySelector(".ingreso-marca-menu");
+            var btn = row.querySelector(".ingreso-marca-dropdown-btn");
+            if (menu) {
+                menu.hidden = false;
+            }
+            if (btn) {
+                btn.setAttribute("aria-expanded", "true");
+            }
+            requestAnimationFrame(function () {
+                positionMarcaMenu(row);
+            });
+        }
+
+        function loadMarcasForRow(row, onDone) {
+            var code = rowCodigo(row);
+            var marcaInput = row.querySelector("input.ingreso-marca-input");
+            if (!code || !marcaInput) {
+                marcaOptionsByRow.set(row, []);
+                if (onDone) {
+                    onDone();
+                }
+                return;
+            }
+            fetch(marcasUrl + "?codigo=" + encodeURIComponent(code), {
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            })
+                .then(function (res) {
+                    return res.json();
+                })
+                .then(function (data) {
+                    var marcas = [];
+                    if (data && data.ok && Array.isArray(data.marcas)) {
+                        data.marcas.forEach(function (m) {
+                            var mu = (m || "").trim().toUpperCase();
+                            if (mu && marcas.indexOf(mu) < 0) {
+                                marcas.push(mu);
+                            }
+                        });
+                    }
+                    marcaOptionsByRow.set(row, marcas);
+                    var menu = row.querySelector(".ingreso-marca-menu");
+                    if (menu && !menu.hidden) {
+                        renderMarcaMenu(row, { filter: marcaInput.value });
+                        requestAnimationFrame(function () {
+                            positionMarcaMenu(row);
+                        });
+                    }
+                })
+                .catch(function () {
+                    marcaOptionsByRow.set(row, []);
+                })
+                .finally(function () {
+                    if (onDone) {
+                        onDone();
+                    }
+                });
+        }
+
+        function bindMarcaCombobox(row) {
+            var wrap = row.querySelector(".ingreso-marca-wrap");
+            var btn = row.querySelector(".ingreso-marca-dropdown-btn");
+            var marcaInput = row.querySelector("input.ingreso-marca-input");
+            if (!wrap || !marcaInput) {
+                return;
+            }
+            if (marcaInput.dataset.marcaInputBound !== "1") {
+                marcaInput.dataset.marcaInputBound = "1";
+                marcaInput.addEventListener("input", function () {
+                    var text = (marcaInput.value || "").trim();
+                    if (!text) {
+                        closeMarcaMenu(row);
+                        return;
+                    }
+                    if (!marcaOptionsByRow.has(row)) {
+                        loadMarcasForRow(row, function () {
+                            openMarcaMenu(row, { filter: marcaInput.value });
+                        });
+                        return;
+                    }
+                    openMarcaMenu(row, { filter: marcaInput.value });
+                });
+                marcaInput.addEventListener("keydown", function (ev) {
+                    if (ev.key === "Escape") {
+                        closeMarcaMenu(row);
+                    }
+                });
+            }
+            if (!btn || btn.dataset.bound === "1") {
+                return;
+            }
+            btn.dataset.bound = "1";
+            btn.addEventListener("click", function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                var menu = row.querySelector(".ingreso-marca-menu");
+                if (menu && !menu.hidden) {
+                    closeMarcaMenu(row);
+                    return;
+                }
+                if (!rowCodigo(row)) {
+                    return;
+                }
+                if (!marcaOptionsByRow.has(row)) {
+                    loadMarcasForRow(row, function () {
+                        openMarcaMenu(row, { showAll: true });
+                    });
+                    return;
+                }
+                openMarcaMenu(row, { showAll: true });
+            });
+        }
+
+        itemsBody.querySelectorAll("tr.item-row").forEach(function (row) {
+            bindMarcaCombobox(row);
+            loadMarcasForRow(row);
+        });
+
+        document.addEventListener("click", function (ev) {
+            if (ev.target.closest(".ingreso-marca-dropdown-btn")) {
+                return;
+            }
+            if (ev.target.closest(".ingreso-marca-menu")) {
+                return;
+            }
+            if (ev.target.closest(".ingreso-marca-input")) {
+                return;
+            }
+            closeAllMarcaMenus();
+        });
+        document.addEventListener("keydown", function (ev) {
+            if (ev.key === "Escape") {
+                closeAllMarcaMenus();
+            }
+        });
+        window.addEventListener(
+            "resize",
+            function () {
+                itemsBody.querySelectorAll("tr.item-row").forEach(function (row) {
+                    var menu = row.querySelector(".ingreso-marca-menu");
+                    if (menu && !menu.hidden) {
+                        positionMarcaMenu(row);
+                    }
+                });
+            },
+            { passive: true }
+        );
+        var tableWrap = form.querySelector(".ing-edit-table-wrap");
+        if (tableWrap) {
+            tableWrap.addEventListener(
+                "scroll",
+                function () {
+                    itemsBody.querySelectorAll("tr.item-row").forEach(function (row) {
+                        var menu = row.querySelector(".ingreso-marca-menu");
+                        if (menu && !menu.hidden) {
+                            positionMarcaMenu(row);
+                        }
+                    });
+                },
+                { passive: true }
+            );
+        }
+    }
+
     window.initBodegaUI = function initBodegaUI() {
         /* SPA: scripts run after innerHTML but before pushState; pathname can still be "/" */
         var path = location.pathname || "";
         var onBodegaRoute = /^\/bodega(\/|$)/.test(path);
         var hasBodegaFragment =
             document.querySelector(
-                "#salidaForm, #ingresoForm, #ajusteForm, #recepcionForm, #labelsForm, #bodegasCatalogoHelpBtn, #variantesFiltrosForm"
+                "#salidaForm, #ingresoForm, #ingresoEditarForm, #ajusteForm, #recepcionForm, #labelsForm, #bodegasCatalogoHelpBtn, #variantesFiltrosForm"
             ) != null;
         if (!onBodegaRoute && !hasBodegaFragment) {
             return;
@@ -5987,6 +6297,7 @@
         initDateInputs(root);
         initRutBindings(root);
         initIngresoView(root);
+        initIngresoEditarView(root);
         initAjusteView(root);
         initSalidaView(root);
         initRecepcionView(root);
