@@ -68,6 +68,16 @@ def importar_excel():
 
     try:
         summary = import_products_from_excel(archivo, batch_size=2000)
+        if summary.get("status") == "blocked":
+            report = summary.get("shift_report") or {}
+            return jsonify(
+                success=False,
+                blocked=True,
+                message=report.get("reason") or "El Excel parece tener columnas corridas. No se importó nada.",
+                summary=summary,
+                shift_report=report,
+            ), 409
+
         notes = " ".join(summary.get("import_notes") or [])
 
         return jsonify(

@@ -155,6 +155,40 @@ body.dark .import-result-stats dt { color:#86efac; }
 body.dark .import-result-stats dd { color:#4ade80; }
 body.dark .import-result-notes { color:#bbf7d0; }
 body.dark .import-result-dismiss { color:#86efac; }
+.import-result-wrap.blocked {
+    background:#fef2f2;
+    border-color:#fecaca;
+}
+.import-result-wrap.blocked .import-result-head { color:#991b1b; }
+.import-result-wrap.blocked .import-result-stats dt { color:#b91c1c; }
+.import-result-wrap.blocked .import-result-stats dd { color:#dc2626; }
+.import-result-wrap.blocked .import-result-notes { color:#7f1d1d; }
+.import-result-samples {
+    margin:10px 0 0;
+    padding:0;
+    list-style:none;
+    font-size:12px;
+    color:#7f1d1d;
+    line-height:1.45;
+}
+.import-result-samples li {
+    margin:0 0 6px;
+    padding:6px 8px;
+    background:#fff;
+    border:1px solid #fecaca;
+    border-radius:8px;
+}
+body.dark .import-result-wrap.blocked {
+    background:#450a0a;
+    border-color:#7f1d1d;
+}
+body.dark .import-result-wrap.blocked .import-result-head { color:#fecaca; }
+body.dark .import-result-wrap.blocked .import-result-notes,
+body.dark .import-result-samples { color:#fecaca; }
+body.dark .import-result-samples li {
+    background:#1f2937;
+    border-color:#7f1d1d;
+}
 
 /* --- Chrome compacto profesional (.buscar-page) --- */
 .buscar-page {
@@ -825,6 +859,10 @@ body.dark .pagination-info {
 
         <form id="importForm" enctype="multipart/form-data">
             <p style="color:#555; font-size:13px; margin-top:4px;">Formatos aceptados: <strong>.xlsx, .xls, .csv</strong></p>
+            <p style="color:#9a3412; font-size:12px; margin-top:8px; line-height:1.45;">
+                Si ordenas o pegas en Excel, selecciona <strong>todas</strong> las columnas.
+                Si el OEM de un producto aparece en otro (sobre todo de otra marca), la importación se bloquea y no se cambia nada.
+            </p>
             <input type="file" name="file" accept=".xlsx,.xls,.csv" required style="width:100%; padding:8px; margin-top:6px;">
             <div id="importMessage" style="margin-top:15px; font-weight:500;"></div>
 
@@ -1011,6 +1049,36 @@ window._formatImportSuccessHtml = function (data) {
     return html.join("");
 };
 
+window._formatImportBlockedHtml = function (data) {
+    var report = data.shift_report || (data.summary && data.summary.shift_report) || {};
+    var esc = window._escapeHtmlBuscar;
+    var samples = Array.isArray(report.samples) ? report.samples : [];
+    var html = [];
+    html.push('<div class="import-result-wrap blocked">');
+    html.push('<div class="import-result-head">⛔ Importación bloqueada</div>');
+    html.push('<p class="import-result-notes" style="padding-left:0;list-style:none;">' +
+        esc(data.message || report.reason || "El Excel parece tener columnas corridas.") +
+        "</p>");
+    html.push('<dl class="import-result-stats">');
+    html.push("<div><dt>OEM corridos</dt><dd>" + esc(String(report.oem_shifts || 0)) + "</dd></div>");
+    html.push("<div><dt>De otra marca</dt><dd>" + esc(String(report.oem_marca_mismatch || 0)) + "</dd></div>");
+    html.push("</dl>");
+    if (samples.length) {
+        html.push('<ul class="import-result-samples">');
+        samples.slice(0, 8).forEach(function (s) {
+            html.push(
+                "<li><strong>" + esc(s.codigo) + "</strong> " + esc(s.marca || "") +
+                " — OEM Excel <code>" + esc(s.oem_excel || "") + "</code> pertenecía a " +
+                esc(s.pertenecia_a || "") + " (" + esc(s.marca_origen || "") + ")</li>"
+            );
+        });
+        html.push("</ul>");
+    }
+    html.push('<p class="import-result-dismiss" style="color:#991b1b;">No se modificó el catálogo. Corrige el Excel y vuelve a intentar.</p>');
+    html.push("</div>");
+    return html.join("");
+};
+
 window.enviarImportacion = function (){
 
     let form = document.getElementById("importForm");
@@ -1053,6 +1121,9 @@ window.enviarImportacion = function (){
                 location.reload();
             }, 8000);
 
+        }else if(data.blocked){
+            msg.style.color="";
+            msg.innerHTML = window._formatImportBlockedHtml(data);
         }else{
             msg.style.color="red";
             msg.innerHTML="❌ "+window._escapeHtmlBuscar(data.message || "Error");

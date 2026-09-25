@@ -3214,6 +3214,21 @@ def importar_excel_productos():
         archivo.save(tmp_path)
 
         summary = import_products_from_excel(tmp_path, batch_size=2000)
+        if summary.get("status") == "blocked":
+            report = summary.get("shift_report") or {}
+            return jsonify(
+                success=False,
+                blocked=True,
+                message=report.get("reason") or (summary.get("errors") or ["Importación bloqueada"])[0],
+                inserted=0,
+                updated=0,
+                skipped=summary.get("skipped", 0),
+                errors=1,
+                time_seconds=summary.get("time_seconds", 0.0),
+                summary=summary,
+                shift_report=report,
+            ), 409
+
         try:
             from app.models import engine
             from app.utils.fts_productos import fts_rebuild
@@ -4785,9 +4800,14 @@ def importar_imagenes_cloudinary_buscar():
     q = (request.args.get("q") or "").strip()
     if len(q) < 1:
         return jsonify({"success": True, "items": []})
+    try:
+        limit = int(request.args.get("limit") or 12)
+    except (TypeError, ValueError):
+        limit = 12
+    limit = max(1, min(limit, 40))
     sess = SessionDB()
     try:
-        items = search_productos_for_assign(sess, q, limit=12)
+        items = search_productos_for_assign(sess, q, limit=limit)
         return jsonify({"success": True, "items": items})
     finally:
         sess.close()
