@@ -58,6 +58,25 @@
         }
     }
 
+    function urlAlreadyConsultedCodigo(codigoValue, paramNames) {
+        var c = (codigoValue || "").trim().toUpperCase();
+        if (!c) {
+            return false;
+        }
+        try {
+            var u = new URL(window.location.href);
+            var names = paramNames || ["codigo"];
+            var i;
+            for (i = 0; i < names.length; i++) {
+                var q = (u.searchParams.get(names[i]) || "").trim().toUpperCase();
+                if (q && q === c) {
+                    return true;
+                }
+            }
+        } catch (e) {}
+        return false;
+    }
+
     /** POST de formularios Bodega vía SPA (ajuste, ingreso, salida, recepción). */
     function submitBodegaFormPost(form, submitter, onDone) {
         if (typeof window._submitModuleForm === "function") {
@@ -5194,7 +5213,9 @@
                 lastKey = c.toUpperCase() + "|" + b;
             }
         }
-        syncKeyFromDom();
+        if (urlAlreadyConsultedCodigo(codigo.value, ["codigo"])) {
+            syncKeyFromDom();
+        }
 
         function buildQuery() {
             var p = new URLSearchParams();
@@ -5220,6 +5241,7 @@
         function consultNow() {
             var c = (codigo.value || "").trim();
             if (!c) {
+                lastKey = "";
                 return;
             }
             var b = (bodega.value || "").trim();
@@ -5248,7 +5270,12 @@
             }, 480);
         }
 
-        codigo.addEventListener("input", scheduleConsult);
+        codigo.addEventListener("input", function () {
+            if (!(codigo.value || "").trim()) {
+                lastKey = "";
+            }
+            scheduleConsult();
+        });
         codigo.addEventListener("blur", function () {
             if (timer) {
                 clearTimeout(timer);
@@ -5582,7 +5609,9 @@
                 lastKey = c.toUpperCase() + "|" + b + "|" + m;
             }
         }
-        syncKeyFromDom();
+        if (urlAlreadyConsultedCodigo(codigo.value, ["codigo"])) {
+            syncKeyFromDom();
+        }
 
         function buildQuery() {
             var p = new URLSearchParams();
@@ -5608,6 +5637,7 @@
         function consultNow() {
             var c = (codigo.value || "").trim();
             if (!c) {
+                lastKey = "";
                 return;
             }
             var b = (bodega.value || "").trim();
@@ -5637,7 +5667,12 @@
             }, 480);
         }
 
-        codigo.addEventListener("input", scheduleConsult);
+        codigo.addEventListener("input", function () {
+            if (!(codigo.value || "").trim()) {
+                lastKey = "";
+            }
+            scheduleConsult();
+        });
         codigo.addEventListener("blur", function () {
             if (timer) {
                 clearTimeout(timer);
@@ -5746,7 +5781,9 @@
                 lastKey = c.toUpperCase() + "|" + b + "|" + m;
             }
         }
-        syncKeyFromDom();
+        if (urlAlreadyConsultedCodigo(codigo.value, ["codigo_producto", "codigo"])) {
+            syncKeyFromDom();
+        }
 
         function buildQuery() {
             var p = new URLSearchParams();
@@ -5775,6 +5812,7 @@
         function consultNow() {
             var c = (codigo.value || "").trim();
             if (!c) {
+                lastKey = "";
                 return;
             }
             var b = (bodega.value || "").trim();
@@ -5804,7 +5842,12 @@
             }, 480);
         }
 
-        codigo.addEventListener("input", scheduleConsult);
+        codigo.addEventListener("input", function () {
+            if (!(codigo.value || "").trim()) {
+                lastKey = "";
+            }
+            scheduleConsult();
+        });
         codigo.addEventListener("blur", function () {
             if (timer) {
                 clearTimeout(timer);
