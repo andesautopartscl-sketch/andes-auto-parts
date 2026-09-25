@@ -158,6 +158,14 @@ html {
 		inset 0 1px 0 rgba(255, 255, 255, 0.08);
 	position: relative;
 }
+.avatar.has-photo {
+	cursor: zoom-in;
+	user-select: none;
+}
+.avatar.has-photo:focus-visible {
+	outline: 2px solid #93c5fd;
+	outline-offset: 2px;
+}
 .avatar-icon {
 	width: 28px;
 	height: 28px;
@@ -453,6 +461,60 @@ html {
 }
 .online-name { font-size: 12px; font-weight: 600; }
 .online-meta { font-size: 10px; opacity: 0.72; }
+.sb-avatar-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 2600;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	padding: 28px 32px;
+	background: rgba(15, 23, 42, 0.72);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+}
+.sb-avatar-modal.open { display: flex; }
+.sb-avatar-modal-card {
+	position: relative;
+	max-width: min(520px, calc(100vw - 48px));
+	max-height: calc(100vh - 56px);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+}
+.sb-avatar-modal-card img {
+	display: block;
+	width: min(420px, calc(100vw - 80px));
+	height: min(420px, calc(100vw - 80px), calc(100vh - 140px));
+	object-fit: cover;
+	border-radius: 18px;
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+	background: #0f172a;
+}
+.sb-avatar-modal-cap {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: #e2e8f0;
+	text-align: center;
+}
+.sb-avatar-modal-close {
+	position: absolute;
+	top: -10px;
+	right: -10px;
+	width: 32px;
+	height: 32px;
+	border: 0;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.14);
+	color: #fff;
+	font-size: 18px;
+	line-height: 1;
+	cursor: pointer;
+}
+.sb-avatar-modal-close:hover { background: rgba(255, 255, 255, 0.24); }
 @media (max-width: 960px) {
 	.sidebar-frame {
 		width: 100%;
@@ -483,7 +545,17 @@ html {
 <div class="sidebar-frame">
 <aside class="sidebar">
 	<div class="user-card">
-		<div class="avatar" aria-hidden="true">
+		<div class="avatar{% if usuario_foto_url %} has-photo{% endif %}"
+			{% if usuario_foto_url %}
+			id="sidebarAvatar"
+			role="button"
+			tabindex="0"
+			title="Doble clic para ver la foto"
+			aria-label="Vista previa de la foto de perfil"
+			data-photo-url="{{ usuario_foto_url }}?v={{ session.get('usuario_id', 0) }}"
+			{% else %}
+			aria-hidden="true"
+			{% endif %}>
 			{% if usuario_foto_url %}
 			<img class="avatar-photo" src="{{ usuario_foto_url }}?v={{ session.get('usuario_id', 0) }}" width="52" height="52" alt="" decoding="async">
 			{% else %}
@@ -945,3 +1017,49 @@ html {
 	</div>
 </aside>
 </div>
+{% if usuario_foto_url %}
+<div id="sidebarAvatarModal" class="sb-avatar-modal" aria-hidden="true">
+	<div class="sb-avatar-modal-card" role="dialog" aria-modal="true" aria-labelledby="sidebarAvatarCap">
+		<button type="button" class="sb-avatar-modal-close" id="sidebarAvatarClose" aria-label="Cerrar">✕</button>
+		<img id="sidebarAvatarPreview" src="{{ usuario_foto_url }}?v={{ session.get('usuario_id', 0) }}" alt="Foto de perfil">
+		<p class="sb-avatar-modal-cap" id="sidebarAvatarCap">{{ nombre_usuario }}</p>
+	</div>
+</div>
+<script>
+(function () {
+	var avatar = document.getElementById('sidebarAvatar');
+	var modal = document.getElementById('sidebarAvatarModal');
+	if (!avatar || !modal) return;
+
+	function closeModal() {
+		modal.classList.remove('open');
+		modal.setAttribute('aria-hidden', 'true');
+	}
+	function openModal() {
+		modal.classList.add('open');
+		modal.setAttribute('aria-hidden', 'false');
+	}
+
+	avatar.addEventListener('dblclick', function (e) {
+		e.preventDefault();
+		openModal();
+	});
+	avatar.addEventListener('keydown', function (e) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			openModal();
+		}
+	});
+	document.getElementById('sidebarAvatarClose')?.addEventListener('click', closeModal);
+	if (window.andesBindBackdropClose) window.andesBindBackdropClose(modal, closeModal);
+	else {
+		modal.addEventListener('click', function (e) {
+			if (e.target === modal) closeModal();
+		});
+	}
+	document.addEventListener('keydown', function (e) {
+		if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+	});
+})();
+</script>
+{% endif %}
