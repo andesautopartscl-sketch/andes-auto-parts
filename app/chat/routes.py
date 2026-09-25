@@ -8,13 +8,20 @@ from uuid import uuid4
 from flask import Blueprint, abort, jsonify, request, send_file, session, url_for
 from sqlalchemy import and_, func, or_
 from werkzeug.datastructures import FileStorage
+from werkzeug.security import check_password_hash
 from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.seguridad.models import Usuario
 from app.utils.decorators import login_required
 from app.utils.permissions import has_permission
-from .models import ChatMessage
+from .models import (
+    ChatMessage,
+    ChatLabel,
+    ChatConversationMeta,
+    ChatConversationLabel,
+    ensure_default_chat_labels,
+)
 
 chat_bp = Blueprint("chat", __name__, url_prefix="/chat")
 ONLINE_WINDOW_SECONDS = 120
@@ -229,7 +236,90 @@ def _user_payload(user: Usuario, unread_count: int, online_threshold: datetime, 
         "status_label": presence_label,
         "last_seen": user.last_seen.isoformat() if user.last_seen else None,
         "unread": unread_count,
+        "archived": False,
+        "labels": [],
     }
+
+
+def _get_or_create_meta(owner_id: int, other_id: int) -> ChatConversationMeta:
+    row = ChatConversationMeta.query.filter_by(
+        owner_user_id=owner_id, other_user_id=other_id
+    ).first()
+    if row is None:
+        row = ChatConversationMeta(
+            owner_user_id=owner_id,
+            other_user_id=other_id,
+            archived=False,
+        )
+        db.session.add(row)
+        db.session.flush()
+    return row
+
+
+def _unarchive_on_activity(user_id: int, other_id: int) -> None:
+    """Un chat archivado vuelve a Chats cuando hay un mensaje nuevo (estilo WhatsApp)."""
+    row = ChatConversationMeta.query.filter_by(
+        owner_user_id=user_id, other_user_id=other_id, archived=True
+    ).first()
+    if row is None:
+        return
+    row.archived = False
+    row.archived_at = None
+    row.updated_at = datetime.utcnow()
+
+
+def _archive_lock_state(user: Usuario) -> tuple[bool, bool]:
+    raw = (getattr(user, "chat_archive_pin_hash", None) or "").strip()
+    locked = bool(raw)
+    token = session.get("chat_archive_unlock")
+    unlocked = bool(locked and token and token == raw[:24])
+    return locked, unlocked
+
+
+def _label_dict(label: ChatLabel) -> dict:
+    return label.to_dict()
+
+
+def _attach_conversation_extras(owner_id: int, payload: list[dict]) -> None:
+    ids = [int(item["id"]) for item in payload]
+    if not ids:
+        return
+    metas = ChatConversationMeta.query.filter(
+        ChatConversationMeta.owner_user_id == owner_id,
+        ChatConversationMeta.other_user_id.in_(ids),
+    ).all()
+    meta_map = {int(m.other_user_id): m for m in metas}
+    links = ChatConversationLabel.query.filter(
+        ChatConversationLabel.owner_user_id == owner_id,
+        ChatConversationLabel.other_user_id.in_(ids),
+    ).all()
+    label_ids = {int(link.label_id) for link in links}
+    catalog = {}
+    if label_ids:
+        catalog = {
+            int(lb.id): lb
+            for lb in ChatLabel.query.filter(ChatLabel.id.in_(label_ids), ChatLabel.activo.is_(True)).all()
+        }
+    labels_map: dict[int, list] = {i: [] for i in ids}
+    for link in links:
+        lb = catalog.get(int(link.label_id))
+        if lb is None:
+            continue
+        labels_map.setdefault(int(link.other_user_id), []).append(_label_dict(lb))
+    for item in payload:
+        uid = int(item["id"])
+        meta = meta_map.get(uid)
+        item["archived"] = bool(meta.archived) if meta else False
+        item["labels"] = labels_map.get(uid) or []
+
+
+def _slugify_label(nombre: str) -> str:
+    import re
+    from unicodedata import normalize
+
+    folded = normalize("NFKD", nombre or "").encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^a-z0-9]+", "-", folded.lower()).strip("-")
+    return (slug or "etiqueta")[:48]
 
 
 @chat_bp.get("/api/users")
@@ -279,8 +369,144 @@ def chat_users():
             item["name"].lower(),
         )
     )
+    ensure_default_chat_labels()
+    _attach_conversation_extras(current_user.id, payload)
     db.session.commit()
-    return jsonify(ok=True, users=payload)
+    locked, unlocked = _archive_lock_state(current_user)
+    return jsonify(
+        ok=True,
+        users=payload,
+        archive_locked=locked,
+        archive_unlocked=unlocked,
+    )
+
+
+@chat_bp.get("/api/labels")
+@login_required
+def chat_labels_list():
+    current_user = _current_user()
+    if current_user is None:
+        return jsonify(ok=False, message="No autenticado"), 401
+    ensure_default_chat_labels()
+    rows = (
+        ChatLabel.query.filter_by(activo=True)
+        .order_by(ChatLabel.orden.asc(), ChatLabel.nombre.asc())
+        .all()
+    )
+    db.session.commit()
+    return jsonify(ok=True, labels=[_label_dict(r) for r in rows])
+
+
+@chat_bp.post("/api/labels")
+@login_required
+def chat_labels_create():
+    current_user = _current_user()
+    if current_user is None:
+        return jsonify(ok=False, message="No autenticado"), 401
+    data = request.get_json(silent=True) or {}
+    nombre = _clean_text(data.get("nombre"))[:60]
+    color = _clean_text(data.get("color")) or "#64748b"
+    if len(color) > 16:
+        color = color[:16]
+    if not nombre:
+        return jsonify(ok=False, message="Indicá un nombre de etiqueta."), 400
+    ensure_default_chat_labels()
+    base = _slugify_label(nombre)
+    slug = base
+    n = 2
+    while ChatLabel.query.filter_by(slug=slug).first() is not None:
+        slug = f"{base}-{n}"[:48]
+        n += 1
+    max_orden = db.session.query(func.max(ChatLabel.orden)).scalar() or 0
+    row = ChatLabel(
+        slug=slug,
+        nombre=nombre,
+        color=color if color.startswith("#") else f"#{color}",
+        orden=int(max_orden) + 1,
+        sistema=False,
+        activo=True,
+    )
+    db.session.add(row)
+    db.session.commit()
+    return jsonify(ok=True, label=_label_dict(row))
+
+
+@chat_bp.post("/api/conversations/<int:other_user_id>/archive")
+@login_required
+def chat_conversation_archive(other_user_id: int):
+    current_user = _current_user()
+    if current_user is None:
+        return jsonify(ok=False, message="No autenticado"), 401
+    other = db.session.get(Usuario, other_user_id)
+    if other is None or not other.activo:
+        return jsonify(ok=False, message="Usuario no disponible"), 404
+    data = request.get_json(silent=True) or {}
+    archived = bool(data.get("archived", True))
+    meta = _get_or_create_meta(current_user.id, other_user_id)
+    meta.archived = archived
+    meta.archived_at = datetime.utcnow() if archived else None
+    meta.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify(ok=True, archived=archived)
+
+
+@chat_bp.post("/api/archive-unlock")
+@login_required
+def chat_archive_unlock():
+    current_user = _current_user()
+    if current_user is None:
+        return jsonify(ok=False, message="No autenticado"), 401
+    pin_hash = (getattr(current_user, "chat_archive_pin_hash", None) or "").strip()
+    if not pin_hash:
+        session.pop("chat_archive_unlock", None)
+        return jsonify(ok=True, archive_locked=False, archive_unlocked=True)
+    data = request.get_json(silent=True) or {}
+    pin = _clean_text(data.get("pin"))
+    if not pin or not check_password_hash(pin_hash, pin):
+        return jsonify(ok=False, message="Clave de archivados incorrecta."), 403
+    session["chat_archive_unlock"] = pin_hash[:24]
+    return jsonify(ok=True, archive_locked=True, archive_unlocked=True)
+
+
+@chat_bp.put("/api/conversations/<int:other_user_id>/labels")
+@login_required
+def chat_conversation_set_labels(other_user_id: int):
+    current_user = _current_user()
+    if current_user is None:
+        return jsonify(ok=False, message="No autenticado"), 401
+    other = db.session.get(Usuario, other_user_id)
+    if other is None or not other.activo:
+        return jsonify(ok=False, message="Usuario no disponible"), 404
+    data = request.get_json(silent=True) or {}
+    raw_ids = data.get("label_ids") or []
+    want: list[int] = []
+    for value in raw_ids:
+        nid = _safe_int(value, 0)
+        if nid > 0 and nid not in want:
+            want.append(nid)
+    valid = []
+    if want:
+        valid = ChatLabel.query.filter(ChatLabel.id.in_(want), ChatLabel.activo.is_(True)).all()
+    valid_ids = {int(r.id) for r in valid}
+    ChatConversationLabel.query.filter_by(
+        owner_user_id=current_user.id,
+        other_user_id=other_user_id,
+    ).delete(synchronize_session=False)
+    now = datetime.utcnow()
+    for lid in want:
+        if lid not in valid_ids:
+            continue
+        db.session.add(
+            ChatConversationLabel(
+                owner_user_id=current_user.id,
+                other_user_id=other_user_id,
+                label_id=lid,
+                created_at=now,
+            )
+        )
+    db.session.commit()
+    labels = [_label_dict(r) for r in sorted(valid, key=lambda x: (x.orden, x.nombre))]
+    return jsonify(ok=True, labels=labels)
 
 
 @chat_bp.get("/api/messages/<int:other_user_id>")
@@ -362,6 +588,8 @@ def chat_send_message():
         is_read=False,
     )
     db.session.add(msg)
+    _unarchive_on_activity(current_user.id, receiver.id)
+    _unarchive_on_activity(receiver.id, current_user.id)
     db.session.commit()
 
     return jsonify(ok=True, message=_serialize_message(msg, current_user.id))
@@ -419,6 +647,8 @@ def chat_send_upload():
         is_read=False,
     )
     db.session.add(msg)
+    _unarchive_on_activity(current_user.id, receiver.id)
+    _unarchive_on_activity(receiver.id, current_user.id)
     db.session.commit()
 
     return jsonify(ok=True, message=_serialize_message(msg, current_user.id))

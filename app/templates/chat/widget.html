@@ -12,7 +12,16 @@
         </header>
 
         <div class="apchat-body">
-            <aside class="apchat-users" id="apchat-users"></aside>
+            <aside class="apchat-users">
+                <div class="apchat-archive-bar hidden" id="apchat-archive-bar">
+                    <button type="button" id="apchat-archive-back" class="apchat-archive-back">
+                        <span class="apchat-archive-back-arrow" aria-hidden="true">‹</span>
+                        Archivados
+                    </button>
+                </div>
+                <div class="apchat-label-filters" id="apchat-label-filters"></div>
+                <div id="apchat-users-list"></div>
+            </aside>
 
             <div class="apchat-conversation">
                 <div class="apchat-conversation-head">
@@ -23,8 +32,17 @@
                             <button type="button" class="apchat-head-menu-item" data-head-action="search" role="menuitem">Buscar</button>
                             <button type="button" class="apchat-head-menu-item" data-head-action="pinned" role="menuitem">Fijados</button>
                             <button type="button" class="apchat-head-menu-item" data-head-action="favorite" role="menuitem">Favoritos</button>
+                            <button type="button" class="apchat-head-menu-item" data-head-action="archive" id="apchat-menu-archive" role="menuitem">Archivar chat</button>
+                            <button type="button" class="apchat-head-menu-item" data-head-action="labels" role="menuitem">Etiquetas</button>
                             <button type="button" class="apchat-head-menu-item" data-head-action="export" role="menuitem">Exportar chat</button>
                             <button type="button" class="apchat-head-menu-item danger" data-head-action="clear" role="menuitem">Vaciar chat</button>
+                        </div>
+                        <div id="apchat-labels-menu" class="apchat-head-menu apchat-labels-menu hidden" role="menu" aria-label="Etiquetas de empresa">
+                            <div class="apchat-labels-list" id="apchat-labels-list"></div>
+                            <div class="apchat-labels-new">
+                                <input id="apchat-label-new-name" type="text" maxlength="40" placeholder="Nueva etiqueta" autocomplete="off">
+                                <button type="button" id="apchat-label-new-btn" title="Crear etiqueta">+</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -100,6 +118,19 @@
             <p id="apchatNoticeText"></p>
             <div class="apchat-notice-actions">
                 <button type="button" id="apchat-notice-ok">Aceptar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="apchat-pin-modal" class="apchat-notice-modal hidden" aria-hidden="true">
+        <div class="apchat-notice-card" role="dialog" aria-modal="true" aria-labelledby="apchatPinTitle">
+            <h4 id="apchatPinTitle">Archivados</h4>
+            <p id="apchatPinText">Ingresá la clave asignada en Opciones de usuario.</p>
+            <input id="apchat-pin-input" class="apchat-pin-input" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="••••">
+            <p id="apchat-pin-error" class="apchat-pin-error hidden"></p>
+            <div class="apchat-notice-actions" style="gap:8px;">
+                <button type="button" id="apchat-pin-cancel" class="apchat-confirm-cancel-btn">Cancelar</button>
+                <button type="button" id="apchat-pin-ok">Abrir</button>
             </div>
         </div>
     </div>
@@ -291,10 +322,77 @@
     cursor: pointer;
 }
 .apchat-body { display: grid; grid-template-columns: 280px 1fr; min-height: 0; flex: 1; }
-.apchat-users { background: #fff; border-right: 1px solid #e2e8f0; overflow-y: auto; }
+.apchat-users { background: #fff; border-right: 1px solid #e2e8f0; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+.apchat-archive-bar { flex-shrink: 0; border-bottom: 1px solid #f1f5f9; }
+.apchat-archive-back {
+    width: 100%; display: flex; align-items: center; gap: 8px;
+    border: none; background: transparent; padding: 10px 12px;
+    font-size: 15px; font-weight: 700; color: #0f172a; cursor: pointer;
+}
+.apchat-archive-back:hover { background: #f8fafc; }
+.apchat-archive-back-arrow { font-size: 22px; line-height: 1; color: #334155; }
+.apchat-label-filters {
+    display: flex; align-items: center; flex-wrap: nowrap; gap: 6px;
+    padding: 8px 10px 10px; flex-shrink: 0; overflow: visible;
+}
+.apchat-label-chip {
+    display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+    border: 1px solid #e5e7eb; background: #fff; color: #111827;
+    border-radius: 999px; height: 30px; padding: 0 12px;
+    font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.apchat-label-chip:hover { background: #f8fafc; }
+.apchat-label-chip.on { background: #e8eaed; border-color: #d1d5db; color: #111827; }
+.apchat-label-chip-count {
+    min-width: 16px; height: 16px; padding: 0 5px; border-radius: 999px;
+    background: #e5e7eb; color: #111827; font-size: 10px; font-weight: 700;
+    display: inline-grid; place-items: center;
+}
+.apchat-label-chip.on .apchat-label-chip-count { background: #fff; }
+.apchat-label-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.apchat-label-more { position: relative; flex-shrink: 0; margin-left: auto; }
+.apchat-label-more-btn { min-width: 30px; max-width: 108px; padding: 0 10px; justify-content: center; overflow: hidden; }
+.apchat-label-more-btn.is-open { background: #e8eaed; }
+.apchat-label-more-name { overflow: hidden; text-overflow: ellipsis; }
+.apchat-label-more-caret { font-size: 10px; line-height: 1; color: #64748b; }
+.apchat-label-more-menu {
+    position: absolute; top: calc(100% + 6px); right: 0;
+    min-width: 196px; max-height: 240px; overflow-y: auto;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+    padding: 6px 0; z-index: 40;
+}
+.apchat-label-more-item {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    border: none; background: transparent; text-align: left;
+    padding: 8px 12px; font-size: 12px; font-weight: 600; color: #0f172a; cursor: pointer;
+}
+.apchat-label-more-item:hover { background: #f8fafc; }
+.apchat-label-more-item.on { background: #eff6ff; color: #1d4ed8; }
+#apchat-users-list { overflow-y: auto; flex: 1; min-height: 0; }
+.apchat-archive-row {
+    width: 100%; display: flex; align-items: center; gap: 12px;
+    border: none; border-bottom: 1px solid #f1f5f9; background: transparent;
+    padding: 10px 14px; cursor: pointer; text-align: left;
+}
+.apchat-archive-row:hover { background: #f8fafc; }
+.apchat-archive-ico {
+    width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+    background: #f1f5f9; color: #64748b;
+    display: grid; place-items: center;
+}
+.apchat-archive-ico svg { width: 18px; height: 18px; }
+.apchat-archive-row-name { flex: 1; font-size: 14px; font-weight: 600; color: #0f172a; }
+.apchat-archive-row-lock { color: #94a3b8; font-size: 13px; }
+.apchat-pin-input {
+    width: 100%; height: 38px; margin-top: 10px;
+    border: 1px solid #cbd5e1; border-radius: 10px;
+    padding: 0 12px; font-size: 18px; letter-spacing: 4px; text-align: center;
+}
+.apchat-pin-error { margin: 8px 0 0; color: #b91c1c; font-size: 12px; }
 .apchat-user {
     width: 100%; text-align: left; border: none; border-bottom: 1px solid #f1f5f9; background: transparent;
-    padding: 12px 14px; cursor: pointer; display: grid; gap: 6px; transition: background 160ms ease;
+    padding: 10px 14px; cursor: pointer; display: grid; gap: 5px; transition: background 160ms ease;
 }
 .apchat-user:hover { background: #eff6ff; }
 .apchat-user.active { background: #dbeafe; }
@@ -308,6 +406,32 @@
 .apchat-user-unread {
     background: #1d4ed8; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;
     min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center;
+}
+.apchat-user-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.apchat-user-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 9px; font-weight: 700; color: #475569;
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 999px; padding: 1px 6px;
+}
+.apchat-labels-menu { min-width: 240px; padding: 6px 0 8px; max-height: min(360px, 55vh); overflow: auto; }
+.apchat-labels-list { display: grid; }
+.apchat-label-row {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    border: none; background: transparent; text-align: left; padding: 7px 12px;
+    font-size: 12px; color: #0f172a; cursor: pointer;
+}
+.apchat-label-row:hover { background: #f1f5f9; }
+.apchat-label-row input { width: 14px; height: 14px; margin: 0; accent-color: #2563eb; }
+.apchat-labels-new {
+    display: flex; gap: 6px; padding: 8px 10px 2px; border-top: 1px solid #f1f5f9; margin-top: 4px;
+}
+.apchat-labels-new input {
+    flex: 1; min-width: 0; height: 28px; border: 1px solid #dbe3ef; border-radius: 7px;
+    padding: 0 8px; font-size: 12px;
+}
+.apchat-labels-new button {
+    width: 28px; height: 28px; border: 1px solid #cbd5e1; border-radius: 7px; background: #fff;
+    cursor: pointer; font-size: 16px; font-weight: 700; color: #1d4ed8;
 }
 .apchat-conversation { display: grid; grid-template-rows: auto 1fr auto auto; min-height: 0; position: relative; }
 .apchat-conversation-head {
@@ -687,6 +811,17 @@
     cursor: pointer;
 }
 #apchat-confirm-ok:hover { filter: brightness(1.04); }
+#apchat-pin-ok {
+    border: 1px solid #1d4ed8;
+    background: linear-gradient(145deg, #1d4ed8 0%, #2563eb 100%);
+    color: #fff;
+    border-radius: 10px;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+#apchat-pin-ok:hover { filter: brightness(1.04); }
 .apchat-confirm-cancel-btn {
     border: 1px solid #cbd5e1;
     background: #f8fafc;
@@ -751,7 +886,7 @@ html.andes-chat-off #apchat-root {
     const fab = document.getElementById('apchat-fab');
     const closeBtn = document.getElementById('apchat-close');
     const badge = document.getElementById('apchat-badge');
-    const usersEl = document.getElementById('apchat-users');
+    const usersEl = document.getElementById('apchat-users-list');
     const messagesEl = document.getElementById('apchat-messages');
     const formEl = document.getElementById('apchat-form');
     const inputEl = document.getElementById('apchat-input');
@@ -764,6 +899,19 @@ html.andes-chat-off #apchat-root {
     const searchInputEl = document.getElementById('apchat-search-input');
     const searchDateEl = document.getElementById('apchat-search-date');
     const searchClearBtn = document.getElementById('apchat-search-clear');
+    const labelsMenuEl = document.getElementById('apchat-labels-menu');
+    const labelsListEl = document.getElementById('apchat-labels-list');
+    const labelNewNameEl = document.getElementById('apchat-label-new-name');
+    const labelNewBtn = document.getElementById('apchat-label-new-btn');
+    const labelFiltersEl = document.getElementById('apchat-label-filters');
+    const archiveBarEl = document.getElementById('apchat-archive-bar');
+    const archiveBackBtn = document.getElementById('apchat-archive-back');
+    const archiveMenuItem = document.getElementById('apchat-menu-archive');
+    const pinModal = document.getElementById('apchat-pin-modal');
+    const pinInputEl = document.getElementById('apchat-pin-input');
+    const pinErrorEl = document.getElementById('apchat-pin-error');
+    const pinOkBtn = document.getElementById('apchat-pin-ok');
+    const pinCancelBtn = document.getElementById('apchat-pin-cancel');
     const typingIndicatorEl = document.getElementById('apchat-typing-indicator');
     const typingTextEl = document.getElementById('apchat-typing-text');
     const emojiBtn = document.getElementById('apchat-emoji-btn');
@@ -954,6 +1102,12 @@ html.andes-chat-off #apchat-root {
     let recordingStartedAt = null;
     let recordingShouldUpload = false;
     let currentFilterMode = 'all';
+    let listView = 'inbox';
+    let selectedLabelId = 0;
+    let unreadOnly = false;
+    let labelsCatalog = [];
+    let archiveLocked = false;
+    let archiveUnlocked = false;
     let editingMessageId = null;
     let isTyping = false;
     let typingTimeout = null;
@@ -1083,6 +1237,148 @@ html.andes-chat-off #apchat-root {
         if (!headMenuEl) return;
         headMenuEl.classList.toggle('hidden', !visible);
         if (headMenuBtn) headMenuBtn.setAttribute('aria-expanded', visible ? 'true' : 'false');
+        if (!visible) setLabelsMenuVisible(false);
+    }
+
+    function setLabelsMenuVisible(visible) {
+        if (!labelsMenuEl) return;
+        labelsMenuEl.classList.toggle('hidden', !visible);
+        if (visible) renderLabelsMenu();
+    }
+
+    function selectedUserRow() {
+        return users.find((u) => Number(u.id) === Number(selectedUserId)) || null;
+    }
+
+    function visibleUsers() {
+        return users.filter((user) => {
+            const archived = !!user.archived;
+            if (listView === 'archived' && !archived) return false;
+            if (listView !== 'archived' && archived) return false;
+            if (unreadOnly && !(Number(user.unread) > 0)) return false;
+            if (selectedLabelId) {
+                const tags = Array.isArray(user.labels) ? user.labels : [];
+                if (!tags.some((t) => Number(t.id) === Number(selectedLabelId))) return false;
+            }
+            return true;
+        });
+    }
+
+    function updateArchiveMenuLabel() {
+        if (!archiveMenuItem) return;
+        const row = selectedUserRow();
+        archiveMenuItem.textContent = (row && row.archived) ? 'Desarchivar chat' : 'Archivar chat';
+    }
+
+    function renderLabelFilters() {
+        if (!labelFiltersEl) return;
+        const unreadN = users.filter((u) => {
+            if (!(Number(u.unread) > 0)) return false;
+            return listView === 'archived' ? !!u.archived : !u.archived;
+        }).length;
+        const allOn = (!unreadOnly && !selectedLabelId) ? ' on' : '';
+        const unreadOn = unreadOnly ? ' on' : '';
+        const selectedLabel = labelsCatalog.find((lb) => Number(lb.id) === Number(selectedLabelId));
+        const moreOn = (!unreadOnly && selectedLabel) ? ' on' : '';
+        const moreLabel = selectedLabel
+            ? '<span class="apchat-label-dot" style="background:' + escapeHtml(selectedLabel.color || '#64748b') + '"></span>' +
+              '<span class="apchat-label-more-name">' + escapeHtml(selectedLabel.nombre) + '</span>'
+            : '<span class="apchat-label-more-caret">▾</span>';
+        let html =
+            '<button type="button" class="apchat-label-chip' + allOn + '" data-chip="all">Todas</button>' +
+            '<button type="button" class="apchat-label-chip' + unreadOn + '" data-chip="unread">No leídos' +
+            (unreadN ? '<span class="apchat-label-chip-count">' + unreadN + '</span>' : '') +
+            '</button>';
+        if (labelsCatalog.length) {
+            html +=
+                '<div class="apchat-label-more">' +
+                '<button type="button" class="apchat-label-chip apchat-label-more-btn' + moreOn + '" data-chip="more" title="Etiquetas" aria-haspopup="menu" aria-expanded="false">' +
+                moreLabel + '</button>' +
+                '<div class="apchat-label-more-menu hidden" role="menu">';
+            labelsCatalog.forEach((lb) => {
+                const on = (!unreadOnly && Number(selectedLabelId) === Number(lb.id)) ? ' on' : '';
+                html +=
+                    '<button type="button" class="apchat-label-more-item' + on + '" data-chip="label" data-label-id="' + lb.id + '" role="menuitem">' +
+                    '<span class="apchat-label-dot" style="background:' + escapeHtml(lb.color || '#64748b') + '"></span>' +
+                    escapeHtml(lb.nombre) + '</button>';
+            });
+            html += '</div></div>';
+        }
+        labelFiltersEl.innerHTML = html;
+        const moreWrap = labelFiltersEl.querySelector('.apchat-label-more');
+        const moreBtn = labelFiltersEl.querySelector('[data-chip="more"]');
+        const moreMenu = labelFiltersEl.querySelector('.apchat-label-more-menu');
+        const closeMore = () => {
+            if (!moreMenu || !moreBtn) return;
+            moreMenu.classList.add('hidden');
+            moreBtn.classList.remove('is-open');
+            moreBtn.setAttribute('aria-expanded', 'false');
+        };
+        labelFiltersEl.querySelectorAll('[data-chip="all"], [data-chip="unread"]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                unreadOnly = btn.getAttribute('data-chip') === 'unread';
+                selectedLabelId = 0;
+                renderLabelFilters();
+                renderUsers();
+            });
+        });
+        if (moreBtn && moreMenu) {
+            moreBtn.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                const willOpen = moreMenu.classList.contains('hidden');
+                moreMenu.classList.toggle('hidden', !willOpen);
+                moreBtn.classList.toggle('is-open', willOpen);
+                moreBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+            });
+            moreMenu.querySelectorAll('[data-chip="label"]').forEach((btn) => {
+                btn.addEventListener('click', (ev) => {
+                    ev.stopPropagation();
+                    unreadOnly = false;
+                    selectedLabelId = Number(btn.getAttribute('data-label-id') || 0);
+                    renderLabelFilters();
+                    renderUsers();
+                });
+            });
+        }
+        labelFiltersEl._closeMore = closeMore;
+    }
+
+    function renderLabelsMenu() {
+        if (!labelsListEl) return;
+        const row = selectedUserRow();
+        const selected = new Set((row && Array.isArray(row.labels) ? row.labels : []).map((t) => Number(t.id)));
+        labelsListEl.innerHTML = '';
+        if (!labelsCatalog.length) {
+            labelsListEl.innerHTML = '<div class="apchat-empty" style="padding:10px;">Sin etiquetas.</div>';
+            return;
+        }
+        labelsCatalog.forEach((lb) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'apchat-label-row';
+            const checked = selected.has(Number(lb.id)) ? ' checked' : '';
+            item.innerHTML =
+                '<input type="checkbox"' + checked + ' tabindex="-1">' +
+                '<span class="apchat-label-dot" style="background:' + escapeHtml(lb.color || '#64748b') + '"></span>' +
+                '<span>' + escapeHtml(lb.nombre) + '</span>';
+            item.addEventListener('click', async (ev) => {
+                ev.preventDefault();
+                if (!selectedUserId) return;
+                const next = new Set(selected);
+                if (next.has(Number(lb.id))) next.delete(Number(lb.id));
+                else next.add(Number(lb.id));
+                try {
+                    const data = await apiPut('/chat/api/conversations/' + selectedUserId + '/labels', {
+                        label_ids: Array.from(next)
+                    });
+                    const u = selectedUserRow();
+                    if (u) u.labels = Array.isArray(data.labels) ? data.labels : [];
+                    renderLabelsMenu();
+                    renderUsers();
+                } catch (_) {}
+            });
+            labelsListEl.appendChild(item);
+        });
     }
 
     function exportCurrentConversation() {
@@ -1392,12 +1688,42 @@ html.andes-chat-off #apchat-root {
 
     function renderUsers() {
         usersEl.innerHTML = '';
-        if (!users.length) {
-            usersEl.innerHTML = '<div class="apchat-empty" style="padding:10px;">No hay usuarios disponibles.</div>';
+        const archivedN = users.filter((u) => u.archived).length;
+        if (archiveBarEl) archiveBarEl.classList.toggle('hidden', listView !== 'archived');
+        if (listView !== 'archived' && archivedN > 0) {
+            const row = document.createElement('button');
+            row.type = 'button';
+            row.className = 'apchat-archive-row';
+            row.innerHTML =
+                '<span class="apchat-archive-ico" aria-hidden="true">' +
+                '<svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5h16M6 7.5V18a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 18V7.5M9.5 11.5 12 14l2.5-2.5M12 7.5V14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+                '</span>' +
+                '<span class="apchat-archive-row-name">Archivados</span>' +
+                (archiveLocked ? '<span class="apchat-archive-row-lock" title="Protegido con clave">🔒</span>' : '') +
+                (archivedN ? '<span class="apchat-label-chip-count">' + archivedN + '</span>' : '');
+            row.addEventListener('click', () => openArchivedView());
+            usersEl.appendChild(row);
+        }
+        const shown = visibleUsers();
+        if (!shown.length) {
+            if (listView !== 'archived' && archivedN > 0 && !unreadOnly && !selectedLabelId) {
+                updateArchiveMenuLabel();
+                return;
+            }
+            let empty = 'No hay chats.';
+            if (listView === 'archived') empty = 'No hay chats archivados.';
+            else if (unreadOnly) empty = 'No hay chats sin leer.';
+            else if (selectedLabelId) empty = 'No hay chats con esa etiqueta.';
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'apchat-empty';
+            emptyEl.style.padding = '10px';
+            emptyEl.textContent = empty;
+            usersEl.appendChild(emptyEl);
+            updateArchiveMenuLabel();
             return;
         }
 
-        users.forEach((user) => {
+        shown.forEach((user) => {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'apchat-user' + (selectedUserId === user.id ? ' active' : '');
@@ -1406,6 +1732,13 @@ html.andes-chat-off #apchat-root {
             const statusTxt = escapeHtml(user.status_label || (user.online ? 'Activo ahora' : 'Sin actividad'));
             const unreadHtml = user.unread > 0 ? `<span class="apchat-user-unread">${user.unread > 99 ? '99+' : user.unread}</span>` : '';
             const dotClass = user.online ? 'online' : 'offline';
+            const tags = Array.isArray(user.labels) ? user.labels : [];
+            const tagsHtml = tags.length
+                ? '<div class="apchat-user-tags">' + tags.map((t) => (
+                    '<span class="apchat-user-tag"><span class="apchat-label-dot" style="background:' +
+                    escapeHtml(t.color || '#64748b') + '"></span>' + escapeHtml(t.nombre) + '</span>'
+                )).join('') + '</div>'
+                : '';
 
             btn.innerHTML = `
                 <div class="apchat-user-top">
@@ -1416,11 +1749,13 @@ html.andes-chat-off #apchat-root {
                     <span class="apchat-presence-dot ${dotClass}"></span>
                     <span class="apchat-user-status">${statusTxt}</span>
                 </div>
+                ${tagsHtml}
             `;
 
             btn.addEventListener('click', () => selectUser(user.id, user.name));
             usersEl.appendChild(btn);
         });
+        updateArchiveMenuLabel();
     }
 
     function messageMediaHtml(message, messageId) {
@@ -1606,14 +1941,45 @@ html.andes-chat-off #apchat-root {
         applyMessageFiltersAndSearch();
     }
 
+    async function loadLabelsCatalog() {
+        try {
+            const data = await apiGet('/chat/api/labels');
+            labelsCatalog = Array.isArray(data.labels) ? data.labels : [];
+            renderLabelFilters();
+        } catch (_) {
+            labelsCatalog = [];
+        }
+    }
+
+    async function toggleArchiveCurrent() {
+        if (!selectedUserId) return;
+        const row = selectedUserRow();
+        const next = !(row && row.archived);
+        try {
+            await apiPost('/chat/api/conversations/' + selectedUserId + '/archive', { archived: next });
+            if (row) row.archived = next;
+            updateArchiveMenuLabel();
+            renderUsers();
+        } catch (_) {}
+    }
+
     async function loadUsers() {
         try {
             const data = await apiGet('/chat/api/users');
             users = Array.isArray(data.users) ? data.users : [];
+            archiveLocked = !!data.archive_locked;
+            archiveUnlocked = !!data.archive_unlocked;
             const unreadTotal = users.reduce((acc, u) => acc + (Number(u.unread) || 0), 0);
             setBadge(unreadTotal);
+            renderLabelFilters();
             renderUsers();
-            if (!selectedUserId && users.length) selectUser(users[0].id, users[0].name);
+            if (labelsMenuEl && !labelsMenuEl.classList.contains('hidden')) renderLabelsMenu();
+            if (!selectedUserId) {
+                const first = visibleUsers()[0];
+                if (first) selectUser(first.id, first.name);
+            } else {
+                updateArchiveMenuLabel();
+            }
         } catch (_) {
         }
     }
@@ -1686,6 +2052,8 @@ html.andes-chat-off #apchat-root {
         setSearchPopoverVisible(false);
         conversationHead.textContent = selectedUserName;
         notifyTypingStop();
+        updateArchiveMenuLabel();
+        setLabelsMenuVisible(false);
         renderUsers();
         loadMessages({ reset: true });
         inputEl.focus();
@@ -2393,6 +2761,114 @@ html.andes-chat-off #apchat-root {
         headMenuBtn.addEventListener('click', () => {
             const willOpen = headMenuEl ? headMenuEl.classList.contains('hidden') : false;
             setHeadMenuVisible(willOpen);
+            if (!willOpen) setLabelsMenuVisible(false);
+        });
+    }
+    function setListView(view) {
+        listView = view === 'archived' ? 'archived' : 'inbox';
+        renderUsers();
+    }
+
+    function promptArchivePin() {
+        return new Promise((resolve) => {
+            if (!pinModal || !pinInputEl || !pinOkBtn || !pinCancelBtn) {
+                resolve(false);
+                return;
+            }
+            pinInputEl.value = '';
+            if (pinErrorEl) {
+                pinErrorEl.textContent = '';
+                pinErrorEl.classList.add('hidden');
+            }
+            const close = (result) => {
+                pinModal.classList.add('hidden');
+                pinModal.setAttribute('aria-hidden', 'true');
+                pinOkBtn.removeEventListener('click', onOk);
+                pinCancelBtn.removeEventListener('click', onCancel);
+                pinInputEl.removeEventListener('keydown', onKey);
+                pinModal.removeEventListener('click', onBackdrop);
+                pinModal.removeEventListener('mousedown', onBackdropDown);
+                resolve(Boolean(result));
+            };
+            const onOk = async () => {
+                const pin = String(pinInputEl.value || '').trim();
+                if (!pin) {
+                    if (pinErrorEl) {
+                        pinErrorEl.textContent = 'Ingresá la clave.';
+                        pinErrorEl.classList.remove('hidden');
+                    }
+                    return;
+                }
+                try {
+                    const data = await apiPost('/chat/api/archive-unlock', { pin: pin });
+                    archiveLocked = data.archive_locked !== false;
+                    archiveUnlocked = !!data.archive_unlocked;
+                    close(true);
+                } catch (err) {
+                    if (pinErrorEl) {
+                        pinErrorEl.textContent = (err && err.message) ? String(err.message) : 'Clave incorrecta.';
+                        pinErrorEl.classList.remove('hidden');
+                    }
+                    pinInputEl.select();
+                }
+            };
+            const onCancel = () => close(false);
+            let backdropDown = false;
+            const onBackdropDown = (event) => { backdropDown = event.target === pinModal; };
+            const onBackdrop = (event) => {
+                if (backdropDown && event.target === pinModal) close(false);
+                backdropDown = false;
+            };
+            const onKey = (ev) => {
+                if (ev.key === 'Enter') {
+                    ev.preventDefault();
+                    onOk();
+                } else if (ev.key === 'Escape') {
+                    ev.preventDefault();
+                    close(false);
+                }
+            };
+            pinOkBtn.addEventListener('click', onOk);
+            pinCancelBtn.addEventListener('click', onCancel);
+            pinInputEl.addEventListener('keydown', onKey);
+            pinModal.addEventListener('mousedown', onBackdropDown);
+            pinModal.addEventListener('click', onBackdrop);
+            pinModal.classList.remove('hidden');
+            pinModal.setAttribute('aria-hidden', 'false');
+            setTimeout(() => pinInputEl.focus(), 20);
+        });
+    }
+
+    async function openArchivedView() {
+        if (archiveLocked && !archiveUnlocked) {
+            const ok = await promptArchivePin();
+            if (!ok) return;
+        }
+        setListView('archived');
+    }
+    if (archiveBackBtn) archiveBackBtn.addEventListener('click', () => setListView('inbox'));
+    if (labelNewBtn) {
+        labelNewBtn.addEventListener('click', async () => {
+            const nombre = String((labelNewNameEl && labelNewNameEl.value) || '').trim();
+            if (!nombre) return;
+            try {
+                const data = await apiPost('/chat/api/labels', { nombre: nombre, color: '#64748b' });
+                if (data && data.label) {
+                    labelsCatalog.push(data.label);
+                    labelsCatalog.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
+                    if (labelNewNameEl) labelNewNameEl.value = '';
+                    renderLabelFilters();
+                    renderLabelsMenu();
+                }
+            } catch (_) {}
+        });
+    }
+    if (labelNewNameEl) {
+        labelNewNameEl.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') {
+                ev.preventDefault();
+                if (labelNewBtn) labelNewBtn.click();
+            }
         });
     }
     headMenuItems.forEach((item) => {
@@ -2418,6 +2894,13 @@ html.andes-chat-off #apchat-root {
                 applyMessageFiltersAndSearch();
             } else if (action === 'export') {
                 exportCurrentConversation();
+            } else if (action === 'archive') {
+                await toggleArchiveCurrent();
+            } else if (action === 'labels') {
+                const willOpen = labelsMenuEl ? labelsMenuEl.classList.contains('hidden') : false;
+                setHeadMenuVisible(false);
+                setLabelsMenuVisible(willOpen);
+                return;
             } else if (action === 'clear') {
                 await clearCurrentConversationForMe();
             }
@@ -2577,15 +3060,21 @@ html.andes-chat-off #apchat-root {
             closeEmojiPicker();
         }
         if (headMenuEl && target && !headMenuEl.contains(target) && target !== headMenuBtn) {
-            if (headMenuBtn && !headMenuBtn.contains(target)) {
+            if (headMenuBtn && !headMenuBtn.contains(target) && !(labelsMenuEl && labelsMenuEl.contains(target))) {
                 setHeadMenuVisible(false);
             }
+        }
+        if (labelsMenuEl && target && !labelsMenuEl.contains(target) && target !== headMenuBtn && !(headMenuEl && headMenuEl.contains(target))) {
+            setLabelsMenuVisible(false);
         }
         if (searchPopoverEl && target && !searchPopoverEl.contains(target) && target !== headMenuBtn && !(headMenuEl && headMenuEl.contains(target))) {
             const trigger = headMenuBtn;
             if (trigger && !trigger.contains(target)) {
                 setSearchPopoverVisible(false);
             }
+        }
+        if (labelFiltersEl && typeof labelFiltersEl._closeMore === 'function' && target && !labelFiltersEl.contains(target)) {
+            labelFiltersEl._closeMore();
         }
     });
 
@@ -2633,6 +3122,7 @@ html.andes-chat-off #apchat-root {
     buildEmojiPicker();
     updateSendButtonByRecorderState();
     if (isChatEnabled()) {
+        loadLabelsCatalog();
         loadUsers();
         startIdleUsersPolling();
         startHeartbeat();

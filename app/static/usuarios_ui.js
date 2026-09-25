@@ -1092,6 +1092,16 @@
                     document.getElementById("optionsEditNombre").value = data.nombre || "";
                     document.getElementById("optionsEditUsuario").value = data.usuario || "";
                     document.getElementById("optionsEditPassword").value = "";
+                    var pinInput = document.getElementById("optionsEditArchivePin");
+                    var pinHint = document.getElementById("optionsEditArchivePinHint");
+                    var pinClearWrap = document.getElementById("optionsEditArchivePinClearWrap");
+                    var pinClear = document.getElementById("optionsEditArchivePinClear");
+                    if (pinInput) pinInput.value = "";
+                    if (pinClear) pinClear.checked = false;
+                    var hasPin = !!data.has_chat_archive_pin;
+                    if (pinHint) pinHint.style.display = hasPin ? "block" : "none";
+                    if (pinClearWrap) pinClearWrap.style.display = hasPin ? "block" : "none";
+                    if (pinInput) pinInput.placeholder = hasPin ? "Dejar vacío para no cambiar" : "4 a 8 dígitos";
                     document.getElementById("optionsEditCorreo").value = data.correo || "";
                     document.getElementById("optionsEditTelefono").value = data.telefono || "";
                     var parsedAddress = inferLocationFromAddress(data.direccion || "");
@@ -1407,6 +1417,11 @@
                         };
                         var password = (document.getElementById("optionsEditPassword").value || "").trim();
                         if (password) payload.password = password;
+                        var archivePin = (document.getElementById("optionsEditArchivePin") && document.getElementById("optionsEditArchivePin").value || "").trim();
+                        if (archivePin) payload.chat_archive_pin = archivePin;
+                        if (document.getElementById("optionsEditArchivePinClear") && document.getElementById("optionsEditArchivePinClear").checked) {
+                            payload.chat_archive_pin_clear = true;
+                        }
                         Object.keys(payload).forEach(function (k) { if (payload[k] === "") delete payload[k]; });
 
                         var res = await fetch(url, {

@@ -717,9 +717,13 @@
 					<label>Usuario</label>
 					<input name="usuario" required placeholder="Ej: jperez">
 				</div>
-				<div class="field">
+                <div class="field">
 					<label>Contraseña</label>
 					<input name="password" type="password" required placeholder="••••••••">
+				</div>
+				<div class="field">
+					<label>Clave de archivados</label>
+					<input name="chat_archive_pin" type="password" inputmode="numeric" maxlength="8" pattern="[0-9]{4,8}" placeholder="4 a 8 dígitos (opcional)" autocomplete="new-password">
 				</div>
 				<div class="field">
 					<label>Rol</label>
@@ -923,9 +927,20 @@
 					<label>Usuario</label>
 					<input name="usuario" id="optionsEditUsuario" required>
 				</div>
-				<div class="field">
+                <div class="field">
 					<label>Contraseña (opcional)</label>
 					<input name="password" id="optionsEditPassword" type="password" placeholder="Dejar vacío para no cambiar">
+				</div>
+				<div class="field">
+					<label>Clave de archivados</label>
+					<input name="chat_archive_pin" id="optionsEditArchivePin" type="password" inputmode="numeric" maxlength="8" pattern="[0-9]{4,8}" placeholder="4 a 8 dígitos" autocomplete="new-password">
+					<p id="optionsEditArchivePinHint" class="reset-hint" style="margin:6px 0 0; display:none;">Este usuario ya tiene clave. Dejá vacío para no cambiarla.</p>
+				</div>
+				<div class="field" id="optionsEditArchivePinClearWrap" style="display:none; align-self:end;">
+					<label style="display:flex; align-items:center; gap:8px; font-weight:600;">
+						<input type="checkbox" id="optionsEditArchivePinClear" name="chat_archive_pin_clear">
+						Quitar clave de archivados
+					</label>
 				</div>
 				<div class="field">
 					<label>Rol</label>

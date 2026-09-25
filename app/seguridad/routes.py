@@ -7,7 +7,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app.extensions import db, limiter
 from app.utils.decorators import admin_required, login_required
 from app.seguridad.models import PasswordResetRequest
-from app.chat.models import ChatMessage
+from app.chat.models import ChatMessage, normalize_chat_archive_pin
 from app.utils.datetime_utils import format_utc_to_chile
 from app.utils.permissions import ALL_PERMISSION_KEYS, LEGACY_KEY_MAP, PERMISSION_CATALOG
 from app.utils.permissions import has_permission
@@ -488,6 +488,16 @@ def _validar_credenciales_propias_bloqueo(auth_user: str, auth_password: str) ->
     return True, ""
 
 
+def _apply_chat_archive_pin(user: Usuario, data: dict) -> None:
+    if data.get("chat_archive_pin_clear"):
+        user.chat_archive_pin_hash = None
+    pin_raw = data.get("chat_archive_pin")
+    if pin_raw is None or str(pin_raw).strip() == "":
+        return
+    pin = normalize_chat_archive_pin(pin_raw)
+    user.chat_archive_pin_hash = generate_password_hash(pin)
+
+
 @seguridad_bp.route("/auditoria-sesion/ip", methods=["POST"])
 @login_required
 def auditoria_ip_accion():
@@ -732,6 +742,11 @@ def api_crear_usuario():
         if normalized_rut is not None:
             nuevo.rut = normalized_rut
 
+        try:
+            _apply_chat_archive_pin(nuevo, data)
+        except ValueError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 400
+
         db.session.add(nuevo)
         db.session.flush()
 
@@ -959,7 +974,8 @@ def api_obtener_usuario(id):
         "direccion": user.direccion or "",
         "genero": user.genero or "",
         "fecha_nacimiento": fecha_nacimiento_fmt,
-        "rut": format_rut(user.rut)
+        "rut": format_rut(user.rut),
+        "has_chat_archive_pin": bool((user.chat_archive_pin_hash or "").strip()),
     }
     perfil = RRHHPerfil.query.filter_by(usuario_id=user.id).first()
     data["rrhh"] = {
@@ -1147,6 +1163,11 @@ def api_editar_usuario(id):
         if "password" in data and data["password"]:
             user.password_hash = generate_password_hash(data["password"])
             logger.debug(f"   - password: ***")
+
+        try:
+            _apply_chat_archive_pin(user, data)
+        except ValueError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 400
         
         if "activo" in data:
             user.activo = bool(data["activo"])

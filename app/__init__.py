@@ -475,6 +475,8 @@ def create_app():
                 conn.execute(text("ALTER TABLE usuarios_sistema ADD COLUMN bloqueado_at DATETIME"))
             if "foto_perfil" not in col_names:
                 conn.execute(text("ALTER TABLE usuarios_sistema ADD COLUMN foto_perfil VARCHAR(255)"))
+            if "chat_archive_pin_hash" not in col_names:
+                conn.execute(text("ALTER TABLE usuarios_sistema ADD COLUMN chat_archive_pin_hash VARCHAR(200)"))
             conn.execute(text("UPDATE usuarios_sistema SET intentos_fallidos = COALESCE(intentos_fallidos, 0)"))
             conn.execute(text("UPDATE usuarios_sistema SET bloqueado_seguridad = COALESCE(bloqueado_seguridad, 0)"))
             conn.execute(

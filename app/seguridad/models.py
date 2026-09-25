@@ -43,6 +43,7 @@ class Usuario(db.Model):
     bloqueado_seguridad = db.Column(db.Boolean, default=False, nullable=False)
     bloqueado_at = db.Column(db.DateTime, nullable=True)
     foto_perfil = db.Column(db.String(255), nullable=True)
+    chat_archive_pin_hash = db.Column(db.String(200), nullable=True)
 
     # Timestamps
     ultimo_acceso = db.Column(db.DateTime, nullable=True)
