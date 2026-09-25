@@ -86,6 +86,11 @@ AUTHORIZATION_CODES = (
 EXECUTION_CODES = (
     "success", "external_error", "timeout", "rejected", "unauthorized",
     "invalid_request",
+    # FASE 10.3.4-B — los cuatro que el Executor real necesita distinguir.
+    # Cada uno le dice al llamador algo que cambia lo que deberia hacer
+    # despues, que es el unico motivo para que un codigo exista.
+    "response_too_large", "redirect_denied",
+    "provider_unavailable", "invalid_response",
 )
 
 GRANT_STATUSES = ("issued", "consumed", "expired", "revoked")
@@ -163,6 +168,8 @@ class BrokerError(Exception):
         "invalid_action": "Accion no permitida.",
         "not_found": "No existe ese secreto.",
         "write_failed": "No se pudo registrar la operacion.",
+        # FASE 10.3.4-B
+        "prepared_request_forbidden": "Solo el Broker prepara peticiones.",
     }
 
     def __init__(self, code: str):
@@ -218,12 +225,26 @@ class ExecutionRequest:
                 "method": self.method, "slots": list(self.slots())}
 
 
+# FASE 10.3.4-B — el sello. Un objeto anonimo, uno por proceso, que solo este
+# modulo puede nombrar. No es criptografia: es la forma que tiene Python de
+# decir "esto lo construi yo". Basta porque el atacante que esta modelado aqui
+# es el codigo de la casa llamando a lo que no debe, no un proceso hostil que
+# ya tiene la memoria.
+_SELLO_DEL_BROKER = object()
+
+
 @dataclass(frozen=True)
 class PreparedRequest:
     """La peticion CON el secreto ya puesto. Solo existe dentro del Broker.
 
     No tiene `to_dict` ni `__repr__` util a proposito: cualquier volcado de
     este objeto seria un volcado del secreto.
+
+    FASE 10.3.4-B — y ahora tampoco se puede FABRICAR desde fuera. Sin el
+    sello, `__post_init__` la rechaza. Que el Executor acepte unicamente este
+    tipo no serviria de nada si cualquiera pudiera construir uno con un valor
+    inventado dentro: la garantia "el secreto solo lo pone el Broker" dejaria
+    de ser una garantia y pasaria a ser una costumbre.
     """
 
     action: str
@@ -231,6 +252,11 @@ class PreparedRequest:
     method: str
     headers: dict[str, str]
     body: str | None
+    sello: Any = None
+
+    def __post_init__(self) -> None:
+        if self.sello is not _SELLO_DEL_BROKER:
+            raise BrokerError("prepared_request_forbidden")
 
     def __repr__(self) -> str:  # pragma: no cover - trivial
         return f"PreparedRequest(action={self.action!r}, method={self.method!r})"
@@ -1000,7 +1026,8 @@ class SecretBroker:
             action=request.action, resource=request.resource,
             method=(request.method or "GET").upper(),
             headers={k: _rellenar(v) for k, v in (request.headers or {}).items()},
-            body=_rellenar(request.body) if request.body else None)
+            body=_rellenar(request.body) if request.body else None,
+            sello=_SELLO_DEL_BROKER)
 
     def __repr__(self) -> str:  # pragma: no cover - trivial
         return f"SecretBroker(store={self._store!r})"

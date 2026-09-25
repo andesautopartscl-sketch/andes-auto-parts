@@ -268,6 +268,17 @@ def orders_enabled() -> bool:
     return _env_bool("ANDES_ASSISTANT_ORDERS_ENABLED", False)
 
 
+def capability_router_enabled() -> bool:
+    """FASE 10.1 — el router de capacidades. Default 0: sin el, el prompt es
+    byte a byte el de 9.x, que es lo que permite medirlo en A/B."""
+    return _env_bool("ANDES_ASSISTANT_CAPABILITY_ROUTER", False)
+
+
+def context_router_enabled() -> bool:
+    """FASE 10.1 — el router de contexto. Default 0, misma razon."""
+    return _env_bool("ANDES_ASSISTANT_CONTEXT_ROUTER", False)
+
+
 def agent_enabled() -> bool:
     """Raw flag. Default 0. Does not imply the loop will run."""
     return _env_bool("ANDES_ASSISTANT_AGENT_ENABLED", False)

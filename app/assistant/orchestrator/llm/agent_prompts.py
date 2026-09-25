@@ -63,7 +63,9 @@ NUNCA presentes una proyeccion como un hecho observado.
 """
 
 
-def build_agent_system_prompt(*, analytical: bool = False) -> str:
+def build_agent_system_prompt(
+    *, analytical: bool = False, capabilities: set[str] | frozenset[str] | None = None
+) -> str:
     """El bloque de analisis entra SOLO en un turno analitico.
 
     Medido en el A/B de 8.5: cargarlo en toda pregunta costo +17% de tokens por
@@ -89,6 +91,19 @@ def build_agent_system_prompt(*, analytical: bool = False) -> str:
     # los contratos tienen que filtrarse JUNTOS: nombrar una tool sin su
     # contrato la vuelve inllamable, que es el defecto de O01/O04 al reves.
     visibles = model_facing_tools(ALLOWED_TOOLS)
+    # FASE 10.1 — ENGANCHE EXPERIMENTAL, apagado por defecto.
+    #
+    # `capabilities=None` es el unico camino que toma el sistema estable, y
+    # produce un prompt byte a byte identico al de 9.9. Con el Capability Router
+    # encendido, estrecha —solo estrecha— el catalogo del turno.
+    #
+    # NO ACTIVAR sin leer docs/fase10-arquitectura.md: medido, el router baja el
+    # techo de 11 764 a 10 084 tokens pero DUPLICA el equivalente facturable
+    # (126 090 -> 251 610) porque rompe el cache de prefijo del proveedor.
+    if capabilities is not None:
+        elegidas = visibles & frozenset(capabilities)
+        if elegidas:  # vacio seria un turno sin nada que llamar
+            visibles = elegidas
     base = SYSTEM_AGENT.format(
         tools=", ".join(sorted(visibles)),
         contracts=format_contracts_for_prompt(only=visibles),

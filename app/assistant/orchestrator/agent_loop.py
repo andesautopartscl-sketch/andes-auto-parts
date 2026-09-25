@@ -14,6 +14,7 @@ from app.assistant.orchestrator.agent_config import (
     MAX_SECONDS,
     MAX_TOOL_CALLS,
     budget_exceeded,
+    capability_router_enabled,
 )
 from app.assistant.orchestrator.agent_progress import (
     PROGRESS_NONE,
@@ -118,6 +119,9 @@ class TurnAgentState:
     # FASE 8.6 — turno analitico. Se decide UNA vez, deterministicamente, sobre el
     # mensaje del usuario: no puede cambiar a mitad del turno ni depende del modelo.
     analytical: bool = False
+    # FASE 10.1 — que capacidades vio el modelo y por que. Nombres y
+    # razones, nunca contenido.
+    capability_obs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -370,6 +374,21 @@ def continue_agent_loop(
     budget = MAX_TOOL_CALLS if max_tool_calls is None else int(max_tool_calls)
     plan = initial_plan if isinstance(initial_plan, dict) and initial_plan else empty_agent_plan()
     seed_evidence = list(initial_evidence or [])
+    # FASE 10.1 — que herramientas ve el modelo en este turno. Se decide UNA vez
+    # (el mensaje no cambia entre decisiones) y se aplica a las 5, que es donde
+    # esta el ahorro: el system se reenvia entero cada vez. Apagado por bandera,
+    # el comportamiento es byte a byte el de 9.x.
+    capacidades = None
+    router_obs: dict[str, Any] = {}
+    if capability_router_enabled():
+        from app.assistant.orchestrator.agent_config import model_facing_tools
+        from app.assistant.orchestrator.capability_router import select_capabilities
+        from app.assistant.orchestrator.catalog import ALLOWED_TOOLS as _TODAS
+
+        _dec = select_capabilities(message, available=model_facing_tools(_TODAS))
+        capacidades = _dec.selected
+        router_obs = _dec.observation()
+
     state = TurnAgentState(
         correlation_id=correlation_id,
         actor_user=actor_user,
@@ -386,6 +405,7 @@ def continue_agent_loop(
         # convertir un turno normal en analitico a mitad de camino.
         analytical=analytical_intent(message),
     )
+    state.capability_obs = router_obs
     _refresh_cost(state)
     state.ledger = ProgressLedger(call_keys=state.loop_keys)
     raw_evidence = list(seed_evidence)
@@ -429,7 +449,8 @@ def continue_agent_loop(
 
         remaining = max(0, budget - state.invoke_count)
         state.goal.refresh(state.evidence)
-        system = build_agent_system_prompt(analytical=state.analytical)
+        system = build_agent_system_prompt(
+            analytical=state.analytical, capabilities=capacidades)
         decision: dict[str, Any] | None = None
         last_err: str | None = None
         ev_before = len(state.evidence.items)

@@ -7,7 +7,10 @@ import uuid
 from typing import Any, Callable
 
 from app.assistant.orchestrator.audit import OrchestratorAudit, message_hash
-from app.assistant.orchestrator.agent_config import agent_loop_allowed
+from app.assistant.orchestrator.agent_config import (
+    agent_loop_allowed,
+    context_router_enabled,
+)
 from app.assistant.orchestrator.catalog import MAX_REPLANS
 from app.assistant.orchestrator.composer import compose_answer
 from app.assistant.orchestrator.conversation_context import (
@@ -876,6 +879,20 @@ def run_orchestrator_chat(
             memory_obs["memory_contextual_selected"] = 0
             memory_obs["permission_epoch_read"] = None
 
+    # FASE 10.1 — puerta de contexto. Se aplica DESPUES de armar todo y ANTES de
+    # que nadie lo use, que es el unico punto por el que pasa el contexto entero.
+    # Solo quita: no puede introducir un bloque que no estuviera ya aqui.
+    context_obs: dict[str, Any] = {}
+    if context_router_enabled():
+        try:
+            from app.assistant.orchestrator.context_router import select_context
+
+            _cd = select_context(context, actor=actor, conversation_id=conversation_id)
+            context = _cd.context
+            context_obs = _cd.observation()
+        except Exception:  # noqa: BLE001 — una puerta no puede tumbar un turno
+            logging.getLogger(__name__).warning("context_router soft-failed")
+
     replan_count = 0
     validation_error: str | None = None
     plan: dict[str, Any] | None = None
@@ -1298,6 +1315,9 @@ def run_orchestrator_chat(
             agent_obs["goal_coverage"] = loop_out.state.goal.safe_snapshot()
             agent_obs["arg_errors"] = list(loop_out.state.arg_errors)
             agent_obs["verifier_breakdown"] = dict(loop_out.state.verifier_breakdown or {})
+            # FASE 10.1 — la seleccion de capacidades, observable.
+            agent_obs["capability_router"] = dict(
+                getattr(loop_out.state, "capability_obs", None) or {})
             agent_obs["agent_progress"] = loop_out.state.ledger.safe_snapshot()
             from app.assistant.orchestrator.agent_config import budget_snapshot
 
@@ -1508,6 +1528,8 @@ def run_orchestrator_chat(
         "goal_coverage": agent_obs.get("goal_coverage"),
         "arg_errors": list(agent_obs.get("arg_errors") or []),
         "verifier_breakdown": agent_obs.get("verifier_breakdown"),
+        "capability_router": agent_obs.get("capability_router") or None,
+        "context_router": context_obs or None,
         "agent_progress": agent_obs.get("agent_progress"),
         "budget": agent_obs.get("budget"),
         "token_economics": agent_obs.get("token_economics"),
