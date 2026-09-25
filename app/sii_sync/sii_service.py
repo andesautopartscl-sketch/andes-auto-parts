@@ -609,10 +609,36 @@ class SIIService:
         return self._parse_http_response(resp)
 
     @staticmethod
+    def _mensaje_http_sii(resp: requests.Response) -> str:
+        status = resp.status_code
+        api_msg = ""
+        try:
+            payload = resp.json()
+        except ValueError:
+            payload = None
+        if isinstance(payload, dict):
+            api_msg = str(payload.get("message") or payload.get("error") or "").strip()
+        blob = (api_msg + " " + (resp.text or "")).lower()
+        if status == 403 and (
+            "api key" in blob or "permiso" in blob or "plan" in blob or "forbidden" in blob
+        ):
+            return (
+                "La API Key de BaseAPI no tiene permiso para bajar el RCV de ventas. "
+                "Entrá a https://baseapi.cl con la misma cuenta de la clave, "
+                "activá el paquete Consulta (RCV) o esperá a que se renueve la cuota gratis, "
+                "y volvé a sincronizar. El ERP no puede habilitar ese plan por sí solo."
+            )
+        if status == 401:
+            return "BaseAPI rechazó la API Key. Revisá SII_API_KEY en el .env."
+        if api_msg:
+            return f"API SII ({status}): {api_msg}"
+        body = (resp.text or "").strip()[:280]
+        return f"API SII respondió HTTP {status}" + (f": {body}" if body else "")
+
+    @staticmethod
     def _parse_http_response(resp: requests.Response) -> Any:
         if resp.status_code >= 400:
-            body = (resp.text or "")[:500]
-            raise SIIServiceError(f"API SII respondió HTTP {resp.status_code}: {body}")
+            raise SIIServiceError(SIIService._mensaje_http_sii(resp))
         try:
             return resp.json()
         except ValueError as exc:

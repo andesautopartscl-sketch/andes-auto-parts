@@ -6,7 +6,7 @@ import logging
 import re
 from pathlib import Path
 
-from sqlalchemy import and_, case, func, or_
+from sqlalchemy import and_, case, func, or_, text
 from werkzeug.utils import secure_filename
 
 from app.models import Producto, ProductoImagen, OemDespiece
@@ -422,7 +422,26 @@ def assign_search_tokens(q: str) -> list[str]:
     return [p for p in re.split(r"[\s,;]+", (q or "").strip()) if p]
 
 
-def _producto_search_item(p: Producto, match_type: str) -> dict:
+def _stock_map_for_codigos(sess, codigos: list[str]) -> dict[str, int]:
+    """Stock total por código desde productos_variantes_stock, en la misma sesión del catálogo."""
+    limpios = sorted({(c or "").strip().upper() for c in codigos if (c or "").strip()})
+    if not limpios:
+        return {}
+    placeholders = ", ".join(f":c{i}" for i in range(len(limpios)))
+    params = {f"c{i}": code for i, code in enumerate(limpios)}
+    filas = sess.execute(
+        text(
+            "SELECT UPPER(TRIM(codigo_producto)) AS codigo, COALESCE(SUM(stock), 0) AS total "
+            "FROM productos_variantes_stock "
+            f"WHERE UPPER(TRIM(codigo_producto)) IN ({placeholders}) "
+            "GROUP BY UPPER(TRIM(codigo_producto))"
+        ),
+        params,
+    ).fetchall()
+    return {(row[0] or "").strip().upper(): int(row[1] or 0) for row in filas}
+
+
+def _producto_search_item(p: Producto, match_type: str, *, stock: int = 0) -> dict:
     codigo = (p.codigo or "").strip().upper()
     oem = (p.codigo_oem or "").strip().upper()
     return {
@@ -433,6 +452,7 @@ def _producto_search_item(p: Producto, match_type: str) -> dict:
         "descripcion": (p.descripcion or "")[:120],
         "marca": (p.marca or "")[:40],
         "modelo": (p.modelo or "")[:80],
+        "stock": int(stock or 0),
         "match_type": match_type,
     }
 
@@ -543,7 +563,21 @@ def search_productos_for_assign(sess, q: str, *, limit: int = 12) -> list[dict]:
                 if len(rows) >= limit:
                     break
 
-    return [_producto_search_item(p, mt) for p, mt in rows[:limit]]
+    picked = rows[:limit]
+    lookup_codes: list[str] = []
+    for p, _ in picked:
+        lookup_codes.append(p.codigo or "")
+        lookup_codes.append(p.codigo_oem or "")
+    stocks = _stock_map_for_codigos(sess, lookup_codes)
+    out = []
+    for p, mt in picked:
+        codigo = (p.codigo or "").strip().upper()
+        oem = (p.codigo_oem or "").strip().upper()
+        stock = stocks.get(codigo, 0)
+        if stock == 0 and oem:
+            stock = stocks.get(oem, 0)
+        out.append(_producto_search_item(p, mt, stock=stock))
+    return out
 
 
 def ext_from_mime(mime: str | None) -> str:

@@ -3,30 +3,117 @@
 
 {% block content %}
 <style>
-.rv-page { font-size: 12.5px; color: #334155; }
-.rv-note {
-  margin: 0 0 12px; padding: 8px 10px; border-radius: 8px;
-  background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; font-size: 12px; line-height: 1.4;
+.rv-page { font-size: 12px; color: #334155; }
+.rv-page .topbar { margin-bottom: 6px; align-items: center; gap: 8px; }
+.rv-page .page-title { font-size: 1.1rem; margin: 0; line-height: 1.2; }
+.rv-page .page-subtitle { margin: 0; font-size: 11.5px; color: #94a3b8; }
+.rv-page .topbar-actions .link-btn { font-size: 11px; padding: 4px 9px; border-radius: 7px; }
+.rv-title-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rv-help-wrap { position: relative; display: inline-flex; }
+.rv-help-btn {
+  width: 20px; height: 20px; padding: 0; border-radius: 999px;
+  border: 1px solid #cbd5e1; background: #f8fafc; color: #64748b;
+  font-size: 12px; font-weight: 700; line-height: 1; cursor: pointer;
 }
+.rv-help-btn:hover, .rv-help-btn[aria-expanded="true"] {
+  background: #eff6ff; border-color: #93c5fd; color: #1d4ed8;
+}
+.rv-help-panel {
+  display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
+  width: min(400px, 78vw); padding: 8px 10px; border-radius: 8px;
+  background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
+  font-size: 12px; line-height: 1.4; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+.rv-help-panel.open { display: block; }
 .rv-filters {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px;
-  margin: 0 0 12px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+  display: grid;
+  grid-template-columns: minmax(150px, 1.2fr) minmax(140px, 1fr) minmax(140px, 1fr) auto auto;
+  gap: 8px 12px;
+  margin: 0 0 8px; padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+  align-items: end;
 }
-.rv-filters label { display:block; font-size: 10.5px; font-weight: 600; color: #64748b; margin-bottom: 3px; }
-.rv-filters input[type="text"], .rv-filters input[type="date"], .rv-filters input[type="number"] {
-  width: 100%; min-height: 30px; padding: 4px 8px; border-radius: 8px; border: 1px solid #cbd5e1; box-sizing: border-box;
+.rv-filters label { display: block; font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 3px; }
+.rv-page .rv-filters input:not([type="checkbox"]):not([type="hidden"]) {
+  width: 100% !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  padding: 0 9px !important;
+  border-radius: 8px !important;
+  border: 1px solid #cbd5e1 !important;
+  box-sizing: border-box !important;
+  font-size: 13px !important;
+  line-height: 30px !important;
 }
-.rv-table-wrap { overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; }
-.rv-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.rv-table th, .rv-table td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: middle; }
-.rv-table th { background: #f8fafc; font-size: 10px; text-transform: uppercase; color: #64748b; }
-.rv-table .num { text-align: right; white-space: nowrap; }
-.rv-table input[type="text"], .rv-table input[type="number"] {
-  width: 100%; min-width: 80px; min-height: 28px; padding: 3px 6px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box; font-size: 12px;
+.rv-filter-checks {
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; padding-bottom: 3px;
 }
-.rv-actions { display:flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
-.rv-empty { padding: 18px; color: #64748b; }
-.message { padding: 8px 10px; border-radius: 8px; margin-bottom: 10px; font-size: 12.5px; }
+.rv-filter-checks label {
+  display: flex !important; align-items: center; gap: 6px; margin: 0 !important;
+  font-size: 12px !important; font-weight: 500 !important; color: #334155 !important;
+  white-space: nowrap; line-height: 1.2;
+}
+.rv-filter-checks input { width: 14px; height: 14px; margin: 0; accent-color: #2563eb; }
+.rv-filter-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.rv-filters .btn, .rv-filters .link-btn { height: 32px; min-height: 32px; font-size: 13px; padding: 0 12px; border-radius: 8px; }
+.rv-actions {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin: 0 0 8px;
+}
+.rv-defaults {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;
+  padding: 6px 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+}
+.rv-defaults label { display: block; font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 3px; }
+.rv-page .rv-defaults input {
+  height: 32px !important; min-height: 32px !important; max-height: 32px !important;
+  min-width: 150px; padding: 0 9px !important; border-radius: 8px !important;
+  border: 1px solid #cbd5e1 !important; box-sizing: border-box !important;
+  font-size: 13px !important; line-height: 30px !important;
+}
+.rv-actions .btn, .rv-actions .link-btn { min-height: 32px; font-size: 13px; padding: 4px 12px; border-radius: 8px; }
+.rv-table-wrap {
+  overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff;
+  max-height: calc(100vh - 250px);
+}
+.rv-page .rv-table {
+  width: 100% !important; border-collapse: collapse !important;
+  font-size: 12.5px !important; table-layout: fixed !important;
+}
+.rv-page .rv-table th,
+.rv-page .rv-table td {
+  padding: 6px 8px !important; border-bottom: 1px solid #f1f5f9 !important;
+  text-align: left !important; vertical-align: middle !important;
+  overflow: hidden !important; text-overflow: ellipsis !important;
+  white-space: nowrap !important; line-height: 1.3 !important;
+  font-size: 12.5px !important; font-weight: 400 !important;
+}
+.rv-page .rv-table th {
+  background: #f8fafc !important; font-size: 10.5px !important;
+  text-transform: uppercase !important; color: #64748b !important;
+  letter-spacing: .03em !important; position: sticky !important; top: 0 !important;
+  z-index: 1 !important; font-weight: 600 !important;
+}
+.rv-page .rv-table td strong { font-size: 12.5px !important; font-weight: 600 !important; }
+.rv-page .rv-table .num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.rv-table .col-check { width: 28px; }
+.rv-table .col-fecha { width: 11%; }
+.rv-table .col-codigo { width: 11%; }
+.rv-table .col-marca { width: 9%; }
+.rv-table .col-bodega { width: 8%; }
+.rv-table .col-cant { width: 6%; }
+.rv-table .col-precio { width: 12%; }
+.rv-table .col-ref { width: 13%; }
+.rv-table .col-obs { width: 30%; }
+.rv-page .rv-table input[type="text"],
+.rv-page .rv-table input[type="number"] {
+  width: 100% !important; min-width: 0 !important; height: 28px !important;
+  min-height: 28px !important; max-height: 28px !important;
+  padding: 0 7px !important; border-radius: 7px !important;
+  border: 1px solid #cbd5e1 !important; box-sizing: border-box !important;
+  font-size: 12.5px !important; line-height: 26px !important;
+}
+.rv-empty { padding: 14px; color: #64748b; font-size: 12.5px; }
+.message { padding: 6px 10px; border-radius: 8px; margin-bottom: 8px; font-size: 12.5px; }
 .message.success { background: #ecfdf5; border: 1px solid #86efac; color: #166534; }
 .message.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
 </style>
@@ -34,7 +121,17 @@
 <div class="rv-page">
   <div class="topbar">
     <div>
-      <h1 class="page-title">Reclasificar ajustes → Venta</h1>
+      <div class="rv-title-row">
+        <h1 class="page-title">Reclasificar ajustes → Venta</h1>
+        <div class="rv-help-wrap">
+          <button type="button" class="rv-help-btn" id="rvHelpBtn" title="Ayuda" aria-label="Ayuda" aria-expanded="false" aria-controls="rvHelpPanel">?</button>
+          <div class="rv-help-panel" id="rvHelpPanel" role="region" aria-live="polite">
+            Solo aparecen ajustes con cantidad negativa que aún no están marcados como venta.
+            Indicá un <strong>precio neto unitario</strong> (por fila o precio por defecto) para poder reclasificar.
+            No vuelve a mover stock.
+          </div>
+        </div>
+      </div>
       <p class="page-subtitle">Marcá ajustes negativos históricos como venta operativa. No vuelve a mover stock.</p>
     </div>
     <div class="topbar-actions">
@@ -43,11 +140,6 @@
       <a class="link-btn" href="{{ url_for('bodega.ajuste') }}" data-module-url="{{ url_for('bodega.ajuste') }}">Ajuste de stock</a>
     </div>
   </div>
-
-  <p class="rv-note">
-    Solo aparecen ajustes con cantidad negativa que aún no están marcados como venta.
-    Indicá un <strong>precio neto unitario</strong> (por fila o precio por defecto) para poder reclasificar.
-  </p>
 
   {% if message %}
   <div class="message {{ message.type }}">{{ message.text }}</div>
@@ -66,15 +158,17 @@
       <label for="rv-hasta">Hasta</label>
       <input id="rv-hasta" type="date" name="hasta" value="{{ filtros.hasta }}">
     </div>
-    <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;">
-      <label style="display:flex;align-items:center;gap:6px;font-weight:500;color:#334155;margin:0 0 4px;">
+    <div class="rv-filter-checks">
+      <label>
         <input type="checkbox" name="solo_conteo" value="1" {% if filtros.solo_conteo %}checked{% endif %}>
         Solo “Conteo físico”
       </label>
-      <label style="display:flex;align-items:center;gap:6px;font-weight:500;color:#334155;margin:0 0 4px;">
+      <label>
         <input type="checkbox" name="solo_con_precio" value="1" {% if filtros.solo_con_precio %}checked{% endif %}>
         Solo con precio ya cargado
       </label>
+    </div>
+    <div class="rv-filter-actions">
       <button type="submit" class="btn btn-primary">Buscar</button>
       <a class="link-btn" href="{{ url_for('bodega.reclasificar_ventas') }}?solo_conteo=0">Ver todos</a>
     </div>
@@ -89,13 +183,15 @@
     {% if filtros.solo_conteo %}<input type="hidden" name="solo_conteo" value="1">{% endif %}
 
     <div class="rv-actions">
-      <div>
-        <label for="precio_default" style="font-size:11px;font-weight:600;color:#64748b;">Precio neto default</label><br>
-        <input id="precio_default" name="precio_default" placeholder="Aplicar a filas sin precio" style="min-width:140px;min-height:30px;padding:4px 8px;border-radius:8px;border:1px solid #cbd5e1;">
-      </div>
-      <div>
-        <label for="ref_sii_default" style="font-size:11px;font-weight:600;color:#64748b;">Ref. SII default</label><br>
-        <input id="ref_sii_default" name="ref_sii_default" placeholder="Opcional" style="min-width:140px;min-height:30px;padding:4px 8px;border-radius:8px;border:1px solid #cbd5e1;">
+      <div class="rv-defaults">
+        <div>
+          <label for="precio_default">Precio neto default</label>
+          <input id="precio_default" name="precio_default" placeholder="Filas sin precio">
+        </div>
+        <div>
+          <label for="ref_sii_default">Ref. SII default</label>
+          <input id="ref_sii_default" name="ref_sii_default" placeholder="Opcional">
+        </div>
       </div>
       <button type="button" class="btn outline" id="rvSelectAll">Seleccionar visibles</button>
       <button type="submit" class="btn btn-primary">Reclasificar seleccionados</button>
@@ -106,33 +202,34 @@
       <table class="rv-table">
         <thead>
           <tr>
-            <th></th>
-            <th>Fecha</th>
-            <th>Código</th>
-            <th>Marca</th>
-            <th>Bodega</th>
-            <th class="num">Cant.</th>
-            <th>Precio neto u.</th>
-            <th>Ref. SII</th>
-            <th>Observación</th>
+            <th class="col-check"></th>
+            <th class="col-fecha">Fecha</th>
+            <th class="col-codigo">Código</th>
+            <th class="col-marca">Marca</th>
+            <th class="col-bodega">Bodega</th>
+            <th class="col-cant num">Cant.</th>
+            <th class="col-precio">Precio neto u.</th>
+            <th class="col-ref">Ref. SII</th>
+            <th class="col-obs">Observación</th>
           </tr>
         </thead>
         <tbody>
           {% for m in candidatos %}
+          {% set fecha_txt = m.fecha|chile_datetime if m.fecha else '' %}
           <tr>
-            <td><input type="checkbox" name="mov_id" value="{{ m.id }}" class="rv-check"></td>
-            <td style="white-space:nowrap;">{{ m.fecha|chile_datetime if m.fecha else '—' }}</td>
-            <td><strong>{{ m.codigo_producto }}</strong></td>
-            <td>{{ m.marca or '—' }}</td>
-            <td>{{ m.bodega or '—' }}</td>
-            <td class="num">{{ m.cantidad }}</td>
-            <td>
+            <td class="col-check"><input type="checkbox" name="mov_id" value="{{ m.id }}" class="rv-check"></td>
+            <td class="col-fecha" title="{{ fecha_txt }}">{% if fecha_txt %}{{ fecha_txt.replace('-', '/')[0:5] }} {{ fecha_txt[-5:] }}{% else %}—{% endif %}</td>
+            <td class="col-codigo" title="{{ m.codigo_producto }}"><strong>{{ m.codigo_producto }}</strong></td>
+            <td class="col-marca" title="{{ m.marca or '' }}">{{ m.marca or '—' }}</td>
+            <td class="col-bodega" title="{{ m.bodega or '' }}">{{ m.bodega or '—' }}</td>
+            <td class="col-cant num">{{ m.cantidad }}</td>
+            <td class="col-precio">
               <input type="text" name="precio_mov_{{ m.id }}" value="{% if m.precio_venta_neto is not none %}{{ m.precio_venta_neto }}{% endif %}" placeholder="Precio" inputmode="decimal">
             </td>
-            <td>
+            <td class="col-ref">
               <input type="text" name="ref_mov_{{ m.id }}" value="{{ m.ref_sii or '' }}" placeholder="Boleta/Factura" maxlength="80">
             </td>
-            <td>{{ m.observacion or '—' }}</td>
+            <td class="col-obs" title="{{ m.observacion or '' }}">{{ m.observacion or '—' }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -146,10 +243,33 @@
 <script>
 (function () {
   var btn = document.getElementById('rvSelectAll');
-  if (!btn) return;
-  btn.addEventListener('click', function () {
-    document.querySelectorAll('.rv-check').forEach(function (c) { c.checked = true; });
-  });
+  if (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.rv-check').forEach(function (c) { c.checked = true; });
+    });
+  }
+  var helpBtn = document.getElementById('rvHelpBtn');
+  var helpPanel = document.getElementById('rvHelpPanel');
+  function closeHelp() {
+    if (!helpPanel || !helpBtn) return;
+    helpPanel.classList.remove('open');
+    helpBtn.setAttribute('aria-expanded', 'false');
+  }
+  if (helpBtn && helpPanel) {
+    helpBtn.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var open = helpPanel.classList.toggle('open');
+      helpBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', function (ev) {
+      if (!helpPanel.classList.contains('open')) return;
+      if (helpBtn.contains(ev.target) || helpPanel.contains(ev.target)) return;
+      closeHelp();
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') closeHelp();
+    });
+  }
 })();
 </script>
 {% endblock %}

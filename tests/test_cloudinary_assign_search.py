@@ -45,6 +45,24 @@ class AssignSearchCatalogTests(unittest.TestCase):
             any((it.get("modelo") or "") and "V80" in it["modelo"].upper() for it in items),
             "los resultados deben incluir modelo (p. ej. V80)",
         )
+        self.assertTrue(
+            all(isinstance(it.get("stock"), int) and it["stock"] >= 0 for it in items),
+            "cada resultado debe traer stock total (variantes) para elegir código",
+        )
+
+    def test_vg4056rc_stock_usa_variantes(self):
+        from app.utils.cloudinary_product_import import _stock_map_for_codigos
+
+        esperado = _stock_map_for_codigos(self.sess, ["VG4056RC"]).get("VG4056RC", 0)
+        items = search_productos_for_assign(self.sess, "VG4056RC", limit=10)
+        self.assertTrue(items, "VG4056RC debería aparecer en la búsqueda por código interno")
+        hit = next((it for it in items if (it.get("codigo") or "").upper() == "VG4056RC"), None)
+        self.assertIsNotNone(hit)
+        self.assertEqual(
+            hit["stock"],
+            esperado,
+            "el stock del modal debe ser la suma de productos_variantes_stock, no 0 si hay unidades",
+        )
 
 
 if __name__ == "__main__":

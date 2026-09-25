@@ -201,7 +201,7 @@
 }
 .imp-page .imp-ps-modal.open { display: flex; }
 .imp-page .imp-ps-card {
-  width: min(720px, 100%); max-height: min(92vh, 800px); background: #fff;
+  width: min(780px, 100%); max-height: min(92vh, 800px); background: #fff;
   border-radius: 10px; border: 1px solid var(--imp-line);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
   display: flex; flex-direction: column; overflow: hidden;
@@ -228,10 +228,17 @@
   line-height: 1.25; word-break: break-word;
 }
 .imp-page .imp-ps-table th { background: var(--imp-navy); color: #fff; font-size: 9px; position: sticky; top: 0; z-index: 1; letter-spacing: 0.02em; }
-.imp-page .imp-ps-col-code { width: 24%; }
-.imp-page .imp-ps-col-desc { width: 28%; }
-.imp-page .imp-ps-col-marca { width: 14%; }
-.imp-page .imp-ps-col-modelo { width: 34%; }
+.imp-page .imp-ps-col-code { width: 22%; }
+.imp-page .imp-ps-col-stock { width: 9%; }
+.imp-page .imp-ps-table th.imp-ps-col-stock,
+.imp-page .imp-ps-table td.imp-ps-col-stock { text-align: center; vertical-align: middle; }
+.imp-page .imp-ps-col-desc { width: 26%; }
+.imp-page .imp-ps-col-marca { width: 13%; }
+.imp-page .imp-ps-col-modelo { width: 30%; }
+.imp-page .imp-ps-stock {
+  display: block; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700;
+}
+.imp-page .imp-ps-stock.is-zero { color: #94a3b8; font-weight: 600; }
 .imp-page .imp-ps-table tbody tr { cursor: pointer; }
 .imp-page .imp-ps-table tbody tr:hover { background: #f8fafc; }
 .imp-page .imp-ps-empty { text-align: center; color: var(--imp-muted); padding: 16px 8px; }
@@ -503,13 +510,14 @@ body.dark .imp-page .imp-ps-table tbody tr:hover { background: #111827; }
           <thead>
             <tr>
               <th class="imp-ps-col-code">Código / OEM</th>
+              <th class="imp-ps-col-stock">Stock</th>
               <th class="imp-ps-col-desc">Descripción</th>
               <th class="imp-ps-col-marca">Marca</th>
               <th class="imp-ps-col-modelo">Modelo</th>
             </tr>
           </thead>
           <tbody id="imp-ps-results">
-            <tr><td colspan="4" class="imp-ps-empty">Sin búsqueda ejecutada.</td></tr>
+            <tr><td colspan="5" class="imp-ps-empty">Sin búsqueda ejecutada.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1085,7 +1093,7 @@ body.dark .imp-page .imp-ps-table tbody tr:hover { background: #111827; }
   function renderCodigoSearchResults(items, q) {
     if (!psResults) return;
     if (!items || !items.length) {
-      psResults.innerHTML = '<tr><td colspan="4" class="imp-ps-empty">Sin resultados para «' + escapeHtml(q) + '».</td></tr>';
+      psResults.innerHTML = '<tr><td colspan="5" class="imp-ps-empty">Sin resultados para «' + escapeHtml(q) + '».</td></tr>';
       return;
     }
     psResults.innerHTML = '';
@@ -1097,10 +1105,13 @@ body.dark .imp-page .imp-ps-table tbody tr:hover { background: #111827; }
         extra = '<div class="imp-ps-meta">Interno: ' + escapeHtml(it.codigo) + '</div>';
       }
       var badge = matchTypeLabel(it.match_type);
+      var stock = parseInt(it.stock, 10);
+      if (!Number.isFinite(stock)) stock = 0;
       tr.innerHTML =
         '<td><span class="imp-ps-code">' + escapeHtml(code) + '</span>' +
         (badge ? ' <span class="badge-detect badge-detect-' + (it.match_type === 'oem' ? 'oem' : 'interno') + '">' + badge + '</span>' : '') +
         extra + '</td>' +
+        '<td class="imp-ps-col-stock"><span class="imp-ps-stock' + (stock > 0 ? '' : ' is-zero') + '">' + stock + '</span></td>' +
         '<td>' + escapeHtml(it.descripcion || '—') + '</td>' +
         '<td>' + escapeHtml(it.marca || '—') + '</td>' +
         '<td>' + escapeHtml(it.modelo || '—') + '</td>';
@@ -1119,7 +1130,7 @@ body.dark .imp-page .imp-ps-table tbody tr:hover { background: #111827; }
     var q = (psInput.value || '').trim();
     if (q.length < 1) {
       psStatus.textContent = 'Escribí un código, OEM o parte de la descripción.';
-      psResults.innerHTML = '<tr><td colspan="4" class="imp-ps-empty">Sin búsqueda ejecutada.</td></tr>';
+      psResults.innerHTML = '<tr><td colspan="5" class="imp-ps-empty">Sin búsqueda ejecutada.</td></tr>';
       return;
     }
     psStatus.textContent = 'Buscando…';
@@ -1131,7 +1142,7 @@ body.dark .imp-page .imp-ps-table tbody tr:hover { background: #111827; }
       renderCodigoSearchResults(items, q);
     }).catch(function () {
       psStatus.textContent = 'No se pudo buscar productos.';
-      psResults.innerHTML = '<tr><td colspan="4" class="imp-ps-empty">Error de red.</td></tr>';
+      psResults.innerHTML = '<tr><td colspan="5" class="imp-ps-empty">Error de red.</td></tr>';
     });
   }
 
@@ -1151,7 +1162,7 @@ body.dark .imp-page .imp-ps-table tbody tr:hover { background: #111827; }
     if (psInput && psInput.value.trim()) runCodigoSearch();
     else {
       if (psStatus) psStatus.textContent = 'Escribí un código, OEM o parte de la descripción.';
-      if (psResults) psResults.innerHTML = '<tr><td colspan="4" class="imp-ps-empty">Sin búsqueda ejecutada.</td></tr>';
+      if (psResults) psResults.innerHTML = '<tr><td colspan="5" class="imp-ps-empty">Sin búsqueda ejecutada.</td></tr>';
     }
   }
 
