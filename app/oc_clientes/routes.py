@@ -31,6 +31,9 @@ from .services import (
     registrar_pagos_conjuntos,
     registrar_pago_oc,
     historial_cobros_mes,
+    anios_cobros_disponibles,
+    listar_oc_por_cobrar,
+    listar_oc_pendientes_entrega,
     resolver_nombre_vendedor_oc,
     timeline_eventos,
     oc_estado_display,
@@ -371,11 +374,16 @@ def _build_list_summary() -> dict:
     por_cobrar = round(sum(oc_monto_pendiente(oc) for oc in entregadas), 2)
     today = date.today()
     data_mes = historial_cobros_mes(today.year, today.month)
+    data_anio = historial_cobros_mes(today.year, anio_completo=True)
     return {
         "pendientes_entrega": int(pendientes or 0),
         "total_por_cobrar": float(por_cobrar or 0),
         "cobrado_mes": float(data_mes.get("total_cobrado") or 0),
+        "cobrado_anio": float(data_anio.get("total_cobrado") or 0),
         "mes_label": f"{_mes_nombre_es(today.month)} {today.year}",
+        "anio": today.year,
+        "mes": today.month,
+        "anios_cobros": anios_cobros_disponibles(),
     }
 
 
@@ -391,13 +399,37 @@ def _mes_nombre_es(month: int) -> str:
 @login_required
 @permission_required("ver_oc_clientes")
 def api_cobrado_mes():
-    """Historial de abonos cobrados en el mes actual."""
-    data = historial_cobros_mes()
+    """Historial de abonos cobrados. month=0 ⇒ año completo."""
+    year = request.args.get("year", type=int)
+    month = request.args.get("month", type=int)
+    anio_completo = month == 0
+    data = historial_cobros_mes(
+        year,
+        None if anio_completo else month,
+        anio_completo=anio_completo,
+    )
     labels = METODO_PAGO_LABELS
     for it in data.get("items") or []:
         mp = (it.get("metodo_pago") or "").strip()
         it["metodo_label"] = labels.get(mp, mp.replace("_", " ").title() if mp else "—")
+    data["anios"] = anios_cobros_disponibles()
     return jsonify(ok=True, **data)
+
+
+@oc_clientes_bp.route("/api/por-cobrar")
+@login_required
+@permission_required("ver_oc_clientes")
+def api_por_cobrar():
+    """OC entregadas con saldo pendiente y antigüedad."""
+    return jsonify(ok=True, **listar_oc_por_cobrar())
+
+
+@oc_clientes_bp.route("/api/pendientes-entrega")
+@login_required
+@permission_required("ver_oc_clientes")
+def api_pendientes_entrega():
+    """OC recibidas pendientes de entrega."""
+    return jsonify(ok=True, **listar_oc_pendientes_entrega())
 
 
 @oc_clientes_bp.route("/")
@@ -462,6 +494,8 @@ def lista():
         puede_modificar=_can_modify(),
         metodo_pago_options=_metodo_pago_options_cobro(incluir_saldo_favor=True),
         url_cobrado_mes=url_for("oc_clientes.api_cobrado_mes"),
+        url_por_cobrar=url_for("oc_clientes.api_por_cobrar"),
+        url_pendientes_entrega=url_for("oc_clientes.api_pendientes_entrega"),
         active_page="oc_clientes",
         _partial=_partial,
     )

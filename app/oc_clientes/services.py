@@ -707,20 +707,259 @@ _MESES_ES = (
     "Diciembre",
 )
 
+AGING_KEYS = ("0-30", "31-60", "61-90", "90+")
+AGING_LABELS = {
+    "0-30": "0–30 días",
+    "31-60": "31–60 días",
+    "61-90": "61–90 días",
+    "90+": "Más de 90 días",
+}
+
+
+def _as_date(value) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return None
+
+
+def aging_bucket(dias: int) -> str:
+    d = max(0, int(dias or 0))
+    if d <= 30:
+        return "0-30"
+    if d <= 60:
+        return "31-60"
+    if d <= 90:
+        return "61-90"
+    return "90+"
+
+
+def periodo_cobros(
+    year: int | None = None,
+    month: int | None = None,
+    *,
+    anio_completo: bool = False,
+) -> dict:
+    """Rango de cobros: un mes, o el año entero si month=0 / anio_completo."""
+    today = date.today()
+    try:
+        y = int(year) if year is not None else today.year
+    except (TypeError, ValueError):
+        y = today.year
+    if y < 2000 or y > today.year + 1:
+        y = today.year
+
+    full = bool(anio_completo) or month == 0
+    if full:
+        return {
+            "inicio": datetime(y, 1, 1),
+            "fin": datetime(y, 12, 31, 23, 59, 59),
+            "label": str(y),
+            "year": y,
+            "month": 0,
+            "anio_completo": True,
+        }
+
+    try:
+        m = int(month) if month is not None else today.month
+    except (TypeError, ValueError):
+        m = today.month
+    if m < 1 or m > 12:
+        m = today.month
+    inicio = datetime(y, m, 1)
+    _, last_day = monthrange(y, m)
+    return {
+        "inicio": inicio,
+        "fin": datetime(y, m, last_day, 23, 59, 59),
+        "label": f"{_MESES_ES[m]} {y}",
+        "year": y,
+        "month": m,
+        "anio_completo": False,
+    }
+
+
+def anios_cobros_disponibles() -> list[int]:
+    today_y = date.today().year
+    years: set[int] = {today_y}
+    for col in (
+        db.session.query(func.min(OrdenCompraClientePago.fecha_pago)).scalar(),
+        db.session.query(func.max(OrdenCompraClientePago.fecha_pago)).scalar(),
+        db.session.query(func.min(OrdenCompraCliente.fecha_pago)).scalar(),
+        db.session.query(func.max(OrdenCompraCliente.fecha_pago)).scalar(),
+    ):
+        if col is None:
+            continue
+        d = col.date() if isinstance(col, datetime) else col
+        year = getattr(d, "year", None)
+        if year:
+            years.add(int(year))
+    return list(range(min(years), max(years) + 1))
+
+
+def listar_oc_por_cobrar() -> dict:
+    """OC entregadas con saldo pendiente, más antigüedad."""
+    from flask import url_for
+
+    from app.utils.datetime_utils import chile_today
+
+    today = chile_today()
+    entregadas = (
+        OrdenCompraCliente.query.filter_by(estado="entregada")
+        .order_by(OrdenCompraCliente.fecha_entrega_real.asc(), OrdenCompraCliente.id.asc())
+        .all()
+    )
+    clientes_map: dict[int, str] = {}
+    cids = {o.cliente_id for o in entregadas if o.cliente_id}
+    if cids:
+        for cl in Cliente.query.filter(Cliente.id.in_(cids)).all():
+            clientes_map[cl.id] = cl.nombre
+
+    items: list[dict] = []
+    aging_totales = {k: 0.0 for k in AGING_KEYS}
+    aging_count = {k: 0 for k in AGING_KEYS}
+
+    for oc in entregadas:
+        pendiente = oc_monto_pendiente(oc)
+        if pendiente <= 0.009:
+            continue
+        cobrado = oc_monto_cobrado(oc)
+        ref = _as_date(oc.fecha_entrega_real) or _as_date(oc.fecha_oc) or today
+        dias = max(0, (today - ref).days)
+        bucket = aging_bucket(dias)
+        aging_totales[bucket] = round(aging_totales[bucket] + pendiente, 2)
+        aging_count[bucket] += 1
+        est_label, _ = oc_estado_display(oc)
+        items.append(
+            {
+                "id": oc.id,
+                "numero_oc": oc.numero_oc,
+                "cliente_nombre": clientes_map.get(oc.cliente_id, "—"),
+                "vendedor": (oc.vendedor or "").strip() or "—",
+                "fecha_oc": oc.fecha_oc.strftime("%d/%m/%Y") if oc.fecha_oc else "—",
+                "fecha_entrega": oc.fecha_entrega_real.strftime("%d/%m/%Y") if oc.fecha_entrega_real else "—",
+                "total": float(oc.total or 0),
+                "cobrado": cobrado,
+                "pendiente": pendiente,
+                "dias": dias,
+                "aging": bucket,
+                "estado_label": est_label,
+                "pago_parcial": oc_tiene_pago_parcial(oc),
+                "numero_factura": (oc.numero_factura or "").strip() or "—",
+                "detalle_url": url_for("oc_clientes.detalle", oid=oc.id),
+            }
+        )
+
+    items.sort(key=lambda x: (-int(x["dias"]), -float(x["pendiente"])))
+    total = round(sum(float(it["pendiente"]) for it in items), 2)
+    return {
+        "total_por_cobrar": total,
+        "cantidad_oc": len(items),
+        "cantidad_clientes": len({it["cliente_nombre"] for it in items}),
+        "aging": [
+            {
+                "key": k,
+                "label": AGING_LABELS[k],
+                "total": aging_totales[k],
+                "cantidad": aging_count[k],
+            }
+            for k in AGING_KEYS
+        ],
+        "items": items,
+    }
+
+
+def listar_oc_pendientes_entrega() -> dict:
+    """OC recibidas que todavía no se entregan."""
+    from flask import url_for
+
+    from app.utils.datetime_utils import chile_today
+
+    today = chile_today()
+    ordenes = (
+        OrdenCompraCliente.query.filter_by(estado="recibida")
+        .order_by(
+            OrdenCompraCliente.fecha_entrega_comprometida.is_(None),
+            OrdenCompraCliente.fecha_entrega_comprometida.asc(),
+            OrdenCompraCliente.fecha_oc.asc(),
+            OrdenCompraCliente.id.asc(),
+        )
+        .all()
+    )
+    clientes_map: dict[int, str] = {}
+    cids = {o.cliente_id for o in ordenes if o.cliente_id}
+    if cids:
+        for cl in Cliente.query.filter(Cliente.id.in_(cids)).all():
+            clientes_map[cl.id] = cl.nombre
+
+    items: list[dict] = []
+    atrasadas = 0
+    sin_fecha = 0
+    total = 0.0
+
+    for oc in ordenes:
+        comprometida = _as_date(oc.fecha_entrega_comprometida)
+        if comprometida is None:
+            plazo_key = "sin_fecha"
+            dias = None
+            plazo_label = "Sin fecha"
+            sin_fecha += 1
+        else:
+            dias = (comprometida - today).days
+            if dias < 0:
+                plazo_key = "atrasada"
+                plazo_label = f"Atraso {abs(dias)} d"
+                atrasadas += 1
+            elif dias == 0:
+                plazo_key = "hoy"
+                plazo_label = "Hoy"
+            else:
+                plazo_key = "a_tiempo"
+                plazo_label = f"En {dias} d"
+
+        monto = float(oc.total or 0)
+        total = round(total + monto, 2)
+        items.append(
+            {
+                "id": oc.id,
+                "numero_oc": oc.numero_oc,
+                "cliente_nombre": clientes_map.get(oc.cliente_id, "—"),
+                "vendedor": (oc.vendedor or "").strip() or "—",
+                "fecha_oc": oc.fecha_oc.strftime("%d/%m/%Y") if oc.fecha_oc else "—",
+                "fecha_ingreso": oc.created_at.strftime("%d/%m/%Y") if oc.created_at else "—",
+                "fecha_comprometida": comprometida.strftime("%d/%m/%Y") if comprometida else "—",
+                "total": monto,
+                "dias": dias,
+                "plazo_key": plazo_key,
+                "plazo_label": plazo_label,
+                "detalle_url": url_for("oc_clientes.detalle", oid=oc.id),
+            }
+        )
+
+    return {
+        "cantidad_oc": len(items),
+        "cantidad_clientes": len({it["cliente_nombre"] for it in items}),
+        "total": total,
+        "cantidad_atrasadas": atrasadas,
+        "cantidad_sin_fecha": sin_fecha,
+        "items": items,
+    }
+
 
 def historial_cobros_mes(
     year: int | None = None,
     month: int | None = None,
+    *,
+    anio_completo: bool = False,
 ) -> dict:
-    """Agrupa cobros del mes por abono (pago conjunto, parcial o individual legacy)."""
+    """Agrupa cobros del mes (o del año) por abono."""
     from flask import url_for
 
-    today = date.today()
-    y = int(year or today.year)
-    m = int(month or today.month)
-    mes_inicio = datetime(y, m, 1)
-    _, last_day = monthrange(y, m)
-    mes_fin = datetime(y, m, last_day, 23, 59, 59)
+    periodo = periodo_cobros(year, month, anio_completo=anio_completo)
+    mes_inicio = periodo["inicio"]
+    mes_fin = periodo["fin"]
 
     pagos = (
         OrdenCompraClientePago.query.filter(
@@ -838,9 +1077,11 @@ def historial_cobros_mes(
     total_cobrado = round(sum(float(it["monto_abono"] or 0) for it in items), 2)
     oc_count = len({o["id"] for it in items for o in it.get("ordenes") or []})
 
-    mes_label = f"{_MESES_ES[m]} {y}" if 1 <= m <= 12 else f"{m:02d}/{y}"
     return {
-        "mes_label": mes_label,
+        "mes_label": periodo["label"],
+        "year": periodo["year"],
+        "month": periodo["month"],
+        "anio_completo": periodo["anio_completo"],
         "total_cobrado": total_cobrado,
         "cantidad_abonos": len(items),
         "cantidad_oc": oc_count,

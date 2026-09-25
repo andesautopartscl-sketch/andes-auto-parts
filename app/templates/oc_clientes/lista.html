@@ -17,7 +17,7 @@
 .oc-kpis { display: flex; gap: 5px; flex-wrap: wrap; align-items: stretch; }
 .oc-kpi {
     display: flex; flex-direction: column; justify-content: center;
-    min-width: 96px; padding: 4px 10px; border-radius: 6px;
+    min-width: 92px; padding: 4px 10px; border-radius: 6px;
     background: #f8fafc; border: 1px solid #e8eef5;
 }
 .oc-kpi strong {
@@ -35,6 +35,27 @@
     border-color: #86efac; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.12);
 }
 .oc-kpi.clickable:focus { outline: 2px solid #86efac; outline-offset: 1px; }
+.oc-kpi.clickable.pendiente {
+    border-color: #bfdbfe; background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%);
+}
+.oc-kpi.clickable.pendiente:hover {
+    border-color: #93c5fd; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+}
+.oc-kpi.clickable.pendiente:focus { outline-color: #93c5fd; }
+.oc-kpi.clickable.por-cobrar {
+    border-color: #fed7aa; background: linear-gradient(180deg, #fff7ed 0%, #f8fafc 100%);
+}
+.oc-kpi.clickable.por-cobrar:hover {
+    border-color: #fdba74; box-shadow: 0 2px 8px rgba(234, 88, 12, 0.12);
+}
+.oc-kpi.clickable.por-cobrar:focus { outline-color: #fdba74; }
+.oc-kpi.clickable.total {
+    border-color: #c7d2fe; background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 100%);
+}
+.oc-kpi.clickable.total:hover {
+    border-color: #a5b4fc; box-shadow: 0 2px 8px rgba(79, 70, 229, 0.12);
+}
+.oc-kpi.clickable.total:focus { outline-color: #a5b4fc; }
 .oc-list-card {
     background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
     width: 100%; max-width: 100%; min-width: 0; overflow: hidden;
@@ -142,18 +163,25 @@
                 <p>OC B2B · entrega, cobro y factura externa</p>
             </div>
             <div class="oc-kpis">
-                <div class="oc-kpi" title="OC en estado recibida">
+                <div class="oc-kpi clickable pendiente" id="ocKpiPendienteEntrega" role="button" tabindex="0"
+                     title="Ver OC pendientes de entrega">
                     <strong>{{ resumen.pendientes_entrega }}</strong>
-                    <span>Pend. entrega</span>
+                    <span>Pend. entrega · ver</span>
                 </div>
-                <div class="oc-kpi" title="OC entregadas sin pago">
+                <div class="oc-kpi clickable por-cobrar" id="ocKpiPorCobrar" role="button" tabindex="0"
+                     title="Ver OC entregadas con saldo pendiente">
                     <strong>${{ '{:,.0f}'.format(resumen.total_por_cobrar).replace(',', '.') }}</strong>
-                    <span>Por cobrar</span>
+                    <span>Por cobrar · ver</span>
                 </div>
                 <div class="oc-kpi clickable" id="ocKpiCobradoMes" role="button" tabindex="0"
-                     title="Ver historial de cobros de {{ resumen.mes_label }}">
+                     title="Ver cobros de {{ resumen.mes_label }}">
                     <strong>${{ '{:,.0f}'.format(resumen.cobrado_mes).replace(',', '.') }}</strong>
                     <span>Cobrado mes · ver</span>
+                </div>
+                <div class="oc-kpi clickable total" id="ocKpiTotalAnio" role="button" tabindex="0"
+                     title="Total cobrado en {{ resumen.anio }} · filtrar por mes">
+                    <strong>${{ '{:,.0f}'.format(resumen.cobrado_anio).replace(',', '.') }}</strong>
+                    <span>Total {{ resumen.anio }} · ver</span>
                 </div>
             </div>
         </div>
@@ -264,6 +292,8 @@
 </div>
 
 {% include 'oc_clientes/_cobrado_mes_modal.html' %}
+{% include 'oc_clientes/_por_cobrar_modal.html' %}
+{% include 'oc_clientes/_pendiente_entrega_modal.html' %}
 {% if puede_modificar %}
 {% include 'oc_clientes/_anular_modal.html' %}
 {% include 'oc_clientes/_reactivar_modal.html' %}

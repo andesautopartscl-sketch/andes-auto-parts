@@ -1,27 +1,46 @@
 <style>
 .oc-cobrado-modal {
     position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
-    padding: 16px; background: rgba(15, 23, 42, 0.5); z-index: 1250;
+    padding: 28px 36px; background: rgba(15, 23, 42, 0.5); z-index: 1250;
 }
 .oc-cobrado-modal.open { display: flex; }
 .oc-cobrado-card {
-    width: min(920px, calc(100vw - 24px)); max-height: calc(100vh - 32px);
+    width: min(880px, calc(100vw - 72px)); max-height: calc(100vh - 56px);
     overflow: hidden; display: flex; flex-direction: column;
     background: #fff; border: 1px solid #dbe3ef; border-radius: 12px;
     box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
 }
 .oc-cobrado-head {
     display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
-    padding: 14px 18px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+    padding: 18px 32px 14px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
 }
 .oc-cobrado-head h3 { margin: 0 0 2px; font-size: 15px; font-weight: 700; color: #0f172a; }
 .oc-cobrado-head p { margin: 0; font-size: 11px; color: #64748b; }
+.oc-cobrado-filters {
+    display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end;
+    padding: 12px 32px; border-bottom: 1px solid #f1f5f9; background: #fff;
+}
+.oc-cobrado-filters label {
+    display: block; font-size: 9px; font-weight: 600; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px;
+}
+.oc-cobrado-filters select,
+.oc-cobrado-filters input {
+    padding: 5px 8px; border: 1px solid #dbe3ef; border-radius: 6px;
+    font-size: 12px; background: #fff; height: 30px; box-sizing: border-box;
+    color: #0f172a; min-width: 118px;
+}
+.oc-cobrado-filters input { min-width: 160px; }
+.oc-cobrado-filters select:focus,
+.oc-cobrado-filters input:focus {
+    outline: none; border-color: #93c5fd; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
 .oc-cobrado-summary {
     display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: #475569;
-    padding: 8px 18px; border-bottom: 1px solid #f1f5f9; background: #fff;
+    padding: 10px 32px; border-bottom: 1px solid #f1f5f9; background: #fff;
 }
 .oc-cobrado-summary strong { color: #0f172a; }
-.oc-cobrado-body { overflow: auto; padding: 0 0 8px; flex: 1; }
+.oc-cobrado-body { overflow: auto; padding: 8px 32px 16px; flex: 1; }
 .oc-cobrado-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .oc-cobrado-table thead th {
     position: sticky; top: 0; z-index: 1;
@@ -40,9 +59,9 @@
     display: inline-flex; padding: 1px 6px; border-radius: 999px; font-size: 9px; font-weight: 600;
     background: #dbeafe; color: #1d4ed8;
 }
-.oc-cobrado-empty { padding: 28px 18px; text-align: center; color: #94a3b8; font-size: 12px; }
+.oc-cobrado-empty { padding: 36px 18px; text-align: center; color: #94a3b8; font-size: 12px; }
 .oc-cobrado-foot {
-    padding: 10px 18px; border-top: 1px solid #e2e8f0; text-align: right; background: #fff;
+    padding: 12px 32px; border-top: 1px solid #e2e8f0; text-align: right; background: #fff;
 }
 .oc-cobrado-loading { padding: 32px 18px; text-align: center; color: #64748b; font-size: 12px; }
 </style>
@@ -51,10 +70,44 @@
     <div class="oc-cobrado-card" role="dialog" aria-modal="true" aria-labelledby="ocCobradoTitle">
         <div class="oc-cobrado-head">
             <div>
-                <h3 id="ocCobradoTitle">Cobros del mes</h3>
+                <h3 id="ocCobradoTitle">Cobros</h3>
                 <p id="ocCobradoSub">Historial de abonos y facturas asociadas</p>
             </div>
             <button type="button" class="btn sm" id="ocCobradoClose" aria-label="Cerrar">✕</button>
+        </div>
+        <div class="oc-cobrado-filters">
+            <div>
+                <label for="ocCobradoYear">Año</label>
+                <select id="ocCobradoYear"></select>
+            </div>
+            <div>
+                <label for="ocCobradoMonth">Mes</label>
+                <select id="ocCobradoMonth">
+                    <option value="0">Todo el año</option>
+                    <option value="1">Enero</option>
+                    <option value="2">Febrero</option>
+                    <option value="3">Marzo</option>
+                    <option value="4">Abril</option>
+                    <option value="5">Mayo</option>
+                    <option value="6">Junio</option>
+                    <option value="7">Julio</option>
+                    <option value="8">Agosto</option>
+                    <option value="9">Septiembre</option>
+                    <option value="10">Octubre</option>
+                    <option value="11">Noviembre</option>
+                    <option value="12">Diciembre</option>
+                </select>
+            </div>
+            <div>
+                <label for="ocCobradoMetodo">Método</label>
+                <select id="ocCobradoMetodo">
+                    <option value="">Todos</option>
+                </select>
+            </div>
+            <div>
+                <label for="ocCobradoCliente">Cliente</label>
+                <input id="ocCobradoCliente" type="search" placeholder="Filtrar cliente" autocomplete="off">
+            </div>
         </div>
         <div class="oc-cobrado-summary" id="ocCobradoSummary" style="display:none;"></div>
         <div class="oc-cobrado-body" id="ocCobradoBody">
@@ -73,7 +126,16 @@
     var loading = document.getElementById('ocCobradoLoading');
     var summary = document.getElementById('ocCobradoSummary');
     var sub = document.getElementById('ocCobradoSub');
+    var title = document.getElementById('ocCobradoTitle');
+    var yearSel = document.getElementById('ocCobradoYear');
+    var monthSel = document.getElementById('ocCobradoMonth');
+    var metodoSel = document.getElementById('ocCobradoMetodo');
+    var clienteInp = document.getElementById('ocCobradoCliente');
     var url = {{ url_cobrado_mes|tojson }};
+    var defaultYear = {{ resumen.anio|default(2026)|tojson }};
+    var defaultMonth = {{ resumen.mes|default(9)|tojson }};
+    var defaultAnios = {{ resumen.anios_cobros|default([2026])|tojson }};
+    var lastData = null;
     if (!modal || !body || !url) return;
 
     function fmt(n) {
@@ -84,22 +146,75 @@
         return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
+    function fillYears(anios) {
+        var list = (anios && anios.length) ? anios.slice() : defaultAnios.slice();
+        if (list.indexOf(defaultYear) < 0) list.push(defaultYear);
+        list.sort(function (a, b) { return b - a; });
+        var current = yearSel.value;
+        yearSel.innerHTML = list.map(function (y) {
+            return '<option value="' + y + '">' + y + '</option>';
+        }).join('');
+        if (current && list.indexOf(Number(current)) >= 0) yearSel.value = current;
+    }
+
+    fillYears(defaultAnios);
+    yearSel.value = String(defaultYear);
+    monthSel.value = String(defaultMonth);
+
     function closeModal() {
         modal.classList.remove('open');
         modal.setAttribute('aria-hidden', 'true');
     }
 
+    function visibleItems(data) {
+        var metodo = (metodoSel.value || '').trim();
+        var q = (clienteInp.value || '').trim().toLowerCase();
+        return (data.items || []).filter(function (it) {
+            if (metodo && (it.metodo_pago || '') !== metodo) return false;
+            if (q && String(it.cliente_nombre || '').toLowerCase().indexOf(q) < 0) return false;
+            return true;
+        });
+    }
+
+    function fillMetodos(items) {
+        var seen = {};
+        var opts = [['', 'Todos']];
+        (items || []).forEach(function (it) {
+            var key = it.metodo_pago || '';
+            if (seen[key]) return;
+            seen[key] = true;
+            opts.push([key, it.metodo_label || key || '—']);
+        });
+        var current = metodoSel.value;
+        metodoSel.innerHTML = opts.map(function (o) {
+            return '<option value="' + esc(o[0]) + '">' + esc(o[1]) + '</option>';
+        }).join('');
+        metodoSel.value = seen.hasOwnProperty(current) || current === '' ? current : '';
+    }
+
     function render(data) {
-        sub.textContent = 'Abonos registrados en ' + (data.mes_label || 'el mes actual');
+        lastData = data;
+        var fullYear = Number(data.month) === 0 || data.anio_completo;
+        title.textContent = fullYear ? ('Cobros ' + (data.year || '')) : 'Cobros del mes';
+        sub.textContent = fullYear
+            ? ('Abonos registrados en ' + (data.mes_label || 'el año'))
+            : ('Abonos registrados en ' + (data.mes_label || 'el mes'));
+
+        var items = visibleItems(data);
+        var totalVisible = items.reduce(function (acc, it) { return acc + (Number(it.monto_abono) || 0); }, 0);
+        var ocSet = {};
+        items.forEach(function (it) {
+            (it.ordenes || []).forEach(function (oc) { ocSet[oc.id] = true; });
+        });
+
         summary.style.display = 'flex';
         summary.innerHTML =
-            '<span>Total cobrado <strong>' + fmt(data.total_cobrado) + '</strong></span>' +
-            '<span>Abonos <strong>' + (data.cantidad_abonos || 0) + '</strong></span>' +
-            '<span>OC pagadas <strong>' + (data.cantidad_oc || 0) + '</strong></span>';
+            '<span>Total cobrado <strong>' + fmt(totalVisible) + '</strong></span>' +
+            '<span>Abonos <strong>' + items.length + '</strong></span>' +
+            '<span>OC pagadas <strong>' + Object.keys(ocSet).length + '</strong></span>';
 
-        var items = data.items || [];
         if (!items.length) {
-            body.innerHTML = '<div class="oc-cobrado-empty">Sin cobros registrados este mes.</div>';
+            body.innerHTML = '<div class="oc-cobrado-empty">Sin cobros en este período.</div>';
             return;
         }
 
@@ -133,31 +248,60 @@
         body.innerHTML = html;
     }
 
-    function openModal() {
-        modal.classList.add('open');
-        modal.setAttribute('aria-hidden', 'false');
+    function load() {
         body.innerHTML = '';
         if (loading) {
             loading.style.display = 'block';
             body.appendChild(loading);
         }
         summary.style.display = 'none';
-
-        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        var params = new URLSearchParams();
+        params.set('year', yearSel.value || String(defaultYear));
+        params.set('month', monthSel.value || '0');
+        fetch(url + '?' + params.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (!data.ok) throw new Error('Error al cargar');
+                fillYears(data.anios);
+                if (data.year) yearSel.value = String(data.year);
+                if (data.month != null) monthSel.value = String(data.month);
+                fillMetodos(data.items);
                 render(data);
             })
             .catch(function () {
+                lastData = null;
                 body.innerHTML = '<div class="oc-cobrado-empty">No se pudo cargar el historial.</div>';
             });
     }
 
-    document.getElementById('ocKpiCobradoMes')?.addEventListener('click', openModal);
-    document.getElementById('ocKpiCobradoMes')?.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(); }
+    function openModal(opts) {
+        opts = opts || {};
+        fillYears(defaultAnios);
+        yearSel.value = String(opts.year != null ? opts.year : defaultYear);
+        monthSel.value = String(opts.month != null ? opts.month : defaultMonth);
+        metodoSel.value = '';
+        clienteInp.value = '';
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+        load();
+    }
+
+    document.getElementById('ocKpiCobradoMes')?.addEventListener('click', function () {
+        openModal({ year: defaultYear, month: defaultMonth });
     });
+    document.getElementById('ocKpiCobradoMes')?.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal({ year: defaultYear, month: defaultMonth }); }
+    });
+    document.getElementById('ocKpiTotalAnio')?.addEventListener('click', function () {
+        openModal({ year: defaultYear, month: 0 });
+    });
+    document.getElementById('ocKpiTotalAnio')?.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal({ year: defaultYear, month: 0 }); }
+    });
+    yearSel.addEventListener('change', load);
+    monthSel.addEventListener('change', load);
+    metodoSel.addEventListener('change', function () { if (lastData) render(lastData); });
+    clienteInp.addEventListener('input', function () { if (lastData) render(lastData); });
     document.getElementById('ocCobradoClose')?.addEventListener('click', closeModal);
     document.getElementById('ocCobradoCloseFoot')?.addEventListener('click', closeModal);
     if (window.andesBindBackdropClose) window.andesBindBackdropClose(modal, closeModal);

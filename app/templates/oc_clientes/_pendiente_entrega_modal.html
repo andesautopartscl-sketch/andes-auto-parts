@@ -1,0 +1,231 @@
+<style>
+.oc-pe-modal {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    padding: 28px 36px; background: rgba(15, 23, 42, 0.5); z-index: 1250;
+}
+.oc-pe-modal.open { display: flex; }
+.oc-pe-card {
+    width: min(880px, calc(100vw - 72px)); max-height: calc(100vh - 56px);
+    overflow: hidden; display: flex; flex-direction: column;
+    background: #fff; border: 1px solid #dbe3ef; border-radius: 12px;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+.oc-pe-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    padding: 18px 32px 14px; border-bottom: 1px solid #e2e8f0; background: #eff6ff;
+}
+.oc-pe-head h3 { margin: 0 0 2px; font-size: 15px; font-weight: 700; color: #0f172a; }
+.oc-pe-head p { margin: 0; font-size: 11px; color: #1d4ed8; }
+.oc-pe-filters {
+    display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end;
+    padding: 12px 32px; border-bottom: 1px solid #f1f5f9; background: #fff;
+}
+.oc-pe-filters label {
+    display: block; font-size: 9px; font-weight: 600; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px;
+}
+.oc-pe-filters select,
+.oc-pe-filters input {
+    padding: 5px 8px; border: 1px solid #dbe3ef; border-radius: 6px;
+    font-size: 12px; background: #fff; height: 30px; box-sizing: border-box;
+    color: #0f172a; min-width: 140px;
+}
+.oc-pe-filters input { min-width: 180px; }
+.oc-pe-filters select:focus,
+.oc-pe-filters input:focus {
+    outline: none; border-color: #93c5fd; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+.oc-pe-summary {
+    display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: #475569;
+    padding: 10px 32px; border-bottom: 1px solid #f1f5f9; background: #fff;
+}
+.oc-pe-summary strong { color: #0f172a; }
+.oc-pe-body { overflow: auto; padding: 8px 32px 16px; flex: 1; }
+.oc-pe-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.oc-pe-table thead th {
+    position: sticky; top: 0; z-index: 1;
+    padding: 7px 12px; text-align: left; font-size: 9px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em; color: #64748b;
+    background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+}
+.oc-pe-table tbody td {
+    padding: 7px 12px; border-bottom: 1px solid #f1f5f9; color: #475569; vertical-align: middle;
+}
+.oc-pe-table tbody tr:hover td { background: #eff6ff; }
+.oc-pe-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.oc-pe-table a { color: #1d4ed8; text-decoration: none; font-weight: 600; }
+.oc-pe-table a:hover { text-decoration: underline; }
+.oc-pe-tag {
+    display: inline-flex; padding: 1px 6px; border-radius: 999px; font-size: 9px; font-weight: 600;
+    background: #dbeafe; color: #1d4ed8;
+}
+.oc-pe-tag.warn { background: #fee2e2; color: #b91c1c; }
+.oc-pe-tag.muted { background: #f1f5f9; color: #64748b; }
+.oc-pe-empty { padding: 36px 18px; text-align: center; color: #94a3b8; font-size: 12px; }
+.oc-pe-foot {
+    padding: 12px 32px; border-top: 1px solid #e2e8f0; text-align: right; background: #fff;
+}
+.oc-pe-loading { padding: 32px 18px; text-align: center; color: #64748b; font-size: 12px; }
+</style>
+
+<div id="ocPendienteModal" class="oc-pe-modal" aria-hidden="true">
+    <div class="oc-pe-card" role="dialog" aria-modal="true" aria-labelledby="ocPendienteTitle">
+        <div class="oc-pe-head">
+            <div>
+                <h3 id="ocPendienteTitle">Pendientes de entrega</h3>
+                <p>OC recibidas que aún no se despachan</p>
+            </div>
+            <button type="button" class="btn sm" id="ocPendienteClose" aria-label="Cerrar">✕</button>
+        </div>
+        <div class="oc-pe-filters">
+            <div>
+                <label for="ocPendientePlazo">Plazo</label>
+                <select id="ocPendientePlazo">
+                    <option value="">Todos</option>
+                    <option value="atrasada">Atrasadas</option>
+                    <option value="hoy">Vencen hoy</option>
+                    <option value="a_tiempo">A tiempo</option>
+                    <option value="sin_fecha">Sin fecha comprometida</option>
+                </select>
+            </div>
+            <div>
+                <label for="ocPendienteCliente">Cliente</label>
+                <input id="ocPendienteCliente" type="search" placeholder="Filtrar cliente" autocomplete="off">
+            </div>
+        </div>
+        <div class="oc-pe-summary" id="ocPendienteSummary" style="display:none;"></div>
+        <div class="oc-pe-body" id="ocPendienteBody">
+            <div class="oc-pe-loading" id="ocPendienteLoading">Cargando…</div>
+        </div>
+        <div class="oc-pe-foot">
+            <button type="button" class="btn sm outline" id="ocPendienteCloseFoot">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var modal = document.getElementById('ocPendienteModal');
+    var body = document.getElementById('ocPendienteBody');
+    var loading = document.getElementById('ocPendienteLoading');
+    var summary = document.getElementById('ocPendienteSummary');
+    var plazoSel = document.getElementById('ocPendientePlazo');
+    var clienteInp = document.getElementById('ocPendienteCliente');
+    var url = {{ url_pendientes_entrega|tojson }};
+    var lastData = null;
+    if (!modal || !body || !url) return;
+
+    function fmt(n) {
+        return '$' + Math.round(Number(n) || 0).toLocaleString('es-CL');
+    }
+
+    function esc(s) {
+        return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function closeModal() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function visibleItems(data) {
+        var plazo = (plazoSel.value || '').trim();
+        var q = (clienteInp.value || '').trim().toLowerCase();
+        return (data.items || []).filter(function (it) {
+            if (plazo && it.plazo_key !== plazo) return false;
+            if (q && String(it.cliente_nombre || '').toLowerCase().indexOf(q) < 0) return false;
+            return true;
+        });
+    }
+
+    function plazoTag(it) {
+        var cls = 'oc-pe-tag';
+        if (it.plazo_key === 'atrasada') cls += ' warn';
+        if (it.plazo_key === 'sin_fecha') cls += ' muted';
+        return '<span class="' + cls + '">' + esc(it.plazo_label || '—') + '</span>';
+    }
+
+    function render(data) {
+        lastData = data;
+        var items = visibleItems(data);
+        var totalVisible = items.reduce(function (acc, it) { return acc + (Number(it.total) || 0); }, 0);
+        var clientes = {};
+        var atrasadas = 0;
+        items.forEach(function (it) {
+            clientes[it.cliente_nombre] = true;
+            if (it.plazo_key === 'atrasada') atrasadas += 1;
+        });
+
+        summary.style.display = 'flex';
+        summary.innerHTML =
+            '<span>OC <strong>' + items.length + '</strong></span>' +
+            '<span>Clientes <strong>' + Object.keys(clientes).length + '</strong></span>' +
+            '<span>Total <strong>' + fmt(totalVisible) + '</strong></span>' +
+            '<span>Atrasadas <strong>' + atrasadas + '</strong></span>';
+
+        if (!items.length) {
+            body.innerHTML = '<div class="oc-pe-empty">No hay OC pendientes de entrega con esos filtros.</div>';
+            return;
+        }
+
+        var html = '<table class="oc-pe-table"><thead><tr>' +
+            '<th>Fecha OC</th><th>Ingreso</th><th>Cliente</th><th>N° OC</th>' +
+            '<th>Vendedor</th><th>Comprometida</th><th>Plazo</th>' +
+            '<th style="text-align:right;">Total</th>' +
+            '</tr></thead><tbody>';
+
+        items.forEach(function (it) {
+            html += '<tr>';
+            html += '<td>' + esc(it.fecha_oc) + '</td>';
+            html += '<td>' + esc(it.fecha_ingreso) + '</td>';
+            html += '<td>' + esc(it.cliente_nombre) + '</td>';
+            html += '<td><a href="' + esc(it.detalle_url) + '">' + esc(it.numero_oc) + '</a></td>';
+            html += '<td>' + esc(it.vendedor) + '</td>';
+            html += '<td>' + esc(it.fecha_comprometida) + '</td>';
+            html += '<td>' + plazoTag(it) + '</td>';
+            html += '<td class="num"><strong>' + fmt(it.total) + '</strong></td>';
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        body.innerHTML = html;
+    }
+
+    function openModal() {
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+        plazoSel.value = '';
+        clienteInp.value = '';
+        body.innerHTML = '';
+        if (loading) {
+            loading.style.display = 'block';
+            body.appendChild(loading);
+        }
+        summary.style.display = 'none';
+
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) throw new Error('Error al cargar');
+                render(data);
+            })
+            .catch(function () {
+                lastData = null;
+                body.innerHTML = '<div class="oc-pe-empty">No se pudo cargar las pendientes de entrega.</div>';
+            });
+    }
+
+    document.getElementById('ocKpiPendienteEntrega')?.addEventListener('click', openModal);
+    document.getElementById('ocKpiPendienteEntrega')?.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(); }
+    });
+    plazoSel.addEventListener('change', function () { if (lastData) render(lastData); });
+    clienteInp.addEventListener('input', function () { if (lastData) render(lastData); });
+    document.getElementById('ocPendienteClose')?.addEventListener('click', closeModal);
+    document.getElementById('ocPendienteCloseFoot')?.addEventListener('click', closeModal);
+    if (window.andesBindBackdropClose) window.andesBindBackdropClose(modal, closeModal);
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+    });
+})();
+</script>

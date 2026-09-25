@@ -1,0 +1,248 @@
+<style>
+.oc-pc-modal {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    padding: 28px 36px; background: rgba(15, 23, 42, 0.5); z-index: 1250;
+}
+.oc-pc-modal.open { display: flex; }
+.oc-pc-card {
+    width: min(880px, calc(100vw - 72px)); max-height: calc(100vh - 56px);
+    overflow: hidden; display: flex; flex-direction: column;
+    background: #fff; border: 1px solid #dbe3ef; border-radius: 12px;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+.oc-pc-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    padding: 18px 32px 14px; border-bottom: 1px solid #e2e8f0; background: #fff7ed;
+}
+.oc-pc-head h3 { margin: 0 0 2px; font-size: 15px; font-weight: 700; color: #0f172a; }
+.oc-pc-head p { margin: 0; font-size: 11px; color: #9a3412; }
+.oc-pc-filters {
+    display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end;
+    padding: 12px 32px; border-bottom: 1px solid #f1f5f9; background: #fff;
+}
+.oc-pc-filters label {
+    display: block; font-size: 9px; font-weight: 600; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px;
+}
+.oc-pc-filters select,
+.oc-pc-filters input {
+    padding: 5px 8px; border: 1px solid #dbe3ef; border-radius: 6px;
+    font-size: 12px; background: #fff; height: 30px; box-sizing: border-box;
+    color: #0f172a; min-width: 140px;
+}
+.oc-pc-filters input { min-width: 180px; }
+.oc-pc-filters select:focus,
+.oc-pc-filters input:focus {
+    outline: none; border-color: #fdba74; box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.12);
+}
+.oc-pc-summary {
+    display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: #475569;
+    padding: 10px 32px; border-bottom: 1px solid #f1f5f9; background: #fff;
+}
+.oc-pc-summary strong { color: #0f172a; }
+.oc-pc-aging {
+    display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 32px 0;
+}
+.oc-pc-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 8px; border-radius: 999px; font-size: 10px; color: #57534e;
+    background: #f8fafc; border: 1px solid #e7e5e4;
+}
+.oc-pc-chip strong { color: #0f172a; font-variant-numeric: tabular-nums; }
+.oc-pc-body { overflow: auto; padding: 8px 32px 16px; flex: 1; }
+.oc-pc-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.oc-pc-table thead th {
+    position: sticky; top: 0; z-index: 1;
+    padding: 7px 12px; text-align: left; font-size: 9px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em; color: #64748b;
+    background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+}
+.oc-pc-table tbody td {
+    padding: 7px 12px; border-bottom: 1px solid #f1f5f9; color: #475569; vertical-align: middle;
+}
+.oc-pc-table tbody tr:hover td { background: #fff7ed; }
+.oc-pc-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.oc-pc-table a { color: #1d4ed8; text-decoration: none; font-weight: 600; }
+.oc-pc-table a:hover { text-decoration: underline; }
+.oc-pc-tag {
+    display: inline-flex; padding: 1px 6px; border-radius: 999px; font-size: 9px; font-weight: 600;
+    background: #ffedd5; color: #c2410c;
+}
+.oc-pc-tag.warn { background: #fee2e2; color: #b91c1c; }
+.oc-pc-empty { padding: 36px 18px; text-align: center; color: #94a3b8; font-size: 12px; }
+.oc-pc-foot {
+    padding: 12px 32px; border-top: 1px solid #e2e8f0; text-align: right; background: #fff;
+}
+.oc-pc-loading { padding: 32px 18px; text-align: center; color: #64748b; font-size: 12px; }
+</style>
+
+<div id="ocPorCobrarModal" class="oc-pc-modal" aria-hidden="true">
+    <div class="oc-pc-card" role="dialog" aria-modal="true" aria-labelledby="ocPorCobrarTitle">
+        <div class="oc-pc-head">
+            <div>
+                <h3 id="ocPorCobrarTitle">Por cobrar</h3>
+                <p>OC entregadas con saldo pendiente</p>
+            </div>
+            <button type="button" class="btn sm" id="ocPorCobrarClose" aria-label="Cerrar">✕</button>
+        </div>
+        <div class="oc-pc-filters">
+            <div>
+                <label for="ocPorCobrarAging">Antigüedad</label>
+                <select id="ocPorCobrarAging">
+                    <option value="">Todas</option>
+                    <option value="0-30">0–30 días</option>
+                    <option value="31-60">31–60 días</option>
+                    <option value="61-90">61–90 días</option>
+                    <option value="90+">Más de 90 días</option>
+                </select>
+            </div>
+            <div>
+                <label for="ocPorCobrarCliente">Cliente</label>
+                <input id="ocPorCobrarCliente" type="search" placeholder="Filtrar cliente" autocomplete="off">
+            </div>
+        </div>
+        <div class="oc-pc-summary" id="ocPorCobrarSummary" style="display:none;"></div>
+        <div class="oc-pc-aging" id="ocPorCobrarAgingBar" style="display:none;"></div>
+        <div class="oc-pc-body" id="ocPorCobrarBody">
+            <div class="oc-pc-loading" id="ocPorCobrarLoading">Cargando…</div>
+        </div>
+        <div class="oc-pc-foot">
+            <button type="button" class="btn sm outline" id="ocPorCobrarCloseFoot">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var modal = document.getElementById('ocPorCobrarModal');
+    var body = document.getElementById('ocPorCobrarBody');
+    var loading = document.getElementById('ocPorCobrarLoading');
+    var summary = document.getElementById('ocPorCobrarSummary');
+    var agingBar = document.getElementById('ocPorCobrarAgingBar');
+    var agingSel = document.getElementById('ocPorCobrarAging');
+    var clienteInp = document.getElementById('ocPorCobrarCliente');
+    var url = {{ url_por_cobrar|tojson }};
+    var lastData = null;
+    if (!modal || !body || !url) return;
+
+    function fmt(n) {
+        return '$' + Math.round(Number(n) || 0).toLocaleString('es-CL');
+    }
+
+    function esc(s) {
+        return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function closeModal() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function visibleItems(data) {
+        var aging = (agingSel.value || '').trim();
+        var q = (clienteInp.value || '').trim().toLowerCase();
+        return (data.items || []).filter(function (it) {
+            if (aging && it.aging !== aging) return false;
+            if (q && String(it.cliente_nombre || '').toLowerCase().indexOf(q) < 0) return false;
+            return true;
+        });
+    }
+
+    function render(data) {
+        lastData = data;
+        var items = visibleItems(data);
+        var totalVisible = items.reduce(function (acc, it) { return acc + (Number(it.pendiente) || 0); }, 0);
+        var clientes = {};
+        items.forEach(function (it) { clientes[it.cliente_nombre] = true; });
+
+        summary.style.display = 'flex';
+        summary.innerHTML =
+            '<span>Saldo pendiente <strong>' + fmt(totalVisible) + '</strong></span>' +
+            '<span>OC <strong>' + items.length + '</strong></span>' +
+            '<span>Clientes <strong>' + Object.keys(clientes).length + '</strong></span>';
+
+        var aging = data.aging || [];
+        if (aging.length) {
+            agingBar.style.display = 'flex';
+            agingBar.innerHTML = aging.map(function (a) {
+                return '<span class="oc-pc-chip"><span>' + esc(a.label) + '</span><strong>' +
+                    fmt(a.total) + '</strong><span>(' + (a.cantidad || 0) + ')</span></span>';
+            }).join('');
+        } else {
+            agingBar.style.display = 'none';
+        }
+
+        if (!items.length) {
+            body.innerHTML = '<div class="oc-pc-empty">No hay OC pendientes de cobro con esos filtros.</div>';
+            return;
+        }
+
+        var html = '<table class="oc-pc-table"><thead><tr>' +
+            '<th>Fecha OC</th><th>Entrega</th><th>Cliente</th><th>N° OC</th>' +
+            '<th>Estado</th><th style="text-align:right;">Total</th>' +
+            '<th style="text-align:right;">Cobrado</th><th style="text-align:right;">Saldo</th>' +
+            '<th style="text-align:right;">Días</th>' +
+            '</tr></thead><tbody>';
+
+        items.forEach(function (it) {
+            var late = Number(it.dias) > 90;
+            html += '<tr>';
+            html += '<td>' + esc(it.fecha_oc) + '</td>';
+            html += '<td>' + esc(it.fecha_entrega) + '</td>';
+            html += '<td>' + esc(it.cliente_nombre) + '</td>';
+            html += '<td><a href="' + esc(it.detalle_url) + '">' + esc(it.numero_oc) + '</a></td>';
+            html += '<td>' + (it.pago_parcial
+                ? '<span class="oc-pc-tag">Parcial</span>'
+                : esc(it.estado_label || 'Pendiente')) + '</td>';
+            html += '<td class="num">' + fmt(it.total) + '</td>';
+            html += '<td class="num">' + fmt(it.cobrado) + '</td>';
+            html += '<td class="num"><strong>' + fmt(it.pendiente) + '</strong></td>';
+            html += '<td class="num">' + (late
+                ? '<span class="oc-pc-tag warn">' + it.dias + '</span>'
+                : it.dias) + '</td>';
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        body.innerHTML = html;
+    }
+
+    function openModal() {
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+        agingSel.value = '';
+        clienteInp.value = '';
+        body.innerHTML = '';
+        if (loading) {
+            loading.style.display = 'block';
+            body.appendChild(loading);
+        }
+        summary.style.display = 'none';
+        agingBar.style.display = 'none';
+
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) throw new Error('Error al cargar');
+                render(data);
+            })
+            .catch(function () {
+                lastData = null;
+                body.innerHTML = '<div class="oc-pc-empty">No se pudo cargar el detalle por cobrar.</div>';
+            });
+    }
+
+    document.getElementById('ocKpiPorCobrar')?.addEventListener('click', openModal);
+    document.getElementById('ocKpiPorCobrar')?.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(); }
+    });
+    agingSel.addEventListener('change', function () { if (lastData) render(lastData); });
+    clienteInp.addEventListener('input', function () { if (lastData) render(lastData); });
+    document.getElementById('ocPorCobrarClose')?.addEventListener('click', closeModal);
+    document.getElementById('ocPorCobrarCloseFoot')?.addEventListener('click', closeModal);
+    if (window.andesBindBackdropClose) window.andesBindBackdropClose(modal, closeModal);
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+    });
+})();
+</script>
