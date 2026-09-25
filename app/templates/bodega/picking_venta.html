@@ -7,68 +7,63 @@
 <style>
 /* Evita que la barra vertical aparezca/desaparezca y mueva todo el ancho al cambiar filtros */
 html { scrollbar-gutter: stable; }
-.pv-wrap { max-width: 1280px; margin: 0 auto; }
+.pv-wrap { max-width: none; margin: 0; display: grid; gap: 6px; }
 .pv-hero {
-    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #2563eb 100%);
-    color: #fff;
-    border-radius: 12px;
-    padding: 14px 16px;
-    margin-bottom: 12px;
+    background: #fff;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: 0;
     display: flex;
     justify-content: space-between;
-    gap: 12px;
+    gap: 10px;
     flex-wrap: wrap;
-    align-items: flex-start;
-    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
+    align-items: center;
+    box-shadow: none;
 }
-.pv-hero h1 { margin: 0 0 6px; font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em; }
-.pv-hero p { margin: 0; opacity: 0.92; font-size: 0.8125rem; line-height: 1.45; max-width: 640px; }
-.pv-hero-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pv-hero-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
+.pv-hero h1 { margin: 0; font-size: 14px; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; }
+.pv-hero p { display: none; }
+.pv-hero-actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .pv-hero-actions a {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 5px 10px;
-    border-radius: 8px;
-    font-size: 12px;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
     font-weight: 600;
     text-decoration: none;
-    background: rgba(255,255,255,0.12);
-    color: #fff;
-    border: 1px solid rgba(255,255,255,0.22);
-}
-.pv-hero-actions a:hover { background: rgba(255,255,255,0.2); }
-.pv-kpis {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 8px;
-    margin-bottom: 12px;
-}
-.pv-kpi {
-    background: #fff;
+    background: #f8fafc;
+    color: #334155;
     border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 10px 12px;
-    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
 }
-.pv-kpi .n { font-size: 1.35rem; font-weight: 800; color: #0f172a; line-height: 1.1; }
-.pv-kpi .l { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-top: 3px; font-weight: 700; line-height: 1.25; }
+.pv-hero-actions a:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.pv-kpis { display: flex; gap: 5px; flex-wrap: wrap; align-items: stretch; margin: 0; }
+.pv-kpi {
+    display: flex; flex-direction: column; justify-content: center;
+    min-width: 84px; padding: 4px 10px; border-radius: 6px;
+    background: #f8fafc; border: 1px solid #e8eef5; box-shadow: none;
+}
+.pv-kpi .n { font-size: 13px; font-weight: 700; color: #0f172a; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.pv-kpi .l { font-size: 8px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-top: 1px; font-weight: 600; line-height: 1.2; }
 .pv-panel {
     background: #fff;
     border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 12px 14px;
-    margin-bottom: 12px;
-    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 0;
+    box-shadow: none;
 }
-.pv-panel h2 { margin: 0 0 10px; font-size: 13px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.04em; }
+.pv-panel h2 { margin: 0 0 6px; font-size: 11px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.04em; }
 .pv-filters {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 10px;
+    gap: 4px;
+    margin-bottom: 6px;
     align-items: center;
-    min-height: 32px;
+    min-height: 26px;
     contain: layout style;
 }
 .pv-pill {
@@ -76,10 +71,10 @@ html { scrollbar-gutter: stable; }
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    min-height: 30px;
-    padding: 5px 12px;
+    min-height: 26px;
+    padding: 3px 9px;
     border-radius: 999px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     line-height: 1.2;
     text-decoration: none;
@@ -93,69 +88,70 @@ html { scrollbar-gutter: stable; }
 .pv-pill:hover { border-color: #cbd5e1; background: #f1f5f9; color: #0f172a; }
 /* Mismo grosor de borde que inactivo (evita micro-saltos); borde oscuro sobre el degradado */
 .pv-pill.on {
-    background: linear-gradient(135deg, #1e40af, #2563eb);
+    background: #1d4ed8;
     color: #fff;
-    border-color: #1e3a8a;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+    border-color: #1e40af;
+    box-shadow: none;
 }
 .pv-pill:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-.pv-results { min-height: min(280px, 42vh); }
-.pv-search-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
-.pv-search-row .field { flex: 1; min-width: 200px; }
-.pv-search-row label { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 3px; }
+.pv-results { min-height: 0; }
+.pv-search-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+.pv-search-row .field { flex: 1; min-width: 180px; }
+.pv-search-row label { display: block; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #94a3b8; margin-bottom: 2px; }
 .pv-search-row input {
     width: 100%;
-    padding: 6px 10px;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
+    padding: 4px 8px;
+    border: 1px solid #dbe3ef;
+    border-radius: 6px;
     font-size: 12px;
-    min-height: 32px;
+    min-height: 28px;
+    height: 28px;
     box-sizing: border-box;
 }
 .pv-search-row .btn.primary,
 .pv-search-row .btn.outline {
-    padding: 6px 12px !important;
-    border-radius: 8px !important;
-    font-size: 12px !important;
-    min-height: 32px;
+    padding: 3px 10px !important;
+    border-radius: 6px !important;
+    font-size: 11px !important;
+    min-height: 28px;
 }
-.pv-table-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
-.pv-table { width: 100%; border-collapse: collapse; min-width: 880px; }
+.pv-table-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+.pv-table { width: 100%; border-collapse: collapse; min-width: 760px; }
 .pv-table th {
     text-align: left;
-    padding: 6px 10px;
-    font-size: 10px;
+    padding: 5px 8px;
+    font-size: 9px;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
     color: #64748b;
     background: #f8fafc;
     border-bottom: 1px solid #e2e8f0;
-    font-weight: 800;
+    font-weight: 700;
 }
-.pv-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #0f172a; vertical-align: middle; }
+.pv-table td { padding: 5px 8px; border-bottom: 1px solid #f1f5f9; font-size: 11px; color: #0f172a; vertical-align: middle; }
 .pv-table tr:last-child td { border-bottom: none; }
 .pv-table tbody tr:hover td { background: #fafbfc; }
 .pv-badge {
     display: inline-flex;
     align-items: center;
-    padding: 2px 7px;
+    padding: 1px 7px;
     border-radius: 999px;
-    font-size: 10px;
-    font-weight: 800;
+    font-size: 9px;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
 }
 .pv-badge.ok { background: #dcfce7; color: #166534; }
 .pv-badge.wip { background: #fef3c7; color: #92400e; }
 .pv-badge.new { background: #e0e7ff; color: #3730a3; }
-.pv-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pv-actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .pv-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 4px 9px;
-    border-radius: 7px;
-    font-size: 11px;
+    padding: 3px 7px;
+    border-radius: 5px;
+    font-size: 10px;
     font-weight: 600;
     text-decoration: none;
     border: 1px solid #cbd5e1;
@@ -167,32 +163,34 @@ html { scrollbar-gutter: stable; }
 .pv-btn:hover { background: #f8fafc; }
 .pv-btn.danger { color: #b91c1c; border-color: #fecaca; background: #fff; }
 .pv-btn.danger:hover { background: #fef2f2; }
-.pv-empty { text-align: center; padding: 20px 16px; color: #64748b; font-size: 12px; line-height: 1.45; }
-.pv-muted { color: #64748b; font-size: 12px; }
+.pv-empty { text-align: center; padding: 14px 10px; color: #94a3b8; font-size: 11px; line-height: 1.4; }
+.pv-muted { color: #64748b; font-size: 11px; }
 .pv-id { font-family: ui-monospace, monospace; font-size: 11px; color: #64748b; }
 .pv-wrap.is-loading { opacity: 0.72; pointer-events: none; transition: opacity 0.15s ease; }
+@media (max-width: 768px) {
+    .pv-hero { flex-direction: column; align-items: stretch; }
+}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="pv-wrap">
     <div class="pv-hero">
-        <div>
-            <h1>Picking venta</h1>
-            <p>Cola de preparación para órdenes de venta enviadas desde el módulo Ventas. Marque cantidades, guarde avances y cierre cuando el vendedor retire la mercadería. El stock se descuenta al facturar, no aquí.</p>
+        <div class="pv-hero-main">
+            <h1 title="Cola de preparación. El stock se descuenta al facturar, no aquí.">Picking venta</h1>
+            <p>Cola de preparación para órdenes de venta. El stock se descuenta al facturar, no aquí.</p>
+            <div class="pv-kpis">
+                <div class="pv-kpi"><div class="n">{{ picking_stats.activos }}</div><div class="l">Activos</div></div>
+                <div class="pv-kpi"><div class="n">{{ picking_stats.pendiente }}</div><div class="l">Pendientes</div></div>
+                <div class="pv-kpi"><div class="n">{{ picking_stats.en_preparacion }}</div><div class="l">En prep.</div></div>
+                <div class="pv-kpi"><div class="n">{{ picking_stats.entregado }}</div><div class="l">Entregados</div></div>
+                <div class="pv-kpi"><div class="n">{{ picking_stats.total }}</div><div class="l">Histórico</div></div>
+            </div>
         </div>
         <div class="pv-hero-actions">
             <a href="{{ url_for('bodega.index') }}">Panel bodega</a>
             <a href="{{ url_for('ventas.orden_venta') }}">Órdenes de venta</a>
         </div>
-    </div>
-
-    <div class="pv-kpis">
-        <div class="pv-kpi"><div class="n">{{ picking_stats.activos }}</div><div class="l">Activos (pend. + prep.)</div></div>
-        <div class="pv-kpi"><div class="n">{{ picking_stats.pendiente }}</div><div class="l">Pendientes</div></div>
-        <div class="pv-kpi"><div class="n">{{ picking_stats.en_preparacion }}</div><div class="l">En preparación</div></div>
-        <div class="pv-kpi"><div class="n">{{ picking_stats.entregado }}</div><div class="l">Entregados</div></div>
-        <div class="pv-kpi"><div class="n">{{ picking_stats.total }}</div><div class="l">Total histórico</div></div>
     </div>
 
     <div class="pv-panel" id="pv-filtros">
