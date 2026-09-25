@@ -395,7 +395,7 @@ body.dark #doc_number:focus {
     min-width: 0;
 }
 .erp-table-scroll {
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: visible;
     -webkit-overflow-scrolling: touch;
     padding: 10px 12px 4px;
@@ -453,11 +453,11 @@ body.dark #doc_number:focus {
     border-collapse: collapse;
     table-layout: auto;
 }
-/* Documento ventas: rejilla legible; min-width evita casillas demasiado angostas (scroll horizontal si hace falta) */
+/* Documento ventas: ocupá el ancho del panel sin forzar scroll horizontal. */
 .erp-table-panel .erp-table {
     table-layout: fixed;
     width: 100%;
-    min-width: 1120px;
+    min-width: 0;
 }
 .erp-table thead th {
     padding: 8px 8px;
@@ -638,7 +638,7 @@ body.dark #doc_number:focus {
 }
 .erp-table-panel .erp-table .tc-num {
     width: 26px;
-    min-width: 24px;
+    min-width: 0;
     max-width: 30px;
     padding-left: 4px !important;
     padding-right: 4px !important;
@@ -648,16 +648,16 @@ body.dark #doc_number:focus {
     display: inline-block;
     min-width: 0;
 }
-.erp-table-panel .erp-table .tc-code { width: 16%; min-width: 160px; }
-.erp-table-panel .erp-table .tc-desc { width: 21%; min-width: 136px; }
-.erp-table-panel .erp-table .tc-brand { width: 11.5%; min-width: 124px; }
-.erp-table-panel .erp-table .tc-wh { width: 9.5%; min-width: 108px; }
-.erp-table-panel .erp-table .tc-origin { width: 10.5%; min-width: 124px; }
-.erp-table-panel .erp-table .tc-qty { width: 5%; min-width: 56px; }
-.erp-table-panel .erp-table .tc-price { width: 9.5%; min-width: 100px; }
-.erp-table-panel .erp-table .tc-marg { width: 7%; min-width: 80px; }
-.erp-table-panel .erp-table .tc-sub { width: 9%; min-width: 84px; }
-.erp-table-panel .erp-table .tc-rm { width: 4%; min-width: 52px; max-width: 60px; text-align: center; vertical-align: middle; }
+.erp-table-panel .erp-table .tc-code { width: 15%; min-width: 0; }
+.erp-table-panel .erp-table .tc-desc { width: 22%; min-width: 0; }
+.erp-table-panel .erp-table .tc-brand { width: 11%; min-width: 0; }
+.erp-table-panel .erp-table .tc-wh { width: 9%; min-width: 0; }
+.erp-table-panel .erp-table .tc-origin { width: 10%; min-width: 0; }
+.erp-table-panel .erp-table .tc-qty { width: 5.5%; min-width: 0; }
+.erp-table-panel .erp-table .tc-price { width: 9%; min-width: 0; }
+.erp-table-panel .erp-table .tc-marg { width: 7%; min-width: 0; }
+.erp-table-panel .erp-table .tc-sub { width: 8%; min-width: 0; }
+.erp-table-panel .erp-table .tc-rm { width: 3.5%; min-width: 0; max-width: 48px; text-align: center; vertical-align: middle; }
 .erp-table-panel .erp-table .tc-sub {
     text-align: right;
     padding-right: 8px !important;
@@ -679,7 +679,7 @@ body.dark #doc_number:focus {
 }
 .code-wrap .item-codigo { flex: 1; min-width: 0; }
 .erp-table-panel .erp-table .code-wrap .item-codigo {
-    min-width: 88px;
+    min-width: 0;
 }
 .erp-table-panel .erp-table .tc-brand select,
 .erp-table-panel .erp-table .tc-wh select,
